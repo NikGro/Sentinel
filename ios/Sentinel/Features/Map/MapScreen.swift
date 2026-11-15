@@ -51,9 +51,8 @@ struct MapScreen: View {
     @Environment(RouteFollower.self) private var route
     @Environment(LocationService.self) private var location
 
-    @State private var camera: MapCameraPosition = .userLocation(
-        fallback: .region(MKCoordinateRegion(center: CLLocationCoordinate2D(latitude: 53.5511, longitude: 9.9937), latitudinalMeters: 12_000, longitudinalMeters: 12_000))
-    )
+    /// Folgt dem eigenen Standort; ohne Standort zeigt die Karte den Ausschnitt mit allen Kräften und Markierungen.
+    @State private var camera: MapCameraPosition = .userLocation(fallback: .automatic)
     @State private var selection: MapSelection?
     @State private var tapMode: MapTapMode = .none
     @State private var editor: EditorContext?

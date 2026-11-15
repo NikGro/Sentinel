@@ -16,6 +16,7 @@ struct SentinelApp: App {
                 .environment(model.fahndung)
                 .environment(model.route)
                 .environment(model.lock)
+                .environment(\.locale, Format.locale)
                 .onChange(of: scenePhase) { _, phase in
                     switch phase {
                     case .background: model.didEnterBackground()

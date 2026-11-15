@@ -53,16 +53,19 @@ enum Theme {
 }
 
 enum Format {
+    /// Die App ist durchgehend deutsch, unabhängig von der Sprache des Geräts.
+    static let locale = Locale(identifier: "de_DE")
+
     static func distance(_ meters: Double) -> String {
-        Measurement(value: meters, unit: UnitLength.meters).formatted(.measurement(width: .abbreviated, usage: .road))
+        Measurement(value: meters, unit: UnitLength.meters).formatted(.measurement(width: .abbreviated, usage: .road).locale(locale))
     }
 
     static func duration(_ seconds: TimeInterval) -> String {
-        Duration.seconds(seconds).formatted(.units(allowed: [.hours, .minutes], width: .narrow))
+        Duration.seconds(seconds).formatted(.units(allowed: [.hours, .minutes], width: .narrow).locale(locale))
     }
 
     static func time(_ date: Date) -> String {
-        date.formatted(date: .omitted, time: .shortened)
+        date.formatted(Date.FormatStyle(date: .omitted, time: .shortened, locale: locale))
     }
 
     /// "vor 3 Min." bzw. "gerade eben".
@@ -72,6 +75,10 @@ enum Format {
         if seconds < 90 { return "vor 1 Min." }
         if seconds < 3600 { return "vor \(Int(seconds / 60)) Min." }
         if seconds < 86_400 { return "vor \(Int(seconds / 3600)) Std." }
-        return date.formatted(date: .abbreviated, time: .shortened)
+        return dateTime(date)
+    }
+
+    static func dateTime(_ date: Date) -> String {
+        date.formatted(Date.FormatStyle(date: .abbreviated, time: .shortened, locale: locale))
     }
 }

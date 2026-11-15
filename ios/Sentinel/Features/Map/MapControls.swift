@@ -24,14 +24,18 @@ struct APositionControl: View {
                     Button {
                         if route.target == .aPosition { route.stop() } else { model.navigate(to: .aPosition) }
                     } label: {
-                        Label(route.target == .aPosition ? "Führung beenden" : "Zur A (\(holder.data.funkrufname))", systemImage: "location.north.line.fill")
+                        Label(route.target == .aPosition ? "Beenden" : "Zur A", systemImage: "location.north.line.fill")
+                            .lineLimit(1)
                             .frame(maxWidth: .infinity)
                     }
                     .buttonStyle(.glass)
+                    .accessibilityLabel(route.target == .aPosition ? "Führung zur A beenden" : "Zur A-Position von \(holder.data.funkrufname) führen")
                 }
                 Button(action: pressClaim) {
                     Label(isArmed ? "Bestätigen: Ich habe A" : "A übernehmen", systemImage: isArmed ? "checkmark.circle.fill" : "a.circle")
                         .fontWeight(.semibold)
+                        .lineLimit(1)
+                        .minimumScaleFactor(0.75)
                         .frame(maxWidth: .infinity)
                 }
                 .buttonStyle(.glassProminent)

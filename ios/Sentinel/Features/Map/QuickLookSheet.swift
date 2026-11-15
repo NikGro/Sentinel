@@ -127,7 +127,7 @@ private struct LastKnownQuickLook: View {
         List {
             if let lkp = lage.operation.lkp {
                 Section {
-                    LabeledContent("Zeitpunkt", value: lkp.date.formatted(date: .abbreviated, time: .shortened))
+                    LabeledContent("Zeitpunkt", value: Format.dateTime(lkp.date))
                     LabeledContent("Verstrichen", value: Format.ago(lkp.date))
                     LabeledContent("Quelle", value: lkp.quelle == "a" ? "A-Position beim Moduswechsel" : lkp.quelle == "tracker" ? "Tracker" : "Manuell gesetzt")
                     if let target = lkp.targetId.flatMap({ lage.targets[$0] }) {
