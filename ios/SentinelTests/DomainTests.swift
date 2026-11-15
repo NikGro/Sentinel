@@ -185,7 +185,7 @@ struct Version03Tests {
     }
 
     @Test func unbekannteMarkierungsartMachtDenLagestandNichtUnbrauchbar() throws {
-        let json = #"{"self":{"id":"a","role":"device"},"server":{"version":"9","routing":false},"online":[],"members":[],"vehicles":[],"annotations":[{"id":"x","rev":1,"updatedAt":1,"updatedBy":"a","data":{"layerId":"lage","typ":"zukunft","punkte":[{"lat":1,"lon":2}]}},{"id":"y","rev":1,"updatedAt":1,"updatedBy":"a","data":{"layerId":"lage","typ":"haltestellen","titel":"","notiz":"","farbe":"#0A84FF","symbol":"","punkte":[{"lat":1,"lon":2}],"radius":500}}],"targets":[],"trackers":[],"layers":[],"rooms":[],"messages":[],"operation":{},"positions":[],"trackerPositions":[]}"#
+        let json = ##"{"self":{"id":"a","role":"device"},"server":{"version":"9","routing":false},"online":[],"members":[],"vehicles":[],"annotations":[{"id":"x","rev":1,"updatedAt":1,"updatedBy":"a","data":{"layerId":"lage","typ":"zukunft","punkte":[{"lat":1,"lon":2}]}},{"id":"y","rev":1,"updatedAt":1,"updatedBy":"a","data":{"layerId":"lage","typ":"haltestellen","titel":"","notiz":"","farbe":"#0A84FF","symbol":"","punkte":[{"lat":1,"lon":2}],"radius":500}}],"targets":[],"trackers":[],"layers":[],"rooms":[],"messages":[],"operation":{},"positions":[],"trackerPositions":[]}"##
         let snapshot = try JSONDecoder().decode(Snapshot.self, from: Data(json.utf8))
         #expect(snapshot.annotations.map(\.id) == ["y"])
     }
