@@ -1,14 +1,9 @@
 import { useSignal } from '@preact/signals';
 import { useEffect } from 'preact/hooks';
 import { command, operation, reach, reachModes, tables, tool } from '../store';
-import { MODUS_TITEL, type Modus, type ReachMode } from '../types';
+import type { ReachMode } from '../types';
 import { ago, Field, Section, TextInput, time } from '../ui';
 
-const MODUS_HINWEIS: Record<Modus, string> = {
-  observation: 'A-Position, Navigation zur A, Zielperson im Blick',
-  fahndung: 'Bestreifung, letzter Standort, Weg-Zeit-Berechnung',
-  oberflaeche: 'Nur Kräfte und Markierungen',
-};
 const REACH_TITEL: Record<ReachMode, string> = { fuss: 'Zu Fuß', kfz: 'Kfz', oepnv: 'ÖPNV' };
 
 /** Einsatzinformationen, Modus, Funkkanal und die Werkzeuge der Fahndung. */
@@ -32,24 +27,6 @@ export function LagePanel() {
 
   return (
     <>
-      <Section title="Modus" hint="Gilt für alle. Beim Wechsel geht nichts verloren: Die A-Position wird in der Fahndung zum letzten bekannten Standort.">
-        <div class="segmented">
-          {(Object.keys(MODUS_TITEL) as Modus[]).map((modus) => (
-            <button
-              key={modus}
-              class={op.modus === modus ? 'active' : ''}
-              title={MODUS_HINWEIS[modus]}
-              onClick={() => {
-                if (op.modus !== modus && confirm(`Modus für alle auf „${MODUS_TITEL[modus]}“ ändern?`)) command('modus.setzen', { modus });
-              }}
-            >
-              {MODUS_TITEL[modus]}
-            </button>
-          ))}
-        </div>
-        <p class="hint">{MODUS_HINWEIS[op.modus]}</p>
-      </Section>
-
       <Section title="Funkkanal">
         <div class="row">
           <input class="mono" inputMode="numeric" maxLength={5} placeholder="1 bis 5 Ziffern" value={kanal.value} onInput={(e) => (kanal.value = e.currentTarget.value.replace(/\D/g, ''))} />
@@ -92,7 +69,7 @@ export function LagePanel() {
         <Section title="Letzter bekannter Standort">
           {op.lkp ? (
             <p>
-              {time(op.lkp.ts)} ({ago(op.lkp.ts)}) · {op.lkp.quelle === 'a' ? 'aus A-Position' : op.lkp.quelle === 'tracker' ? 'vom Tracker' : 'manuell'}
+              {time(op.lkp.ts)} ({ago(op.lkp.ts)}), {op.lkp.quelle === 'a' ? 'aus A-Position' : op.lkp.quelle === 'tracker' ? 'vom Tracker' : 'manuell'}
             </p>
           ) : (
             <p class="hint">Nicht gesetzt.</p>

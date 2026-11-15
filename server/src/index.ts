@@ -6,6 +6,7 @@ import { Database } from './db.js';
 import { buildApp, type Services } from './http/app.js';
 import { Hub } from './hub.js';
 import { Lage } from './lage.js';
+import { MapKitTokens } from './mapkit.js';
 import { ReachService } from './reach/reach.js';
 import { ReleaseStore } from './release.js';
 import { Vault } from './security.js';
@@ -41,6 +42,7 @@ export async function createServices(config: Config, database?: Database): Promi
     reach,
     vault,
     paj,
+    mapkit: new MapKitTokens(config.mapkit, new URL(config.publicUrl).origin),
     argus: new ArgusImporter(config.argusDir),
     releases: new ReleaseStore(config.dataDir, config.publicUrl),
     unknownTrackers: new Map(),

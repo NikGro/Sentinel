@@ -24,6 +24,21 @@ cd deploy/valhalla && docker compose up -d   # lädt Kartendaten und baut das We
 
 Ohne Valhalla rechnet der Server mit dem Näherungsmodell. Der Kartenausschnitt steht in `tile_urls`.
 
+### Apple Maps in der Kommandozentrale (optional)
+
+Die iPhone-App nutzt Apple Maps von Haus aus. Im Browser verlangt Apple einen MapKit-JS-Schlüssel, den es nur
+mit Mitgliedschaft im Apple Developer Program gibt. Ohne Schlüssel zeigt die Kommandozentrale OpenStreetMap.
+
+1. Im Apple-Entwicklerkonto unter *Certificates, Identifiers & Profiles* → *Keys* einen Schlüssel mit *MapKit JS*
+   anlegen und die `.p8`-Datei laden. Key-ID und Team-ID notieren.
+2. Datei als `deploy/data/AuthKey.p8` ablegen (`chown 10001:10001`, `chmod 600`).
+3. In `deploy/.env` `SENTINEL_MAPKIT_TEAM_ID`, `SENTINEL_MAPKIT_KEY_ID` und `SENTINEL_MAPKIT_KEY_FILE=/data/AuthKey.p8` setzen.
+4. `docker compose up -d`. Unter *System* steht danach „Karte: Apple Maps“.
+
+Der private Schlüssel bleibt auf dem Server. Der Browser erhält nur Tokens mit 30 Minuten Laufzeit, die an die eigene
+Adresse gebunden sind. Ist Apple nicht erreichbar, fällt die Anzeige auf OpenStreetMap zurück.
+Hinweis: Diese Anbindung ist ohne Schlüssel entstanden und deshalb noch nicht gegen Apple erprobt.
+
 ### Tracker
 
 Für SinoTrack muss TCP-Port 5013 vom Router auf den Server weitergeleitet sein. Siehe [TRACKER.md](TRACKER.md).

@@ -6,7 +6,7 @@ Einsatzwerkzeug für Zivilfahnder: gemeinsame Lagekarte für Observation und Fah
 | --- | --- | --- |
 | iOS-App | [`ios/`](ios) | SwiftUI, MapKit, iOS 26+, keine Fremdbibliotheken |
 | Lageserver | [`server/`](server) | Node.js 24, TypeScript, Fastify, SQLite |
-| Kommandozentrale (Web) | [`server/web/`](server/web) | Preact, MapLibre |
+| Kommandozentrale (Web) | [`server/web/`](server/web) | Preact, Apple Maps (MapKit JS) oder OpenStreetMap (MapLibre) |
 | Bereitstellung | [`deploy/`](deploy) | Docker Compose, optional Valhalla für die Weg-Zeit-Berechnung |
 
 Weiterführend: [Architektur](docs/ARCHITEKTUR.md) · [Sicherheit](docs/SICHERHEIT.md) · [Betrieb](docs/BETRIEB.md) · [Tracker](docs/TRACKER.md)
@@ -66,4 +66,5 @@ cd ios && xcodegen generate && open Sentinel.xcodeproj
 - ÖPNV in der Weg-Zeit-Berechnung ist ein Näherungsmodell; Fuß und Kfz rechnen auf dem echten Wegenetz (bis 120 bzw. 40 Minuten, danach Näherung).
 - Die PAJ-Anbindung folgt der öffentlichen Schnittstellenbeschreibung und ist noch nicht mit echten Geräten erprobt.
 - iOS gibt Apps die eigene Rufnummer nicht preis. Die Nummer wird deshalb aus der eigenen Kontaktkarte übernommen.
+- Apple Maps in der Kommandozentrale ist vorbereitet, aber mangels Schlüssel noch nicht gegen Apple erprobt; bis dahin läuft OpenStreetMap.
 - Noch offen: Telefonkonferenz, Phantombild per KI auf dem Gerät, eigene Tracker-Firmware.

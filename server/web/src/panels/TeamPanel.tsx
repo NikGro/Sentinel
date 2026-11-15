@@ -83,10 +83,10 @@ export function TeamPanel() {
                     {operation.value.a?.memberId === m.id && <span class="badge-a">A</span>}
                   </b>
                   <small>
-                    {m.data.name} · {m.data.dienststelle}
+                    {m.data.name}, {m.data.dienststelle}
                   </small>
                   <small class="hint">
-                    {[m.data.telefon, vehicle ? `in ${vehicle.data.bezeichnung}` : '', position ? `Position ${ago(position.ts)}` : 'keine Position'].filter(Boolean).join(' · ')}
+                    {[m.data.telefon, vehicle ? `in ${vehicle.data.bezeichnung}` : '', position ? `Position ${ago(position.ts)}` : 'keine Position'].filter(Boolean).join(', ')}
                   </small>
                 </div>
                 {position && (
@@ -121,7 +121,7 @@ export function TeamPanel() {
               <li key={v.id}>
                 <div class="grow">
                   <b>{v.data.bezeichnung}</b>
-                  <small>{[v.data.kennzeichen, crew.length ? `Besetzt: ${crew.join(', ')}` : 'Unbesetzt', tracked ? `Tracker ${ago(tracked.ts)}` : ''].filter(Boolean).join(' · ')}</small>
+                  <small>{[v.data.kennzeichen, crew.length ? `Besetzt: ${crew.join(', ')}` : 'Unbesetzt', tracked ? `Tracker ${ago(tracked.ts)}` : ''].filter(Boolean).join(', ')}</small>
                 </div>
                 {point && (
                   <button class="quiet" onClick={() => (focusRequest.value = { ...point, at: Date.now() })}>

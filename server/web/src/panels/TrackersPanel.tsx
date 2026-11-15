@@ -43,7 +43,7 @@ export function TrackersPanel() {
                 <div class="grow">
                   <b>{t.data.name}</b>
                   <small>
-                    {t.data.anbieter === 'paj' ? 'PAJ' : 'SinoTrack'} · <span class="mono">{t.data.kennung}</span> · {usage(t.id)}
+                    {t.data.anbieter === 'paj' ? 'PAJ' : 'SinoTrack'}, <span class="mono">{t.data.kennung}</span>, {usage(t.id)}
                   </small>
                   <small class="hint">{position ? `Letzte Position ${ago(position.ts)}` : 'Noch keine Position empfangen'}</small>
                 </div>

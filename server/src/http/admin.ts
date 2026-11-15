@@ -26,7 +26,7 @@ const argusColor = (faktor: number) => (faktor >= 3 ? '#FF3B30' : faktor >= 2 ? 
 
 /** Routen der Kommandozentrale: Anmeldung, Geräteverwaltung, Tracker-Anbieter, Pakete und Argus-Import. */
 export function registerAdminRoutes(app: FastifyInstance, services: Services, guards: Guards): void {
-  const { auth, lage, hub, db, config, argus, paj, vault, releases, reach, unknownTrackers } = services;
+  const { auth, lage, hub, db, config, argus, paj, vault, releases, reach, unknownTrackers, mapkit } = services;
   const loginLimiter = new RateLimiter(6, 10 * 60_000);
   const zentrale = { id: 'zentrale', role: 'zentrale' } as const;
 
@@ -63,9 +63,17 @@ export function registerAdminRoutes(app: FastifyInstance, services: Services, gu
       },
       argus: { verfuegbar: argus.available, projekte: argus.projects() },
       routing: reach.routingConfigured,
+      karte: mapkit.configured ? 'apple' : 'osm',
       release: releases.current(),
       sidestoreQuelle: `${config.publicUrl}/sidestore/source.json`,
     };
+  });
+
+  app.get('/api/v1/admin/mapkit-token', async (request) => {
+    guards.admin(request);
+    const token = mapkit.issue();
+    if (!token) throw new HttpError(404, 'Apple Maps ist auf diesem Server nicht eingerichtet.');
+    return { token };
   });
 
   app.post('/api/v1/admin/zugangscode', async (request) => {

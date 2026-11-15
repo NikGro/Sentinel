@@ -126,6 +126,7 @@ export interface AdminStatus {
   routing: boolean;
   release: { version: string; build: string; datum: string; groesse: number } | null;
   sidestoreQuelle: string;
+  karte: 'apple' | 'osm';
 }
 
 export const MODUS_TITEL: Record<Modus, string> = { observation: 'Observation', fahndung: 'Fahndung', oberflaeche: 'Oberfläche' };

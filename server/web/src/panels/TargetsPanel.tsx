@@ -106,8 +106,8 @@ export function TargetsPanel() {
               <div class="grow">
                 <b>{anzeigename(t.data)}</b>
                 <small>
-                  {[age !== null ? `${age} Jahre` : '', t.data.kennzeichen].filter(Boolean).join(' · ') || 'keine Angaben'}
-                  {position ? ` · Tracker ${ago(position.ts)}` : ''}
+                  {[age !== null ? `${age} Jahre` : '', t.data.kennzeichen].filter(Boolean).join(', ') || 'keine Angaben'}
+                  {position ? `, Tracker ${ago(position.ts)}` : ''}
                 </small>
                 <small class="hint">Geändert von {nameOf(t.updatedBy)}</small>
               </div>

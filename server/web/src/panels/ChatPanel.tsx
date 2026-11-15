@@ -22,7 +22,7 @@ export function ChatPanel() {
         {messages.value.map((m) => (
           <div key={m.id} class={`bubble ${m.updatedBy === 'zentrale' ? 'mine' : ''}`}>
             <small>
-              {nameOf(m.updatedBy)} · {time(m.updatedAt)}
+              {nameOf(m.updatedBy)}, {time(m.updatedAt)}
             </small>
             <div>{m.data.text}</div>
           </div>

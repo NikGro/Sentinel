@@ -46,7 +46,7 @@ export function SystemPanel() {
               <div class="grow">
                 <b>{tables.member.value[d.id]?.data.funkrufname ?? 'Ohne Profil'}</b>
                 <small>
-                  {d.name} · zuletzt {ago(d.lastSeen)}
+                  {d.name}, zuletzt {ago(d.lastSeen)}
                 </small>
               </div>
               <button
@@ -76,6 +76,7 @@ export function SystemPanel() {
       </Section>
 
       <Section title="Dienste">
+        <p>Karte: {status.karte === 'apple' ? 'Apple Maps' : 'OpenStreetMap (kein Apple-Maps-Schlüssel hinterlegt)'}</p>
         <p>Weg-Zeit-Berechnung: {status.routing ? 'Wegenetz (Valhalla) für Fuß und Kfz, ÖPNV als Näherung' : 'Näherungsmodell'}</p>
         <p>Tracker-Empfang: {status.tracker.h02Port ? `TCP-Port ${status.tracker.h02Port}` : 'abgeschaltet'}</p>
         <p>Argus Predict: {status.argus.verfuegbar ? `${status.argus.projekte.length} Projekte` : 'nicht eingebunden'}</p>

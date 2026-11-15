@@ -33,7 +33,7 @@
 
 - Daten liegen auf dem Server im Klartext in SQLite (Dateirechte 600). Schutz der Platte ist Sache des Betreibers
   (verschlüsseltes Volume empfohlen). Eine Ende-zu-Ende-Verschlüsselung gibt es nicht.
-- Kartenkacheln: Die App nutzt Apple Karten, die Kommandozentrale OpenStreetMap. Beide Anbieter sehen, welcher
+- Kartenkacheln: Die App nutzt Apple Karten, die Kommandozentrale Apple Maps (mit Schlüssel) oder OpenStreetMap. Beide Anbieter sehen, welcher
   Kartenausschnitt geladen wird, aber keine Einsatzdaten. Routen zur A-Position berechnet Apple Karten.
 - H02-Tracker senden unverschlüsselt und ohne Anmeldung; angenommen werden nur Positionen bekannter Gerätekennungen.
 - Vor einem dienstlichen Einsatz mit echten personenbezogenen Daten: Freigabe durch IT-Sicherheit und Datenschutz.
