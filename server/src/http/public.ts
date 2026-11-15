@@ -1,4 +1,5 @@
-import { createReadStream, createWriteStream, rmSync } from 'node:fs';
+import { createReadStream, createWriteStream, existsSync, rmSync } from 'node:fs';
+import { join } from 'node:path';
 import { pipeline } from 'node:stream/promises';
 import type { FastifyInstance } from 'fastify';
 import { z } from 'zod';
@@ -37,6 +38,11 @@ export function registerPublicRoutes(app: FastifyInstance, services: Services, g
 
   app.get('/sidestore/:file', async (request, reply) => {
     const { file } = request.params as { file: string };
+    const icon = join(config.webDir, 'icon.png');
+    if (file === 'icon.png' && existsSync(icon)) {
+      reply.header('Content-Type', 'image/png').header('Cross-Origin-Resource-Policy', 'cross-origin').header('Cache-Control', 'public, max-age=86400');
+      return reply.send(createReadStream(icon));
+    }
     if (!/^Sentinel-[0-9.]+-\d+\.ipa$/.test(file) || !releases.current()) throw new HttpError(404, 'Nicht gefunden.');
     reply
       .header('Content-Type', 'application/octet-stream')

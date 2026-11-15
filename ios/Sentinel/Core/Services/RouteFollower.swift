@@ -100,8 +100,8 @@ final class RouteFollower {
         defer { isCalculating = false }
 
         let request = MKDirections.Request()
-        request.source = MKMapItem(placemark: MKPlacemark(coordinate: from.coordinate))
-        request.destination = MKMapItem(placemark: MKPlacemark(coordinate: resolved.point.coordinate))
+        request.source = MKMapItem(location: CLLocation(latitude: from.lat, longitude: from.lon), address: nil)
+        request.destination = MKMapItem(location: CLLocation(latitude: resolved.point.lat, longitude: resolved.point.lon), address: nil)
         request.transportType = walking ? .walking : .automobile
         do {
             let response = try await MKDirections(request: request).calculate()
@@ -117,7 +117,7 @@ final class RouteFollower {
     /// Übergibt das aktuelle Ziel an Apple Karten (statische Route ohne Nachführung).
     func openInMaps() {
         guard let destination else { return }
-        let item = MKMapItem(placemark: MKPlacemark(coordinate: destination.coordinate))
+        let item = MKMapItem(location: CLLocation(latitude: destination.lat, longitude: destination.lon), address: nil)
         item.name = title
         item.openInMaps(launchOptions: [MKLaunchOptionsDirectionsModeKey: walking ? MKLaunchOptionsDirectionsModeWalking : MKLaunchOptionsDirectionsModeDriving])
     }

@@ -1,0 +1,36 @@
+# SENTINEL Lageserver. Start: docker compose up -d --build
+# Erwartet eine Datei .env neben dieser Datei (siehe .env.example) und das Docker-Netz "sentinel".
+name: sentinel
+
+services:
+  server:
+    build: ../server
+    image: sentinel-server:local
+    container_name: Sentinel
+    restart: unless-stopped
+    env_file: .env
+    environment:
+      SENTINEL_TRACKER_PORT: "5013"
+      SENTINEL_VALHALLA_URL: http://Sentinel-Valhalla:8002
+      SENTINEL_ARGUS_DIR: /argus
+    ports:
+      # Weboberfläche und API: nur lokal, davor steht der Reverse Proxy mit TLS.
+      - "127.0.0.1:8790:8790"
+      # SinoTrack/H02-Tracker (TCP). Nur erreichbar, wenn der Router den Port weiterleitet.
+      - "5013:5013"
+    volumes:
+      - ./data:/data
+      - ${ARGUS_DATA_DIR:-./argus-leer}:/argus:ro
+    networks: [sentinel]
+    # Härtung: kein Schreibzugriff außerhalb von /data, keine Sonderrechte.
+    read_only: true
+    tmpfs: [/tmp]
+    cap_drop: [ALL]
+    security_opt: ["no-new-privileges:true"]
+    mem_limit: 512m
+    pids_limit: 256
+
+networks:
+  sentinel:
+    name: sentinel
+    external: true

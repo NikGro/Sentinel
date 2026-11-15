@@ -58,7 +58,6 @@ export async function buildApp(services: Services): Promise<FastifyInstance> {
     logger: config.production ? { level: 'info', redact: ['req.headers.authorization', 'req.headers.cookie'] } : false,
     trustProxy: true,
     bodyLimit: 256 * 1024,
-    disableRequestLogging: true,
   });
 
   await app.register(cookie);
