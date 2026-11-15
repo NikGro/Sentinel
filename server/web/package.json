@@ -1,0 +1,22 @@
+{
+  "name": "sentinel-kommandozentrale",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "npm run worker && vite",
+    "build": "npm run worker && tsc --noEmit && vite build",
+    "typecheck": "tsc --noEmit",
+    "worker": "mkdir -p public/maplibre && cp node_modules/maplibre-gl/dist/maplibre-gl-worker.mjs node_modules/maplibre-gl/dist/maplibre-gl-shared.mjs public/maplibre/"
+  },
+  "dependencies": {
+    "@preact/signals": "^2.11.4",
+    "maplibre-gl": "^6.18.0",
+    "preact": "^11.2.0"
+  },
+  "devDependencies": {
+    "@preact/preset-vite": "^2.10.1",
+    "typescript": "^5.7.3",
+    "vite": "^6.1.0"
+  }
+}

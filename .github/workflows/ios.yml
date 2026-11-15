@@ -1,0 +1,111 @@
+name: iOS-App
+
+on:
+  push:
+    branches: [main, "claude/**"]
+    paths: ["ios/**", ".github/workflows/ios.yml"]
+  pull_request:
+    paths: ["ios/**", ".github/workflows/ios.yml"]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ios-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    name: Testen und unsignierte IPA bauen
+    runs-on: macos-26
+    timeout-minutes: 45
+    defaults:
+      run:
+        working-directory: ios
+    env:
+      BUILD_NUMBER: ${{ github.run_number }}
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          persist-credentials: false
+
+      - name: Werkzeuge
+        run: |
+          xcodebuild -version
+          which xcodegen || brew install xcodegen
+          xcodegen generate
+
+      - name: Tests im Simulator
+        run: |
+          set -o pipefail
+          DEVICE=$(xcrun simctl list devices available | grep -E '^\s+iPhone' | head -1 | sed -E 's/^ +//; s/ \([0-9A-F-]{36}\).*//')
+          echo "Simulator: $DEVICE"
+          xcodebuild test \
+            -project Sentinel.xcodeproj -scheme Sentinel \
+            -destination "platform=iOS Simulator,name=$DEVICE" \
+            -derivedDataPath build/DerivedData \
+            -resultBundlePath build/Tests.xcresult \
+            CODE_SIGNING_ALLOWED=NO 2>&1 | tee build-test.log | xcbeautify --quiet
+
+      - name: Bildschirmfotos des Rundgangs
+        if: always()
+        run: |
+          xcrun xcresulttool export attachments --path build/Tests.xcresult --output-path build/Bildschirmfotos || true
+          ls build/Bildschirmfotos 2>/dev/null | head -40 || true
+
+      - uses: actions/upload-artifact@v5
+        if: always()
+        with:
+          name: Bildschirmfotos-${{ github.run_number }}
+          path: ios/build/Bildschirmfotos
+          if-no-files-found: ignore
+          retention-days: 14
+
+      - name: Fehlerübersicht
+        if: failure()
+        run: |
+          grep -hE "(error|warning: unre|failed|Test Case .* failed|Expectation failed)" build-*.log | sort -u | head -150 || true
+
+      - name: Unsigniertes Archiv
+        run: |
+          set -o pipefail
+          xcodebuild archive \
+            -project Sentinel.xcodeproj -scheme Sentinel -configuration Release \
+            -destination "generic/platform=iOS" \
+            -archivePath build/Sentinel.xcarchive \
+            -derivedDataPath build/DerivedData \
+            CURRENT_PROJECT_VERSION="$BUILD_NUMBER" \
+            CODE_SIGNING_ALLOWED=NO CODE_SIGNING_REQUIRED=NO CODE_SIGN_IDENTITY="" 2>&1 | tee build-archive.log | xcbeautify --quiet
+
+      - name: IPA packen
+        id: ipa
+        run: |
+          rm -rf build/Payload && mkdir -p build/Payload
+          cp -R build/Sentinel.xcarchive/Products/Applications/Sentinel.app build/Payload/
+          (cd build && zip -qry Sentinel.ipa Payload)
+          VERSION=$(/usr/libexec/PlistBuddy -c "Print :CFBundleShortVersionString" build/Payload/Sentinel.app/Info.plist)
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+          ls -lh build/Sentinel.ipa
+
+      - uses: actions/upload-artifact@v5
+        with:
+          name: Sentinel-${{ steps.ipa.outputs.version }}-${{ github.run_number }}
+          path: ios/build/Sentinel.ipa
+          if-no-files-found: error
+          retention-days: 30
+
+      # Veröffentlicht die IPA in der SideStore-Quelle des eigenen Servers.
+      # Läuft nur auf main bzw. bei manuellem Start und nur, wenn das Deploy-Token hinterlegt ist.
+      - name: In SideStore-Quelle veröffentlichen
+        if: (github.ref == 'refs/heads/main' || github.event_name == 'workflow_dispatch') && env.SENTINEL_DEPLOY_TOKEN != ''
+        env:
+          SENTINEL_DEPLOY_TOKEN: ${{ secrets.SENTINEL_DEPLOY_TOKEN }}
+          SENTINEL_URL: ${{ vars.SENTINEL_URL || 'https://sentinel.ng-lab.de' }}
+          VERSION: ${{ steps.ipa.outputs.version }}
+        run: |
+          curl --fail --silent --show-error \
+            -X POST "$SENTINEL_URL/api/v1/deploy/release?version=$VERSION&build=$BUILD_NUMBER" \
+            -H "Authorization: Bearer $SENTINEL_DEPLOY_TOKEN" \
+            -H "Content-Type: application/octet-stream" \
+            --data-binary @build/Sentinel.ipa

@@ -1,0 +1,34 @@
+# Routing-Dienst für die Weg-Zeit-Berechnung (Aufenthaltsbereich der Zielperson).
+# Optionaler Baustein: Ohne ihn rechnet der Sentinel-Server mit einem Näherungsmodell.
+# Der Dienst ist nur im internen Docker-Netz "sentinel" erreichbar, es wird kein Port veröffentlicht.
+name: sentinel-routing
+
+services:
+  valhalla:
+    image: ghcr.io/valhalla/valhalla-scripted:latest
+    container_name: Sentinel-Valhalla
+    restart: unless-stopped
+    environment:
+      # Kartenausschnitt: Hamburg und Umland. Weitere Länder mit Leerzeichen getrennt ergänzen.
+      tile_urls: >-
+        https://download.geofabrik.de/europe/germany/hamburg-latest.osm.pbf
+        https://download.geofabrik.de/europe/germany/schleswig-holstein-latest.osm.pbf
+        https://download.geofabrik.de/europe/germany/niedersachsen-latest.osm.pbf
+      server_threads: "2"
+      serve_tiles: "True"
+      build_elevation: "False"
+      build_admins: "False"
+      build_time_zones: "False"
+      build_tar: "True"
+      force_rebuild: "False"
+    volumes:
+      - ./data:/custom_files
+    networks: [sentinel]
+    mem_limit: 6g
+    # Synology-Kernel kennt keine CPU-Quoten, deshalb nur eine niedrige Gewichtung.
+    cpu_shares: 256
+
+networks:
+  sentinel:
+    name: sentinel
+    external: true

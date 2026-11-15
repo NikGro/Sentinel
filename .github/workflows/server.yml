@@ -1,0 +1,49 @@
+name: Server
+
+on:
+  push:
+    branches: [main, "claude/**"]
+    paths: ["server/**", ".github/workflows/server.yml"]
+  pull_request:
+    paths: ["server/**", ".github/workflows/server.yml"]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: server-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  test:
+    name: Typprüfung, Tests, Build
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    defaults:
+      run:
+        working-directory: server
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 24
+          cache: npm
+          cache-dependency-path: |
+            server/package-lock.json
+            server/web/package-lock.json
+      - run: npm ci
+      - run: npm ci --prefix web
+      - run: npm run typecheck
+      - run: npm test
+      - run: npm run build
+      - name: Abhängigkeiten auf bekannte Schwachstellen prüfen
+        run: npm audit --omit=dev --audit-level=high
+      - name: Quellpaket für die Bereitstellung
+        run: tar -czf ../sentinel-server.tar.gz --exclude=node_modules --exclude=dist --exclude=test -C .. server deploy
+      - uses: actions/upload-artifact@v5
+        with:
+          name: sentinel-server
+          path: sentinel-server.tar.gz
+          retention-days: 14
