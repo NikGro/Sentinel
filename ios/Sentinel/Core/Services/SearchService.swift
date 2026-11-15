@@ -37,7 +37,7 @@ final class SearchService: NSObject, MKLocalSearchCompleterDelegate {
     }
 
     /// Teilt eine Eingabe an "&" oder "/" in zwei Straßennamen.
-    static func intersectionParts(_ text: String) -> (String, String)? {
+    nonisolated static func intersectionParts(_ text: String) -> (String, String)? {
         guard let separator = text.firstIndex(where: { $0 == "&" || $0 == "/" }) else { return nil }
         let a = text[..<separator].trimmingCharacters(in: .whitespaces)
         let b = text[text.index(after: separator)...].trimmingCharacters(in: .whitespaces)
@@ -45,7 +45,7 @@ final class SearchService: NSObject, MKLocalSearchCompleterDelegate {
     }
 
     /// "12 Musterstraße" wird zu "Musterstraße 12"; andere Eingaben bleiben unverändert.
-    static func normalizedAddress(_ text: String) -> String {
+    nonisolated static func normalizedAddress(_ text: String) -> String {
         let trimmed = text.trimmingCharacters(in: .whitespaces)
         guard let match = trimmed.wholeMatch(of: #/(\d+\s?[a-zA-Z]?)\s+(\D.*)/#) else { return trimmed }
         return "\(match.2) \(match.1)"

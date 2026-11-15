@@ -31,7 +31,7 @@ final class LocationContext {
     }
 
     /// Kurs in Grad als Himmelsrichtung, z. B. "Nordost".
-    static func cardinal(_ degrees: CLLocationDirection) -> String {
+    nonisolated static func cardinal(_ degrees: CLLocationDirection) -> String {
         let names = ["Nord", "Nordost", "Ost", "Südost", "Süd", "Südwest", "West", "Nordwest"]
         let index = Int(((degrees.truncatingRemainder(dividingBy: 360) + 360 + 22.5) / 45).rounded(.down)) % 8
         return names[index]
