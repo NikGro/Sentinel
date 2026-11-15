@@ -15,6 +15,9 @@ struct SentinelApp: App {
                 .environment(model.photos)
                 .environment(model.fahndung)
                 .environment(model.route)
+                .environment(model.locationContext)
+                .environment(model.search)
+                .environment(model.audio)
                 .environment(model.lock)
                 .environment(\.locale, Format.locale)
                 .onChange(of: scenePhase) { _, phase in

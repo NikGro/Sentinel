@@ -1,17 +1,12 @@
 import { useSignal } from '@preact/signals';
 import { useEffect } from 'preact/hooks';
-import { command, operation, reach, reachModes, tables, tool } from '../store';
-import { MODUS_TITEL, type Modus, type ReachMode } from '../types';
+import { command, focusRequest, memberLabel, operation, permanentUnlocked, reach, reachModes, saveObject, selectedObject, showCoverage, tables, toggleCoverage } from '../store';
+import type { ReachMode } from '../types';
 import { ago, Field, Section, TextInput, time } from '../ui';
 
-const MODUS_HINWEIS: Record<Modus, string> = {
-  observation: 'A-Position, Navigation zur A, Zielperson im Blick',
-  fahndung: 'Bestreifung, letzter Standort, Weg-Zeit-Berechnung',
-  oberflaeche: 'Nur Kräfte und Markierungen',
-};
 const REACH_TITEL: Record<ReachMode, string> = { fuss: 'Zu Fuß', kfz: 'Kfz', oepnv: 'ÖPNV' };
 
-/** Einsatzinformationen, Modus, Funkkanal und die Werkzeuge der Fahndung. */
+/** Einsatzinformationen, Funkkanal, A-Position, Fahndungsräume und Bestreifung. */
 export function LagePanel() {
   const op = operation.value;
   const titel = useSignal(op.titel);
@@ -29,27 +24,10 @@ export function LagePanel() {
   const dirty = titel.value !== op.titel || hinweise.value !== op.hinweise;
   const kanalValid = kanal.value === '' || /^\d{1,5}$/.test(kanal.value);
   const aHolder = op.a ? tables.member.value[op.a.memberId] : null;
+  const fahndungsraeume = Object.values(tables.annotation.value).filter((a) => a.data.typ === 'fahndungsraum');
 
   return (
     <>
-      <Section title="Modus" hint="Gilt für alle. Beim Wechsel geht nichts verloren: Die A-Position wird in der Fahndung zum letzten bekannten Standort.">
-        <div class="segmented">
-          {(Object.keys(MODUS_TITEL) as Modus[]).map((modus) => (
-            <button
-              key={modus}
-              class={op.modus === modus ? 'active' : ''}
-              title={MODUS_HINWEIS[modus]}
-              onClick={() => {
-                if (op.modus !== modus && confirm(`Modus für alle auf „${MODUS_TITEL[modus]}“ ändern?`)) command('modus.setzen', { modus });
-              }}
-            >
-              {MODUS_TITEL[modus]}
-            </button>
-          ))}
-        </div>
-        <p class="hint">{MODUS_HINWEIS[op.modus]}</p>
-      </Section>
-
       <Section title="Funkkanal">
         <div class="row">
           <input class="mono" inputMode="numeric" maxLength={5} placeholder="1 bis 5 Ziffern" value={kanal.value} onInput={(e) => (kanal.value = e.currentTarget.value.replace(/\D/g, ''))} />
@@ -71,71 +49,105 @@ export function LagePanel() {
         </button>
       </Section>
 
-      {op.modus === 'observation' && (
-        <Section title="A-Position">
-          {aHolder && op.a ? (
-            <div class="row between">
-              <span>
-                <b>{aHolder.data.funkrufname}</b> seit {time(op.a.seit)}
-              </span>
-              <button class="quiet" onClick={() => command('a.freigeben')}>
-                Freigeben
-              </button>
-            </div>
-          ) : (
-            <p class="hint">Niemand hält die A-Position. Übernommen wird sie in der App.</p>
-          )}
-        </Section>
-      )}
-
-      {op.modus !== 'oberflaeche' && (
-        <Section title="Letzter bekannter Standort">
-          {op.lkp ? (
-            <p>
-              {time(op.lkp.ts)} ({ago(op.lkp.ts)}) · {op.lkp.quelle === 'a' ? 'aus A-Position' : op.lkp.quelle === 'tracker' ? 'vom Tracker' : 'manuell'}
-            </p>
-          ) : (
-            <p class="hint">Nicht gesetzt.</p>
-          )}
-          <div class="row">
-            <button class={tool.value.kind === 'lkp' ? 'active' : ''} onClick={() => (tool.value = tool.value.kind === 'lkp' ? { kind: 'auswahl' } : { kind: 'lkp' })}>
-              Auf Karte setzen
+      <Section title="A-Position" hint="Übernommen wird die A-Position in der App. Hier lässt sie sich freigeben.">
+        {aHolder && op.a ? (
+          <div class="row between">
+            <span>
+              <b>{memberLabel(aHolder.data)}</b> seit {time(op.a.seit)}
+            </span>
+            <button class="quiet" onClick={() => command('a.freigeben')}>
+              Freigeben
             </button>
-            {op.lkp && (
-              <>
-                <button onClick={() => command('lkp.setzen', { lat: op.lkp!.lat, lon: op.lkp!.lon, targetId: op.lkp!.targetId })}>Zeit auf jetzt</button>
-                <button class="quiet" onClick={() => command('lkp.loeschen')}>
-                  Entfernen
-                </button>
-              </>
+          </div>
+        ) : (
+          <p class="hint">Niemand hält die A-Position.</p>
+        )}
+        {aHolder?.data.fortbewegung === 'oepnv' && aHolder.data.oepnv && (
+          <>
+            <p>
+              Im ÖPNV: <b>{aHolder.data.oepnv.linie}</b> Richtung {aHolder.data.oepnv.richtung}
+            </p>
+            {op.ueberschlagen.naechste.length > 0 && (
+              <ol class="stops">
+                {op.ueberschlagen.naechste.map((stop) => {
+                  const assigned = Object.entries(op.ueberschlagen.zuweisungen)
+                    .filter(([, s]) => s.name === stop.name && s.lat === stop.lat)
+                    .map(([id]) => tables.member.value[id]?.data.spitzname ?? 'Unbekannt');
+                  return (
+                    <li key={`${stop.name}-${stop.lat}`}>
+                      <button class="quiet" onClick={() => (focusRequest.value = { ...stop, at: Date.now() })}>
+                        {stop.name}
+                      </button>
+                      {assigned.length > 0 && <small>besetzt von {assigned.join(', ')}</small>}
+                    </li>
+                  );
+                })}
+              </ol>
             )}
-          </div>
-        </Section>
-      )}
+          </>
+        )}
+      </Section>
 
-      {op.modus === 'fahndung' && (
-        <Section title="Fahndung" hint="Die Flächen zeigen, wo sich die Zielperson seit dem letzten Standort befinden kann, und wachsen mit der Zeit.">
-          <div class="row">
-            {(Object.keys(REACH_TITEL) as ReachMode[]).map((mode) => (
-              <label key={mode} class={`chip reach-${mode} ${reachModes.value[mode] ? 'on' : ''}`}>
-                <input type="checkbox" checked={reachModes.value[mode]} onChange={() => (reachModes.value = { ...reachModes.value, [mode]: !reachModes.value[mode] })} />
-                {REACH_TITEL[mode]}
-              </label>
-            ))}
-          </div>
-          {reach.value.some((a) => a.quelle === 'modell') && <p class="hint">Teilweise Näherungsmodell (ÖPNV sowie lange Zeiträume).</p>}
-          <button
-            class="quiet"
-            onClick={() => {
-              if (confirm('Bisherige Bestreifung für alle löschen?')) command('bestreifung.zuruecksetzen');
-            }}
-          >
-            Bestreifung zurücksetzen
-          </button>
-        </Section>
-      )}
+      <Section title="Fahndungsräume" hint="Ein Fahndungsraum zeigt, wo sich die Zielperson seit dem angegebenen Zeitpunkt befinden kann. Neu anlegen über die Werkzeugleiste der Karte.">
+        <div class="row">
+          {(Object.keys(REACH_TITEL) as ReachMode[]).map((mode) => (
+            <label key={mode} class={`chip reach-${mode} ${reachModes.value[mode] ? 'on' : ''}`}>
+              <input type="checkbox" checked={reachModes.value[mode]} onChange={() => (reachModes.value = { ...reachModes.value, [mode]: !reachModes.value[mode] })} />
+              {REACH_TITEL[mode]}
+            </label>
+          ))}
+        </div>
+        {fahndungsraeume.length === 0 && <p class="hint">Kein Fahndungsraum angelegt.</p>}
+        <ul class="list">
+          {fahndungsraeume.map((room) => (
+            <li key={room.id}>
+              <div class="grow">
+                <b>{room.data.titel || 'Fahndungsraum'}</b>
+                <small>
+                  seit {room.data.zeit ? time(room.data.zeit) : '–'} ({room.data.zeit ? ago(room.data.zeit) : ''})
+                  {(reach.value[room.id] ?? []).some((a) => a.quelle === 'modell') ? ', teils Näherung' : ''}
+                </small>
+              </div>
+              <button
+                class="quiet"
+                onClick={() => {
+                  focusRequest.value = { ...room.data.punkte[0]!, at: Date.now() };
+                  selectedObject.value = room.id;
+                }}
+              >
+                Zeigen
+              </button>
+              <button onClick={() => saveObject(room.id, { ...room.data, zeit: Date.now() })} title="Zeitpunkt auf jetzt setzen">
+                Jetzt
+              </button>
+            </li>
+          ))}
+        </ul>
+      </Section>
 
-      <Section title="Lage abschließen" hint="Entfernt Markierungen der laufenden Lage, geladene Pakete, Chat, Bestreifung und letzten Standort. Dauerhafte Orte, Profile, Fahrzeuge und Tracker bleiben.">
+      <Section title="Bestreifung" hint="Aufgezeichnet wird immer. Die Anzeige auf dieser Karte schaltet jeder für sich ein.">
+        <label class="check">
+          <input type="checkbox" checked={showCoverage.value} onChange={toggleCoverage} />
+          Bestreifte Wege anzeigen
+        </label>
+        <button
+          class="quiet"
+          onClick={() => {
+            if (confirm('Bisherige Bestreifung für alle löschen?')) command('bestreifung.zuruecksetzen');
+          }}
+        >
+          Bestreifung zurücksetzen
+        </button>
+      </Section>
+
+      <Section title="Dauerhafte Orte" hint="Die Ebene ist gegen versehentliches Bearbeiten gesperrt. Ausblenden geht unter Ebenen.">
+        <label class="check">
+          <input type="checkbox" checked={permanentUnlocked.value} onChange={() => (permanentUnlocked.value = !permanentUnlocked.value)} />
+          Zum Bearbeiten entsperren
+        </label>
+      </Section>
+
+      <Section title="Lage abschließen" hint="Entfernt Markierungen der laufenden Lage, geladene Pakete, Chatnachrichten und Bestreifung. Dauerhafte Orte, Profile, Fahrzeuge, Tracker und Chaträume bleiben.">
         <a class="button" href="/api/v1/admin/export" download>
           Lage vorher sichern (JSON)
         </a>

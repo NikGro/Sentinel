@@ -1,4 +1,3 @@
-import type { Server } from 'node:net';
 import { ArgusImporter } from './argus.js';
 import { Auth } from './auth.js';
 import { loadConfig, type Config } from './config.js';
@@ -6,13 +5,16 @@ import { Database } from './db.js';
 import { buildApp, type Services } from './http/app.js';
 import { Hub } from './hub.js';
 import { Lage } from './lage.js';
+import { MapKitTokens } from './mapkit.js';
+import { createOverpassClient, OepnvStore } from './oepnv.js';
 import { ReachService } from './reach/reach.js';
+import { RouteService } from './reach/route.js';
 import { ReleaseStore } from './release.js';
 import { Vault } from './security.js';
-import { startH02Listener } from './trackers/h02.js';
+import { intervalCommand, startH02Listener, type H02Listener } from './trackers/h02.js';
 import { PajPoller, type PajCredentials } from './trackers/paj.js';
 
-export const SERVER_VERSION = '0.1.0';
+export const SERVER_VERSION = '0.2.0';
 const MAX_UNKNOWN_TRACKERS = 50;
 
 /** Baut alle Dienste zusammen. Getrennt von `main`, damit Tests denselben Aufbau mit einer Speicher-Datenbank nutzen. */
@@ -20,7 +22,9 @@ export async function createServices(config: Config, database?: Database): Promi
   const db = database ?? new Database(config.dataDir);
   const auth = new Auth(db);
   await auth.bootstrap(config.dataDir);
-  const lage = new Lage(db);
+  const overpass = config.overpassUrl ? createOverpassClient(config.overpassUrl) : null;
+  const oepnv = new OepnvStore(config.dataDir, config.oepnvBbox, overpass);
+  const lage = new Lage(db, (linienId, position, count) => oepnv.upcoming(linienId, position, count));
   const reach = new ReachService(config.valhallaUrl);
   const hub = new Hub(lage, () => ({ version: SERVER_VERSION, routing: reach.routingConfigured }));
   const vault = new Vault(config.dataKey);
@@ -39,18 +43,22 @@ export async function createServices(config: Config, database?: Database): Promi
     lage,
     hub,
     reach,
+    routes: new RouteService(config.valhallaUrl),
     vault,
     paj,
+    oepnv,
+    overpass,
+    mapkit: new MapKitTokens(config.mapkit, new URL(config.publicUrl).origin),
     argus: new ArgusImporter(config.argusDir),
     releases: new ReleaseStore(config.dataDir, config.publicUrl),
     unknownTrackers: new Map(),
   };
 }
 
-function startTrackerListener(services: Services): Server | null {
+function startTrackerListener(services: Services): H02Listener | null {
   const { config, lage, unknownTrackers } = services;
   if (config.trackerPort === 0) return null;
-  return startH02Listener(
+  const listener = startH02Listener(
     config.trackerPort,
     config.host,
     (fix) => {
@@ -63,6 +71,10 @@ function startTrackerListener(services: Services): Server | null {
       unknownTrackers.set(kennung, Date.now());
     },
   );
+  lage.on('event', (event) => {
+    if (event.type === 'trackerIntervall' && event.anbieter === 'sinotrack') listener.send(event.kennung, intervalCommand(event.kennung, event.sekunden));
+  });
+  return listener;
 }
 
 async function main(): Promise<void> {
@@ -70,13 +82,15 @@ async function main(): Promise<void> {
   const services = await createServices(config);
   const app = await buildApp(services);
   const trackerListener = startTrackerListener(services);
+  services.oepnv.refreshIfStale();
+  setInterval(() => services.oepnv.refreshIfStale(), 6 * 3600_000).unref();
   await app.listen({ host: config.host, port: config.port });
   console.log(`SENTINEL Server ${SERVER_VERSION} läuft auf ${config.host}:${config.port}`);
 
   const shutdown = async () => {
     services.hub.close();
     services.paj.stop();
-    trackerListener?.close();
+    trackerListener?.server.close();
     await app.close();
     services.db.close();
     process.exit(0);

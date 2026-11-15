@@ -1,6 +1,7 @@
+import MapKit
 import SwiftUI
 
-/// Zielpersonen: jederzeit schnell aufrufbar, von allen bearbeitbar.
+/// Ziele (Personen, Fahrzeuge, Objekte): jederzeit schnell aufrufbar, von allen bearbeitbar.
 struct TargetListScreen: View {
     @Environment(LageStore.self) private var lage
     @State private var editing: TargetEditorContext?
@@ -17,23 +18,29 @@ struct TargetListScreen: View {
             .overlay {
                 if lage.targets.isEmpty {
                     ContentUnavailableView {
-                        Label("Keine Zielpersonen", systemImage: "person.crop.rectangle.stack")
+                        Label("Keine Ziele", systemImage: "person.crop.rectangle.stack")
                     } description: {
-                        Text("Legen Sie eine Zielperson an. Alle im Einsatz sehen und bearbeiten dieselben Angaben.")
+                        Text("Zielpersonen, Zielfahrzeuge und Zielobjekte lassen sich hier oder über das Plus auf der Karte anlegen. Alle im Einsatz sehen und bearbeiten dieselben Angaben.")
                     } actions: {
-                        Button("Zielperson anlegen") { editing = TargetEditorContext(id: LageStore.newId(), target: Target(), isNew: true) }
+                        Button("Zielperson anlegen") { editing = TargetEditorContext(id: LageStore.newId(), target: Target(art: .person), isNew: true) }
                             .buttonStyle(.glassProminent)
                     }
                 }
             }
-            .navigationTitle("Zielpersonen")
+            .navigationTitle("Ziele")
             .navigationDestination(for: String.self) { id in
                 TargetDetail(targetId: id)
             }
             .toolbar {
                 ToolbarItem(placement: .primaryAction) {
-                    Button("Zielperson anlegen", systemImage: "plus") {
-                        editing = TargetEditorContext(id: LageStore.newId(), target: Target(), isNew: true)
+                    Menu {
+                        ForEach(ZielArt.allCases) { art in
+                            Button(art.title, systemImage: art.symbolName) {
+                                editing = TargetEditorContext(id: LageStore.newId(), target: Target(art: art), isNew: true)
+                            }
+                        }
+                    } label: {
+                        Label("Ziel anlegen", systemImage: "plus")
                     }
                 }
             }
@@ -59,7 +66,7 @@ private struct TargetRow: View {
             RemoteImage(blobId: target.data.fotoBlob) {
                 ZStack {
                     Theme.target.opacity(0.2)
-                    Image(systemName: "person.fill")
+                    Image(systemName: target.data.art.symbolName)
                         .foregroundStyle(Theme.target)
                 }
             }
@@ -78,8 +85,8 @@ private struct TargetRow: View {
                     Text(target.data.kennzeichen)
                         .font(.caption.monospaced().weight(.semibold))
                 }
-                if lage.position(ofTarget: target) != nil {
-                    Label("Tracker aktiv", systemImage: "dot.radiowaves.left.and.right")
+                if let position = lage.position(ofTarget: target) {
+                    Label(position.fromTracker ? "Tracker aktiv" : "Standort gesetzt", systemImage: position.fromTracker ? "dot.radiowaves.left.and.right" : "mappin")
                         .font(.caption)
                         .foregroundStyle(.green)
                 }
@@ -88,9 +95,11 @@ private struct TargetRow: View {
     }
 }
 
-/// Vollständiges Profil einer Zielperson.
+/// Vollständiges Profil eines Ziels.
 struct TargetDetail: View {
     let targetId: String
+    /// Standort auf der Karte neu setzen; nur verfügbar, wenn die Detailansicht über der Karte liegt.
+    var placeOnMap: ((String) -> Void)?
 
     @Environment(AppModel.self) private var model
     @Environment(LageStore.self) private var lage
@@ -101,7 +110,7 @@ struct TargetDetail: View {
         if let target = lage.targets[targetId] {
             content(target)
         } else {
-            ContentUnavailableView("Zielperson wurde entfernt", systemImage: "person.slash")
+            ContentUnavailableView("Ziel wurde entfernt", systemImage: "person.slash")
         }
     }
 
@@ -113,7 +122,7 @@ struct TargetDetail: View {
                     RemoteImage(blobId: target.fotoBlob) {
                         ZStack {
                             Theme.target.opacity(0.2)
-                            Image(systemName: "person.fill")
+                            Image(systemName: target.art.symbolName)
                                 .font(.largeTitle)
                                 .foregroundStyle(Theme.target)
                         }
@@ -124,8 +133,11 @@ struct TargetDetail: View {
                     VStack(alignment: .leading, spacing: 6) {
                         Text(target.displayName)
                             .font(.title3.weight(.bold))
+                        Text(target.art.title)
+                            .font(.caption.weight(.semibold))
+                            .foregroundStyle(Theme.target)
                         if let birthDate = target.birthDate, let age = target.age() {
-                            Text("\(birthDate.formatted(date: .numeric, time: .omitted)) · \(age) Jahre")
+                            Text("\(birthDate.formatted(date: .numeric, time: .omitted)), \(age) Jahre")
                                 .font(.subheadline)
                         }
                         if !target.geburtsort.isEmpty {
@@ -143,17 +155,34 @@ struct TargetDetail: View {
                 .listRowBackground(Color.clear)
             }
 
-            if let position = lage.position(ofTarget: entity) {
-                Section("Tracker") {
-                    LabeledContent("Letzte Position", value: Format.ago(position.date))
+            Section("Standort") {
+                if let position = lage.position(ofTarget: entity) {
+                    LabeledContent(position.fromTracker ? "Tracker" : "Von Hand gesetzt", value: Format.ago(position.date))
                     Button("Hinführen", systemImage: "location.north.line.fill") {
                         model.navigate(to: .target(entity.id))
+                        dismiss()
+                    }
+                } else {
+                    Text("Kein Standort bekannt.")
+                        .foregroundStyle(.secondary)
+                }
+                if let placeOnMap, target.trackerId == nil {
+                    Button(target.standort == nil ? "Standort auf Karte setzen" : "Standort neu setzen", systemImage: "hand.tap") {
+                        placeOnMap(entity.id)
                         dismiss()
                     }
                 }
             }
 
-            TextSection(title: "Anschrift", text: target.anschrift)
+            if !target.anschrift.isEmpty || target.art == .objekt {
+                Section("Anschrift") {
+                    if !target.anschrift.isEmpty {
+                        Text(target.anschrift)
+                            .textSelection(.enabled)
+                    }
+                    LookAroundCard(address: target.anschrift, point: lage.position(ofTarget: entity)?.point)
+                }
+            }
             TextSection(title: "Optische Merkmale", text: target.merkmale)
 
             if !target.kennzeichen.isEmpty || !target.fahrzeugBeschreibung.isEmpty || target.fahrzeugFotoBlob != nil {
@@ -231,7 +260,26 @@ struct TargetEditor: View {
     var body: some View {
         NavigationStack {
             Form {
-                Section("Person") {
+                Section {
+                    Picker("Art", selection: $target.art) {
+                        ForEach(ZielArt.allCases) { art in
+                            Label(art.title, systemImage: art.symbolName).tag(art)
+                        }
+                    }
+                    if target.art != .person {
+                        TextField(target.art == .fahrzeug ? "Bezeichnung, z. B. BMW 3er dunkelblau" : "Bezeichnung, z. B. Wohnung Musterstraße", text: $target.bezeichnung)
+                    }
+                    if target.standort != nil {
+                        HStack {
+                            Label("Standort von Hand gesetzt", systemImage: "mappin")
+                            Spacer()
+                            Button("Entfernen", role: .destructive) { target.standort = nil }
+                                .buttonStyle(.borderless)
+                        }
+                    }
+                }
+
+                Section(target.art == .person ? "Person" : "Personenbezug (optional)") {
                     TextField("Vorname", text: $target.vorname)
                     TextField("Nachname", text: $target.nachname)
                     Toggle("Geburtsdatum bekannt", isOn: $hasBirthDate.animation())
@@ -280,16 +328,16 @@ struct TargetEditor: View {
                         }
                     }
                 } footer: {
-                    Text("Tracker richtet die Kommandozentrale ein. Mit Tracker erscheint die Zielperson live auf der Karte.")
+                    Text("Tracker werden unter Mehr, Tracker verwaltet. Mit Tracker erscheint das Ziel live auf der Karte; der von Hand gesetzte Standort tritt dann zurück.")
                 }
 
                 if !context.isNew {
                     Section {
-                        Button("Zielperson löschen", systemImage: "trash", role: .destructive) { showsDelete = true }
+                        Button("Ziel löschen", systemImage: "trash", role: .destructive) { showsDelete = true }
                     }
                 }
             }
-            .navigationTitle(context.isNew ? "Neue Zielperson" : "Zielperson bearbeiten")
+            .navigationTitle(context.isNew ? "Neu: \(target.art.title)" : "\(target.art.title) bearbeiten")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
@@ -297,10 +345,10 @@ struct TargetEditor: View {
                 }
                 ToolbarItem(placement: .confirmationAction) {
                     Button("Sichern", action: save)
-                        .disabled(target.vorname.isEmpty && target.nachname.isEmpty && target.merkmale.isEmpty)
+                        .disabled(target.vorname.isEmpty && target.nachname.isEmpty && target.merkmale.isEmpty && target.bezeichnung.isEmpty && target.kennzeichen.isEmpty && target.anschrift.isEmpty)
                 }
             }
-            .confirmationDialog("Zielperson für alle löschen?", isPresented: $showsDelete, titleVisibility: .visible) {
+            .confirmationDialog("Ziel für alle löschen?", isPresented: $showsDelete, titleVisibility: .visible) {
                 Button("Löschen", role: .destructive) {
                     lage.delete(Target.self, id: context.id)
                     dismiss()
@@ -313,5 +361,46 @@ struct TargetEditor: View {
         var result = target
         result.birthDate = hasBirthDate ? birthDate : nil
         if lage.put(result, id: context.id) { dismiss() }
+    }
+}
+
+/// Look-Around-Vorschau (Straßenansicht von Apple Karten) für eine Anschrift oder einen Standort, sofern Apple dort Aufnahmen hat.
+struct LookAroundCard: View {
+    let address: String
+    let point: GeoPoint?
+
+    @State private var scene: MKLookAroundScene?
+    @State private var loaded = false
+
+    var body: some View {
+        Group {
+            if let scene {
+                LookAroundPreview(initialScene: scene)
+                    .frame(height: 180)
+                    .clipShape(.rect(cornerRadius: 12))
+            } else if loaded {
+                Label("Keine Straßenansicht verfügbar", systemImage: "binoculars")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            } else {
+                ProgressView()
+                    .frame(maxWidth: .infinity)
+            }
+        }
+        .task(id: "\(address)|\(point?.lat ?? 0)|\(point?.lon ?? 0)") {
+            loaded = false
+            scene = await Self.loadScene(address: address, point: point)
+            loaded = true
+        }
+    }
+
+    private static func loadScene(address: String, point: GeoPoint?) async -> MKLookAroundScene? {
+        var coordinate = point?.coordinate
+        if coordinate == nil, !address.isEmpty {
+            let placemarks = try? await CLGeocoder().geocodeAddressString(address)
+            coordinate = placemarks?.first?.location?.coordinate
+        }
+        guard let coordinate else { return nil }
+        return try? await MKLookAroundSceneRequest(coordinate: coordinate).scene
     }
 }

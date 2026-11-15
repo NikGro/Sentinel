@@ -28,14 +28,33 @@ struct Snapshot: Decodable, Sendable {
     var targets: [Versioned<Target>]
     var trackers: [Versioned<Tracker>]
     var layers: [Versioned<Layer>]
+    var rooms: [Versioned<ChatRoom>]
     var messages: [Versioned<ChatMessage>]
     var operation: OperationState
     var positions: [PositionEntry]
     var trackerPositions: [PositionEntry]
 
+    init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        me = try c.decode(ActorInfo.self, forKey: .me)
+        server = try c.decode(ServerInfo.self, forKey: .server)
+        online = try c.decode([String].self, forKey: .online)
+        members = try c.decode([Versioned<Member>].self, forKey: .members)
+        vehicles = try c.decode([Versioned<Vehicle>].self, forKey: .vehicles)
+        annotations = try c.decode([Versioned<MapObject>].self, forKey: .annotations)
+        targets = try c.decode([Versioned<Target>].self, forKey: .targets)
+        trackers = try c.decode([Versioned<Tracker>].self, forKey: .trackers)
+        layers = try c.decode([Versioned<Layer>].self, forKey: .layers)
+        rooms = try c.decodeIfPresent([Versioned<ChatRoom>].self, forKey: .rooms) ?? []
+        messages = try c.decode([Versioned<ChatMessage>].self, forKey: .messages)
+        operation = try c.decode(OperationState.self, forKey: .operation)
+        positions = try c.decode([PositionEntry].self, forKey: .positions)
+        trackerPositions = try c.decode([PositionEntry].self, forKey: .trackerPositions)
+    }
+
     private enum CodingKeys: String, CodingKey {
         case me = "self"
-        case server, online, members, vehicles, annotations, targets, trackers, layers, messages, operation, positions, trackerPositions
+        case server, online, members, vehicles, annotations, targets, trackers, layers, rooms, messages, operation, positions, trackerPositions
     }
 }
 
@@ -47,6 +66,7 @@ enum ServerMessage: Sendable {
     case putTarget(Versioned<Target>)
     case putTracker(Versioned<Tracker>)
     case putLayer(Versioned<Layer>)
+    case putRoom(Versioned<ChatRoom>)
     case putMessage(Versioned<ChatMessage>)
     case delete(kind: String, id: String)
     case operation(OperationState)
@@ -108,6 +128,7 @@ enum WireCodec {
             case Target.kind: return .putTarget(try decoder.decode(Put<Target>.self, from: data).entity)
             case Tracker.kind: return .putTracker(try decoder.decode(Put<Tracker>.self, from: data).entity)
             case Layer.kind: return .putLayer(try decoder.decode(Put<Layer>.self, from: data).entity)
+            case ChatRoom.kind: return .putRoom(try decoder.decode(Put<ChatRoom>.self, from: data).entity)
             case ChatMessage.kind: return .putMessage(try decoder.decode(Put<ChatMessage>.self, from: data).entity)
             default: return .unknown
             }

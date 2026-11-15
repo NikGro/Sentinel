@@ -2,15 +2,14 @@ import CoreLocation
 import Foundation
 import Observation
 
-/// Daten des Fahndungsmodus: Bestreifung (wo war wer schon) und Weg-Zeit-Flächen (wo kann die Zielperson inzwischen sein).
+/// Bestreifung (wo war wer schon) und Weg-Zeit-Flächen aller Fahndungsräume (wo kann die Zielperson inzwischen sein).
 @MainActor
 @Observable
 final class FahndungStore {
     /// Bestreifte Wege je Fahnder, in Abschnitte zerlegt (Lücken trennen Abschnitte).
     private(set) var segments: [CoverageSegment] = []
-    private(set) var reachAreas: [ReachArea] = []
-    private(set) var reachMinutes: Double = 0
-    private(set) var isLoadingReach = false
+    /// Weg-Zeit-Flächen je Fahndungsraum (Kennung der Markierung).
+    private(set) var reachAreas: [String: [ReachArea]] = [:]
 
     @ObservationIgnored var client: APIClient?
     @ObservationIgnored private var reachLoop: Task<Void, Never>?
@@ -46,7 +45,7 @@ final class FahndungStore {
         segments = result
     }
 
-    /// Hängt eine Live-Position an den laufenden Abschnitt des Fahnders an.
+    /// Hängt eine Live-Position an den laufenden Abschnitt des Fahnders an, damit die Anzeige ohne Neuladen mitwächst.
     func appendLive(memberId: String, position: Position) {
         guard (position.acc ?? 0) <= 60 else { return }
         let point = position.point
@@ -67,18 +66,24 @@ final class FahndungStore {
         liveTail = [:]
     }
 
-    // MARK: Weg-Zeit-Berechnung
+    // MARK: Fahndungsräume
 
-    /// Hält die Flächen aktuell, solange ein letzter Standort bekannt ist. Die Flächen wachsen mit der verstrichenen Zeit.
-    func trackReach(origin: OperationState.LastKnownPosition?, modes: [ReachMode]) {
+    struct ReachInput: Equatable {
+        let id: String
+        let point: GeoPoint
+        let since: Date
+    }
+
+    /// Hält die Flächen aller Fahndungsräume aktuell; sie wachsen mit der seit dem Zeitpunkt verstrichenen Zeit.
+    func trackReach(_ inputs: [ReachInput], modes: [ReachMode]) {
         reachLoop?.cancel()
-        guard let origin, !modes.isEmpty, client != nil else {
-            reachAreas = []
+        guard !inputs.isEmpty, !modes.isEmpty, client != nil else {
+            reachAreas = [:]
             return
         }
         reachLoop = Task { [weak self] in
             while !Task.isCancelled {
-                await self?.loadReach(origin: origin, modes: modes)
+                await self?.loadReach(inputs, modes: modes)
                 try? await Task.sleep(for: .seconds(45))
             }
         }
@@ -87,17 +92,18 @@ final class FahndungStore {
     func stopReach() {
         reachLoop?.cancel()
         reachLoop = nil
-        reachAreas = []
+        reachAreas = [:]
     }
 
-    private func loadReach(origin: OperationState.LastKnownPosition, modes: [ReachMode]) async {
+    private func loadReach(_ inputs: [ReachInput], modes: [ReachMode]) async {
         guard let client else { return }
-        let minutes = max(1, Date.now.timeIntervalSince(origin.date) / 60)
-        isLoadingReach = true
-        defer { isLoadingReach = false }
-        guard let areas = try? await client.reach(from: origin.point, minutes: minutes, modes: modes), !Task.isCancelled else { return }
-        reachAreas = areas
-        reachMinutes = minutes
+        var next: [String: [ReachArea]] = [:]
+        for input in inputs {
+            let minutes = max(1, Date.now.timeIntervalSince(input.since) / 60)
+            next[input.id] = (try? await client.reach(from: input.point, minutes: minutes, modes: modes)) ?? reachAreas[input.id] ?? []
+        }
+        guard !Task.isCancelled else { return }
+        reachAreas = next
     }
 }
 

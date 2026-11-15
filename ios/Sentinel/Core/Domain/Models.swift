@@ -24,6 +24,22 @@ struct GeoPoint: Codable, Hashable, Sendable {
     }
 }
 
+/// Standort mit Zeitpunkt (ms seit 1970), z. B. ein abgestelltes Fahrzeug oder ein von Hand gesetztes Ziel.
+struct TimedPoint: Codable, Equatable, Hashable, Sendable {
+    var lat: Double
+    var lon: Double
+    var ts: Double
+
+    var point: GeoPoint { GeoPoint(lat: lat, lon: lon) }
+    var date: Date { Date(timeIntervalSince1970: ts / 1000) }
+
+    init(_ point: GeoPoint, at date: Date = .now) {
+        lat = point.lat
+        lon = point.lon
+        ts = (date.timeIntervalSince1970 * 1000).rounded()
+    }
+}
+
 /// Live-Position eines Fahnders oder Trackers. Zeit in Millisekunden seit 1970.
 struct Position: Codable, Equatable, Sendable {
     var lat: Double
@@ -53,39 +69,123 @@ protocol LageEntity: Codable, Equatable, Sendable {
     static var kind: String { get }
 }
 
+/// Wie ein Fahnder gerade unterwegs ist.
+enum Fortbewegung: String, Codable, CaseIterable, Identifiable, Sendable {
+    case fuss, fahrzeug, oepnv
+
+    var id: String { rawValue }
+
+    var title: String {
+        switch self {
+        case .fuss: "Zu Fuß"
+        case .fahrzeug: "Fahrzeug"
+        case .oepnv: "ÖPNV"
+        }
+    }
+
+    var symbolName: String {
+        switch self {
+        case .fuss: "figure.walk"
+        case .fahrzeug: "car.fill"
+        case .oepnv: "tram.fill"
+        }
+    }
+}
+
+/// Gewählte Linie und Fahrtrichtung im öffentlichen Nahverkehr.
+struct OepnvFahrt: Codable, Equatable, Hashable, Sendable {
+    var linienId: String
+    var linie: String
+    var richtung: String
+}
+
+/// Fahnder. Jeder Fahnder hat ein eigenes Gerät; sein Standort kommt immer vom Telefon.
 struct Member: LageEntity {
     static let kind = "member"
     var name: String
-    var funkrufname: String
+    var spitzname: String
     var dienststelle: String
     var telefon: String = ""
     var fotoBlob: String?
+    var aktiv: Bool = true
+    var fortbewegung: Fortbewegung = .fuss
     var fahrzeugId: String?
+    var oepnv: OepnvFahrt?
+
+    init(name: String, spitzname: String, dienststelle: String, telefon: String = "", fotoBlob: String? = nil) {
+        self.name = name
+        self.spitzname = spitzname
+        self.dienststelle = dienststelle
+        self.telefon = telefon
+        self.fotoBlob = fotoBlob
+    }
+
+    private enum CodingKeys: String, CodingKey {
+        case name, spitzname, dienststelle, telefon, fotoBlob, aktiv, fortbewegung, fahrzeugId, oepnv
+    }
+
+    init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        name = try c.decode(String.self, forKey: .name)
+        spitzname = try c.decodeIfPresent(String.self, forKey: .spitzname) ?? name
+        dienststelle = try c.decodeIfPresent(String.self, forKey: .dienststelle) ?? ""
+        telefon = try c.decodeIfPresent(String.self, forKey: .telefon) ?? ""
+        fotoBlob = try c.decodeIfPresent(String.self, forKey: .fotoBlob)
+        aktiv = try c.decodeIfPresent(Bool.self, forKey: .aktiv) ?? true
+        fortbewegung = (try? c.decodeIfPresent(Fortbewegung.self, forKey: .fortbewegung)) ?? .fuss
+        fahrzeugId = try c.decodeIfPresent(String.self, forKey: .fahrzeugId)
+        oepnv = try c.decodeIfPresent(OepnvFahrt.self, forKey: .oepnv)
+    }
 }
 
+/// Fahrzeug der eigenen Kräfte. Bleibt dauerhaft angelegt und wird je Einsatz aktiv geschaltet.
 struct Vehicle: LageEntity {
     static let kind = "vehicle"
 
-    struct Parked: Codable, Equatable, Sendable {
-        var lat: Double
-        var lon: Double
-        var ts: Double
-    }
-
-    var bezeichnung: String
+    var funkrufname: String
+    var bezeichnung: String = ""
     var kennzeichen: String = ""
     var beschreibung: String = ""
     var fotoBlob: String?
     var trackerId: String?
-    var abgestellt: Parked?
+    var aktiv: Bool = true
+    var abgestellt: TimedPoint?
+
+    init(funkrufname: String, bezeichnung: String = "", kennzeichen: String = "", beschreibung: String = "") {
+        self.funkrufname = funkrufname
+        self.bezeichnung = bezeichnung
+        self.kennzeichen = kennzeichen
+        self.beschreibung = beschreibung
+    }
+
+    private enum CodingKeys: String, CodingKey {
+        case funkrufname, bezeichnung, kennzeichen, beschreibung, fotoBlob, trackerId, aktiv, abgestellt
+    }
+
+    init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        bezeichnung = try c.decodeIfPresent(String.self, forKey: .bezeichnung) ?? ""
+        funkrufname = try c.decodeIfPresent(String.self, forKey: .funkrufname) ?? (bezeichnung.isEmpty ? "Fahrzeug" : bezeichnung)
+        kennzeichen = try c.decodeIfPresent(String.self, forKey: .kennzeichen) ?? ""
+        beschreibung = try c.decodeIfPresent(String.self, forKey: .beschreibung) ?? ""
+        fotoBlob = try c.decodeIfPresent(String.self, forKey: .fotoBlob)
+        trackerId = try c.decodeIfPresent(String.self, forKey: .trackerId)
+        aktiv = try c.decodeIfPresent(Bool.self, forKey: .aktiv) ?? true
+        abgestellt = try c.decodeIfPresent(TimedPoint.self, forKey: .abgestellt)
+    }
+
+    /// Zusatzangabe unter dem Funkrufnamen.
+    var subtitle: String {
+        [bezeichnung, kennzeichen].filter { !$0.isEmpty }.joined(separator: ", ")
+    }
 }
 
-/// Markierung auf der Karte: Marker, Beschriftung, Linie, Fläche oder Kreis.
+/// Markierung auf der Karte: Marker, Beschriftung, Linie, Fläche, Kreis oder Fahndungsraum.
 struct MapObject: LageEntity {
     static let kind = "annotation"
 
     enum Shape: String, Codable, CaseIterable, Sendable {
-        case marker, text, linie, flaeche, kreis
+        case marker, text, linie, flaeche, kreis, fahndungsraum
 
         var title: String {
             switch self {
@@ -94,6 +194,7 @@ struct MapObject: LageEntity {
             case .linie: "Linie"
             case .flaeche: "Fläche"
             case .kreis: "Kreis"
+            case .fahndungsraum: "Fahndungsraum"
             }
         }
 
@@ -104,6 +205,7 @@ struct MapObject: LageEntity {
             case .linie: "point.topleft.down.to.point.bottomright.curvepath"
             case .flaeche: "pentagon"
             case .kreis: "circle.dashed"
+            case .fahndungsraum: "scope"
             }
         }
 
@@ -128,6 +230,20 @@ struct MapObject: LageEntity {
     var punkte: [GeoPoint]
     var radius: Double?
     var wert: Double?
+    /// Fahndungsraum: Zeitpunkt (ms), ab dem die Weg-Zeit-Flächen wachsen.
+    var zeit: Double?
+    /// Marker, dessen Standort ein Tracker liefert.
+    var trackerId: String?
+
+    init(layerId: String, typ: Shape, titel: String = "", farbe: String = "#FF9F0A", punkte: [GeoPoint], radius: Double? = nil, zeit: Double? = nil) {
+        self.layerId = layerId
+        self.typ = typ
+        self.titel = titel
+        self.farbe = farbe
+        self.punkte = punkte
+        self.radius = radius
+        self.zeit = zeit
+    }
 
     /// Ankerpunkt für Beschriftung und Antippen.
     var anchor: GeoPoint {
@@ -136,10 +252,37 @@ struct MapObject: LageEntity {
         let lon = punkte.map(\.lon).reduce(0, +) / Double(punkte.count)
         return GeoPoint(lat: lat, lon: lon)
     }
+
+    var since: Date? { zeit.map { Date(timeIntervalSince1970: $0 / 1000) } }
 }
 
+enum ZielArt: String, Codable, CaseIterable, Identifiable, Sendable {
+    case person, fahrzeug, objekt
+
+    var id: String { rawValue }
+
+    var title: String {
+        switch self {
+        case .person: "Zielperson"
+        case .fahrzeug: "Zielfahrzeug"
+        case .objekt: "Zielobjekt"
+        }
+    }
+
+    var symbolName: String {
+        switch self {
+        case .person: "person.fill"
+        case .fahrzeug: "car.side.fill"
+        case .objekt: "house.fill"
+        }
+    }
+}
+
+/// Zielperson, Zielfahrzeug oder Zielobjekt. Erscheint auf der Karte, sobald ein Standort oder Tracker bekannt ist.
 struct Target: LageEntity {
     static let kind = "target"
+    var art: ZielArt = .person
+    var bezeichnung: String = ""
     var vorname: String = ""
     var nachname: String = ""
     var geburtsdatum: String?
@@ -155,10 +298,53 @@ struct Target: LageEntity {
     var hinweise: String = ""
     var massnahmen: String = ""
     var trackerId: String?
+    var standort: TimedPoint?
+
+    init(art: ZielArt = .person, bezeichnung: String = "", vorname: String = "", nachname: String = "") {
+        self.art = art
+        self.bezeichnung = bezeichnung
+        self.vorname = vorname
+        self.nachname = nachname
+    }
+
+    private enum CodingKeys: String, CodingKey {
+        case art, bezeichnung, vorname, nachname, geburtsdatum, geburtsort, staatsangehoerigkeit, anschrift, merkmale, fotoBlob
+        case kennzeichen, fahrzeugBeschreibung, fahrzeugFotoBlob, sachverhalt, hinweise, massnahmen, trackerId, standort
+    }
+
+    init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        func text(_ key: CodingKeys) throws -> String { try c.decodeIfPresent(String.self, forKey: key) ?? "" }
+        art = (try? c.decodeIfPresent(ZielArt.self, forKey: .art)) ?? .person
+        bezeichnung = try text(.bezeichnung)
+        vorname = try text(.vorname)
+        nachname = try text(.nachname)
+        geburtsdatum = try c.decodeIfPresent(String.self, forKey: .geburtsdatum)
+        geburtsort = try text(.geburtsort)
+        staatsangehoerigkeit = try text(.staatsangehoerigkeit)
+        anschrift = try text(.anschrift)
+        merkmale = try text(.merkmale)
+        fotoBlob = try c.decodeIfPresent(String.self, forKey: .fotoBlob)
+        kennzeichen = try text(.kennzeichen)
+        fahrzeugBeschreibung = try text(.fahrzeugBeschreibung)
+        fahrzeugFotoBlob = try c.decodeIfPresent(String.self, forKey: .fahrzeugFotoBlob)
+        sachverhalt = try text(.sachverhalt)
+        hinweise = try text(.hinweise)
+        massnahmen = try text(.massnahmen)
+        trackerId = try c.decodeIfPresent(String.self, forKey: .trackerId)
+        standort = try c.decodeIfPresent(TimedPoint.self, forKey: .standort)
+    }
 
     var displayName: String {
-        let full = [vorname, nachname].filter { !$0.isEmpty }.joined(separator: " ")
-        return full.isEmpty ? "Unbekannte Person" : full
+        switch art {
+        case .person:
+            let full = [vorname, nachname].filter { !$0.isEmpty }.joined(separator: " ")
+            return full.isEmpty ? "Unbekannte Person" : full
+        case .fahrzeug:
+            return [kennzeichen, bezeichnung].first { !$0.isEmpty } ?? "Zielfahrzeug"
+        case .objekt:
+            return [bezeichnung, anschrift].first { !$0.isEmpty } ?? "Zielobjekt"
+        }
     }
 
     private static let birthFormat: DateFormatter = {
@@ -189,6 +375,7 @@ struct Tracker: LageEntity {
     var name: String
     var anbieter: String
     var kennung: String
+    var intervall: Int?
 
     var providerTitle: String { anbieter == "paj" ? "PAJ" : "SinoTrack" }
 }
@@ -203,6 +390,8 @@ struct Layer: LageEntity {
     var status: String
     var beschreibung: String = ""
 
+    var isLive: Bool { status == "live" }
+
     var symbolName: String {
         switch art {
         case "dauerhaft": "pin"
@@ -213,47 +402,55 @@ struct Layer: LageEntity {
     }
 }
 
-struct ChatMessage: LageEntity {
-    static let kind = "message"
-    var text: String
+struct ChatRoom: LageEntity {
+    static let kind = "room"
+    static let generalId = "allgemein"
+    var name: String
 }
 
-enum Modus: String, Codable, CaseIterable, Identifiable, Sendable {
-    case observation, fahndung, oberflaeche
-
-    var id: String { rawValue }
-
-    var title: String {
-        switch self {
-        case .observation: "Observation"
-        case .fahndung: "Fahndung"
-        case .oberflaeche: "Oberfläche"
-        }
+struct ChatAttachment: Codable, Equatable, Sendable {
+    enum Art: String, Codable, Sendable {
+        case bild, audio, datei
     }
 
-    var shortTitle: String {
-        switch self {
-        case .observation: "OBS"
-        case .fahndung: "FHN"
-        case .oberflaeche: "OFL"
-        }
+    var blobId: String
+    var art: Art
+    var name: String = ""
+    var mime: String
+    var groesse: Int
+    var dauer: Double?
+}
+
+struct ChatMessage: LageEntity {
+    static let kind = "message"
+    var roomId: String = ChatRoom.generalId
+    var text: String = ""
+    var anhang: ChatAttachment?
+
+    init(roomId: String, text: String, anhang: ChatAttachment? = nil) {
+        self.roomId = roomId
+        self.text = text
+        self.anhang = anhang
     }
 
-    var symbolName: String {
-        switch self {
-        case .observation: "eye"
-        case .fahndung: "scope"
-        case .oberflaeche: "square.grid.3x3"
-        }
+    private enum CodingKeys: String, CodingKey {
+        case roomId, text, anhang
     }
 
-    var summary: String {
-        switch self {
-        case .observation: "A-Position, Navigation zur A, Zielperson im Blick"
-        case .fahndung: "Bestreifung, letzter Standort, Weg-Zeit-Berechnung"
-        case .oberflaeche: "Nur Kräfte und Markierungen"
-        }
+    init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        roomId = try c.decodeIfPresent(String.self, forKey: .roomId) ?? ChatRoom.generalId
+        text = try c.decodeIfPresent(String.self, forKey: .text) ?? ""
+        anhang = try c.decodeIfPresent(ChatAttachment.self, forKey: .anhang)
     }
+}
+
+struct LeapfrogStop: Codable, Equatable, Hashable, Sendable {
+    var name: String
+    var lat: Double
+    var lon: Double
+
+    var point: GeoPoint { GeoPoint(lat: lat, lon: lon) }
 }
 
 /// Gemeinsamer Zustand des laufenden Einsatzes.
@@ -263,25 +460,35 @@ struct OperationState: Codable, Equatable, Sendable {
         var seit: Double
     }
 
-    struct LastKnownPosition: Codable, Equatable, Sendable {
-        var lat: Double
-        var lon: Double
-        var ts: Double
-        var quelle: String
-        var targetId: String?
-
-        var point: GeoPoint { GeoPoint(lat: lat, lon: lon) }
-        var date: Date { Date(timeIntervalSince1970: ts / 1000) }
+    /// Überschlagendes Anfahren der nächsten Haltestellen, solange die A im ÖPNV fährt.
+    struct Leapfrog: Codable, Equatable, Sendable {
+        var teilnehmer: [String] = []
+        var zuweisungen: [String: LeapfrogStop] = [:]
+        var naechste: [LeapfrogStop] = []
     }
 
-    var modus: Modus = .observation
     var funkkanal: String?
     var titel: String = ""
     var hinweise: String = ""
     var a: APosition?
-    var lkp: LastKnownPosition?
-    var bestreifungSeit: Double?
+    var ueberschlagen = Leapfrog()
     var rev: Int = 0
+
+    init() {}
+
+    private enum CodingKeys: String, CodingKey {
+        case funkkanal, titel, hinweise, a, ueberschlagen, rev
+    }
+
+    init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        funkkanal = try c.decodeIfPresent(String.self, forKey: .funkkanal)
+        titel = try c.decodeIfPresent(String.self, forKey: .titel) ?? ""
+        hinweise = try c.decodeIfPresent(String.self, forKey: .hinweise) ?? ""
+        a = try c.decodeIfPresent(APosition.self, forKey: .a)
+        ueberschlagen = try c.decodeIfPresent(Leapfrog.self, forKey: .ueberschlagen) ?? Leapfrog()
+        rev = try c.decodeIfPresent(Int.self, forKey: .rev) ?? 0
+    }
 }
 
 /// Fortbewegungsarten der Weg-Zeit-Berechnung.
@@ -321,4 +528,23 @@ struct CoverageTrack: Codable, Equatable, Sendable {
     var memberId: String
     /// [Breite, Länge, Zeit in ms]
     var punkte: [[Double]]
+}
+
+/// Eine Fahrtrichtung einer ÖPNV-Linie aus der Suche.
+struct LineHit: Codable, Identifiable, Hashable, Sendable {
+    var id: String
+    var ref: String
+    var typ: String
+    var richtung: String
+    var meter: Double?
+
+    var symbolName: String {
+        switch typ {
+        case "subway": "tram.fill.tunnel"
+        case "train", "light_rail": "train.side.front.car"
+        case "tram": "tram.fill"
+        case "ferry": "ferry.fill"
+        default: "bus.fill"
+        }
+    }
 }

@@ -1,6 +1,6 @@
 import SwiftUI
 
-/// A-Position übernehmen, abgeben und zur A navigieren (nur Observationsmodus).
+/// A-Position übernehmen, abgeben und zur A navigieren.
 struct APositionControl: View {
     @Environment(AppModel.self) private var model
     @Environment(LageStore.self) private var lage
@@ -22,14 +22,14 @@ struct APositionControl: View {
             } else {
                 if let holder = lage.aHolder {
                     Button {
-                        if route.target == .aPosition { route.stop() } else { model.navigate(to: .aPosition) }
+                        model.navigate(to: .aPosition)
                     } label: {
-                        Label(route.target == .aPosition ? "Beenden" : "Zur A", systemImage: "location.north.line.fill")
+                        Label("Zur A", systemImage: "location.north.line.fill")
                             .lineLimit(1)
                             .frame(maxWidth: .infinity)
                     }
                     .buttonStyle(.glass)
-                    .accessibilityLabel(route.target == .aPosition ? "Führung zur A beenden" : "Zur A-Position von \(holder.data.funkrufname) führen")
+                    .accessibilityLabel("Zur A-Position von \(lage.label(of: holder.data)) führen")
                 }
                 Button(action: pressClaim) {
                     Label(isArmed ? "Bestätigen: Ich habe A" : "A übernehmen", systemImage: isArmed ? "checkmark.circle.fill" : "a.circle")
@@ -39,7 +39,7 @@ struct APositionControl: View {
                         .frame(maxWidth: .infinity)
                 }
                 .buttonStyle(.glassProminent)
-                .tint(isArmed ? Theme.aPosition : .accentColor)
+                .tint(isArmed ? Theme.aPosition : Theme.accent)
                 .sensoryFeedback(.warning, trigger: isArmed) { _, armed in armed }
                 .accessibilityHint(isArmed ? "Erneut drücken, um die A-Position zu übernehmen" : "Zweimal drücken zum Übernehmen")
             }
@@ -64,173 +64,151 @@ struct APositionControl: View {
     }
 }
 
-/// Werkzeuge des Fahndungsmodus: letzter Standort, Weg-Zeit-Flächen je Fortbewegungsart, Bestreifung.
-struct FahndungControl: View {
-    let now: Date
-    let placeLastKnown: () -> Void
-
-    @Environment(LageStore.self) private var lage
-    @Environment(LocalSettings.self) private var settings
-    @Environment(FahndungStore.self) private var fahndung
-    @Environment(LocationService.self) private var location
-
-    var body: some View {
-        @Bindable var settings = settings
-        VStack(spacing: 8) {
-            HStack(spacing: 8) {
-                if let lkp = lage.operation.lkp {
-                    VStack(alignment: .leading, spacing: 1) {
-                        Text("Letzter Standort \(Format.time(lkp.date))")
-                            .font(.footnote.weight(.semibold))
-                        Text(statusLine(lkp))
-                            .font(.caption2)
-                            .foregroundStyle(.secondary)
-                    }
-                } else {
-                    Text("Kein letzter Standort gesetzt")
-                        .font(.footnote.weight(.semibold))
-                }
-                Spacer(minLength: 0)
-                Menu {
-                    Button("Auf Karte antippen", systemImage: "hand.tap", action: placeLastKnown)
-                    if let current = location.current {
-                        Button("Mein Standort, jetzt", systemImage: "location.fill") {
-                            lage.setLastKnownPosition(GeoPoint(current.coordinate))
-                        }
-                    }
-                    if lage.operation.lkp != nil {
-                        Button("Zeit auf jetzt setzen", systemImage: "clock.arrow.circlepath") {
-                            if let lkp = lage.operation.lkp { lage.setLastKnownPosition(lkp.point, targetId: lkp.targetId) }
-                        }
-                        Button("Entfernen", systemImage: "trash", role: .destructive) { lage.clearLastKnownPosition() }
-                    }
-                } label: {
-                    Label("Standort", systemImage: "scope")
-                }
-                .buttonStyle(.glass)
-            }
-
-            HStack(spacing: 8) {
-                ForEach(ReachMode.allCases) { mode in
-                    let enabled = settings.isReachEnabled(mode)
-                    Button { settings.toggleReach(mode) } label: {
-                        Label(mode.title, systemImage: mode.symbolName)
-                            .font(.caption.weight(.semibold))
-                            .frame(maxWidth: .infinity)
-                    }
-                    .buttonStyle(.glass)
-                    .tint(enabled ? Theme.color(for: mode) : .gray)
-                    .opacity(enabled ? 1 : 0.55)
-                    .accessibilityValue(enabled ? "ein" : "aus")
-                }
-                Toggle(isOn: $settings.showsCoverage) {
-                    Label("Bestreifung", systemImage: "road.lanes")
-                        .font(.caption.weight(.semibold))
-                }
-                .toggleStyle(.button)
-                .buttonStyle(.glass)
-                .tint(Theme.coverage)
-                .labelStyle(.iconOnly)
-                .accessibilityLabel("Bestreifung anzeigen")
-            }
-        }
-        .padding(12)
-        .glassEffect(.regular, in: .rect(cornerRadius: 22))
-    }
-
-    private func statusLine(_ lkp: OperationState.LastKnownPosition) -> String {
-        let minutes = max(0, Int(now.timeIntervalSince(lkp.date) / 60))
-        let source = switch lkp.quelle {
-        case "a": "aus A-Position"
-        case "tracker": "vom Tracker"
-        default: "manuell"
-        }
-        let model = fahndung.reachAreas.contains { $0.isModel } ? " · Näherung" : ""
-        return "seit \(minutes) Min. · \(source)\(model)"
-    }
-}
-
-/// Markierungen anlegen sowie eigene Bearbeitungen rückgängig machen und wiederholen.
-struct DrawingToolbar: View {
-    let startDrawing: (MapObject.Shape) -> Void
+/// Eigene Fortbewegung auf einen Blick; ein Tipp öffnet die Auswahl.
+struct MobilityChip: View {
+    let open: () -> Void
 
     @Environment(LageStore.self) private var lage
 
     var body: some View {
-        HStack(spacing: 10) {
-            Menu {
-                ForEach(MapObject.Shape.allCases, id: \.self) { shape in
-                    Button(shape.title, systemImage: shape.symbolName) { startDrawing(shape) }
+        if let me = lage.me {
+            Button(action: open) {
+                HStack(spacing: 8) {
+                    Image(systemName: me.data.fortbewegung.symbolName)
+                    Text(lage.mobilityDescription(of: me.data))
+                        .lineLimit(1)
+                    Spacer(minLength: 0)
+                    Image(systemName: "chevron.up")
+                        .font(.caption.weight(.bold))
+                        .foregroundStyle(.secondary)
                 }
-            } label: {
-                Label("Markieren", systemImage: "plus")
-                    .labelStyle(.titleAndIcon)
-                    .fontWeight(.semibold)
+                .font(.subheadline.weight(.semibold))
+                .padding(.horizontal, 16)
+                .frame(height: 40)
+                .contentShape(.rect)
             }
-            .buttonStyle(.glass)
-
-            Spacer()
-
-            Button("Rückgängig", systemImage: "arrow.uturn.backward") { lage.undo() }
-                .disabled(!lage.undoStack.canUndo)
-            Button("Wiederholen", systemImage: "arrow.uturn.forward") { lage.redo() }
-                .disabled(!lage.undoStack.canRedo)
+            .buttonStyle(.plain)
+            .glassEffect(.regular.interactive(), in: .capsule)
+            .accessibilityLabel("Fortbewegung: \(lage.mobilityDescription(of: me.data))")
+            .accessibilityHint("Ändern")
         }
-        .labelStyle(.iconOnly)
-        .buttonStyle(.glass)
-        .controlSize(.large)
     }
 }
 
-/// Anzeige der laufenden Routenführung zu einem (auch bewegten) Ziel.
-struct RouteBanner: View {
+/// Oberer Teil der Navi-Ansicht: nächstes Manöver mit Entfernung, wie in einer Navi-App.
+struct NavigationBanner: View {
     @Environment(RouteFollower.self) private var route
 
     var body: some View {
-        @Bindable var route = route
-        HStack(spacing: 12) {
-            Image(systemName: "arrow.triangle.turn.up.right.diamond.fill")
-                .font(.title2)
-                .foregroundStyle(.blue)
-            VStack(alignment: .leading, spacing: 2) {
-                Text(route.title.isEmpty ? "Route" : route.title)
-                    .font(.footnote.weight(.bold))
-                    .lineLimit(1)
-                Text(summary)
-                    .font(.caption.monospacedDigit())
-                    .foregroundStyle(.secondary)
-                if let instruction = route.nextInstruction {
-                    Text(instruction)
-                        .font(.caption)
+        VStack(alignment: .leading, spacing: 6) {
+            HStack(alignment: .center, spacing: 14) {
+                Image(systemName: ManeuverSymbol.name(for: route.progress?.nextInstruction ?? ""))
+                    .font(.system(size: 38, weight: .bold))
+                    .frame(width: 52)
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(headline)
+                        .font(.title2.weight(.bold).monospacedDigit())
+                    Text(route.progress?.nextInstruction ?? route.failure ?? "Route wird berechnet …")
+                        .font(.headline)
                         .lineLimit(2)
                 }
+                Spacer(minLength: 0)
             }
-            Spacer(minLength: 0)
-            Menu {
-                Toggle("Zu Fuß", systemImage: "figure.walk", isOn: $route.walking)
-                Button("In Apple Karten öffnen", systemImage: "map") { route.openInMaps() }
-                Button("Führung beenden", systemImage: "xmark", role: .destructive) { route.stop() }
-            } label: {
-                Image(systemName: "ellipsis.circle")
-                    .font(.title3)
+            if let following = route.progress?.followingInstruction {
+                Label("Dann: \(following)", systemImage: ManeuverSymbol.name(for: following))
+                    .font(.footnote.weight(.semibold))
+                    .foregroundStyle(.white.opacity(0.85))
+                    .lineLimit(1)
             }
-            .accessibilityLabel("Routenoptionen")
-            Button("Beenden", systemImage: "xmark.circle.fill") { route.stop() }
-                .labelStyle(.iconOnly)
-                .font(.title3)
-                .foregroundStyle(.secondary)
         }
-        .padding(.horizontal, 14)
-        .padding(.vertical, 10)
-        .glassEffect(.regular, in: .rect(cornerRadius: 18))
+        .foregroundStyle(.white)
+        .padding(16)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background((route.route?.usesSpecialRights == true ? Color.purple : Color(hex: "#1F6F5C")).gradient, in: .rect(cornerRadius: 22))
+        .accessibilityElement(children: .combine)
     }
 
-    private var summary: String {
-        if let current = route.route {
-            return "\(Format.distance(current.distance)) · \(Format.duration(current.expectedTravelTime))"
+    private var headline: String {
+        if let progress = route.progress { return Format.distance(progress.distanceToManeuver) }
+        if let beeline = route.beeline { return Format.distance(beeline) }
+        return "–"
+    }
+}
+
+/// Unterer Teil der Navi-Ansicht: Ankunft, Restzeit, Ziel, Sonderrechte und Beenden.
+struct NavigationBottomBar: View {
+    @Environment(AppModel.self) private var model
+    @Environment(RouteFollower.self) private var route
+    @Environment(LageStore.self) private var lage
+
+    var body: some View {
+        @Bindable var route = route
+        VStack(spacing: 10) {
+            HStack(alignment: .center, spacing: 14) {
+                VStack(alignment: .leading, spacing: 2) {
+                    if let progress = route.progress {
+                        Text("\(Format.time(progress.arrival)) Ankunft")
+                            .font(.headline.monospacedDigit())
+                        Text("\(Format.duration(progress.remainingTime)), \(Format.distance(progress.remainingDistance))")
+                            .font(.subheadline.monospacedDigit())
+                            .foregroundStyle(.secondary)
+                    } else {
+                        Text(route.failure ?? "Route wird berechnet …")
+                            .font(.subheadline)
+                    }
+                    Text(route.title)
+                        .font(.caption.weight(.semibold))
+                        .foregroundStyle(.secondary)
+                        .lineLimit(1)
+                }
+                Spacer(minLength: 0)
+                Menu {
+                    Toggle("Zu Fuß", systemImage: "figure.walk", isOn: $route.walking)
+                    Button("In Apple Karten öffnen", systemImage: "map") { route.openInMaps() }
+                } label: {
+                    Image(systemName: "ellipsis")
+                        .font(.title3.weight(.semibold))
+                        .frame(width: 44, height: 44)
+                }
+                .glassEffect(.regular.interactive(), in: .circle)
+                .accessibilityLabel("Routenoptionen")
+                Button {
+                    model.stopNavigation()
+                } label: {
+                    Text("Beenden")
+                        .fontWeight(.semibold)
+                        .padding(.horizontal, 6)
+                }
+                .buttonStyle(.glassProminent)
+                .tint(.red)
+                .controlSize(.large)
+            }
+
+            if !route.walking {
+                Toggle(isOn: $route.specialRights) {
+                    Label {
+                        VStack(alignment: .leading, spacing: 1) {
+                            Text("Sonderrechte")
+                                .font(.footnote.weight(.semibold))
+                            Text(specialRightsHint)
+                                .font(.caption2)
+                                .foregroundStyle(.secondary)
+                        }
+                    } icon: {
+                        Image(systemName: "light.beacon.max.fill")
+                            .foregroundStyle(route.specialRights ? Color.purple : Color.secondary)
+                    }
+                }
+                .tint(.purple)
+                .disabled(!lage.routingAvailable)
+            }
         }
-        if let failure = route.failure { return failure }
-        if let beeline = route.beeline { return "Luftlinie \(Format.distance(beeline))" }
-        return "Route wird berechnet …"
+        .padding(14)
+        .glassEffect(.regular, in: .rect(cornerRadius: 22))
+    }
+
+    private var specialRightsHint: String {
+        if !lage.routingAvailable { return "Auf diesem Server nicht verfügbar" }
+        return route.specialRights ? "Einbahnstraßen und Abbiegeverbote werden ignoriert" : "Route beachtet alle Verkehrsregeln"
     }
 }

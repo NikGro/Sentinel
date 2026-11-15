@@ -22,45 +22,6 @@ struct CallsignTests {
     }
 }
 
-struct UndoStackTests {
-    private func marker(_ title: String) -> MapObject {
-        MapObject(layerId: Layer.lageId, typ: .marker, titel: title, punkte: [GeoPoint(lat: 53.55, lon: 9.99)])
-    }
-
-    @Test func rueckgaengigUndWiederholen() {
-        var stack = UndoStack()
-        stack.record(MapEdit(id: "m1", before: nil, after: marker("A")))
-        stack.record(MapEdit(id: "m1", before: marker("A"), after: marker("B")))
-
-        let first = stack.undo()
-        #expect(first?.restore == marker("A"))
-        let second = stack.undo()
-        #expect(second?.id == "m1")
-        #expect(second?.restore == nil, "Anlegen rückgängig machen heißt löschen")
-        #expect(!stack.canUndo)
-
-        #expect(stack.redo()?.restore == marker("A"))
-        #expect(stack.redo()?.restore == marker("B"))
-        #expect(!stack.canRedo)
-    }
-
-    @Test func neueBearbeitungVerwirftWiederholen() {
-        var stack = UndoStack()
-        stack.record(MapEdit(id: "m1", before: nil, after: marker("A")))
-        _ = stack.undo()
-        stack.record(MapEdit(id: "m2", before: nil, after: marker("C")))
-        #expect(!stack.canRedo)
-    }
-
-    @Test func unveraenderteSchritteUndGrenzeWerdenBeachtet() {
-        var stack = UndoStack(limit: 2)
-        stack.record(MapEdit(id: "m1", before: marker("A"), after: marker("A")))
-        #expect(!stack.canUndo)
-        for index in 0..<5 { stack.record(MapEdit(id: "m\(index)", before: nil, after: marker("\(index)"))) }
-        #expect(stack.done.count == 2)
-    }
-}
-
 struct TargetTests {
     @Test func alterWirdAusGeburtsdatumBerechnet() throws {
         var target = Target()
@@ -77,17 +38,23 @@ struct TargetTests {
     @Test func anzeigenameFaelltAufPlatzhalterZurueck() {
         #expect(Target().displayName == "Unbekannte Person")
         #expect(Target(vorname: "Max", nachname: "Muster").displayName == "Max Muster")
+        #expect(Target(art: .fahrzeug, bezeichnung: "BMW").displayName == "BMW")
+        #expect(Target(art: .objekt).displayName == "Zielobjekt")
     }
 }
 
 struct WireCodecTests {
     @Test func dekodiertSnapshot() throws {
         let json = """
-        {"t":"snapshot","self":{"id":"g1","role":"fahnder"},"server":{"version":"0.1.0","routing":true},"online":["g1"],
-         "members":[{"id":"g1","rev":2,"updatedAt":1763190000000,"updatedBy":"g1","data":{"name":"Test","funkrufname":"P 35/24","dienststelle":"PK 35","telefon":"","fotoBlob":null,"fahrzeugId":null}}],
-         "vehicles":[],"annotations":[{"id":"m1","rev":1,"updatedAt":1,"updatedBy":"zentrale","data":{"layerId":"lage","typ":"kreis","titel":"","notiz":"","farbe":"#FF9F0A","symbol":"","punkte":[{"lat":53.5,"lon":10}],"radius":150,"wert":null}}],
-         "targets":[],"trackers":[],"layers":[{"id":"lage","rev":1,"updatedAt":1,"updatedBy":"system","data":{"name":"Lage","art":"lage","status":"live","beschreibung":""}}],"messages":[],
-         "operation":{"modus":"fahndung","funkkanal":"4711","titel":"","hinweise":"","a":null,"lkp":{"lat":53.5,"lon":10,"ts":1763190000000,"quelle":"a","targetId":null},"bestreifungSeit":1763190000000,"rev":4},
+        {"t":"snapshot","self":{"id":"g1","role":"fahnder"},"server":{"version":"0.2.0","routing":true},"online":["g1"],
+         "members":[{"id":"g1","rev":2,"updatedAt":1763190000000,"updatedBy":"g1","data":{"name":"Test","spitzname":"Falke","dienststelle":"PK 35","telefon":"","fotoBlob":null,"aktiv":true,"fortbewegung":"oepnv","fahrzeugId":null,"oepnv":{"linienId":"7","linie":"U3","richtung":"Barmbek"}}}],
+         "vehicles":[{"id":"v1","rev":1,"updatedAt":1,"updatedBy":"g1","data":{"funkrufname":"P 35/24","bezeichnung":"Golf","kennzeichen":"","beschreibung":"","fotoBlob":null,"trackerId":null,"aktiv":false,"abgestellt":{"lat":53.5,"lon":10,"ts":1}}}],
+         "annotations":[{"id":"m1","rev":1,"updatedAt":1,"updatedBy":"zentrale","data":{"layerId":"lage","typ":"fahndungsraum","titel":"","notiz":"","farbe":"#FF9F0A","symbol":"","punkte":[{"lat":53.5,"lon":10}],"radius":null,"wert":null,"zeit":1763190000000,"trackerId":null}}],
+         "targets":[{"id":"t1","rev":1,"updatedAt":1,"updatedBy":"g1","data":{"art":"objekt","bezeichnung":"Wohnung","standort":{"lat":53.5,"lon":10,"ts":1}}}],
+         "trackers":[],"layers":[{"id":"lage","rev":1,"updatedAt":1,"updatedBy":"system","data":{"name":"Lage","art":"lage","status":"live","beschreibung":""}}],
+         "rooms":[{"id":"allgemein","rev":1,"updatedAt":1,"updatedBy":"system","data":{"name":"Allgemein"}}],
+         "messages":[{"id":"n1","rev":1,"updatedAt":1,"updatedBy":"g1","data":{"roomId":"allgemein","text":"","anhang":{"blobId":"b1","art":"audio","name":"","mime":"audio/mp4","groesse":1200,"dauer":3.5}}}],
+         "operation":{"funkkanal":"4711","titel":"","hinweise":"","a":{"memberId":"g1","seit":1},"ueberschlagen":{"teilnehmer":[],"zuweisungen":{},"naechste":[{"name":"Hauptbahnhof","lat":53.55,"lon":10.0}]},"rev":4},
          "positions":[{"id":"g1","p":{"lat":53.5,"lon":10,"ts":1763190000000,"acc":5}}],"trackerPositions":[]}
         """
         guard case .snapshot(let snapshot) = try WireCodec.decode(Data(json.utf8)) else {
@@ -95,20 +62,37 @@ struct WireCodecTests {
             return
         }
         #expect(snapshot.me.id == "g1")
-        #expect(snapshot.members.first?.data.funkrufname == "P 35/24")
-        #expect(snapshot.annotations.first?.data.typ == .kreis)
-        #expect(snapshot.operation.modus == .fahndung)
-        #expect(snapshot.operation.lkp?.quelle == "a")
+        #expect(snapshot.members.first?.data.spitzname == "Falke")
+        #expect(snapshot.members.first?.data.fortbewegung == .oepnv)
+        #expect(snapshot.members.first?.data.oepnv?.linie == "U3")
+        #expect(snapshot.vehicles.first?.data.aktiv == false)
+        #expect(snapshot.annotations.first?.data.typ == .fahndungsraum)
+        #expect(snapshot.annotations.first?.data.since != nil)
+        #expect(snapshot.targets.first?.data.art == .objekt)
+        #expect(snapshot.targets.first?.data.displayName == "Wohnung")
+        #expect(snapshot.rooms.first?.data.name == "Allgemein")
+        #expect(snapshot.messages.first?.data.anhang?.art == .audio)
+        #expect(snapshot.operation.ueberschlagen.naechste.first?.name == "Hauptbahnhof")
         #expect(snapshot.positions.first?.p.spd == nil)
     }
 
+    @Test func alteDatenOhneNeueFelderWerdenGelesen() throws {
+        let member = try JSONDecoder().decode(Member.self, from: Data(#"{"name":"Nikki","funkrufname":"P 35/24","dienststelle":"ZF 35"}"#.utf8))
+        #expect(member.spitzname == "Nikki")
+        #expect(member.aktiv)
+        #expect(member.fortbewegung == .fuss)
+        let vehicle = try JSONDecoder().decode(Vehicle.self, from: Data(#"{"bezeichnung":"Volvo"}"#.utf8))
+        #expect(vehicle.funkrufname == "Volvo")
+    }
+
     @Test func dekodiertEinzelneEreignisse() throws {
-        let put = #"{"t":"put","kind":"message","entity":{"id":"n1","rev":1,"updatedAt":5,"updatedBy":"zentrale","data":{"text":"Hallo"}}}"#
+        let put = #"{"t":"put","kind":"message","entity":{"id":"n1","rev":1,"updatedAt":5,"updatedBy":"zentrale","data":{"roomId":"r1","text":"Hallo"}}}"#
         guard case .putMessage(let message) = try WireCodec.decode(Data(put.utf8)) else {
             Issue.record("Nachricht erwartet")
             return
         }
         #expect(message.data.text == "Hallo")
+        #expect(message.data.roomId == "r1")
 
         guard case .delete(let kind, let id) = try WireCodec.decode(Data(#"{"t":"del","kind":"annotation","id":"m1"}"#.utf8)) else {
             Issue.record("Löschung erwartet")
@@ -142,5 +126,42 @@ struct ServerURLTests {
         #expect(APIClient.normalizedServerURL(" https://sentinel.ng-lab.de/ ")?.absoluteString == "https://sentinel.ng-lab.de")
         #expect(APIClient.normalizedServerURL("http://sentinel.ng-lab.de") == nil)
         #expect(APIClient.normalizedServerURL("") == nil)
+    }
+}
+
+struct SearchTests {
+    @Test func hausnummerZuerstWirdUmgestellt() {
+        #expect(SearchService.normalizedAddress("12 Musterstraße") == "Musterstraße 12")
+        #expect(SearchService.normalizedAddress("12a Musterstraße") == "Musterstraße 12a")
+        #expect(SearchService.normalizedAddress("Musterstraße 12") == "Musterstraße 12")
+        #expect(SearchService.normalizedAddress("Hauptbahnhof") == "Hauptbahnhof")
+    }
+
+    @Test func kreuzungenMitUndOderSchraegstrich() {
+        #expect(SearchService.intersectionParts("Mönckebergstraße / Steinstraße")?.1 == "Steinstraße")
+        #expect(SearchService.intersectionParts("A & B")?.0 == "A")
+        #expect(SearchService.intersectionParts("Musterstraße 12") == nil)
+    }
+}
+
+struct NavigationTests {
+    @Test func himmelsrichtungen() {
+        #expect(LocationContext.cardinal(0) == "Nord")
+        #expect(LocationContext.cardinal(44) == "Nordost")
+        #expect(LocationContext.cardinal(180) == "Süd")
+        #expect(LocationContext.cardinal(359) == "Nord")
+        #expect(LocationContext.cardinal(270) == "West")
+    }
+
+    @Test func manoeverSymbole() {
+        #expect(ManeuverSymbol.name(for: "Links abbiegen auf Steinstraße") == "arrow.turn.up.left")
+        #expect(ManeuverSymbol.name(for: "Leicht rechts halten") == "arrow.up.right")
+        #expect(ManeuverSymbol.name(for: "Sie haben Ihr Ziel erreicht") == "mappin.circle.fill")
+        #expect(ManeuverSymbol.name(for: "Geradeaus weiterfahren") == "arrow.up")
+    }
+
+    @Test func dauerAlsUhrzeit() {
+        #expect(Format.clock(65) == "1:05")
+        #expect(Format.clock(0) == "0:00")
     }
 }

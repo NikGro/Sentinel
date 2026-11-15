@@ -9,7 +9,10 @@ import type { Config } from '../config.js';
 import type { Database } from '../db.js';
 import type { Hub } from '../hub.js';
 import type { Actor, Lage } from '../lage.js';
+import type { MapKitTokens } from '../mapkit.js';
+import type { OepnvStore, OverpassClient } from '../oepnv.js';
 import type { ReachService } from '../reach/reach.js';
+import type { RouteService } from '../reach/route.js';
 import type { ReleaseStore } from '../release.js';
 import { RateLimiter, type Vault } from '../security.js';
 import type { PajPoller } from '../trackers/paj.js';
@@ -26,10 +29,15 @@ export interface Services {
   lage: Lage;
   hub: Hub;
   reach: ReachService;
+  routes: RouteService;
   argus: ArgusImporter;
   releases: ReleaseStore;
   vault: Vault;
   paj: PajPoller;
+  mapkit: MapKitTokens;
+  oepnv: OepnvStore;
+  /** `null`, wenn die Overpass-API abgeschaltet ist. */
+  overpass: OverpassClient | null;
   /** Kennungen von Trackern, die sich gemeldet haben, aber noch nicht angelegt sind. */
   unknownTrackers: Map<string, number>;
 }
@@ -47,8 +55,13 @@ export class HttpError extends Error {
 export interface Guards {
   /** Angemeldeter Akteur (Gerät oder Kommandozentrale) oder 401. */
   actor(request: FastifyRequest): Actor;
-  /** Nur Kommandozentrale, sonst 401/403. */
+  /**
+   * Verwaltung: Kommandozentrale und angemeldete Fahnder-Geräte. Alle Einstellungen sind bewusst auch in der App
+   * erreichbar; nur das Verwaltungspasswort der Kommandozentrale bleibt dieser vorbehalten (siehe `zentrale`).
+   */
   admin(request: FastifyRequest): Actor;
+  /** Nur Kommandozentrale, sonst 401/403. */
+  zentrale(request: FastifyRequest): Actor;
   limit(limiter: RateLimiter, request: FastifyRequest): void;
 }
 
@@ -65,11 +78,15 @@ export async function buildApp(services: Services): Promise<FastifyInstance> {
 
   const publicOrigin = new URL(config.publicUrl).origin;
   const wsOrigin = publicOrigin.replace(/^http/, 'ws');
+  // Apple Maps wird nur freigegeben, wenn ein MapKit-Schlüssel hinterlegt ist.
+  const apple = services.mapkit.configured;
   const csp = [
     "default-src 'self'",
-    "img-src 'self' data: blob: https://tile.openstreetmap.org",
+    `script-src 'self'${apple ? ' https://cdn.apple-mapkit.com' : ''}`,
+    "media-src 'self' blob:",
+    `img-src 'self' data: blob: https://tile.openstreetmap.org${apple ? ' https://*.apple-mapkit.com' : ''}`,
     "style-src 'self' 'unsafe-inline'",
-    `connect-src 'self' ${wsOrigin} https://tile.openstreetmap.org`,
+    `connect-src 'self' ${wsOrigin} https://tile.openstreetmap.org${apple ? ' https://*.apple-mapkit.com' : ''}`,
     "worker-src 'self' blob:",
     "object-src 'none'",
     "frame-ancestors 'none'",
@@ -80,11 +97,12 @@ export async function buildApp(services: Services): Promise<FastifyInstance> {
   app.addHook('onSend', async (request, reply) => {
     reply.header('X-Content-Type-Options', 'nosniff');
     reply.header('X-Frame-Options', 'DENY');
-    reply.header('Referrer-Policy', 'no-referrer');
+    // OpenStreetMap verlangt für Kartenkacheln eine Herkunftsangabe; übermittelt wird nur die Adresse des Servers, nie der Pfad.
+    reply.header('Referrer-Policy', 'strict-origin');
     reply.header('Cross-Origin-Opener-Policy', 'same-origin');
     reply.header('Cross-Origin-Resource-Policy', 'same-origin');
     reply.header('Permissions-Policy', 'geolocation=(), camera=(), microphone=(), payment=()');
-    reply.header('Content-Security-Policy', csp);
+    if (!reply.hasHeader('Content-Security-Policy')) reply.header('Content-Security-Policy', csp);
     if (request.url.startsWith('/api/') && !reply.hasHeader('Cache-Control')) reply.header('Cache-Control', 'no-store');
   });
 
@@ -111,6 +129,9 @@ export async function buildApp(services: Services): Promise<FastifyInstance> {
       throw new HttpError(401, 'Nicht angemeldet.');
     },
     admin(request) {
+      return guards.actor(request);
+    },
+    zentrale(request) {
       const actor = guards.actor(request);
       if (actor.role !== 'zentrale') throw new HttpError(403, 'Nur für die Kommandozentrale.');
       return actor;

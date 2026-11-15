@@ -8,8 +8,10 @@ import {
   type CommandName,
   type Entity,
   type EntityData,
+  type Fortbewegung,
   type Kind,
-  type Modus,
+  type LeapfrogStop,
+  type OepnvFahrt,
   type Operation,
   type Position,
 } from './schemas.js';
@@ -26,9 +28,9 @@ export type LageEvent =
   | { type: 'operation'; operation: Operation }
   | { type: 'pos'; id: string; p: Position }
   | { type: 'tpos'; id: string; p: Position }
-  /** Eine Ebene wurde für die Fahnder sichtbar (in die Lage geladen) oder unsichtbar (zurück in den Entwurf). */
-  | { type: 'layerVisibility'; layerId: string; live: boolean }
-  | { type: 'bestreifungReset' };
+  | { type: 'bestreifungReset' }
+  /** Neues Sendeintervall für einen Tracker, das an das Gerät übertragen werden soll. */
+  | { type: 'trackerIntervall'; anbieter: 'sinotrack' | 'paj'; kennung: string; sekunden: number };
 
 /** Fachlicher Fehler, dessen Text dem Benutzer gezeigt werden darf. */
 export class LageError extends Error {
@@ -42,22 +44,27 @@ export class LageError extends Error {
 
 export const LAYER_LAGE = 'lage';
 export const LAYER_DAUERHAFT = 'dauerhaft';
+export const ROOM_ALLGEMEIN = 'allgemein';
 const PROTECTED_LAYERS = new Set([LAYER_LAGE, LAYER_DAUERHAFT]);
-const MAX_MESSAGES = 500;
+const MAX_MESSAGES_PER_ROOM = 500;
 /** Bestreifung: Punkt nur speichern, wenn er sich deutlich vom letzten unterscheidet und brauchbar genau ist. */
 const TRACK_MIN_DISTANCE_M = 12;
 const TRACK_MAX_ACCURACY_M = 60;
+/** Ältere Bestreifung wird verworfen, damit die Datenbank nicht unbegrenzt wächst. */
+const TRACK_RETENTION_MS = 72 * 3600_000;
+const LEAPFROG_STOPS = 8;
 
 const DEFAULT_OPERATION: Operation = {
-  modus: 'observation',
   funkkanal: null,
   titel: '',
   hinweise: '',
   a: null,
-  lkp: null,
-  bestreifungSeit: null,
+  ueberschlagen: { teilnehmer: [], zuweisungen: {}, naechste: [] },
   rev: 0,
 };
+
+/** Liefert die kommenden Halte einer ÖPNV-Linie ab einem Standort (siehe oepnv.ts). */
+export type UpcomingStops = (linienId: string, position: { lat: number; lon: number }, count: number) => LeapfrogStop[];
 
 /**
  * Die laufende Lage: alle gemeinsam bearbeiteten Objekte, der Einsatzzustand und die Live-Positionen.
@@ -70,14 +77,50 @@ export class Lage extends EventEmitter<{ event: [LageEvent] }> {
   private readonly trackerPositions = new Map<string, Position>();
   private readonly lastTrackPoint = new Map<string, Position>();
 
-  constructor(private readonly db: Database) {
+  constructor(
+    private readonly db: Database,
+    private readonly upcomingStops: UpcomingStops = () => [],
+  ) {
     super();
     const stored = db.getKv('operation');
-    this.operationState = stored ? { ...DEFAULT_OPERATION, ...(JSON.parse(stored) as Operation) } : { ...DEFAULT_OPERATION };
+    const parsed = stored ? (JSON.parse(stored) as Partial<Operation>) : {};
+    this.operationState = {
+      funkkanal: parsed.funkkanal ?? null,
+      titel: parsed.titel ?? '',
+      hinweise: parsed.hinweise ?? '',
+      a: parsed.a ?? null,
+      ueberschlagen: parsed.ueberschlagen ?? DEFAULT_OPERATION.ueberschlagen,
+      rev: parsed.rev ?? 0,
+    };
     const trackerPos = db.getKv('trackerPositions');
     if (trackerPos) for (const [id, p] of Object.entries(JSON.parse(trackerPos) as Record<string, Position>)) this.trackerPositions.set(id, p);
-    this.ensureLayer(LAYER_LAGE, { name: 'Lage', art: 'lage', status: 'live', beschreibung: 'Laufender Einsatz' });
-    this.ensureLayer(LAYER_DAUERHAFT, { name: 'Dauerhafte Orte', art: 'dauerhaft', status: 'live', beschreibung: 'Bleibt beim Zurücksetzen erhalten' });
+    this.migrate();
+    this.ensure('layer', LAYER_LAGE, { name: 'Lage', art: 'lage', status: 'live', beschreibung: 'Laufender Einsatz' });
+    this.ensure('layer', LAYER_DAUERHAFT, { name: 'Dauerhafte Orte', art: 'dauerhaft', status: 'live', beschreibung: 'Bleibt beim Zurücksetzen erhalten' });
+    this.ensure('room', ROOM_ALLGEMEIN, { name: 'Allgemein' });
+    this.pruneTrack();
+  }
+
+  /**
+   * Bringt gespeicherte Objekte auf den aktuellen Stand des Datenmodells.
+   * Fehlende Felder erhalten ihre Vorgabewerte; umbenannte Felder werden übertragen.
+   */
+  private migrate(): void {
+    const rows = this.db.sql.prepare('SELECT kind, id, data FROM entities').all() as unknown as { kind: string; id: string; data: string }[];
+    for (const row of rows) {
+      if (!(KINDS as string[]).includes(row.kind)) continue;
+      const raw = JSON.parse(row.data) as Record<string, unknown>;
+      if (row.kind === 'member') {
+        raw.spitzname ??= raw.funkrufname ?? raw.name;
+        if (raw.fahrzeugId && !raw.fortbewegung) raw.fortbewegung = 'fahrzeug';
+        delete raw.funkrufname;
+      }
+      if (row.kind === 'vehicle' && !raw.funkrufname) raw.funkrufname = String(raw.bezeichnung || 'Fahrzeug').slice(0, 20);
+      const parsed = ENTITY_SCHEMAS[row.kind as Kind].safeParse(raw);
+      if (!parsed.success) continue;
+      const next = JSON.stringify(parsed.data);
+      if (next !== row.data) this.db.sql.prepare('UPDATE entities SET data = ? WHERE kind = ? AND id = ?').run(next, row.kind, row.id);
+    }
   }
 
   // ───────────────────────────── Lesen ─────────────────────────────
@@ -98,21 +141,20 @@ export class Lage extends EventEmitter<{ event: [LageEvent] }> {
     return row ? fromRow<K>(row) : null;
   }
 
-  isLayerLive(layerId: string): boolean {
-    return this.get('layer', layerId)?.data.status === 'live';
+  positionOf(memberId: string): Position | undefined {
+    return this.positions.get(memberId);
   }
 
-  /** Vollständiger Zustand für einen neu verbundenen Client. Fahnder sehen keine Entwürfe. */
-  snapshot(role: Role) {
-    const layers = this.list('layer').filter((l) => role === 'zentrale' || l.data.status === 'live');
-    const visible = new Set(layers.map((l) => l.id));
+  /** Vollständiger Zustand für einen neu verbundenen Client. */
+  snapshot() {
     return {
       members: this.list('member'),
       vehicles: this.list('vehicle'),
-      annotations: this.list('annotation').filter((a) => visible.has(a.data.layerId)),
+      annotations: this.list('annotation'),
       targets: this.list('target'),
       trackers: this.list('tracker'),
-      layers,
+      layers: this.list('layer'),
+      rooms: this.list('room'),
       messages: this.list('message').sort((a, b) => a.updatedAt - b.updatedAt),
       operation: this.operationState,
       positions: [...this.positions].map(([id, p]) => ({ id, p })),
@@ -121,8 +163,7 @@ export class Lage extends EventEmitter<{ event: [LageEvent] }> {
   }
 
   coverage(): { memberId: string; punkte: [number, number, number][] }[] {
-    const since = this.operationState.bestreifungSeit ?? 0;
-    const rows = this.db.sql.prepare('SELECT member_id, ts, lat, lon FROM track WHERE ts >= ? ORDER BY member_id, ts').all(since) as unknown as {
+    const rows = this.db.sql.prepare('SELECT member_id, ts, lat, lon FROM track ORDER BY member_id, ts').all() as unknown as {
       member_id: string;
       ts: number;
       lat: number;
@@ -148,14 +189,23 @@ export class Lage extends EventEmitter<{ event: [LageEvent] }> {
     switch (kind) {
       case 'member': {
         if (actor.role !== 'zentrale' && actor.id !== id) throw new LageError('verboten', 'Nur das eigene Profil ist änderbar.');
-        // Die Fahrzeugbesetzung ändert sich ausschließlich über Kommandos.
-        const previous = existing as Entity<'member'> | null;
-        data = { ...(data as EntityData<'member'>), fahrzeugId: previous?.data.fahrzeugId ?? null };
+        // Aktivität, Fortbewegung und Fahrzeug ändern sich ausschließlich über Kommandos.
+        const previous = (existing as Entity<'member'> | null)?.data;
+        const next = data as EntityData<'member'>;
+        data = {
+          ...next,
+          aktiv: previous?.aktiv ?? true,
+          fortbewegung: previous?.fortbewegung ?? 'fuss',
+          fahrzeugId: previous?.fahrzeugId ?? null,
+          oepnv: previous?.oepnv ?? null,
+        };
         break;
       }
-      case 'message':
+      case 'message': {
         if (existing) throw new LageError('verboten', 'Nachrichten können nicht geändert werden.');
+        if (!this.get('room', (data as EntityData<'message'>).roomId)) throw new LageError('ungueltig', 'Chatraum existiert nicht.');
         break;
+      }
       case 'annotation':
         if (!this.get('layer', (data as EntityData<'annotation'>).layerId)) throw new LageError('ungueltig', 'Ebene existiert nicht.');
         break;
@@ -169,17 +219,18 @@ export class Lage extends EventEmitter<{ event: [LageEvent] }> {
         }
         break;
       }
+      case 'vehicle': {
+        const next = data as EntityData<'vehicle'>;
+        // Wer in einem abgeschalteten Fahrzeug saß, ist danach zu Fuß unterwegs.
+        if (!next.aktiv) for (const m of this.occupants(id)) this.write('member', m.id, { ...m.data, fortbewegung: 'fuss', fahrzeugId: null }, actor.id);
+        break;
+      }
       default:
         break;
     }
 
     const entity = this.write(kind, id, data, actor.id);
-    if (kind === 'layer') {
-      const before = (existing as Entity<'layer'> | null)?.data.status;
-      const after = (data as EntityData<'layer'>).status;
-      if (before !== undefined && before !== after) this.emit('event', { type: 'layerVisibility', layerId: id, live: after === 'live' });
-    }
-    if (kind === 'message') this.trimMessages();
+    if (kind === 'message') this.trimMessages((data as EntityData<'message'>).roomId);
     return entity;
   }
 
@@ -190,19 +241,25 @@ export class Lage extends EventEmitter<{ event: [LageEvent] }> {
         if (actor.role !== 'zentrale') throw new LageError('verboten', 'Profile entfernt nur die Kommandozentrale.');
         if (this.operationState.a?.memberId === id) this.updateOperation({ a: null });
         this.positions.delete(id);
+        this.leaveLeapfrog(id);
         break;
       case 'message':
-        throw new LageError('verboten', 'Nachrichten können nicht gelöscht werden.');
+        throw new LageError('verboten', 'Nachrichten können nicht einzeln gelöscht werden.');
+      case 'room':
+        if (id === ROOM_ALLGEMEIN) throw new LageError('verboten', 'Der allgemeine Chatraum kann nicht gelöscht werden.');
+        for (const m of this.list('message')) if (m.data.roomId === id) this.remove('message', m.id);
+        break;
       case 'layer':
         if (PROTECTED_LAYERS.has(id)) throw new LageError('verboten', 'Diese Ebene kann nicht gelöscht werden.');
         for (const a of this.list('annotation')) if (a.data.layerId === id) this.remove('annotation', a.id);
         break;
       case 'vehicle':
-        for (const m of this.list('member')) if (m.data.fahrzeugId === id) this.write('member', m.id, { ...m.data, fahrzeugId: null }, actor.id);
+        for (const m of this.occupants(id)) this.write('member', m.id, { ...m.data, fortbewegung: 'fuss', fahrzeugId: null }, actor.id);
         break;
       case 'tracker':
         for (const t of this.list('target')) if (t.data.trackerId === id) this.write('target', t.id, { ...t.data, trackerId: null }, actor.id);
         for (const v of this.list('vehicle')) if (v.data.trackerId === id) this.write('vehicle', v.id, { ...v.data, trackerId: null }, actor.id);
+        for (const a of this.list('annotation')) if (a.data.trackerId === id) this.write('annotation', a.id, { ...a.data, trackerId: null }, actor.id);
         this.trackerPositions.delete(id);
         this.persistTrackerPositions();
         break;
@@ -215,9 +272,17 @@ export class Lage extends EventEmitter<{ event: [LageEvent] }> {
   // ───────────────────────────── Positionen ─────────────────────────────
 
   reportPosition(memberId: string, p: Position): void {
+    const member = this.get('member', memberId);
+    // Im Ruhemodus wird kein Standort geteilt.
+    if (member && !member.data.aktiv) return;
     this.positions.set(memberId, p);
     this.emit('event', { type: 'pos', id: memberId, p });
-    if (this.operationState.modus !== 'fahndung') return;
+    this.recordTrack(memberId, p);
+    if (this.operationState.a?.memberId === memberId) this.updateLeapfrog();
+  }
+
+  /** Bestreifung: Jeder Weg wird aufgezeichnet; wer sie sehen möchte, schaltet die Anzeige in seiner App ein. */
+  private recordTrack(memberId: string, p: Position): void {
     if ((p.acc ?? 0) > TRACK_MAX_ACCURACY_M) return;
     const last = this.lastTrackPoint.get(memberId);
     if (last && (p.ts <= last.ts || distanceMeters(last, p) < TRACK_MIN_DISTANCE_M)) return;
@@ -234,7 +299,6 @@ export class Lage extends EventEmitter<{ event: [LageEvent] }> {
     this.trackerPositions.set(tracker.id, p);
     this.persistTrackerPositions();
     this.emit('event', { type: 'tpos', id: tracker.id, p });
-    this.followTargetTracker(tracker.id, p);
     return true;
   }
 
@@ -252,123 +316,187 @@ export class Lage extends EventEmitter<{ event: [LageEvent] }> {
     const op = this.operationState;
 
     switch (name) {
-      case 'modus.setzen':
-        this.setModus((args as { modus: Modus }).modus, now);
-        break;
-      case 'a.uebernehmen':
+      case 'a.uebernehmen': {
         if (actor.role !== 'fahnder') throw new LageError('verboten', 'Die A-Position kann nur ein Fahnder übernehmen.');
-        if (op.modus !== 'observation') throw new LageError('konflikt', 'Die A-Position gibt es nur im Observationsmodus.');
+        const me = this.get('member', actor.id);
+        if (!me) throw new LageError('unbekannt', 'Profil fehlt.');
+        if (!me.data.aktiv) throw new LageError('konflikt', 'Im Ruhemodus kann die A-Position nicht übernommen werden.');
+        this.leaveLeapfrog(actor.id);
         this.updateOperation({ a: { memberId: actor.id, seit: now } });
+        this.updateLeapfrog();
         break;
+      }
       case 'a.freigeben':
-        if (op.a && (op.a.memberId === actor.id || actor.role === 'zentrale')) this.updateOperation({ a: null });
+        if (op.a && (op.a.memberId === actor.id || actor.role === 'zentrale')) {
+          this.updateOperation({ a: null });
+          this.updateLeapfrog();
+        }
         break;
       case 'funkkanal.setzen':
-        this.updateOperation({ funkkanal: (args as { kanal: string | null }).kanal });
+        this.updateOperation({ funkkanal: args.kanal as string | null });
         break;
-      case 'lage.setzen': {
-        const { titel, hinweise } = args as { titel: string; hinweise: string };
-        this.updateOperation({ titel, hinweise });
+      case 'lage.setzen':
+        this.updateOperation({ titel: args.titel as string, hinweise: args.hinweise as string });
+        break;
+      case 'fortbewegung.setzen':
+        this.setMobility(actor, args.art as Fortbewegung, (args.fahrzeugId as string | null | undefined) ?? null, (args.oepnv as OepnvFahrt | null | undefined) ?? null, now);
+        break;
+      case 'aktiv.setzen':
+        this.setActive(actor, args.aktiv as boolean);
+        break;
+      case 'ueberschlagen.beitreten': {
+        if (actor.role !== 'fahnder') throw new LageError('verboten', 'Nur Fahnder können überschlagend anfahren.');
+        if (op.a?.memberId === actor.id) throw new LageError('konflikt', 'Wer die A hält, fährt nicht überschlagend.');
+        if (!op.ueberschlagen.teilnehmer.includes(actor.id)) {
+          this.updateOperation({ ueberschlagen: { ...op.ueberschlagen, teilnehmer: [...op.ueberschlagen.teilnehmer, actor.id] } });
+          this.updateLeapfrog();
+        }
         break;
       }
-      case 'lkp.setzen': {
-        const a = args as { lat: number; lon: number; ts?: number; targetId?: string | null };
-        this.updateOperation({ lkp: { lat: a.lat, lon: a.lon, ts: Math.min(a.ts ?? now, now), quelle: 'manuell', targetId: a.targetId ?? null } });
+      case 'ueberschlagen.verlassen':
+        this.leaveLeapfrog(actor.id);
+        break;
+      case 'tracker.intervall': {
+        const tracker = this.get('tracker', args.trackerId as string);
+        if (!tracker) throw new LageError('unbekannt', 'Tracker existiert nicht.');
+        if (tracker.data.anbieter !== 'sinotrack') throw new LageError('konflikt', 'Das Sendeintervall von PAJ-Trackern wird im PAJ-Portal eingestellt.');
+        const sekunden = args.sekunden as number;
+        this.write('tracker', tracker.id, { ...tracker.data, intervall: sekunden }, actor.id);
+        this.emit('event', { type: 'trackerIntervall', anbieter: tracker.data.anbieter, kennung: tracker.data.kennung, sekunden });
         break;
       }
-      case 'lkp.loeschen':
-        this.updateOperation({ lkp: null });
-        break;
-      case 'fahrzeug.einsteigen':
-        this.boardVehicle(actor, (args as { fahrzeugId: string }).fahrzeugId);
-        break;
-      case 'fahrzeug.aussteigen':
-        this.leaveVehicle(actor, now);
-        break;
       case 'bestreifung.zuruecksetzen':
-        this.resetCoverage(now);
+        this.resetCoverage();
         break;
       case 'lage.zuruecksetzen':
-        this.reset(actor, (args as { ziele: boolean }).ziele, now);
+        this.reset(actor, args.ziele as boolean);
         break;
     }
     this.db.audit(actor.id, `cmd:${name}`);
   }
 
   /**
-   * Moduswechsel ohne Informationsverlust:
-   * - Observation → Fahndung: Die A-Position wird zum letzten bekannten Standort (Sichtkontakt abgerissen),
-   *   die Bestreifungs-Aufzeichnung beginnt bzw. läuft weiter.
-   * - Fahndung → Observation: Letzter Standort und Bestreifung bleiben gespeichert, werden aber nur noch blass bzw. gar nicht gezeigt.
-   * - Oberflächenfahndung: weder A-Position noch Weg-Zeit-Berechnung, nur Kräfte und Markierungen.
+   * Fortbewegung wechseln. Steigt der letzte Insasse aus einem Fahrzeug aus,
+   * bleibt das Fahrzeug an dessen aktuellem Standort stehen.
    */
-  private setModus(modus: Modus, now: number): void {
-    const op = this.operationState;
-    if (op.modus === modus) return;
-    const patch: Partial<Operation> = { modus };
-    if (modus !== 'observation' && op.a) {
-      const position = this.positions.get(op.a.memberId);
-      if (modus === 'fahndung' && position) {
-        patch.lkp = { lat: position.lat, lon: position.lon, ts: now, quelle: 'a', targetId: op.lkp?.targetId ?? null };
-      }
-      patch.a = null;
-    }
-    if (modus === 'fahndung' && op.bestreifungSeit === null) patch.bestreifungSeit = now;
-    this.updateOperation(patch);
-  }
-
-  /** Im Fahndungsmodus folgt der letzte bekannte Standort automatisch einem Tracker an der Zielperson. */
-  private followTargetTracker(trackerId: string, p: Position): void {
-    const op = this.operationState;
-    if (op.modus !== 'fahndung') return;
-    if (op.lkp && op.lkp.quelle !== 'tracker') return;
-    const target = this.list('target').find((t) => t.data.trackerId === trackerId);
-    if (!target) return;
-    if (op.lkp && p.ts - op.lkp.ts < 30_000 && distanceMeters(op.lkp, p) < 25) return;
-    this.updateOperation({ lkp: { lat: p.lat, lon: p.lon, ts: p.ts, quelle: 'tracker', targetId: target.id } });
-  }
-
-  private boardVehicle(actor: Actor, fahrzeugId: string): void {
+  private setMobility(actor: Actor, art: Fortbewegung, fahrzeugId: string | null, oepnv: OepnvFahrt | null, now: number): void {
     const member = this.get('member', actor.id);
     if (!member) throw new LageError('unbekannt', 'Profil fehlt.');
-    if (!this.get('vehicle', fahrzeugId)) throw new LageError('unbekannt', 'Fahrzeug existiert nicht.');
-    this.write('member', member.id, { ...member.data, fahrzeugId }, actor.id);
-  }
-
-  private leaveVehicle(actor: Actor, now: number): void {
-    const member = this.get('member', actor.id);
-    const fahrzeugId = member?.data.fahrzeugId;
-    if (!member || !fahrzeugId) return;
-    this.write('member', member.id, { ...member.data, fahrzeugId: null }, actor.id);
-    const vehicle = this.get('vehicle', fahrzeugId);
-    const position = this.positions.get(actor.id);
-    const stillOccupied = this.list('member').some((m) => m.data.fahrzeugId === fahrzeugId);
-    if (vehicle && position && !stillOccupied) {
-      this.write('vehicle', vehicle.id, { ...vehicle.data, abgestellt: { lat: position.lat, lon: position.lon, ts: now } }, actor.id);
+    if (art === 'fahrzeug') {
+      const vehicle = fahrzeugId ? this.get('vehicle', fahrzeugId) : null;
+      if (!vehicle) throw new LageError('unbekannt', 'Bitte ein Fahrzeug auswählen.');
+      if (!vehicle.data.aktiv) throw new LageError('konflikt', 'Dieses Fahrzeug ist für den Einsatz nicht aktiv geschaltet.');
     }
+    if (art === 'oepnv' && !oepnv) throw new LageError('ungueltig', 'Bitte Linie und Richtung auswählen.');
+
+    const previousVehicle = member.data.fahrzeugId;
+    const nextVehicle = art === 'fahrzeug' ? fahrzeugId : null;
+    this.write(
+      'member',
+      member.id,
+      { ...member.data, fortbewegung: art, fahrzeugId: nextVehicle, oepnv: art === 'oepnv' ? oepnv : null },
+      actor.id,
+    );
+
+    if (previousVehicle && previousVehicle !== nextVehicle) {
+      const vehicle = this.get('vehicle', previousVehicle);
+      const position = this.positions.get(actor.id);
+      if (vehicle && position && this.occupants(previousVehicle).length === 0) {
+        this.write('vehicle', vehicle.id, { ...vehicle.data, abgestellt: { lat: position.lat, lon: position.lon, ts: now } }, actor.id);
+      }
+    }
+    if (nextVehicle && nextVehicle !== previousVehicle) {
+      const vehicle = this.get('vehicle', nextVehicle);
+      if (vehicle?.data.abgestellt) this.write('vehicle', vehicle.id, { ...vehicle.data, abgestellt: null }, actor.id);
+    }
+    if (this.operationState.a?.memberId === actor.id) this.updateLeapfrog();
   }
 
-  private resetCoverage(now: number): void {
+  /** Ruhemodus: Wer sich abmeldet, gibt die A-Position ab und fährt nicht mehr überschlagend. */
+  private setActive(actor: Actor, aktiv: boolean): void {
+    const member = this.get('member', actor.id);
+    if (!member) throw new LageError('unbekannt', 'Profil fehlt.');
+    this.write('member', member.id, { ...member.data, aktiv }, actor.id);
+    if (aktiv) return;
+    if (this.operationState.a?.memberId === actor.id) this.updateOperation({ a: null });
+    this.leaveLeapfrog(actor.id);
+    this.positions.delete(actor.id);
+    this.updateLeapfrog();
+  }
+
+  private leaveLeapfrog(memberId: string): void {
+    const current = this.operationState.ueberschlagen;
+    if (!current.teilnehmer.includes(memberId)) return;
+    const zuweisungen = { ...current.zuweisungen };
+    delete zuweisungen[memberId];
+    this.updateOperation({ ueberschlagen: { ...current, teilnehmer: current.teilnehmer.filter((id) => id !== memberId), zuweisungen } });
+  }
+
+  /**
+   * Überschlagendes Anfahren: Solange die A im ÖPNV fährt, wird jedem Teilnehmer eine der kommenden Haltestellen
+   * zugewiesen. Bestehende Zuweisungen bleiben, solange die Haltestelle noch vor der A liegt; ist die A vorbei,
+   * erhält der Teilnehmer die nächste noch unbesetzte Haltestelle dahinter.
+   */
+  private updateLeapfrog(): void {
+    const op = this.operationState;
+    const holder = op.a ? this.get('member', op.a.memberId) : null;
+    const position = op.a ? this.positions.get(op.a.memberId) : undefined;
+    const linienId = holder?.data.fortbewegung === 'oepnv' ? holder.data.oepnv?.linienId : undefined;
+    const naechste = linienId && position ? this.upcomingStops(linienId, position, LEAPFROG_STOPS) : [];
+
+    const key = (s: LeapfrogStop) => `${s.name}|${s.lat.toFixed(5)}|${s.lon.toFixed(5)}`;
+    const upcomingKeys = naechste.map(key);
+    const zuweisungen: Record<string, LeapfrogStop> = {};
+    const taken = new Set<string>();
+    const teilnehmer = op.ueberschlagen.teilnehmer.filter((id) => this.get('member', id)?.data.aktiv);
+    for (const id of teilnehmer) {
+      const current = op.ueberschlagen.zuweisungen[id];
+      if (current && upcomingKeys.includes(key(current)) && !taken.has(key(current))) {
+        zuweisungen[id] = current;
+        taken.add(key(current));
+      }
+    }
+    for (const id of teilnehmer) {
+      if (zuweisungen[id]) continue;
+      // Nächste freie Haltestelle hinter der am weitesten vorne liegenden bereits besetzten.
+      const lastTaken = Math.max(-1, ...upcomingKeys.map((k, i) => (taken.has(k) ? i : -1)));
+      const free = naechste.find((s, i) => i > lastTaken && !taken.has(key(s))) ?? naechste.find((s) => !taken.has(key(s)));
+      if (!free) continue;
+      zuweisungen[id] = free;
+      taken.add(key(free));
+    }
+    const next = { teilnehmer, zuweisungen, naechste };
+    if (JSON.stringify(next) !== JSON.stringify(op.ueberschlagen)) this.updateOperation({ ueberschlagen: next });
+  }
+
+  private resetCoverage(): void {
     this.db.sql.exec('DELETE FROM track');
     this.lastTrackPoint.clear();
-    this.updateOperation({ bestreifungSeit: this.operationState.modus === 'fahndung' ? now : null });
     this.emit('event', { type: 'bestreifungReset' });
   }
 
-  /** Setzt die laufende Lage zurück. Dauerhafte Orte, Profile, Fahrzeuge und Tracker bleiben erhalten. */
-  private reset(actor: Actor, includeTargets: boolean, now: number): void {
+  private pruneTrack(now = Date.now()): void {
+    this.db.sql.prepare('DELETE FROM track WHERE ts < ?').run(now - TRACK_RETENTION_MS);
+  }
+
+  /** Setzt die laufende Lage zurück. Dauerhafte Orte, Profile, Fahrzeuge, Tracker und Chaträume bleiben erhalten. */
+  private reset(actor: Actor, includeTargets: boolean): void {
     const layers = this.list('layer');
     const doomed = new Set(layers.filter((l) => l.data.status === 'live' && l.data.art !== 'dauerhaft').map((l) => l.id));
     for (const a of this.list('annotation')) if (doomed.has(a.data.layerId)) this.remove('annotation', a.id);
     for (const l of layers) if (doomed.has(l.id) && !PROTECTED_LAYERS.has(l.id)) this.remove('layer', l.id);
     for (const m of this.list('message')) this.remove('message', m.id);
     if (includeTargets) for (const t of this.list('target')) this.remove('target', t.id);
-    this.updateOperation({ a: null, lkp: null, titel: '', hinweise: '' });
-    this.resetCoverage(now);
+    this.updateOperation({ a: null, titel: '', hinweise: '', ueberschlagen: DEFAULT_OPERATION.ueberschlagen });
+    this.resetCoverage();
     this.db.audit(actor.id, 'lage.zurueckgesetzt', includeTargets ? 'inklusive Zielpersonen' : '');
   }
 
   // ───────────────────────────── intern ─────────────────────────────
+
+  private occupants(vehicleId: string): Entity<'member'>[] {
+    return this.list('member').filter((m) => m.data.fortbewegung === 'fahrzeug' && m.data.fahrzeugId === vehicleId);
+  }
 
   private updateOperation(patch: Partial<Operation>): void {
     this.operationState = { ...this.operationState, ...patch, rev: this.operationState.rev + 1 };
@@ -395,15 +523,15 @@ export class Lage extends EventEmitter<{ event: [LageEvent] }> {
     this.emit('event', { type: 'del', kind, id });
   }
 
-  private ensureLayer(id: string, data: EntityData<'layer'>): void {
-    if (!this.get('layer', id)) this.write('layer', id, data, 'system');
+  private ensure<K extends Kind>(kind: K, id: string, data: EntityData<K>): void {
+    if (!this.get(kind, id)) this.write(kind, id, data, 'system');
   }
 
-  private trimMessages(): void {
-    const messages = this.list('message');
-    if (messages.length <= MAX_MESSAGES) return;
+  private trimMessages(roomId: string): void {
+    const messages = this.list('message').filter((m) => m.data.roomId === roomId);
+    if (messages.length <= MAX_MESSAGES_PER_ROOM) return;
     messages.sort((a, b) => a.updatedAt - b.updatedAt);
-    for (const old of messages.slice(0, messages.length - MAX_MESSAGES)) this.remove('message', old.id);
+    for (const old of messages.slice(0, messages.length - MAX_MESSAGES_PER_ROOM)) this.remove('message', old.id);
   }
 
   private persistTrackerPositions(): void {

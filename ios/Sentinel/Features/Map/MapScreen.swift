@@ -6,14 +6,12 @@ enum MapSelection: Identifiable, Hashable {
     case member(String)
     case vehicle(String)
     case target(String)
-    case lastKnown
 
     var id: String {
         switch self {
         case .member(let id): "member-\(id)"
         case .vehicle(let id): "vehicle-\(id)"
         case .target(let id): "target-\(id)"
-        case .lastKnown: "lkp"
         }
     }
 }
@@ -23,7 +21,10 @@ enum MapTapMode: Equatable {
     case none
     case drawing(MapObject.Shape, points: [GeoPoint])
     case moving(objectId: String)
-    case placingLastKnown
+    /// Neues Ziel (Person, Fahrzeug, Objekt) an der getippten Stelle anlegen.
+    case newTarget(ZielArt)
+    /// Standort eines bestehenden Ziels neu setzen.
+    case placingTarget(String)
 
     var hint: String? {
         switch self {
@@ -31,7 +32,8 @@ enum MapTapMode: Equatable {
         case .drawing(let shape, let points):
             shape.isMultiPoint ? "\(shape.title): Punkte antippen (\(points.count) gesetzt)" : "\(shape.title): Ort antippen"
         case .moving: "Neuen Ort antippen"
-        case .placingLastKnown: "Letzten bekannten Standort antippen"
+        case .newTarget(let art): "\(art.title): Standort antippen"
+        case .placingTarget: "Neuen Standort des Ziels antippen"
         }
     }
 }
@@ -42,7 +44,7 @@ struct EditorContext: Identifiable {
     let isNew: Bool
 }
 
-/// Die Lagekarte: Kräfte, Fahrzeuge, Zielpersonen, Markierungen und die Werkzeuge des jeweiligen Modus.
+/// Die Lagekarte: Kräfte, Fahrzeuge, Ziele, Markierungen und eine Navigation wie in einer Navi-App.
 struct MapScreen: View {
     @Environment(AppModel.self) private var model
     @Environment(LageStore.self) private var lage
@@ -50,17 +52,18 @@ struct MapScreen: View {
     @Environment(FahndungStore.self) private var fahndung
     @Environment(RouteFollower.self) private var route
     @Environment(LocationService.self) private var location
+    @Environment(LocationContext.self) private var locationContext
 
-    /// Folgt dem eigenen Standort; ohne Standort zeigt die Karte den Ausschnitt mit allen Kräften und Markierungen.
     @State private var camera: MapCameraPosition = .userLocation(fallback: .automatic)
     @State private var selection: MapSelection?
     @State private var tapMode: MapTapMode = .none
     @State private var editor: EditorContext?
+    @State private var targetEditor: TargetEditorContext?
     @State private var showsLayers = false
-    @State private var pendingMode: Modus?
+    @State private var showsSearch = false
+    @State private var showsMobility = false
+    @State private var cameraTick = 0
     @State private var now = Date.now
-
-    private var modus: Modus { lage.operation.modus }
 
     var body: some View {
         MapReader { proxy in
@@ -72,29 +75,33 @@ struct MapScreen: View {
                     openEditor(for: id)
                 }
                 RouteLayer(lines: routeLines)
-                LastKnownLayer(pins: lastKnownPins, faded: modus != .fahndung) { selection = .lastKnown }
-                VehiclesLayer(pins: vehiclePins) { selection = .vehicle($0) }
-                TargetsLayer(pins: targetPins) { selection = .target($0) }
-                MembersLayer(pins: memberPins) { selection = .member($0) }
+                StopsLayer(stops: lage.operation.ueberschlagen.naechste, mine: lage.myLeapfrogStop)
+                SymbolLayer(pins: vehiclePins + targetPins) { selection = $0 }
+                ForcesLayer(pins: forcePins) { selection = $0 }
                 DraftLayer(points: draftPoints, outline: draftOutline)
             }
-            .mapStyle(settings.mapStyleIsSatellite ? .hybrid(pointsOfInterest: .all, showsTraffic: true) : .standard(pointsOfInterest: .all, showsTraffic: true))
+            .mapStyle(mapStyle)
             .mapControls {
                 MapCompass()
+                MapPitchToggle()
                 MapScaleView()
             }
+            .onMapCameraChange(frequency: .continuous) { _ in cameraTick &+= 1 }
             .onTapGesture { point in
                 guard tapMode != .none, let coordinate = proxy.convert(point, from: .local) else { return }
                 handleTap(GeoPoint(coordinate))
             }
+            .overlay { streetLabel(proxy) }
         }
         .safeAreaInset(edge: .top, spacing: 0) { topArea }
         .safeAreaInset(edge: .bottom, spacing: 0) { bottomArea }
-        .overlay(alignment: .trailing) { sideButtons }
+        .overlay(alignment: .topTrailing) { sideButtons }
         .sheet(item: $selection) { selection in
-            QuickLookSheet(selection: selection) { tapMode = .placingLastKnown }
-                .presentationDetents([.medium, .large])
-                .presentationBackgroundInteraction(.enabled(upThrough: .medium))
+            QuickLookSheet(selection: selection) { targetId in
+                tapMode = .placingTarget(targetId)
+            }
+            .presentationDetents([.medium, .large])
+            .presentationBackgroundInteraction(.enabled(upThrough: .medium))
         }
         .sheet(item: $editor) { context in
             MapObjectEditor(context: context) { objectId in
@@ -102,68 +109,110 @@ struct MapScreen: View {
             }
             .presentationDetents([.medium, .large])
         }
+        .sheet(item: $targetEditor) { context in
+            TargetEditor(context: context)
+        }
         .sheet(isPresented: $showsLayers) {
             LayerSheet()
                 .presentationDetents([.medium, .large])
         }
-        .confirmationDialog(
-            "Modus für alle auf „\(pendingMode?.title ?? "")“ ändern?",
-            isPresented: Binding(get: { pendingMode != nil }, set: { if !$0 { pendingMode = nil } }),
-            titleVisibility: .visible
-        ) {
-            Button("Modus wechseln") {
-                if let pendingMode { lage.setMode(pendingMode) }
+        .sheet(isPresented: $showsSearch) {
+            SearchSheet { target in
+                model.navigate(to: target)
+                camera = .userLocation(followsHeading: true, fallback: .automatic)
             }
-        } message: {
-            Text(pendingMode?.summary ?? "")
+            .presentationDetents([.large])
         }
-        .task(id: lage.coverageGeneration) {
-            if modus == .fahndung { await fahndung.reloadCoverage() } else { fahndung.clearCoverage() }
+        .sheet(isPresented: $showsMobility) {
+            MobilitySheet()
+                .presentationDetents([.medium, .large])
         }
-        .task(id: ReachKey(origin: lage.operation.lkp, modes: enabledReachModes, active: modus == .fahndung && lage.hasSnapshot)) {
-            if modus == .fahndung {
-                fahndung.trackReach(origin: lage.operation.lkp, modes: enabledReachModes)
-            } else {
-                fahndung.stopReach()
+        .task(id: CoverageKey(enabled: settings.showsCoverage, generation: lage.coverageGeneration)) {
+            guard settings.showsCoverage else {
+                fahndung.clearCoverage()
+                return
             }
+            while !Task.isCancelled {
+                await fahndung.reloadCoverage()
+                try? await Task.sleep(for: .seconds(60))
+            }
+        }
+        .task(id: reachInputs.map { "\($0.id)|\($0.since.timeIntervalSince1970)|\($0.point.lat)|\($0.point.lon)" }.joined() + enabledReachModes.map(\.rawValue).joined()) {
+            fahndung.trackReach(reachInputs, modes: enabledReachModes)
         }
         .task {
-            // Minutentakt für Altersangaben (z. B. "seit 12 Min.") und veraltete Positionen.
+            // Takt für Altersangaben und veraltete Positionen.
             while !Task.isCancelled {
                 try? await Task.sleep(for: .seconds(20))
                 now = .now
             }
         }
-        .onChange(of: modus) { _, newValue in
-            if newValue != .observation, route.target == .aPosition { route.stop() }
-            if case .placingLastKnown = tapMode, newValue != .fahndung { tapMode = .none }
+        .onChange(of: route.isActive) { _, active in
+            if active { camera = .userLocation(followsHeading: true, fallback: .automatic) }
         }
         .sensoryFeedback(.impact, trigger: lage.operation.a?.memberId)
     }
 
-    private struct ReachKey: Equatable {
-        let origin: OperationState.LastKnownPosition?
-        let modes: [ReachMode]
-        let active: Bool
+    private struct CoverageKey: Equatable {
+        let enabled: Bool
+        let generation: Int
+    }
+
+    private var mapStyle: MapStyle {
+        switch settings.mapStyle {
+        case .standard: .standard(elevation: .realistic, pointsOfInterest: .all, showsTraffic: settings.showsTraffic)
+        case .hybrid: .hybrid(elevation: .realistic, pointsOfInterest: .all, showsTraffic: settings.showsTraffic)
+        case .satellit: .imagery(elevation: .realistic)
+        }
+    }
+
+    private var isFollowing: Bool { camera.followsUserLocation }
+
+    // MARK: Statuszeile unter dem eigenen Standort
+
+    @ViewBuilder
+    private func streetLabel(_ proxy: MapProxy) -> some View {
+        let _ = cameraTick
+        if isFollowing || route.isActive, let summary = locationContext.summary, let current = location.current,
+           let point = proxy.convert(current.coordinate, to: .local) {
+            GeometryReader { geometry in
+                Text(summary)
+                    .font(.footnote.weight(.semibold))
+                    .lineLimit(1)
+                    .padding(.horizontal, 10)
+                    .padding(.vertical, 5)
+                    .glassEffect(.regular, in: .capsule)
+                    .fixedSize()
+                    .position(x: min(max(point.x, 120), geometry.size.width - 120), y: point.y + 34)
+                    .allowsHitTesting(false)
+                    .accessibilityLabel("Eigener Standort: \(summary)")
+            }
+        }
     }
 
     // MARK: Obere Leiste
 
     private var topArea: some View {
         VStack(spacing: 8) {
-            Picker("Modus", selection: Binding(get: { modus }, set: { if $0 != modus { pendingMode = $0 } })) {
-                ForEach(Modus.allCases) { modus in
-                    Text(modus.title).tag(modus)
-                }
-            }
-            .pickerStyle(.segmented)
-            .padding(4)
-            .glassEffect(.regular, in: .capsule)
-            .padding(.horizontal, 16)
-
             if route.isActive {
-                RouteBanner()
+                NavigationBanner()
+            } else {
+                Button { showsSearch = true } label: {
+                    HStack(spacing: 10) {
+                        Image(systemName: "magnifyingglass")
+                        Text("Suchen oder navigieren")
+                            .foregroundStyle(.secondary)
+                        Spacer()
+                    }
+                    .font(.body)
                     .padding(.horizontal, 16)
+                    .frame(height: 46)
+                    .contentShape(.rect)
+                }
+                .buttonStyle(.plain)
+                .glassEffect(.regular.interactive(), in: .capsule)
+                .padding(.trailing, 60)
+                .accessibilityLabel("Suchen oder navigieren")
             }
 
             if let hint = tapMode.hint {
@@ -183,27 +232,30 @@ struct MapScreen: View {
                 .padding(.horizontal, 14)
                 .padding(.vertical, 10)
                 .glassEffect(.regular.tint(.yellow.opacity(0.25)), in: .rect(cornerRadius: 16))
-                .padding(.horizontal, 16)
             }
         }
+        .padding(.horizontal, 16)
         .padding(.top, 4)
         .animation(.snappy, value: tapMode)
         .animation(.snappy, value: route.isActive)
     }
 
-    // MARK: Seitliche Knöpfe
+    // MARK: Knöpfe am rechten Rand, direkt unter dem Kompass
 
     private var sideButtons: some View {
         GlassEffectContainer(spacing: 10) {
             VStack(spacing: 10) {
-                MapRoundButton(title: "Ebenen", symbol: "square.3.layers.3d") { showsLayers = true }
-                MapRoundButton(title: settings.mapStyleIsSatellite ? "Standardkarte" : "Satellitenbild", symbol: settings.mapStyleIsSatellite ? "map" : "globe.europe.africa") {
-                    settings.mapStyleIsSatellite.toggle()
+                AddMenu { action in
+                    switch action {
+                    case .shape(let shape): tapMode = .drawing(shape, points: [])
+                    case .target(let art): tapMode = .newTarget(art)
+                    }
                 }
-                MapRoundButton(title: "Eigener Standort", symbol: "location.fill") {
-                    withAnimation { camera = .userLocation(fallback: .automatic) }
+                MapRoundButton(title: "Ebenen und Kartenstil", symbol: "square.3.layers.3d") { showsLayers = true }
+                MapRoundButton(title: isFollowing ? "Standort folgt" : "Eigener Standort", symbol: isFollowing ? "location.north.line.fill" : "location") {
+                    withAnimation { camera = .userLocation(followsHeading: route.isActive || isFollowing, fallback: .automatic) }
                 }
-                if modus == .observation, let a = lage.aPosition {
+                if let a = lage.aPosition {
                     MapRoundButton(title: "A-Position zeigen", symbol: "a.circle.fill", tint: Theme.aPosition) {
                         withAnimation { camera = .region(MKCoordinateRegion(center: a.point.coordinate, latitudinalMeters: 800, longitudinalMeters: 800)) }
                     }
@@ -211,27 +263,23 @@ struct MapScreen: View {
             }
         }
         .padding(.trailing, 12)
+        .padding(.top, route.isActive ? 150 : 110)
     }
 
     // MARK: Untere Leiste
 
     private var bottomArea: some View {
         VStack(spacing: 8) {
-            switch modus {
-            case .observation:
+            if route.isActive {
+                NavigationBottomBar()
+            } else {
                 APositionControl()
-            case .fahndung:
-                FahndungControl(now: now, placeLastKnown: { tapMode = .placingLastKnown })
-            case .oberflaeche:
-                EmptyView()
-            }
-            DrawingToolbar { shape in
-                tapMode = .drawing(shape, points: [])
+                MobilityChip { showsMobility = true }
             }
         }
         .padding(.horizontal, 16)
         .padding(.bottom, 8)
-        .animation(.snappy, value: modus)
+        .animation(.snappy, value: route.isActive)
     }
 
     // MARK: Tippen und Zeichnen
@@ -240,11 +288,19 @@ struct MapScreen: View {
         switch tapMode {
         case .none:
             break
-        case .placingLastKnown:
-            lage.setLastKnownPosition(point, targetId: lage.operation.lkp?.targetId)
+        case .placingTarget(let id):
+            if var target = lage.targets[id]?.data {
+                target.standort = TimedPoint(point)
+                lage.put(target, id: id)
+            }
             tapMode = .none
+        case .newTarget(let art):
+            var target = Target(art: art)
+            target.standort = TimedPoint(point)
+            tapMode = .none
+            targetEditor = TargetEditorContext(id: LageStore.newId(), target: target, isNew: true)
         case .moving(let objectId):
-            guard var object = lage.mapObjects[objectId]?.data else {
+            guard var object = lage.mapObjects[objectId]?.data, settings.canEdit(layerId: object.layerId) else {
                 tapMode = .none
                 return
             }
@@ -267,7 +323,15 @@ struct MapScreen: View {
     private func finishDrawing(_ shape: MapObject.Shape, _ points: [GeoPoint]) {
         guard points.count >= shape.minimumPoints else { return }
         tapMode = .none
-        let object = MapObject(layerId: Layer.lageId, typ: shape, punkte: points, radius: shape == .kreis ? 150 : nil)
+        let isRoom = shape == .fahndungsraum
+        let object = MapObject(
+            layerId: Layer.lageId,
+            typ: shape,
+            farbe: isRoom ? "#C97C7C" : "#FF9F0A",
+            punkte: points,
+            radius: shape == .kreis ? 150 : nil,
+            zeit: isRoom ? (Date.now.timeIntervalSince1970 * 1000).rounded() : nil
+        )
         editor = EditorContext(id: LageStore.newId(), object: object, isNew: true)
     }
 
@@ -278,8 +342,12 @@ struct MapScreen: View {
 
     // MARK: Aufbereitung für die Karte
 
+    /// Nur geladene Ebenen erscheinen auf der Karte; Entwürfe bleiben in der Ebenenliste.
     private var visibleObjects: [Versioned<MapObject>] {
-        lage.mapObjects.values.filter { !settings.hiddenLayers.contains($0.data.layerId) && lage.layers[$0.data.layerId] != nil }
+        lage.mapObjects.values.filter { object in
+            guard let layer = lage.layers[object.data.layerId] else { return false }
+            return layer.data.isLive && !settings.hiddenLayers.contains(object.data.layerId)
+        }
     }
 
     private func objects(_ shape: MapObject.Shape) -> [Versioned<MapObject>] {
@@ -287,75 +355,108 @@ struct MapScreen: View {
     }
 
     /// Antippbare Griffe. Prognosezellen (mit Kennwert) bekommen keinen, sonst würde die Karte überladen.
-    private var handles: [Versioned<MapObject>] {
-        visibleObjects.filter { $0.data.wert == nil && !$0.data.punkte.isEmpty }
-    }
-
-    private var memberPins: [MemberPin] {
-        lage.sortedMembers.compactMap { member in
-            guard let position = lage.positions[member.id] else { return nil }
-            let isA = modus == .observation && lage.operation.a?.memberId == member.id
-            // Der eigene Standort erscheint als blauer Punkt; ein eigener Marker nur, wenn man selbst die A hält.
-            if member.id == lage.selfId, !isA { return nil }
-            return MemberPin(
-                id: member.id,
-                callsign: member.data.funkrufname,
-                coordinate: position.point.coordinate,
-                isA: isA,
-                isStale: !lage.isOnline(member.id) || now.timeIntervalSince(position.date) > 120,
-                inVehicle: member.data.fahrzeugId != nil
+    private var handles: [ObjectHandle] {
+        visibleObjects.filter { $0.data.wert == nil && !$0.data.punkte.isEmpty }.map { object in
+            ObjectHandle(
+                id: object.id,
+                object: object.data,
+                coordinate: lage.position(ofObject: object.data).coordinate,
+                locked: !settings.canEdit(layerId: object.data.layerId)
             )
         }
     }
 
+    private var forcePins: [ForcePin] {
+        var pins: [ForcePin] = []
+        var crews: [String: (names: [String], position: Position, isA: Bool, stale: Bool)] = [:]
+        for member in lage.activeMembers {
+            guard let position = lage.positions[member.id] else { continue }
+            let isA = lage.operation.a?.memberId == member.id
+            let stale = !lage.isOnline(member.id) || now.timeIntervalSince(position.date) > 120
+            if let vehicle = lage.vehicle(of: member.data) {
+                var crew = crews[vehicle.id] ?? (names: [], position: position, isA: false, stale: true)
+                crew.names.append(member.data.spitzname)
+                if position.ts > crew.position.ts { crew.position = position }
+                crew.isA = crew.isA || isA
+                crew.stale = crew.stale && stale
+                crews[vehicle.id] = crew
+                continue
+            }
+            // Der eigene Standort erscheint als blauer Punkt; ein eigener Marker nur, wenn man selbst die A hält.
+            if member.id == lage.selfId, !isA { continue }
+            pins.append(ForcePin(
+                id: member.id,
+                label: lage.label(of: member.data),
+                coordinate: position.point.coordinate,
+                isA: isA,
+                isStale: stale,
+                symbol: member.data.fortbewegung.symbolName,
+                target: .member(member.id)
+            ))
+        }
+        for (vehicleId, crew) in crews {
+            guard let vehicle = lage.vehicles[vehicleId] else { continue }
+            let point = lage.position(ofVehicle: vehicle)?.point ?? crew.position.point
+            pins.append(ForcePin(
+                id: "fz-\(vehicleId)",
+                label: "\(vehicle.data.funkrufname) (\(crew.names.joined(separator: ", ")))",
+                coordinate: point.coordinate,
+                isA: crew.isA,
+                isStale: crew.stale,
+                symbol: "car.fill",
+                target: .vehicle(vehicleId)
+            ))
+        }
+        return pins
+    }
+
     private var vehiclePins: [SymbolPin] {
-        lage.sortedVehicles.compactMap { vehicle in
-            // Besetzte Fahrzeuge ohne eigenen Tracker zeigt bereits der Marker der Besatzung.
-            let occupied = !lage.occupants(of: vehicle.id).isEmpty
-            guard let position = lage.position(ofVehicle: vehicle), !occupied || position.source == "Tracker" else { return nil }
-            let title = vehicle.data.kennzeichen.isEmpty ? vehicle.data.bezeichnung : vehicle.data.kennzeichen
-            return SymbolPin(id: vehicle.id, title: title, subtitle: position.source, coordinate: position.point.coordinate)
+        lage.activeVehicles.compactMap { vehicle in
+            guard lage.occupants(of: vehicle.id).isEmpty, let position = lage.position(ofVehicle: vehicle) else { return nil }
+            return SymbolPin(id: vehicle.id, title: vehicle.data.funkrufname, symbol: "car.fill", color: .indigo, coordinate: position.point.coordinate, selection: .vehicle(vehicle.id))
         }
     }
 
     private var targetPins: [SymbolPin] {
         lage.sortedTargets.compactMap { target in
             guard let position = lage.position(ofTarget: target) else { return nil }
-            return SymbolPin(id: target.id, title: target.data.displayName, subtitle: "", coordinate: position.point.coordinate)
+            return SymbolPin(id: target.id, title: target.data.displayName, symbol: target.data.art.symbolName, color: Theme.target, coordinate: position.point.coordinate, selection: .target(target.id))
         }
-    }
-
-    private var lastKnownPins: [SymbolPin] {
-        guard modus != .oberflaeche, let lkp = lage.operation.lkp else { return [] }
-        return [SymbolPin(id: "lkp", title: "Letzter Standort", subtitle: "Zuletzt \(Format.time(lkp.date))", coordinate: lkp.point.coordinate)]
     }
 
     private var enabledReachModes: [ReachMode] {
         ReachMode.allCases.filter(settings.isReachEnabled)
     }
 
+    private var reachInputs: [FahndungStore.ReachInput] {
+        objects(.fahndungsraum).compactMap { object in
+            guard let since = object.data.since, let point = object.data.punkte.first else { return nil }
+            return FahndungStore.ReachInput(id: object.id, point: point, since: since)
+        }
+    }
+
     private var reachRings: [ReachRing] {
-        guard modus == .fahndung else { return [] }
-        return fahndung.reachAreas
-            .filter { settings.isReachEnabled($0.modus) }
-            .flatMap { area in
+        fahndung.reachAreas.flatMap { roomId, areas in
+            areas.filter { settings.isReachEnabled($0.modus) }.flatMap { area in
                 area.ringe.enumerated().map { index, ring in
                     ReachRing(
-                        id: "\(area.modus.rawValue)-\(index)",
+                        id: "\(roomId)-\(area.modus.rawValue)-\(index)",
                         mode: area.modus,
                         coordinates: ring.filter { $0.count >= 2 }.map { CLLocationCoordinate2D(latitude: $0[0], longitude: $0[1]) }
                     )
                 }
             }
+        }
     }
 
     private var coverageSegments: [CoverageSegment] {
-        guard modus == .fahndung, settings.showsCoverage else { return [] }
+        guard settings.showsCoverage else { return [] }
         return fahndung.segments.filter { $0.points.count > 1 }
     }
 
     private var routeLines: [RouteLine] {
-        route.route.map { [RouteLine(polyline: $0.polyline)] } ?? []
+        guard let current = route.route, current.coordinates.count > 1 else { return [] }
+        return [RouteLine(polyline: MKPolyline(coordinates: current.coordinates, count: current.coordinates.count), specialRights: current.usesSpecialRights)]
     }
 
     private var draftPoints: [DraftPoint] {
@@ -366,7 +467,7 @@ struct MapScreen: View {
     private var draftOutline: [RouteLine] {
         guard case .drawing(_, let points) = tapMode, points.count > 1 else { return [] }
         let coordinates = points.map(\.coordinate)
-        return [RouteLine(polyline: MKPolyline(coordinates: coordinates, count: coordinates.count))]
+        return [RouteLine(polyline: MKPolyline(coordinates: coordinates, count: coordinates.count), specialRights: false)]
     }
 }
 
@@ -386,5 +487,38 @@ struct MapRoundButton: View {
         }
         .glassEffect(.regular.interactive(), in: .circle)
         .accessibilityLabel(title)
+    }
+}
+
+/// Hervorgehobener Plus-Knopf: Markierungen, Fahndungsräume und Ziele hinzufügen.
+struct AddMenu: View {
+    enum Action {
+        case shape(MapObject.Shape)
+        case target(ZielArt)
+    }
+
+    let select: (Action) -> Void
+
+    var body: some View {
+        Menu {
+            Section("Fahndung") {
+                Button(MapObject.Shape.fahndungsraum.title, systemImage: MapObject.Shape.fahndungsraum.symbolName) { select(.shape(.fahndungsraum)) }
+                ForEach(ZielArt.allCases) { art in
+                    Button(art.title, systemImage: art.symbolName) { select(.target(art)) }
+                }
+            }
+            Section("Markierung") {
+                ForEach([MapObject.Shape.marker, .text, .linie, .flaeche, .kreis], id: \.self) { shape in
+                    Button(shape.title, systemImage: shape.symbolName) { select(.shape(shape)) }
+                }
+            }
+        } label: {
+            Image(systemName: "plus")
+                .font(.system(size: 20, weight: .bold))
+                .foregroundStyle(.white)
+                .frame(width: 44, height: 44)
+        }
+        .glassEffect(.regular.tint(Theme.accent).interactive(), in: .circle)
+        .accessibilityLabel("Hinzufügen")
     }
 }

@@ -1,5 +1,5 @@
 import { useSignal } from '@preact/signals';
-import { adminStatus, api, attempt, del, focusRequest, newId, put, refreshStatus, tables, trackerPositions } from '../store';
+import { adminStatus, api, attempt, command, del, focusRequest, newId, put, refreshStatus, tables, trackerPositions } from '../store';
 import type { Tracker } from '../types';
 import { ago, Field, Section, TextInput } from '../ui';
 
@@ -17,13 +17,15 @@ export function TrackersPanel() {
 
   const usage = (id: string) => {
     const target = Object.values(tables.target.value).find((t) => t.data.trackerId === id);
-    if (target) return `Zielperson ${[target.data.vorname, target.data.nachname].filter(Boolean).join(' ')}`;
+    if (target) return `Ziel ${[target.data.vorname, target.data.nachname, target.data.bezeichnung].filter(Boolean).join(' ')}`;
     const vehicle = Object.values(tables.vehicle.value).find((v) => v.data.trackerId === id);
-    return vehicle ? `Fahrzeug ${vehicle.data.bezeichnung}` : 'nicht zugeordnet';
+    if (vehicle) return `Fahrzeug ${vehicle.data.funkrufname}`;
+    const marker = Object.values(tables.annotation.value).find((a) => a.data.trackerId === id);
+    return marker ? `Marker ${marker.data.titel || ''}`.trim() : 'nicht zugeordnet';
   };
 
-  const add = (data: Tracker) => {
-    if (put('tracker', newId(), data)) {
+  const add = (data: Omit<Tracker, 'intervall'>) => {
+    if (put('tracker', newId(), { ...data, intervall: null })) {
       name.value = '';
       kennung.value = '';
       window.setTimeout(() => void refreshStatus(), 500);
@@ -32,7 +34,7 @@ export function TrackersPanel() {
 
   return (
     <>
-      <Section title="Tracker" hint="Zugeordnet werden Tracker bei der Zielperson bzw. beim Fahrzeug.">
+      <Section title="Tracker" hint="Zugeordnet werden Tracker beim Ziel, beim Fahrzeug oder bei einem Marker. Das Sendeintervall lässt sich bei SinoTrack-Geräten hier ändern; PAJ-Geräte stellt man im PAJ-Portal ein.">
         {trackers.length === 0 && <p class="hint">Noch kein Tracker angelegt.</p>}
         <ul class="list">
           {trackers.map((t) => {
@@ -43,7 +45,7 @@ export function TrackersPanel() {
                 <div class="grow">
                   <b>{t.data.name}</b>
                   <small>
-                    {t.data.anbieter === 'paj' ? 'PAJ' : 'SinoTrack'} · <span class="mono">{t.data.kennung}</span> · {usage(t.id)}
+                    {t.data.anbieter === 'paj' ? 'PAJ' : 'SinoTrack'}, <span class="mono">{t.data.kennung}</span>, {usage(t.id)}
                   </small>
                   <small class="hint">{position ? `Letzte Position ${ago(position.ts)}` : 'Noch keine Position empfangen'}</small>
                 </div>
@@ -54,12 +56,38 @@ export function TrackersPanel() {
                 )}
                 <button
                   class="quiet"
+                  onClick={() => {
+                    const name = prompt('Neuer Name des Trackers', t.data.name)?.trim();
+                    if (name) put('tracker', t.id, { ...t.data, name: name.slice(0, 60) });
+                  }}
+                >
+                  Umbenennen
+                </button>
+                {t.data.anbieter === 'sinotrack' && (
+                  <select
+                    title="Sendeintervall (wird an das Gerät geschickt)"
+                    value={String(t.data.intervall ?? '')}
+                    onChange={(e) => {
+                      const sekunden = Number(e.currentTarget.value);
+                      if (sekunden) command('tracker.intervall', { trackerId: t.id, sekunden });
+                    }}
+                  >
+                    <option value="">Intervall</option>
+                    {[10, 20, 30, 60, 120, 300, 600].map((sek) => (
+                      <option key={sek} value={sek}>
+                        {sek < 60 ? `${sek} s` : `${sek / 60} min`}
+                      </option>
+                    ))}
+                  </select>
+                )}
+                <button
+                  class="quiet"
                   title="Löschen"
                   onClick={() => {
                     if (confirm(`Tracker „${t.data.name}“ löschen?`)) del('tracker', t.id);
                   }}
                 >
-                  ✕
+                  Löschen
                 </button>
               </li>
             );

@@ -1,5 +1,5 @@
 import { computed, signal } from '@preact/signals';
-import type { AdminStatus, Entity, Kind, KindMap, MapObject, Operation, Position, ReachArea, ReachMode, Shape } from './types';
+import type { AdminStatus, Entity, Kind, KindMap, MapObject, Member, Operation, Position, ReachArea, ReachMode, Shape, Vehicle } from './types';
 
 /** Zentraler Zustand der Kommandozentrale. Alle Änderungen kommen vom Server zurück und landen hier. */
 
@@ -16,25 +16,62 @@ export const tables = {
   target: signal<Table<'target'>>({}),
   tracker: signal<Table<'tracker'>>({}),
   layer: signal<Table<'layer'>>({}),
+  room: signal<Table<'room'>>({}),
   message: signal<Table<'message'>>({}),
 };
 
-export const operation = signal<Operation>({ modus: 'observation', funkkanal: null, titel: '', hinweise: '', a: null, lkp: null, bestreifungSeit: null, rev: 0 });
+export const operation = signal<Operation>({ funkkanal: null, titel: '', hinweise: '', a: null, ueberschlagen: { teilnehmer: [], zuweisungen: {}, naechste: [] }, rev: 0 });
 export const positions = signal<Record<string, Position>>({});
 export const trackerPositions = signal<Record<string, Position>>({});
 export const online = signal<Set<string>>(new Set());
 export const adminStatus = signal<AdminStatus | null>(null);
 export const coverage = signal<{ memberId: string; punkte: [number, number, number][] }[]>([]);
-export const reach = signal<ReachArea[]>([]);
+/** Weg-Zeit-Flächen je Fahndungsraum (Kennung der Markierung). */
+export const reach = signal<Record<string, ReachArea[]>>({});
 export const reachModes = signal<Record<ReachMode, boolean>>({ fuss: true, kfz: true, oepnv: true });
 
 // Nur für diese Sitzung: Kartenwerkzeug, Zielebene neuer Objekte, ausgeblendete Ebenen, Auswahl.
-export type Tool = { kind: 'auswahl' } | { kind: 'zeichnen'; shape: Shape; punkte: { lat: number; lon: number }[] } | { kind: 'lkp' } | { kind: 'verschieben'; id: string };
+export type Tool =
+  | { kind: 'auswahl' }
+  | { kind: 'zeichnen'; shape: Shape; punkte: { lat: number; lon: number }[] }
+  | { kind: 'verschieben'; id: string }
+  /** Standort eines Ziels (Person, Fahrzeug, Objekt) auf der Karte setzen. */
+  | { kind: 'zielstandort'; targetId: string };
 export const tool = signal<Tool>({ kind: 'auswahl' });
 export const targetLayer = signal('lage');
 export const hiddenLayers = signal<Set<string>>(new Set());
 export const selectedObject = signal<string | null>(null);
 export const focusRequest = signal<{ lat: number; lon: number; at: number } | null>(null);
+
+const stored = (key: string, fallback: boolean) => {
+  try {
+    const value = localStorage.getItem(key);
+    return value === null ? fallback : value === '1';
+  } catch {
+    return fallback;
+  }
+};
+const remember = (key: string, value: boolean) => {
+  try {
+    localStorage.setItem(key, value ? '1' : '0');
+  } catch {
+    /* ohne Speicher gilt die Einstellung nur bis zum Neuladen */
+  }
+};
+
+/** Bestreifung anzeigen: jeder entscheidet für sich. */
+export const showCoverage = signal(stored('sentinel.bestreifung', false));
+export function toggleCoverage(): void {
+  showCoverage.value = !showCoverage.value;
+  remember('sentinel.bestreifung', showCoverage.value);
+  if (showCoverage.value) void loadCoverage();
+}
+
+/** Die Ebene "Dauerhafte Orte" ist gegen versehentliches Bearbeiten gesperrt, bis sie bewusst entsperrt wird. */
+export const permanentUnlocked = signal(false);
+export const isLocked = (layerId: string) => layerId === 'dauerhaft' && !permanentUnlocked.value;
+
+export const activeRoom = signal('allgemein');
 
 export const messages = computed(() => Object.values(tables.message.value).sort((a, b) => a.updatedAt - b.updatedAt));
 export const layers = computed(() => {
@@ -45,8 +82,24 @@ export const layers = computed(() => {
 export function nameOf(actorId: string): string {
   if (actorId === 'zentrale') return 'Zentrale';
   if (actorId === 'system') return 'System';
-  return tables.member.value[actorId]?.data.funkrufname ?? 'Unbekannt';
+  return tables.member.value[actorId]?.data.spitzname ?? 'Unbekannt';
 }
+
+/** Fahrzeug, in dem ein Fahnder gerade sitzt. */
+export function vehicleOf(member: Member): Entity<Vehicle> | undefined {
+  return member.fortbewegung === 'fahrzeug' && member.fahrzeugId ? tables.vehicle.value[member.fahrzeugId] : undefined;
+}
+
+/** Bezeichnung auf der Karte: zu Fuß der Spitzname, im Fahrzeug dessen Funkrufname. */
+export function memberLabel(member: Member): string {
+  const vehicle = vehicleOf(member);
+  if (vehicle) return vehicle.data.funkrufname;
+  if (member.fortbewegung === 'oepnv' && member.oepnv) return `${member.spitzname} (${member.oepnv.linie})`;
+  return member.spitzname;
+}
+
+/** Aktueller Standort eines Trackers, falls bekannt. */
+export const trackerPoint = (trackerId: string | null) => (trackerId ? trackerPositions.value[trackerId] : undefined);
 
 // ───────────── Verbindung ─────────────
 
@@ -98,6 +151,7 @@ function receive(m: any): void {
       tables.target.value = index(m.targets);
       tables.tracker.value = index(m.trackers);
       tables.layer.value = index(m.layers);
+      tables.room.value = index(m.rooms ?? []);
       tables.message.value = index(m.messages);
       operation.value = m.operation;
       positions.value = Object.fromEntries(m.positions.map((e: any) => [e.id, e.p]));
@@ -121,9 +175,7 @@ function receive(m: any): void {
       break;
     }
     case 'operation': {
-      const changed = m.operation.modus !== operation.value.modus || m.operation.bestreifungSeit !== operation.value.bestreifungSeit;
       operation.value = m.operation;
-      if (changed) void loadCoverage();
       break;
     }
     case 'pos':
@@ -183,7 +235,7 @@ export async function refreshStatus(): Promise<void> {
 }
 
 export async function loadCoverage(): Promise<void> {
-  if (operation.value.modus !== 'fahndung') {
+  if (!showCoverage.value) {
     coverage.value = [];
     return;
   }
@@ -194,19 +246,37 @@ export async function loadCoverage(): Promise<void> {
   }
 }
 
+/** Berechnet die Weg-Zeit-Flächen aller Fahndungsräume. Die Flächen wachsen mit der seit dem Zeitpunkt verstrichenen Zeit. */
 export async function loadReach(): Promise<void> {
-  const op = operation.value;
   const modi = (Object.keys(reachModes.value) as ReachMode[]).filter((m) => reachModes.value[m]);
-  if (op.modus !== 'fahndung' || !op.lkp || modi.length === 0) {
-    reach.value = [];
+  const rooms = Object.values(tables.annotation.value).filter((a) => a.data.typ === 'fahndungsraum' && a.data.zeit !== null && !hiddenLayers.value.has(a.data.layerId));
+  if (modi.length === 0 || rooms.length === 0) {
+    reach.value = {};
     return;
   }
-  try {
-    const minuten = Math.max(1, (Date.now() - op.lkp.ts) / 60000);
-    reach.value = (await api('/reach', { method: 'POST', body: { lat: op.lkp.lat, lon: op.lkp.lon, minuten, modi } })).flaechen;
-  } catch {
-    /* Anzeige bleibt beim letzten Stand */
+  const next: Record<string, ReachArea[]> = {};
+  await Promise.all(
+    rooms.map(async (room) => {
+      const point = room.data.punkte[0]!;
+      const minuten = Math.max(1, (Date.now() - room.data.zeit!) / 60000);
+      try {
+        next[room.id] = (await api('/reach', { method: 'POST', body: { lat: point.lat, lon: point.lon, minuten, modi } })).flaechen;
+      } catch {
+        next[room.id] = reach.value[room.id] ?? [];
+      }
+    }),
+  );
+  reach.value = next;
+}
+
+export async function uploadFile(file: Blob): Promise<{ id: string; mime: string; groesse: number } | null> {
+  const response = await fetch('/api/v1/blobs', { method: 'POST', headers: { 'content-type': file.type || 'application/octet-stream' }, body: file, credentials: 'same-origin' });
+  const body = await response.json().catch(() => ({}));
+  if (!response.ok) {
+    notice.value = body.fehler ?? 'Datei konnte nicht hochgeladen werden.';
+    return null;
   }
+  return body as { id: string; mime: string; groesse: number };
 }
 
 export async function uploadImage(file: File): Promise<string | null> {

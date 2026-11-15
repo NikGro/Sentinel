@@ -1,14 +1,21 @@
 import { useSignal } from '@preact/signals';
-import { del, focusRequest, nameOf, newId, put, tables, trackerPositions } from '../store';
-import type { Target } from '../types';
+import { del, focusRequest, nameOf, newId, put, tables, tool, trackerPoint } from '../store';
+import { ZIEL_TITEL, type Target, type ZielArt } from '../types';
 import { ageOf, ago, Field, ImageField, Section, TextInput } from '../ui';
 
 const LEER: Target = {
+  art: 'person',
+  bezeichnung: '',
+  standort: null,
   vorname: '', nachname: '', geburtsdatum: null, geburtsort: '', staatsangehoerigkeit: '', anschrift: '', merkmale: '', fotoBlob: null,
   kennzeichen: '', fahrzeugBeschreibung: '', fahrzeugFotoBlob: null, sachverhalt: '', hinweise: '', massnahmen: '', trackerId: null,
 };
 
-const anzeigename = (t: Target) => [t.vorname, t.nachname].filter(Boolean).join(' ') || 'Unbekannte Person';
+const anzeigename = (t: Target) => {
+  if (t.art === 'fahrzeug') return t.kennzeichen || t.bezeichnung || 'Zielfahrzeug';
+  if (t.art === 'objekt') return t.bezeichnung || t.anschrift || 'Zielobjekt';
+  return [t.vorname, t.nachname].filter(Boolean).join(' ') || 'Unbekannte Person';
+};
 
 /** Zielpersonen anlegen und pflegen. Alle Kräfte sehen und bearbeiten dieselben Angaben. */
 export function TargetsPanel() {
@@ -25,13 +32,44 @@ export function TargetsPanel() {
     );
     return (
       <Section
-        title={neu ? 'Neue Zielperson' : anzeigename(data)}
+        title={neu ? `Neu: ${ZIEL_TITEL[data.art]}` : anzeigename(data)}
         actions={
           <button class="quiet" onClick={() => (editing.value = null)}>
             Zurück
           </button>
         }
       >
+        <Field label="Art">
+          <select value={data.art} onChange={(e) => set({ art: e.currentTarget.value as ZielArt })}>
+            {(Object.keys(ZIEL_TITEL) as ZielArt[]).map((art) => (
+              <option key={art} value={art}>
+                {ZIEL_TITEL[art]}
+              </option>
+            ))}
+          </select>
+        </Field>
+        {data.art !== 'person' && text('bezeichnung', data.art === 'fahrzeug' ? 'Bezeichnung, z. B. BMW 3er dunkelblau' : 'Bezeichnung, z. B. Wohnung Musterstraße')}
+        <div class="field">
+          <span>Standort</span>
+          <div class="row">
+            <span class="hint">{data.trackerId ? 'vom Tracker' : data.standort ? `von Hand gesetzt, ${new Date(data.standort.ts).toLocaleString('de-DE', { dateStyle: 'short', timeStyle: 'short' })}` : 'nicht gesetzt'}</span>
+            {!neu && (
+              <button
+                onClick={() => {
+                  put('target', id, data);
+                  tool.value = { kind: 'zielstandort', targetId: id };
+                }}
+              >
+                Auf Karte setzen
+              </button>
+            )}
+            {data.standort && (
+              <button class="quiet" onClick={() => set({ standort: null })}>
+                Entfernen
+              </button>
+            )}
+          </div>
+        </div>
         <div class="grid2">
           {text('vorname', 'Vorname')}
           {text('nachname', 'Nachname')}
@@ -75,7 +113,7 @@ export function TargetsPanel() {
             <button
               class="danger"
               onClick={() => {
-                if (confirm('Zielperson für alle löschen?') && del('target', id)) editing.value = null;
+                if (confirm('Ziel für alle löschen?') && del('target', id)) editing.value = null;
               }}
             >
               Löschen
@@ -88,26 +126,26 @@ export function TargetsPanel() {
 
   return (
     <Section
-      title="Zielpersonen"
+      title="Ziele"
       actions={
         <button class="primary" onClick={() => (editing.value = { id: newId(), data: { ...LEER }, neu: true })}>
           Anlegen
         </button>
       }
     >
-      {targets.length === 0 && <p class="hint">Noch keine Zielperson angelegt.</p>}
+      {targets.length === 0 && <p class="hint">Noch kein Ziel angelegt. Zielpersonen, Zielfahrzeuge und Zielobjekte lassen sich hier oder über die Werkzeugleiste der Karte anlegen.</p>}
       <ul class="list">
         {targets.map((t) => {
-          const position = t.data.trackerId ? trackerPositions.value[t.data.trackerId] : undefined;
+          const position = trackerPoint(t.data.trackerId) ?? t.data.standort ?? undefined;
           const age = ageOf(t.data.geburtsdatum);
           return (
             <li key={t.id}>
-              {t.data.fotoBlob ? <img class="thumb" src={`/api/v1/blobs/${t.data.fotoBlob}`} alt="" /> : <div class="thumb empty">ZP</div>}
+              {t.data.fotoBlob ? <img class="thumb" src={`/api/v1/blobs/${t.data.fotoBlob}`} alt="" /> : <div class="thumb empty">{t.data.art === 'fahrzeug' ? 'ZF' : t.data.art === 'objekt' ? 'ZO' : 'ZP'}</div>}
               <div class="grow">
                 <b>{anzeigename(t.data)}</b>
                 <small>
-                  {[age !== null ? `${age} Jahre` : '', t.data.kennzeichen].filter(Boolean).join(' · ') || 'keine Angaben'}
-                  {position ? ` · Tracker ${ago(position.ts)}` : ''}
+                  {[ZIEL_TITEL[t.data.art], age !== null ? `${age} Jahre` : '', t.data.kennzeichen].filter(Boolean).join(', ')}
+                  {position ? `, Standort ${ago(position.ts)}` : ''}
                 </small>
                 <small class="hint">Geändert von {nameOf(t.updatedBy)}</small>
               </div>

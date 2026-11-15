@@ -6,7 +6,7 @@ Einsatzwerkzeug für Zivilfahnder: gemeinsame Lagekarte für Observation und Fah
 | --- | --- | --- |
 | iOS-App | [`ios/`](ios) | SwiftUI, MapKit, iOS 26+, keine Fremdbibliotheken |
 | Lageserver | [`server/`](server) | Node.js 24, TypeScript, Fastify, SQLite |
-| Kommandozentrale (Web) | [`server/web/`](server/web) | Preact, MapLibre |
+| Kommandozentrale (Web) | [`server/web/`](server/web) | Preact, Apple Maps (MapKit JS) oder OpenStreetMap (MapLibre) |
 | Bereitstellung | [`deploy/`](deploy) | Docker Compose, optional Valhalla für die Weg-Zeit-Berechnung |
 
 Weiterführend: [Architektur](docs/ARCHITEKTUR.md) · [Sicherheit](docs/SICHERHEIT.md) · [Betrieb](docs/BETRIEB.md) · [Tracker](docs/TRACKER.md)
@@ -14,29 +14,26 @@ Weiterführend: [Architektur](docs/ARCHITEKTUR.md) · [Sicherheit](docs/SICHERHE
 ## Funktionen
 
 **Eine Lage für alle.** Wer am Server angemeldet ist, arbeitet immer in derselben laufenden Lage. Es gibt keine
-Projekte, in denen man sich verirren kann. Vorbereitetes entsteht als *Paket* (Entwurfs-Ebene) in der
-Kommandozentrale und wird bei Bedarf in die Lage geladen. Ebenen lassen sich je Gerät ein- und ausblenden.
+Projekte und keine Modi. Vorbereitetes entsteht als *Paket* (Entwurfs-Ebene) und wird bei Bedarf in die Lage geladen.
+Ebenen lassen sich je Gerät ein- und ausblenden.
 
-**Drei Modi, ein Umschalter.** Der Modus gilt für alle und wechselt ohne Datenverlust.
+**Kräfte.** Fahnder legen sich in der App selbst an (Spitzname, Dienststelle, Bild, Handynummer) und schalten sich in
+den Ruhemodus. Ihre Fortbewegung wählen sie selbst: zu Fuß, in einem Fahrzeug der eigenen Kräfte oder im ÖPNV mit
+Linie und Richtung. Fahrzeuge bleiben dauerhaft angelegt (Funkrufname, Kennzeichen, Bild, Tracker), jeder schaltet sie
+für den Einsatz ein. Auf der Karte heißt ein Fahnder zu Fuß wie sein Spitzname, im Fahrzeug wie dessen Funkrufname.
 
-| Modus | Besonderheiten |
-| --- | --- |
-| Observation | A-Position (Übernahme mit zweitem Druck zur Bestätigung), dynamische Routenführung zur A |
-| Fahndung | Bestreifung (wo war wer schon), letzter bekannter Standort, Weg-Zeit-Flächen für Fuß, Kfz und ÖPNV |
-| Oberfläche | nur Kräfte, Markierungen und Ebenen (z. B. Argus-Predict-Prognose) |
+**Karte und Navigation.** Navi-Ansicht mit nächstem Manöver, Ankunftszeit und Schalter für Sonderrechte (Einbahnstraßen
+und Abbiegeverbote werden ignoriert, Poller nicht). Suche nach Adressen und Kreuzungen („A / B“) oder nach Objekten der
+Lage; bewegt sich das Ziel, folgt die Route. Die A-Position steht dabei immer oben. Fährt die A im ÖPNV, fahren
+Teilnehmer die kommenden Haltestellen überschlagend an. Unter dem eigenen Standort stehen Straße und Fahrtrichtung.
 
-Beim Wechsel von Observation zu Fahndung wird die A-Position zum letzten bekannten Standort; beim Rückwechsel
-bleiben Standort und Bestreifung gespeichert. Hängt an der Zielperson ein Tracker, führt er den Standort nach.
+**Kartenelemente** über das Plus: Fahndungsraum (Weg-Zeit-Flächen zu Fuß, ÖPNV und Kfz ab einem Zeitpunkt),
+Zielperson, Zielfahrzeug, Zielobjekt (mit Look-Around-Vorschau), Marker, Beschriftung, Linie, Fläche, Kreis. Ziele und
+Marker können einem GPS-Tracker folgen.
 
-**Weitere Funktionen**
-
-- Profile (Name, Funkrufname mit Formatprüfung, Dienststelle, Bild, Handynummer), Anruf aus der Schnellübersicht
-- Fahrzeuge als eigene Objekte mit Ein- und Aussteigen, optional mit GPS-Tracker
-- Zielpersonen mit Bild, Personalien, Fahrzeug, Sachverhalt, Hinweisen, Maßnahmen und optionalem Tracker
-- Marker, Beschriftungen, Linien, Flächen und Kreise; jeder bearbeitet alles, eigene Schritte sind rückgängig zu machen
-- Lageleiste mit Modus, Funkkanal (1 bis 5 Ziffern), A-Position und Verbindungszustand in jeder Ansicht
-- Chat, GPS-Tracker (SinoTrack direkt ohne Hersteller-Server, PAJ über das PAJ-Portal), Import aus Argus Predict
-- Kommandozentrale im Browser: Lage führen, Pakete vorplanen, Geräte und Tracker verwalten
+**Weiteres:** Bestreifung (immer aufgezeichnet, je Nutzer einblendbar), Chaträume mit Fotos, Dateien und
+Sprachnachrichten, GPS-Tracker (SinoTrack direkt, PAJ über das Portal), Argus-Predict-Import, gesperrte Ebene für
+dauerhafte Orte, Kommandozentrale im Browser. Alle Einstellungen sind auch in der App erreichbar.
 
 ## Installation der App über SideStore
 
@@ -63,7 +60,11 @@ cd ios && xcodegen generate && open Sentinel.xcodeproj
 ## Stand und bekannte Grenzen
 
 - Die App ist bislang durch Kompilieren und Tests der Fachlogik in der Pipeline geprüft, noch nicht im Einsatz auf Geräten.
-- ÖPNV in der Weg-Zeit-Berechnung ist ein Näherungsmodell; Fuß und Kfz rechnen auf dem echten Wegenetz (bis 120 bzw. 40 Minuten, danach Näherung).
+- ÖPNV in der Weg-Zeit-Berechnung (Fahndungsraum) ist ein Näherungsmodell; Fuß und Kfz rechnen auf dem echten Wegenetz (bis 120 bzw. 40 Minuten, danach Näherung).
 - Die PAJ-Anbindung folgt der öffentlichen Schnittstellenbeschreibung und ist noch nicht mit echten Geräten erprobt.
 - iOS gibt Apps die eigene Rufnummer nicht preis. Die Nummer wird deshalb aus der eigenen Kontaktkarte übernommen.
-- Noch offen: Telefonkonferenz, Phantombild per KI auf dem Gerät, eigene Tracker-Firmware.
+- Apple Maps in der Kommandozentrale ist vorbereitet, aber mangels Schlüssel noch nicht gegen Apple erprobt; bis dahin läuft OpenStreetMap.
+- ÖPNV-Linien und Kreuzungssuche stammen aus OpenStreetMap (Overpass-API); Fahrpläne und Verspätungen fließen nicht ein.
+- Eine Google-Ortssuche ist nicht eingebunden; dafür wäre ein kostenpflichtiger Google-Schlüssel nötig. Gesucht wird über Apple Karten.
+- Das Sendeintervall wird an SinoTrack-Geräte mit dem H02-Befehl S71 geschickt; ob ein Modell ihn umsetzt, ist nicht geprüft.
+- Noch offen: Projekte, Telefonkonferenz, Phantombild per KI auf dem Gerät, eigene Tracker-Firmware.

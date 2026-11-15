@@ -1,22 +1,31 @@
 <svg xmlns="http://www.w3.org/2000/svg" width="1024" height="1024" viewBox="0 0 1024 1024">
   <defs>
-    <linearGradient id="bg" x1="0" y1="0" x2="0" y2="1">
-      <stop offset="0" stop-color="#16324F"/>
-      <stop offset="1" stop-color="#07111D"/>
-    </linearGradient>
-    <linearGradient id="sh" x1="0" y1="0" x2="0" y2="1">
-      <stop offset="0" stop-color="#4DA3FF"/>
-      <stop offset="1" stop-color="#0A84FF"/>
+    <radialGradient id="bg" cx="50%" cy="38%" r="75%">
+      <stop offset="0" stop-color="#1E2224"/>
+      <stop offset="1" stop-color="#0C0E0F"/>
+    </radialGradient>
+    <linearGradient id="ring" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#7FD1C7"/>
+      <stop offset="1" stop-color="#2F7D77"/>
     </linearGradient>
   </defs>
   <rect width="1024" height="1024" fill="url(#bg)"/>
-  <g fill="none" stroke="#2B4C6F" stroke-width="6" opacity="0.7">
-    <circle cx="512" cy="530" r="150"/><circle cx="512" cy="530" r="270"/><circle cx="512" cy="530" r="390"/>
-    <path d="M512 100V960M82 530H942"/>
+  <!-- feines Raster -->
+  <g stroke="#FFFFFF" stroke-opacity="0.05" stroke-width="4">
+    <path d="M0 256H1024M0 512H1024M0 768H1024M256 0V1024M512 0V1024M768 0V1024"/>
   </g>
-  <path d="M512 196 L772 290 V520 C772 676 664 790 512 844 C360 790 252 676 252 520 V290 Z" fill="url(#sh)"/>
-  <path d="M512 196 L772 290 V520 C772 676 664 790 512 844 Z" fill="#0A6CD6"/>
-  <circle cx="512" cy="508" r="112" fill="#07111D"/>
-  <circle cx="512" cy="508" r="52" fill="#FF453A"/>
-  <circle cx="512" cy="508" r="112" fill="none" stroke="#FFFFFF" stroke-width="18"/>
+  <!-- Ring in vier Bögen, Lücken auf den Himmelsrichtungen -->
+  <g fill="none" stroke="url(#ring)" stroke-width="64" stroke-linecap="round">
+    <path d="M 563 222 A 292 292 0 0 1 802 461"/>
+    <path d="M 802 563 A 292 292 0 0 1 563 802"/>
+    <path d="M 461 802 A 292 292 0 0 1 222 563"/>
+    <path d="M 222 461 A 292 292 0 0 1 461 222"/>
+  </g>
+  <!-- Peilstriche -->
+  <g stroke="#E8EEED" stroke-width="40" stroke-linecap="round">
+    <path d="M512 150V262M512 762V874M150 512H262M762 512H874"/>
+  </g>
+  <!-- Ziel -->
+  <circle cx="512" cy="512" r="92" fill="#E8EEED"/>
+  <circle cx="512" cy="512" r="46" fill="#C94A44"/>
 </svg>

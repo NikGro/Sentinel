@@ -1,6 +1,6 @@
 import SwiftUI
 
-/// Lageübersicht: Einsatzinformationen, Funkkanal, Modus und Erreichbarkeit der Kräfte.
+/// Lageübersicht: Einsatzinformationen, Funkkanal, A-Position und Erreichbarkeit der Kräfte.
 struct SituationSheet: View {
     @Environment(LageStore.self) private var lage
     @Environment(\.dismiss) private var dismiss
@@ -8,7 +8,6 @@ struct SituationSheet: View {
 
     @State private var showsChannelEditor = false
     @State private var showsNotesEditor = false
-    @State private var pendingMode: Modus?
 
     var body: some View {
         NavigationStack {
@@ -33,60 +32,43 @@ struct SituationSheet: View {
                     Button("Titel und Hinweise bearbeiten", systemImage: "square.and.pencil") { showsNotesEditor = true }
                 }
 
-                Section {
-                    ForEach(Modus.allCases) { modus in
-                        Button {
-                            if modus != lage.operation.modus { pendingMode = modus }
-                        } label: {
-                            HStack {
-                                Label {
-                                    VStack(alignment: .leading, spacing: 2) {
-                                        Text(modus.title)
-                                        Text(modus.summary)
+                Section("A-Position") {
+                    if let holder = lage.aHolder, let a = lage.operation.a {
+                        LabeledContent(lage.label(of: holder.data)) {
+                            Text("seit \(Format.time(Date(timeIntervalSince1970: a.seit / 1000)))")
+                        }
+                        if holder.data.fortbewegung == .oepnv, let line = holder.data.oepnv {
+                            Label("\(line.linie) Richtung \(line.richtung)", systemImage: "tram.fill")
+                            ForEach(Array(lage.operation.ueberschlagen.naechste.enumerated()), id: \.offset) { index, stop in
+                                HStack {
+                                    Text("\(index + 1).")
+                                        .monospacedDigit()
+                                        .foregroundStyle(.secondary)
+                                    Text(stop.name)
+                                    Spacer()
+                                    let assigned = lage.operation.ueberschlagen.zuweisungen.filter { $0.value == stop }.compactMap { lage.members[$0.key]?.data.spitzname }
+                                    if !assigned.isEmpty {
+                                        Text(assigned.joined(separator: ", "))
                                             .font(.caption)
-                                            .foregroundStyle(.secondary)
+                                            .foregroundStyle(.green)
                                     }
-                                } icon: {
-                                    Image(systemName: modus.symbolName)
-                                        .foregroundStyle(Theme.color(for: modus))
-                                }
-                                Spacer()
-                                if modus == lage.operation.modus {
-                                    Image(systemName: "checkmark")
-                                        .fontWeight(.semibold)
-                                        .foregroundStyle(.tint)
                                 }
                             }
                         }
-                        .tint(.primary)
-                    }
-                } header: {
-                    Text("Modus")
-                } footer: {
-                    Text("Der Modus gilt für alle. Beim Wechsel geht nichts verloren: Die A-Position wird in der Fahndung zum letzten bekannten Standort, Bestreifung und Standort bleiben beim Rückwechsel gespeichert.")
-                }
-
-                if lage.operation.modus == .observation {
-                    Section("A-Position") {
-                        if let holder = lage.aHolder, let a = lage.operation.a {
-                            LabeledContent(holder.data.funkrufname) {
-                                Text("seit \(Format.time(Date(timeIntervalSince1970: a.seit / 1000)))")
-                            }
-                        } else {
-                            Text("Niemand hält die A-Position.")
-                                .foregroundStyle(.secondary)
-                        }
+                    } else {
+                        Text("Niemand hält die A-Position.")
+                            .foregroundStyle(.secondary)
                     }
                 }
 
                 Section("Kräfte") {
                     ForEach(lage.sortedMembers) { member in
                         HStack(spacing: 12) {
-                            Avatar(blobId: member.data.fotoBlob, fallbackText: member.data.funkrufname, size: 36, tint: lage.isOnline(member.id) ? .green : .gray)
+                            Avatar(blobId: member.data.fotoBlob, fallbackText: member.data.spitzname, size: 36, tint: lage.isOnline(member.id) && member.data.aktiv ? .green : .gray)
                             VStack(alignment: .leading, spacing: 2) {
-                                Text(member.data.funkrufname)
+                                Text(member.data.spitzname)
                                     .font(.body.weight(.semibold))
-                                Text(member.data.name)
+                                Text(member.data.aktiv ? lage.mobilityDescription(of: member.data) : "Ruhemodus")
                                     .font(.caption)
                                     .foregroundStyle(.secondary)
                             }
@@ -97,7 +79,7 @@ struct SituationSheet: View {
                                     .buttonStyle(.bordered)
                                     .buttonBorderShape(.circle)
                                     .tint(.green)
-                                    .accessibilityLabel("\(member.data.funkrufname) anrufen")
+                                    .accessibilityLabel("\(member.data.spitzname) anrufen")
                             }
                         }
                     }
@@ -116,15 +98,6 @@ struct SituationSheet: View {
             }
             .sheet(isPresented: $showsNotesEditor) {
                 SituationNotesEditor(title: lage.operation.titel, notes: lage.operation.hinweise)
-            }
-            .confirmationDialog(
-                "Modus für alle auf „\(pendingMode?.title ?? "")“ ändern?",
-                isPresented: Binding(get: { pendingMode != nil }, set: { if !$0 { pendingMode = nil } }),
-                titleVisibility: .visible
-            ) {
-                Button("Modus wechseln") {
-                    if let pendingMode { lage.setMode(pendingMode) }
-                }
             }
         }
     }

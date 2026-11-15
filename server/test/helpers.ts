@@ -18,5 +18,5 @@ export function testConfig() {
   return loadConfig({ SENTINEL_DATA_DIR: dataDir, SENTINEL_PUBLIC_URL: 'http://localhost:8790', SENTINEL_WEB_DIR: join(dataDir, 'kein-web'), SENTINEL_DEPLOY_TOKEN: 'deploy-geheim' });
 }
 
-export const profil = (funkrufname = 'P 35/24') => ({ name: 'Test Fahnder', funkrufname, dienststelle: 'PK 35' });
+export const profil = (spitzname = 'Falke') => ({ name: 'Test Fahnder', spitzname, dienststelle: 'PK 35' });
 export const pos = (lat: number, lon: number, ts = Date.now()): Position => ({ lat, lon, ts, acc: 5 });

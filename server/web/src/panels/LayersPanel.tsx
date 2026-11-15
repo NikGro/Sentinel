@@ -38,7 +38,7 @@ export function LayersPanel() {
                 <div class="grow">
                   <b>{layer.data.name}</b>
                   <small>
-                    {ART_TITEL[layer.data.art]} · {counts.get(layer.id) ?? 0} Objekte{draft ? ' · Entwurf' : ''}
+                    {ART_TITEL[layer.data.art]}, {counts.get(layer.id) ?? 0} Objekte{draft ? ', Entwurf' : ''}
                   </small>
                 </div>
                 {!fixed && (
@@ -47,7 +47,7 @@ export function LayersPanel() {
                       {draft ? 'Laden' : 'Zurückziehen'}
                     </button>
                     <a class="button quiet" href={`/api/v1/admin/ebenen/${layer.id}/export`} download title="Als Datei sichern">
-                      ⭳
+                      Export
                     </a>
                     <button
                       class="quiet"

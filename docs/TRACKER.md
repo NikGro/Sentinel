@@ -7,7 +7,8 @@ Fahrzeug zugeordnet. Im Fahndungsmodus führt ein Tracker an der Zielperson den 
 
 Die Tracker senden direkt an den Sentinel-Server. Der Server des Herstellers ist nicht beteiligt.
 
-1. Router: TCP-Port 5013 auf den Server weiterleiten.
+1. Router: TCP-Port 5013 auf den Server weiterleiten. Im Tracker wird der Domainname eingetragen, nicht die
+   IP-Adresse; eine Portfreigabe ersetzt das aber nicht (siehe unten).
 2. SIM mit Datentarif einlegen, dann per SMS an die Nummer der SIM (Standardpasswort `0000`):
 
    | SMS | Wirkung |
@@ -23,6 +24,20 @@ Die Tracker senden direkt an den Sentinel-Server. Der Server des Herstellers ist
 Hinweise: Das Protokoll ist unverschlüsselt und kennt keine Anmeldung. Der Server nimmt nur Positionen bekannter
 Kennungen an und begrenzt Verbindungen und Nachrichtengröße. Das Standardpasswort des Trackers sollte geändert werden
 (`777<neu><alt>`), damit niemand per SMS den Zielserver umstellt.
+
+### Warum ein Domainname die Portfreigabe nicht ersetzt
+
+Die Tracker sprechen kein HTTP, sondern senden rohe TCP-Daten. Ein DNS-Eintrag (auch ein CNAME) sagt dem Tracker
+nur, unter welcher Adresse der Server zu finden ist. Erreichen muss er ihn weiterhin über einen Port, den der
+Router durchlässt. Der Reverse Proxy für die Weboberfläche (Port 443) versteht nur HTTPS und kann das
+Tracker-Protokoll nicht annehmen.
+
+Wer keinen weiteren Port öffnen möchte, hat zwei Möglichkeiten:
+
+- Ein Protokollweiche vor Port 443 (z. B. `sslh` oder HAProxy), die TLS an den Webserver und alles andere an
+  Port 5013 reicht. Das greift in den Zugang aller übrigen Dienste auf dem Server ein und will geplant sein.
+- Ein kleiner Mietserver als Relais, der die Trackerdaten annimmt und über eine ausgehende, verschlüsselte
+  Verbindung an Sentinel weitergibt. Dann ist zu Hause gar kein Tracker-Port offen.
 
 ## PAJ
 

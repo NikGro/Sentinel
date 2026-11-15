@@ -1,10 +1,18 @@
 import assert from 'node:assert/strict';
+import { generateKeyPairSync, verify } from 'node:crypto';
+import { mkdtempSync, writeFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import { test } from 'node:test';
 import { cellCorners, selectCells } from '../src/argus.js';
 import { distanceMeters, utmToWgs84 } from '../src/geo.js';
+import { MapKitTokens } from '../src/mapkit.js';
 import { modelRadiusMeters, ReachService } from '../src/reach/reach.js';
+import { costingFor, decodePolyline6, RouteService } from '../src/reach/route.js';
 import { hashPassword, RateLimiter, Vault, verifyPassword } from '../src/security.js';
-import { parseH02Binary, parseH02Text } from '../src/trackers/h02.js';
+import { intervalCommand, parseH02Binary, parseH02Text } from '../src/trackers/h02.js';
+import { nextStopIndex, OepnvStore, parseRoutes } from '../src/oepnv.js';
+import { sniffMime } from '../src/http/device.js';
 
 test('UTM 32N nach WGS84 (Hamburger Rathaus)', () => {
   const p = utmToWgs84(565_835.6, 5_933_949.0);
@@ -77,4 +85,96 @@ test('Sicherheit: Passwort-Hash, Tresor, Ratenbegrenzung', async () => {
   assert.equal(new Vault('anderer').open(vault.seal('geheim')), null);
   const limiter = new RateLimiter(2, 1000);
   assert.deepEqual([limiter.take('ip', 0), limiter.take('ip', 1), limiter.take('ip', 2), limiter.take('ip', 1001)], [true, true, false, true]);
+});
+
+test('Apple Maps: Token ist ES256-signiert und an die eigene Adresse gebunden', () => {
+  assert.equal(new MapKitTokens({ teamId: '', keyId: '', keyFile: '' }, 'https://x').configured, false);
+  const { privateKey, publicKey } = generateKeyPairSync('ec', { namedCurve: 'P-256' });
+  const keyFile = join(mkdtempSync(join(tmpdir(), 'sentinel-mapkit-')), 'AuthKey.p8');
+  writeFileSync(keyFile, privateKey.export({ type: 'pkcs8', format: 'pem' }));
+  const tokens = new MapKitTokens({ teamId: 'TEAM123456', keyId: 'KEY1234567', keyFile }, 'https://sentinel.example.org');
+  assert.ok(tokens.configured);
+  const [header, payload, signature] = tokens.issue(1_700_000_000_000)!.split('.') as [string, string, string];
+  assert.deepEqual(JSON.parse(Buffer.from(header, 'base64url').toString()), { alg: 'ES256', kid: 'KEY1234567', typ: 'JWT' });
+  const claims = JSON.parse(Buffer.from(payload, 'base64url').toString());
+  assert.equal(claims.iss, 'TEAM123456');
+  assert.equal(claims.origin, 'https://sentinel.example.org');
+  assert.equal(claims.exp - claims.iat, 1800);
+  assert.ok(verify('sha256', Buffer.from(`${header}.${payload}`), { key: publicKey, dsaEncoding: 'ieee-p1363' }, Buffer.from(signature, 'base64url')));
+});
+
+test('Route: Linienzug wird entpackt', () => {
+  // Bekanntes Beispiel des Polyline-Verfahrens, hier mit sechs Nachkommastellen kodiert.
+  assert.deepEqual(decodePolyline6('_izlhA~rlgdF_{geC~ywl@_kwzCn`{nI'), [[38.5, -120.2], [40.7, -120.95], [43.252, -126.453]]);
+});
+
+test('Route: Sonderrechte ignorieren Einbahnstraßen und Abbiegeverbote, aber keine Zufahrtssperren', async () => {
+  const special = costingFor({ sonderrechte: true, zuFuss: false }).costing_options.auto as Record<string, unknown>;
+  assert.equal(special.ignore_oneways, true);
+  assert.equal(special.ignore_restrictions, true);
+  assert.equal('ignore_access' in special, false, 'Poller und andere Sperren bleiben beachtet');
+  assert.deepEqual(costingFor({ sonderrechte: false, zuFuss: false }).costing_options, {});
+  assert.equal(costingFor({ sonderrechte: true, zuFuss: true }).costing, 'pedestrian');
+
+  let sent: any;
+  const ok = (async (_url: string, init: RequestInit) => {
+    sent = JSON.parse(init.body as string);
+    return new Response(JSON.stringify({ trip: { summary: { length: 0.76, time: 105 }, legs: [{ shape: '_izlhA~rlgdF_{geC~ywl@', maneuvers: [{ instruction: 'Links abbiegen.', length: 0.2 }] }] } }));
+  }) as typeof fetch;
+  const result = await new RouteService('http://valhalla', ok).route({ lat: 53.55, lon: 9.99 }, { lat: 53.56, lon: 10 }, { sonderrechte: true, zuFuss: false });
+  assert.equal(sent.costing_options.auto.ignore_oneways, true);
+  assert.equal(sent.directions_options.language, 'de-DE');
+  assert.equal(result?.meter, 760);
+  assert.equal(result?.sekunden, 105);
+  assert.equal(result?.anweisungen[0]?.text, 'Links abbiegen.');
+  assert.equal(result?.sonderrechte, true);
+  assert.equal(await new RouteService('', ok).route({ lat: 1, lon: 1 }, { lat: 2, lon: 2 }, { sonderrechte: false, zuFuss: false }), null);
+});
+
+test('ÖPNV: Routen aus OpenStreetMap werden zu Linien mit geordneten Halten', () => {
+  const node = (id: number, lat: number, name: string) => ({ type: 'node' as const, id, lat, lon: 10, tags: { name } });
+  const lines = parseRoutes([
+    node(1, 53.50, 'Start'), node(2, 53.5001, 'Start'), node(3, 53.51, 'Mitte'), node(4, 53.52, 'Ende'),
+    { type: 'relation', id: 99, tags: { ref: 'U3', route: 'subway', to: 'Ende' }, members: [
+      { type: 'node', ref: 1, role: 'stop' }, { type: 'node', ref: 2, role: 'platform' }, { type: 'node', ref: 3, role: 'stop' }, { type: 'node', ref: 4, role: 'stop_exit_only' }, { type: 'way', ref: 7, role: '' },
+    ] },
+    { type: 'relation', id: 100, tags: { route: 'bus' }, members: [] },
+  ]);
+  assert.equal(lines.length, 1);
+  assert.deepEqual(lines[0]!.halte.map((h) => h.name), ['Start', 'Mitte', 'Ende']);
+  assert.equal(lines[0]!.nach, 'Ende');
+});
+
+test('ÖPNV: nächster Halt ab Standort, Suche nach Linie und in der Nähe', () => {
+  const halte = [0, 1, 2, 3].map((i) => ({ lat: 53.5 + i * 0.01, lon: 10 }));
+  assert.equal(nextStopIndex(halte, { lat: 53.5, lon: 10 }), 1);
+  assert.equal(nextStopIndex(halte, { lat: 53.515, lon: 10.0005 }), 2);
+  assert.equal(nextStopIndex(halte, { lat: 53.53, lon: 10 }), 4);
+  const store = new OepnvStore(mkdtempSync(join(tmpdir(), 'sentinel-oepnv-')), [53, 9, 54, 11], null);
+  (store as unknown as { setLines(l: unknown[]): void }).setLines([
+    { id: '1', ref: 'U3', typ: 'subway', von: 'A', nach: 'Barmbek', halte: halte.map((h, i) => ({ ...h, name: `H${i}` })) },
+    { id: '2', ref: 'U3', typ: 'subway', von: 'B', nach: 'Wandsbek', halte: [...halte].reverse().map((h, i) => ({ ...h, name: `H${i}` })) },
+    { id: '3', ref: '269', typ: 'bus', von: 'C', nach: 'Ort', halte: [{ name: 'X', lat: 54, lon: 11 }, { name: 'Y', lat: 54.01, lon: 11 }] },
+  ]);
+  assert.deepEqual(store.search('u 3', null).map((r) => r.richtung), ['Barmbek', 'Wandsbek']);
+  assert.deepEqual(store.search('', { lat: 53.5, lon: 10 }).map((r) => r.id).sort(), ['1', '2']);
+  assert.deepEqual(store.upcoming('1', { lat: 53.515, lon: 10 }, 5).map((h) => h.name), ['H2', 'H3']);
+});
+
+test('Dateityp wird am Inhalt erkannt', () => {
+  assert.equal(sniffMime(Buffer.from([0xff, 0xd8, 0xff, 0xe0, 0])), 'image/jpeg');
+  assert.equal(sniffMime(Buffer.from('%PDF-1.7')), 'application/pdf');
+  assert.equal(sniffMime(Buffer.concat([Buffer.from([0, 0, 0, 0x20]), Buffer.from('ftypM4A '), Buffer.alloc(8)])), 'audio/mp4');
+  assert.equal(sniffMime(Buffer.from('<html>')), 'application/octet-stream');
+});
+
+test('SinoTrack: Befehl für das Sendeintervall', () => {
+  assert.equal(intervalCommand('9170123456', 30, new Date(Date.UTC(2026, 10, 15, 12, 5, 9))), '*HQ,9170123456,S71,120509,22,30#');
+});
+
+test('Route: Manöver tragen ihre Position im Linienzug', async () => {
+  const ok = (async () =>
+    new Response(JSON.stringify({ trip: { summary: { length: 1, time: 60 }, legs: [{ shape: '_izlhA~rlgdF_{geC~ywl@', maneuvers: [{ instruction: 'Los', length: 0.5, begin_shape_index: 0 }, { instruction: 'Rechts', length: 0.5, begin_shape_index: 1 }] }] } }))) as typeof fetch;
+  const result = await new RouteService('http://v', ok).route({ lat: 1, lon: 1 }, { lat: 2, lon: 2 }, { sonderrechte: false, zuFuss: false });
+  assert.deepEqual(result?.anweisungen.map((a) => a.index), [0, 1]);
 });

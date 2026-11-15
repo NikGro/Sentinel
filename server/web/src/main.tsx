@@ -1,5 +1,5 @@
 import { render } from 'preact';
-import 'maplibre-gl/dist/maplibre-gl.css';
+import '@fontsource-variable/inter';
 import { App } from './App';
 import './styles.css';
 

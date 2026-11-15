@@ -1,26 +1,31 @@
 import { useSignal } from '@preact/signals';
-import { del, focusRequest, newId, online, operation, positions, put, tables, trackerPositions } from '../store';
-import type { Vehicle } from '../types';
+import { del, focusRequest, newId, online, operation, positions, put, tables, trackerPoint, vehicleOf } from '../store';
+import { FORTBEWEGUNG_TITEL, type Vehicle } from '../types';
 import { ago, Field, ImageField, Section, TextInput } from '../ui';
 
-/** Kräfte im Einsatz und die Fahrzeugflotte. */
+const LEERES_FAHRZEUG: Vehicle = { funkrufname: '', bezeichnung: '', kennzeichen: '', beschreibung: '', fotoBlob: null, trackerId: null, aktiv: true, abgestellt: null };
+
+/** Kräfte im Einsatz und die Fahrzeugflotte. Fahnder schalten sich in der App selbst aktiv, Fahrzeuge kann jeder schalten. */
 export function TeamPanel() {
   const editing = useSignal<{ id: string; data: Vehicle; neu: boolean } | null>(null);
-  const members = Object.values(tables.member.value).sort((a, b) => a.data.funkrufname.localeCompare(b.data.funkrufname, 'de', { numeric: true }));
-  const vehicles = Object.values(tables.vehicle.value).sort((a, b) => a.data.bezeichnung.localeCompare(b.data.bezeichnung));
+  const members = Object.values(tables.member.value).sort((a, b) => Number(b.data.aktiv) - Number(a.data.aktiv) || a.data.spitzname.localeCompare(b.data.spitzname, 'de'));
+  const vehicles = Object.values(tables.vehicle.value).sort((a, b) => Number(b.data.aktiv) - Number(a.data.aktiv) || a.data.funkrufname.localeCompare(b.data.funkrufname, 'de', { numeric: true }));
 
   if (editing.value) {
     const { id, data, neu } = editing.value;
     const set = (patch: Partial<Vehicle>) => (editing.value = { id, neu, data: { ...data, ...patch } });
     return (
       <Section
-        title={neu ? 'Neues Fahrzeug' : data.bezeichnung}
+        title={neu ? 'Neues Fahrzeug' : data.funkrufname}
         actions={
           <button class="quiet" onClick={() => (editing.value = null)}>
             Zurück
           </button>
         }
       >
+        <Field label="Funkrufname (z. B. P 35/24)">
+          <TextInput value={data.funkrufname} onInput={(funkrufname) => set({ funkrufname })} maxLength={20} />
+        </Field>
         <Field label="Bezeichnung">
           <TextInput value={data.bezeichnung} onInput={(bezeichnung) => set({ bezeichnung })} placeholder="z. B. Golf grau" maxLength={60} />
         </Field>
@@ -41,10 +46,14 @@ export function TeamPanel() {
             ))}
           </select>
         </Field>
+        <label class="check">
+          <input type="checkbox" checked={data.aktiv} onChange={() => set({ aktiv: !data.aktiv })} />
+          Im heutigen Einsatz aktiv
+        </label>
         <div class="row">
           <button
             class="primary"
-            disabled={!data.bezeichnung.trim()}
+            disabled={!data.funkrufname.trim()}
             onClick={() => {
               if (put('vehicle', id, data)) editing.value = null;
             }}
@@ -68,28 +77,36 @@ export function TeamPanel() {
 
   return (
     <>
-      <Section title="Kräfte">
-        {members.length === 0 && <p class="hint">Noch niemand angemeldet. Den Zugangscode finden Sie unter „System“.</p>}
+      <Section title="Fahnder" hint="Jeder Fahnder legt sich in der App selbst an und schaltet dort Ruhemodus und Fortbewegung.">
+        {members.length === 0 && <p class="hint">Noch niemand angemeldet. Den Zugangscode finden Sie unter System.</p>}
         <ul class="list">
           {members.map((m) => {
             const position = positions.value[m.id];
-            const vehicle = m.data.fahrzeugId ? tables.vehicle.value[m.data.fahrzeugId] : undefined;
+            const vehicle = vehicleOf(m.data);
             return (
-              <li key={m.id}>
-                <span class={`presence ${online.value.has(m.id) ? 'on' : ''}`} />
+              <li key={m.id} class={m.data.aktiv ? '' : 'ruhend'}>
+                <span class={`presence ${online.value.has(m.id) && m.data.aktiv ? 'on' : ''}`} />
                 <div class="grow">
                   <b>
-                    {m.data.funkrufname}
+                    {m.data.spitzname}
                     {operation.value.a?.memberId === m.id && <span class="badge-a">A</span>}
                   </b>
                   <small>
-                    {m.data.name} · {m.data.dienststelle}
+                    {m.data.name}, {m.data.dienststelle}
                   </small>
                   <small class="hint">
-                    {[m.data.telefon, vehicle ? `in ${vehicle.data.bezeichnung}` : '', position ? `Position ${ago(position.ts)}` : 'keine Position'].filter(Boolean).join(' · ')}
+                    {m.data.aktiv
+                      ? [
+                          vehicle ? `im Fahrzeug ${vehicle.data.funkrufname}` : m.data.fortbewegung === 'oepnv' && m.data.oepnv ? `${m.data.oepnv.linie} Richtung ${m.data.oepnv.richtung}` : FORTBEWEGUNG_TITEL[m.data.fortbewegung],
+                          m.data.telefon,
+                          position ? `Position ${ago(position.ts)}` : 'keine Position',
+                        ]
+                          .filter(Boolean)
+                          .join(', ')
+                      : 'Ruhemodus'}
                   </small>
                 </div>
-                {position && (
+                {position && m.data.aktiv && (
                   <button class="quiet" onClick={() => (focusRequest.value = { ...position, at: Date.now() })}>
                     Zeigen
                   </button>
@@ -102,26 +119,27 @@ export function TeamPanel() {
 
       <Section
         title="Fahrzeuge"
-        hint="Ein- und Ausgestiegen wird in der App. Mit Tracker meldet das Fahrzeug seinen Standort selbst."
+        hint="Fahrzeuge bleiben dauerhaft angelegt und werden für den Einsatz aktiv geschaltet. Steigt der letzte Insasse aus, bleibt das Fahrzeug an Ort und Stelle; mit Tracker meldet es seinen Standort selbst."
         actions={
-          <button
-            class="primary"
-            onClick={() => (editing.value = { id: newId(), neu: true, data: { bezeichnung: '', kennzeichen: '', beschreibung: '', fotoBlob: null, trackerId: null, abgestellt: null } })}
-          >
+          <button class="primary" onClick={() => (editing.value = { id: newId(), neu: true, data: { ...LEERES_FAHRZEUG } })}>
             Anlegen
           </button>
         }
       >
         <ul class="list">
           {vehicles.map((v) => {
-            const crew = members.filter((m) => m.data.fahrzeugId === v.id).map((m) => m.data.funkrufname);
-            const tracked = v.data.trackerId ? trackerPositions.value[v.data.trackerId] : undefined;
+            const crew = members.filter((m) => m.data.aktiv && vehicleOf(m.data)?.id === v.id).map((m) => m.data.spitzname);
+            const tracked = trackerPoint(v.data.trackerId);
             const point = tracked ?? v.data.abgestellt ?? undefined;
             return (
-              <li key={v.id}>
+              <li key={v.id} class={v.data.aktiv ? '' : 'ruhend'}>
+                <input type="checkbox" title="Im Einsatz aktiv" checked={v.data.aktiv} onChange={() => put('vehicle', v.id, { ...v.data, aktiv: !v.data.aktiv })} />
                 <div class="grow">
-                  <b>{v.data.bezeichnung}</b>
-                  <small>{[v.data.kennzeichen, crew.length ? `Besetzt: ${crew.join(', ')}` : 'Unbesetzt', tracked ? `Tracker ${ago(tracked.ts)}` : ''].filter(Boolean).join(' · ')}</small>
+                  <b>{v.data.funkrufname}</b>
+                  <small>{[v.data.bezeichnung, v.data.kennzeichen].filter(Boolean).join(', ') || 'ohne Beschreibung'}</small>
+                  <small class="hint">
+                    {[v.data.aktiv ? (crew.length ? `Besetzt: ${crew.join(', ')}` : 'Unbesetzt') : 'Nicht im Einsatz', tracked ? `Tracker ${ago(tracked.ts)}` : ''].filter(Boolean).join(', ')}
+                  </small>
                 </div>
                 {point && (
                   <button class="quiet" onClick={() => (focusRequest.value = { ...point, at: Date.now() })}>

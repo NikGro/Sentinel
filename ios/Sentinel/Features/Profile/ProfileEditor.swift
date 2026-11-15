@@ -13,7 +13,7 @@ struct ProfileEditor: View {
     @Environment(\.dismiss) private var dismiss
 
     @State private var name = ""
-    @State private var callsign = ""
+    @State private var nickname = ""
     @State private var unit = ""
     @State private var phone = ""
     @State private var photo: String?
@@ -21,25 +21,10 @@ struct ProfileEditor: View {
     @State private var showsSignOut = false
     @State private var didLoad = false
 
-    // Optionales erstes Fahrzeug (nur beim Anlegen).
-    @State private var addsVehicle = false
-    @State private var vehicleName = ""
-    @State private var vehiclePlate = ""
-    @State private var vehicleDescription = ""
-    @State private var vehiclePhoto: String?
-
-    private var normalizedCallsign: String? { Callsign.normalize(callsign) }
-
     private var isValid: Bool {
         !name.trimmingCharacters(in: .whitespaces).isEmpty
             && !unit.trimmingCharacters(in: .whitespaces).isEmpty
-            && normalizedCallsign != nil
-            && (!addsVehicle || !vehicleTitle.isEmpty)
-    }
-
-    private var vehicleTitle: String {
-        let explicit = vehicleName.trimmingCharacters(in: .whitespaces)
-        return explicit.isEmpty ? vehiclePlate.trimmingCharacters(in: .whitespaces) : explicit
+            && !nickname.trimmingCharacters(in: .whitespaces).isEmpty
     }
 
     var body: some View {
@@ -47,17 +32,13 @@ struct ProfileEditor: View {
             Section {
                 TextField("Name", text: $name)
                     .textContentType(.name)
-                TextField("Funkrufname, z. B. P 35/24", text: $callsign)
-                    .textInputAutocapitalization(.characters)
+                TextField("Spitzname", text: $nickname)
                     .autocorrectionDisabled()
                 TextField("Dienststelle", text: $unit)
             } header: {
                 Text("Pflichtangaben")
             } footer: {
-                if !callsign.isEmpty, normalizedCallsign == nil {
-                    Text("Funkrufname: 1 bis 3 Buchstaben, 1 bis 3 Ziffern, Schrägstrich, 1 bis 3 Ziffern.")
-                        .foregroundStyle(.red)
-                }
+                Text("Der Spitzname erscheint auf der Karte, solange Sie zu Fuß unterwegs sind. Im Fahrzeug steht dort dessen Funkrufname.")
             }
 
             Section {
@@ -77,24 +58,7 @@ struct ProfileEditor: View {
                 Text("Tipp: Über das Kontakte-Symbol die eigene Karte wählen, dann wird die Nummer übernommen. Die Tastatur schlägt die eigene Nummer ebenfalls vor.")
             }
 
-            if mode == .create {
-                Section {
-                    Toggle("Fahrzeug gleich mit anlegen", isOn: $addsVehicle.animation())
-                    if addsVehicle {
-                        TextField("Bezeichnung, z. B. Golf grau", text: $vehicleName)
-                        TextField("Kennzeichen", text: $vehiclePlate)
-                            .textInputAutocapitalization(.characters)
-                            .autocorrectionDisabled()
-                        TextField("Beschreibung", text: $vehicleDescription, axis: .vertical)
-                            .lineLimit(1...4)
-                        PhotoField(title: "Fahrzeugbild", blobId: $vehiclePhoto)
-                    }
-                } header: {
-                    Text("Fahrzeug")
-                } footer: {
-                    Text("Fahrzeuge sind eigene Objekte: Sie steigen ein und aus, das Fahrzeug bleibt am Ort des Aussteigens stehen. Weitere Fahrzeuge unter „Team“.")
-                }
-            } else {
+            if mode == .edit {
                 Section {
                     Button("Dieses Gerät abmelden", role: .destructive) { showsSignOut = true }
                 }
@@ -129,33 +93,21 @@ struct ProfileEditor: View {
         guard !didLoad, let me = lage.me?.data else { return }
         didLoad = true
         name = me.name
-        callsign = me.funkrufname
+        nickname = me.spitzname
         unit = me.dienststelle
         phone = me.telefon
         photo = me.fotoBlob
     }
 
     private func save() {
-        guard let selfId = lage.selfId, let normalizedCallsign else { return }
-        let member = Member(
-            name: name.trimmingCharacters(in: .whitespaces),
-            funkrufname: normalizedCallsign,
-            dienststelle: unit.trimmingCharacters(in: .whitespaces),
-            telefon: PhoneNumber.sanitize(phone),
-            fotoBlob: photo,
-            fahrzeugId: lage.me?.data.fahrzeugId
-        )
+        guard let selfId = lage.selfId else { return }
+        var member = lage.me?.data ?? Member(name: "", spitzname: "", dienststelle: "")
+        member.name = name.trimmingCharacters(in: .whitespaces)
+        member.spitzname = String(nickname.trimmingCharacters(in: .whitespaces).prefix(30))
+        member.dienststelle = unit.trimmingCharacters(in: .whitespaces)
+        member.telefon = PhoneNumber.sanitize(phone)
+        member.fotoBlob = photo
         guard lage.put(member, id: selfId) else { return }
-        if mode == .create, addsVehicle {
-            let vehicleId = LageStore.newId()
-            let vehicle = Vehicle(
-                bezeichnung: vehicleTitle,
-                kennzeichen: vehiclePlate.trimmingCharacters(in: .whitespaces),
-                beschreibung: vehicleDescription.trimmingCharacters(in: .whitespacesAndNewlines),
-                fotoBlob: vehiclePhoto
-            )
-            if lage.put(vehicle, id: vehicleId) { lage.board(vehicleId: vehicleId) }
-        }
         if mode == .edit { dismiss() }
     }
 }

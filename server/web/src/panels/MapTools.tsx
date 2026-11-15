@@ -1,13 +1,40 @@
 import { useSignal } from '@preact/signals';
 import { finishDrawing } from '../map';
-import { canRedo, canUndo, deleteObject, layers, nameOf, redo, saveObject, selectedObject, tables, targetLayer, tool, undo } from '../store';
-import { PALETTE, SHAPE_TITEL, type MapObject, type Shape } from '../types';
+import { canRedo, canUndo, deleteObject, isLocked, layers, nameOf, newId, put, redo, saveObject, selectedObject, tables, targetLayer, tool, undo } from '../store';
+import { PALETTE, SHAPE_TITEL, ZIEL_TITEL, type MapObject, type Shape, type Target, type ZielArt } from '../types';
 import { ago, Field, TextInput } from '../ui';
 
 const HINWEIS: Record<string, string> = {
-  lkp: 'Letzten bekannten Standort auf der Karte anklicken',
+  zielstandort: 'Standort des Ziels auf der Karte anklicken',
   verschieben: 'Neuen Ort auf der Karte anklicken',
 };
+
+const NEUES_ZIEL = (art: ZielArt): Target => ({
+  art,
+  bezeichnung: '',
+  standort: null,
+  vorname: '',
+  nachname: '',
+  geburtsdatum: null,
+  geburtsort: '',
+  staatsangehoerigkeit: '',
+  anschrift: '',
+  merkmale: '',
+  fotoBlob: null,
+  kennzeichen: '',
+  fahrzeugBeschreibung: '',
+  fahrzeugFotoBlob: null,
+  sachverhalt: '',
+  hinweise: '',
+  massnahmen: '',
+  trackerId: null,
+});
+
+/** Legt ein neues Ziel an und lässt seinen Standort auf der Karte setzen. Bearbeitet wird es danach unter Ziele. */
+function placeTarget(art: ZielArt): void {
+  const id = newId();
+  if (put('target', id, NEUES_ZIEL(art))) tool.value = { kind: 'zielstandort', targetId: id };
+}
 
 /** Werkzeugleiste über der Karte: Markierungen zeichnen, Zielebene wählen, Rückgängig/Wiederholen. */
 export function MapToolbar() {
@@ -25,11 +52,17 @@ export function MapToolbar() {
           </button>
         ))}
         <span class="divider" />
+        {(Object.keys(ZIEL_TITEL) as ZielArt[]).map((art) => (
+          <button key={art} class={`ziel-${art}`} onClick={() => placeTarget(art)}>
+            {ZIEL_TITEL[art]}
+          </button>
+        ))}
+        <span class="divider" />
         <label class="inline">
           in Ebene
           <select value={targetLayer.value} onChange={(e) => (targetLayer.value = e.currentTarget.value)}>
             {layers.value
-              .filter((l) => l.data.art !== 'argus')
+              .filter((l) => l.data.art !== 'argus' && !isLocked(l.id))
               .map((l) => (
                 <option key={l.id} value={l.id}>
                   {l.data.name}
@@ -78,6 +111,21 @@ function ObjectForm(props: { id: string; initial: MapObject; updatedBy: string; 
   const object = draft.value;
   const change = (patch: Partial<MapObject>) => (draft.value = { ...object, ...patch });
   const dirty = JSON.stringify(object) !== JSON.stringify(props.initial);
+  const locked = isLocked(props.initial.layerId);
+  if (locked) {
+    return (
+      <div class="object-editor">
+        <header>
+          <strong>{object.titel || SHAPE_TITEL[object.typ]}</strong>
+          <button class="quiet" onClick={() => (selectedObject.value = null)}>
+            Schließen
+          </button>
+        </header>
+        {object.notiz && <p>{object.notiz}</p>}
+        <p class="hint">Gehört zu den dauerhaften Orten und ist gesperrt. Entsperren unter Lage, Dauerhafte Orte.</p>
+      </div>
+    );
+  }
 
   return (
     <div class="object-editor">
@@ -98,6 +146,31 @@ function ObjectForm(props: { id: string; initial: MapObject; updatedBy: string; 
           <button key={farbe} class={object.farbe.toUpperCase() === farbe ? 'active' : ''} style={{ background: farbe }} title={farbe} onClick={() => change({ farbe })} />
         ))}
       </div>
+      {object.typ === 'fahndungsraum' && (
+        <Field label="Seit (letzte bekannte Sichtung)">
+          <input
+            type="datetime-local"
+            value={object.zeit ? toLocalInput(object.zeit) : ''}
+            max={toLocalInput(Date.now())}
+            onInput={(e) => {
+              const ts = new Date(e.currentTarget.value).getTime();
+              if (Number.isFinite(ts)) change({ zeit: Math.min(ts, Date.now()) });
+            }}
+          />
+        </Field>
+      )}
+      {object.typ === 'marker' && (
+        <Field label="Standort von Tracker">
+          <select value={object.trackerId ?? ''} onChange={(e) => change({ trackerId: e.currentTarget.value || null })}>
+            <option value="">Von Hand gesetzt</option>
+            {Object.values(tables.tracker.value).map((t) => (
+              <option key={t.id} value={t.id}>
+                {t.data.name}
+              </option>
+            ))}
+          </select>
+        </Field>
+      )}
       {object.typ === 'kreis' && (
         <Field label="Radius in Metern">
           <input type="number" min={5} max={100000} value={object.radius ?? 150} onInput={(e) => change({ radius: Math.min(Math.max(Number(e.currentTarget.value) || 150, 5), 100000) })} />
@@ -106,7 +179,7 @@ function ObjectForm(props: { id: string; initial: MapObject; updatedBy: string; 
       <Field label="Ebene">
         <select value={object.layerId} onChange={(e) => change({ layerId: e.currentTarget.value })}>
           {layers.value
-            .filter((l) => l.data.art !== 'argus')
+            .filter((l) => l.data.art !== 'argus' && !isLocked(l.id))
             .map((l) => (
               <option key={l.id} value={l.id}>
                 {l.data.name}
@@ -134,4 +207,10 @@ function ObjectForm(props: { id: string; initial: MapObject; updatedBy: string; 
       </small>
     </div>
   );
+}
+
+/** Zeitpunkt als Wert für ein datetime-local-Feld in lokaler Zeit. */
+function toLocalInput(ts: number): string {
+  const d = new Date(ts - new Date(ts).getTimezoneOffset() * 60_000);
+  return d.toISOString().slice(0, 16);
 }
