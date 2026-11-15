@@ -87,7 +87,7 @@ private struct ConnectingView: View {
     }
 }
 
-/// Hauptnavigation. Die Lageleiste über der Tableiste ist in jeder Ansicht sichtbar.
+/// Hauptnavigation. Die Lageleiste mit dem Funkkanal gehört zur Karte.
 struct MainView: View {
     enum Section: Hashable {
         case lage, ziele, kraefte, chat, mehr
@@ -96,7 +96,6 @@ struct MainView: View {
     @Environment(LageStore.self) private var lage
     @Environment(LocalSettings.self) private var settings
     @State private var selection: Section = .lage
-    @State private var showsSituation = false
 
     var body: some View {
         TabView(selection: $selection) {
@@ -116,12 +115,6 @@ struct MainView: View {
             Tab("Mehr", systemImage: "ellipsis", value: Section.mehr) {
                 SettingsScreen()
             }
-        }
-        .tabViewBottomAccessory {
-            SituationBar { showsSituation = true }
-        }
-        .sheet(isPresented: $showsSituation) {
-            SituationSheet()
         }
         .alert("Hinweis", isPresented: Binding(get: { lage.lastError != nil }, set: { if !$0 { lage.lastError = nil } })) {
             Button("OK", role: .cancel) {}

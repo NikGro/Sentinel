@@ -11,40 +11,61 @@ struct APositionControl: View {
     @State private var disarm: Task<Void, Never>?
 
     var body: some View {
-        HStack(spacing: 10) {
+        HStack(spacing: Theme.barSpacing) {
             if lage.holdsA {
-                Label("Sie haben die A-Position", systemImage: "a.circle.fill")
-                    .font(.subheadline.weight(.semibold))
-                    .foregroundStyle(Theme.aPosition)
-                Spacer(minLength: 0)
-                Button("Abgeben") { lage.releaseA() }
-                    .buttonStyle(.glass)
+                HStack(spacing: 10) {
+                    Label("Sie haben die A-Position", systemImage: "a.circle.fill")
+                        .font(.subheadline.weight(.semibold))
+                        .foregroundStyle(Theme.aPosition)
+                        .lineLimit(1)
+                        .minimumScaleFactor(0.8)
+                    Spacer(minLength: 0)
+                }
+                .padding(.horizontal, 18)
+                .frame(height: Theme.barHeight)
+                .glassEffect(.regular, in: .capsule)
+                Button { lage.releaseA() } label: {
+                    Text("Abgeben")
+                        .font(.subheadline.weight(.semibold))
+                        .padding(.horizontal, 18)
+                        .frame(height: Theme.barHeight)
+                        .contentShape(.capsule)
+                }
+                .buttonStyle(.plain)
+                .glassEffect(.regular.interactive(), in: .capsule)
             } else {
                 if let holder = lage.aHolder {
                     Button {
                         model.navigate(to: .aPosition)
                     } label: {
                         Label("Zur A", systemImage: "location.north.line.fill")
+                            .font(.subheadline.weight(.semibold))
                             .lineLimit(1)
                             .frame(maxWidth: .infinity)
+                            .frame(height: Theme.barHeight)
+                            .contentShape(.capsule)
                     }
-                    .buttonStyle(.glass)
+                    .buttonStyle(.plain)
+                    .glassEffect(.regular.interactive(), in: .capsule)
                     .accessibilityLabel("Zur A-Position von \(lage.label(of: holder.data)) führen")
                 }
                 Button(action: pressClaim) {
                     Label(isArmed ? "Bestätigen: Ich habe A" : "A übernehmen", systemImage: isArmed ? "checkmark.circle.fill" : "a.circle")
-                        .fontWeight(.semibold)
+                        .font(.subheadline.weight(.semibold))
+                        .foregroundStyle(.white)
                         .lineLimit(1)
                         .minimumScaleFactor(0.75)
+                        .padding(.horizontal, 12)
                         .frame(maxWidth: .infinity)
+                        .frame(height: Theme.barHeight)
+                        .contentShape(.capsule)
                 }
-                .buttonStyle(.glassProminent)
-                .tint(isArmed ? Theme.aPosition : Theme.accent)
+                .buttonStyle(.plain)
+                .glassEffect(.regular.tint(isArmed ? Theme.aPosition : Theme.accent).interactive(), in: .capsule)
                 .sensoryFeedback(.warning, trigger: isArmed) { _, armed in armed }
                 .accessibilityHint(isArmed ? "Erneut drücken, um die A-Position zu übernehmen" : "Zweimal drücken zum Übernehmen")
             }
         }
-        .controlSize(.large)
         .animation(.snappy, value: isArmed)
         .onDisappear { disarm?.cancel() }
     }
@@ -83,8 +104,8 @@ struct MobilityChip: View {
                         .foregroundStyle(.secondary)
                 }
                 .font(.subheadline.weight(.semibold))
-                .padding(.horizontal, 16)
-                .frame(height: 40)
+                .padding(.horizontal, 18)
+                .frame(height: Theme.barHeight)
                 .contentShape(.rect)
             }
             .buttonStyle(.plain)

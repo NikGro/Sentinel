@@ -42,6 +42,7 @@ final class RundgangTests: XCTestCase {
         XCTAssertTrue(app.buttons["A übernehmen"].exists, "A-Position lässt sich übernehmen")
         XCTAssertTrue(app.buttons["Hinzufügen"].exists, "Plus-Knopf ist da")
         XCTAssertTrue(app.buttons["Suchen oder navigieren"].exists, "Suche ist da")
+        XCTAssertTrue(app.buttons["Lageübersicht"].exists || app.buttons.matching(NSPredicate(format: "label BEGINSWITH 'Funkkanal'")).firstMatch.exists, "Lageleiste auf der Karte")
         capture("01-karte")
 
         // Zweistufige Übernahme: Der erste Druck schärft nur.
@@ -78,8 +79,10 @@ final class RundgangTests: XCTestCase {
         capture("07-chat")
 
         app.tabBars.buttons["Mehr"].tap()
-        XCTAssertTrue(app.staticTexts["GPS-Tracker"].waitForExistence(timeout: 5), "Verwaltung auch in der App")
+        XCTAssertTrue(app.navigationBars["Mehr"].waitForExistence(timeout: 5), "Mehr-Ansicht erscheint")
         capture("08-mehr")
+        app.swipeUp()
+        XCTAssertTrue(app.buttons["GPS-Tracker"].waitForExistence(timeout: 5) || app.staticTexts["GPS-Tracker"].exists, "Verwaltung auch in der App")
     }
 
     func testFortbewegung() {

@@ -1,6 +1,6 @@
 import SwiftUI
 
-/// Lageleiste: in jeder Ansicht sichtbar, zeigt Funkkanal, A-Position, eigene Fortbewegung und Verbindungszustand.
+/// Lageleiste auf der Karte: zeigt Funkkanal, A-Position, eigene Fortbewegung und Verbindungszustand.
 struct SituationBar: View {
     let onTap: () -> Void
 
@@ -45,10 +45,12 @@ struct SituationBar: View {
                 }
                 .foregroundStyle(.secondary)
             }
-            .padding(.horizontal, 16)
+            .padding(.horizontal, 18)
+            .frame(height: Theme.barHeight)
             .contentShape(.rect)
         }
         .buttonStyle(.plain)
+        .glassEffect(.regular.interactive(), in: .capsule)
         .accessibilityElement(children: .combine)
         .accessibilityLabel(accessibilitySummary)
         .accessibilityHint("Öffnet die Lageübersicht")

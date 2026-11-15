@@ -184,29 +184,21 @@ struct ChatRoomView: View {
     // MARK: Eingabe
 
     private var composer: some View {
-        HStack(alignment: .bottom, spacing: 8) {
+        HStack(alignment: .bottom, spacing: Theme.barSpacing) {
             if audio.isRecording {
-                Button("Verwerfen", systemImage: "trash") { _ = audio.stop(cancel: true) }
-                    .labelStyle(.iconOnly)
-                    .font(.title3)
-                    .frame(width: 44, height: 44)
-                    .tint(.red)
+                ComposerRoundButton(title: "Verwerfen", symbol: "trash", tint: .red) { _ = audio.stop(cancel: true) }
                 HStack {
                     Circle().fill(.red).frame(width: 10, height: 10)
                     Text("Aufnahme \(Format.clock(audio.elapsed))")
                         .monospacedDigit()
                     Spacer()
                 }
-                .padding(.horizontal, 14)
-                .frame(height: 44)
+                .padding(.horizontal, 18)
+                .frame(height: Theme.barHeight)
                 .glassEffect(.regular, in: .capsule)
-                Button("Senden", systemImage: "arrow.up") {
+                ComposerRoundButton(title: "Senden", symbol: "arrow.up", prominent: true) {
                     if let recording = audio.stop() { Task { await sendVoice(recording.data, duration: recording.duration) } }
                 }
-                .labelStyle(.iconOnly)
-                .buttonStyle(.glassProminent)
-                .buttonBorderShape(.circle)
-                .controlSize(.large)
             } else {
                 Menu {
                     Button("Kamera", systemImage: "camera") { showsCamera = true }
@@ -217,7 +209,7 @@ struct ChatRoomView: View {
                 } label: {
                     Image(systemName: isUploading ? "hourglass" : "plus")
                         .font(.system(size: 18, weight: .semibold))
-                        .frame(width: 44, height: 44)
+                        .frame(width: Theme.roundButton, height: Theme.roundButton)
                 }
                 .glassEffect(.regular.interactive(), in: .circle)
                 .disabled(isUploading)
@@ -226,30 +218,23 @@ struct ChatRoomView: View {
                 TextField("Nachricht", text: $draft, axis: .vertical)
                     .lineLimit(1...4)
                     .focused($isComposing)
-                    .padding(.horizontal, 14)
-                    .padding(.vertical, 10)
-                    .glassEffect(.regular, in: .rect(cornerRadius: 20))
+                    .padding(.horizontal, 18)
+                    .padding(.vertical, 8)
+                    .frame(minHeight: Theme.barHeight)
+                    .glassEffect(.regular, in: .rect(cornerRadius: Theme.barHeight / 2))
 
                 if draft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-                    Button("Sprachnachricht", systemImage: "mic.fill") { Task { await audio.start() } }
-                        .labelStyle(.iconOnly)
-                        .buttonStyle(.glass)
-                        .buttonBorderShape(.circle)
-                        .controlSize(.large)
+                    ComposerRoundButton(title: "Sprachnachricht", symbol: "mic.fill") { Task { await audio.start() } }
                 } else {
-                    Button("Senden", systemImage: "arrow.up") {
+                    ComposerRoundButton(title: "Senden", symbol: "arrow.up", prominent: true) {
                         lage.sendMessage(draft, in: roomId)
                         draft = ""
                     }
-                    .labelStyle(.iconOnly)
-                    .buttonStyle(.glassProminent)
-                    .buttonBorderShape(.circle)
-                    .controlSize(.large)
                 }
             }
         }
-        .padding(.horizontal, 12)
-        .padding(.vertical, 8)
+        .padding(.horizontal, Theme.barInset)
+        .padding(.vertical, Theme.barSpacing)
     }
 
     private func markRead() {
@@ -425,5 +410,27 @@ private struct AttachmentView: View {
         } catch {
             previewURL = nil
         }
+    }
+}
+
+/// Runder Knopf der Chat-Eingabe, gleich groß wie die übrigen Glasknöpfe.
+private struct ComposerRoundButton: View {
+    let title: String
+    let symbol: String
+    var tint: Color = .primary
+    var prominent = false
+    let action: () -> Void
+
+    var body: some View {
+        Button(action: action) {
+            Image(systemName: symbol)
+                .font(.system(size: 18, weight: .semibold))
+                .foregroundStyle(prominent ? Color.white : tint)
+                .frame(width: Theme.roundButton, height: Theme.roundButton)
+                .contentShape(.circle)
+        }
+        .buttonStyle(.plain)
+        .glassEffect(prominent ? .regular.tint(Theme.accent).interactive() : .regular.interactive(), in: .circle)
+        .accessibilityLabel(title)
     }
 }

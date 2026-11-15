@@ -62,6 +62,7 @@ struct MapScreen: View {
     @State private var showsLayers = false
     @State private var showsSearch = false
     @State private var showsMobility = false
+    @State private var showsSituation = false
     @State private var cameraTick = 0
     @State private var now = Date.now
 
@@ -126,6 +127,9 @@ struct MapScreen: View {
         .sheet(isPresented: $showsMobility) {
             MobilitySheet()
                 .presentationDetents([.medium, .large])
+        }
+        .sheet(isPresented: $showsSituation) {
+            SituationSheet()
         }
         .task(id: CoverageKey(enabled: settings.showsCoverage, generation: lage.coverageGeneration)) {
             guard settings.showsCoverage else {
@@ -205,13 +209,13 @@ struct MapScreen: View {
                         Spacer()
                     }
                     .font(.body)
-                    .padding(.horizontal, 16)
-                    .frame(height: 46)
+                    .padding(.horizontal, 18)
+                    .frame(height: Theme.barHeight)
                     .contentShape(.rect)
                 }
                 .buttonStyle(.plain)
                 .glassEffect(.regular.interactive(), in: .capsule)
-                .padding(.trailing, 60)
+                .padding(.trailing, Theme.roundButton + Theme.barSpacing)
                 .accessibilityLabel("Suchen oder navigieren")
             }
 
@@ -234,7 +238,7 @@ struct MapScreen: View {
                 .glassEffect(.regular.tint(.yellow.opacity(0.25)), in: .rect(cornerRadius: 16))
             }
         }
-        .padding(.horizontal, 16)
+        .padding(.horizontal, Theme.barInset)
         .padding(.top, 4)
         .animation(.snappy, value: tapMode)
         .animation(.snappy, value: route.isActive)
@@ -243,8 +247,8 @@ struct MapScreen: View {
     // MARK: Knöpfe am rechten Rand, direkt unter dem Kompass
 
     private var sideButtons: some View {
-        GlassEffectContainer(spacing: 10) {
-            VStack(spacing: 10) {
+        GlassEffectContainer(spacing: Theme.barSpacing) {
+            VStack(spacing: Theme.barSpacing) {
                 AddMenu { action in
                     switch action {
                     case .shape(let shape): tapMode = .drawing(shape, points: [])
@@ -262,23 +266,24 @@ struct MapScreen: View {
                 }
             }
         }
-        .padding(.trailing, 12)
-        .padding(.top, route.isActive ? 150 : 110)
+        .padding(.trailing, Theme.barInset)
+        .padding(.top, route.isActive ? 160 : 4 + Theme.barHeight + Theme.barSpacing)
     }
 
     // MARK: Untere Leiste
 
     private var bottomArea: some View {
-        VStack(spacing: 8) {
+        VStack(spacing: Theme.barSpacing) {
             if route.isActive {
                 NavigationBottomBar()
             } else {
                 APositionControl()
                 MobilityChip { showsMobility = true }
             }
+            SituationBar { showsSituation = true }
         }
-        .padding(.horizontal, 16)
-        .padding(.bottom, 8)
+        .padding(.horizontal, Theme.barInset)
+        .padding(.bottom, Theme.barSpacing)
         .animation(.snappy, value: route.isActive)
     }
 
@@ -483,7 +488,7 @@ struct MapRoundButton: View {
             Image(systemName: symbol)
                 .font(.system(size: 17, weight: .semibold))
                 .foregroundStyle(tint)
-                .frame(width: 44, height: 44)
+                .frame(width: Theme.roundButton, height: Theme.roundButton)
         }
         .glassEffect(.regular.interactive(), in: .circle)
         .accessibilityLabel(title)
@@ -516,7 +521,7 @@ struct AddMenu: View {
             Image(systemName: "plus")
                 .font(.system(size: 20, weight: .bold))
                 .foregroundStyle(.white)
-                .frame(width: 44, height: 44)
+                .frame(width: Theme.roundButton, height: Theme.roundButton)
         }
         .glassEffect(.regular.tint(Theme.accent).interactive(), in: .circle)
         .accessibilityLabel("Hinzufügen")

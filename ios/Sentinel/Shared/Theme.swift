@@ -38,6 +38,15 @@ enum Theme {
     static let target = Color(hex: "#FF375F")
     static let coverage = Color(hex: "#FF9F0A")
 
+    /// Einheitliche Höhe aller Leisten und Eingabefelder über der Tableiste (Suche, A-Position, Fortbewegung, Lageleiste, Chat).
+    static let barHeight: CGFloat = 50
+    /// Einheitlicher Durchmesser runder Glasknöpfe.
+    static let roundButton: CGFloat = 50
+    /// Seitlicher Abstand, bündig mit der schwebenden Tableiste.
+    static let barInset: CGFloat = 22
+    /// Abstand zwischen gestapelten Leisten.
+    static let barSpacing: CGFloat = 8
+
     static func color(for mode: ReachMode) -> Color {
         switch mode {
         case .fuss: .green

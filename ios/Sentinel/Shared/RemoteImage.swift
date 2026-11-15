@@ -43,8 +43,11 @@ struct Avatar: View {
                 Text(fallbackText)
                     .font(.system(size: size * 0.32, weight: .semibold, design: .rounded))
                     .foregroundStyle(tint)
-                    .minimumScaleFactor(0.5)
-                    .padding(4)
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.4)
+                    .multilineTextAlignment(.center)
+                    .padding(.horizontal, size * 0.12)
+                    .frame(width: size, height: size, alignment: .center)
             }
         }
         .frame(width: size, height: size)
