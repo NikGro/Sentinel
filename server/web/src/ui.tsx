@@ -25,11 +25,11 @@ export function Field(props: { label: string; children: ComponentChildren }) {
   );
 }
 
-export function TextInput(props: { value: string; onInput: (value: string) => void; placeholder?: string; rows?: number; maxLength?: number; type?: string }) {
+export function TextInput(props: { value: string; onInput: (value: string) => void; placeholder?: string; rows?: number; maxLength?: number; type?: 'text' | 'number' | 'email' | 'password' }) {
   if (props.rows) {
-    return <textarea rows={props.rows} value={props.value} placeholder={props.placeholder} maxLength={props.maxLength} onInput={(e) => props.onInput(e.currentTarget.value)} />;
+    return <textarea rows={props.rows} value={props.value} placeholder={props.placeholder ?? ''} maxLength={props.maxLength ?? 4000} onInput={(e) => props.onInput(e.currentTarget.value)} />;
   }
-  return <input type={props.type ?? 'text'} value={props.value} placeholder={props.placeholder} maxLength={props.maxLength} onInput={(e) => props.onInput(e.currentTarget.value)} />;
+  return <input type={(props.type ?? 'text') as 'text'} value={props.value} placeholder={props.placeholder ?? ''} maxLength={props.maxLength ?? 4000} onInput={(e) => props.onInput(e.currentTarget.value)} />;
 }
 
 export function ImageField(props: { label: string; blobId: string | null; onChange: (blobId: string | null) => void }) {

@@ -1,5 +1,5 @@
 import { effect } from '@preact/signals';
-import maplibregl, { type GeoJSONSource, type Map as MlMap, type Marker } from 'maplibre-gl';
+import { Map as MlMap, Marker, NavigationControl, ScaleControl, type GeoJSONSource, type MapMouseEvent } from 'maplibre-gl';
 import {
   coverage,
   focusRequest,
@@ -78,7 +78,7 @@ class MarkerGroup {
         continue;
       }
       existing?.marker.remove();
-      const marker = new maplibregl.Marker({ element: item.build(), anchor: 'center' }).setLngLat(lngLat(item.point)).addTo(this.map);
+      const marker = new Marker({ element: item.build(), anchor: 'center' }).setLngLat(lngLat(item.point)).addTo(this.map);
       this.markers.set(item.id, { marker, signature: item.signature });
     }
     for (const [id, entry] of this.markers) {
@@ -91,7 +91,7 @@ class MarkerGroup {
 }
 
 export function createMap(container: HTMLElement): () => void {
-  const map = new maplibregl.Map({
+  const map = new MlMap({
     container,
     style: {
       version: 8,
@@ -105,8 +105,8 @@ export function createMap(container: HTMLElement): () => void {
     attributionControl: { compact: true },
     doubleClickZoom: false,
   });
-  map.addControl(new maplibregl.NavigationControl({ visualizePitch: false }), 'top-right');
-  map.addControl(new maplibregl.ScaleControl({ unit: 'metric' }), 'bottom-right');
+  map.addControl(new NavigationControl({ visualizePitch: false }), 'top-right');
+  map.addControl(new ScaleControl({ unit: 'metric' }), 'bottom-right');
 
   const disposers: (() => void)[] = [];
   const source = (id: string) => map.getSource(id) as GeoJSONSource | undefined;
@@ -298,7 +298,7 @@ export function createMap(container: HTMLElement): () => void {
     );
   });
 
-  map.on('click', (event) => {
+  map.on('click', (event: MapMouseEvent) => {
     const point: GeoPoint = { lat: event.lngLat.lat, lon: event.lngLat.lng };
     const current = tool.value;
     switch (current.kind) {
