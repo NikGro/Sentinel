@@ -18,7 +18,8 @@ export interface RouteResult {
   punkte: [number, number][];
   meter: number;
   sekunden: number;
-  anweisungen: { text: string; meter: number }[];
+  /** `index` ist die Position im Linienzug, an der das Manöver beginnt. */
+  anweisungen: { text: string; meter: number; index: number }[];
   sonderrechte: boolean;
 }
 
@@ -61,7 +62,7 @@ export function decodePolyline6(encoded: string): [number, number][] {
 interface ValhallaTrip {
   trip?: {
     summary: { length: number; time: number };
-    legs: { shape: string; maneuvers: { instruction: string; length: number }[] }[];
+    legs: { shape: string; maneuvers: { instruction: string; length: number; begin_shape_index?: number }[] }[];
   };
 }
 
@@ -100,7 +101,7 @@ export class RouteService {
         punkte: decodePolyline6(leg.shape),
         meter: Math.round(body.trip.summary.length * 1000),
         sekunden: Math.round(body.trip.summary.time),
-        anweisungen: leg.maneuvers.map((m) => ({ text: m.instruction, meter: Math.round(m.length * 1000) })),
+        anweisungen: leg.maneuvers.map((m) => ({ text: m.instruction, meter: Math.round(m.length * 1000), index: m.begin_shape_index ?? 0 })),
         sonderrechte: options.sonderrechte && !options.zuFuss,
       };
     } catch {

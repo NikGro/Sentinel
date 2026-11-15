@@ -21,6 +21,10 @@ export interface Config {
   readonly dataKey: string;
   /** Apple Maps in der Kommandozentrale: Team-ID, Key-ID und Pfad zur .p8-Datei. Leer = OpenStreetMap. */
   readonly mapkit: { teamId: string; keyId: string; keyFile: string };
+  /** Overpass-API für ÖPNV-Linien und Kreuzungssuche; leer schaltet beides ab. */
+  readonly overpassUrl: string;
+  /** Einsatzraum für ÖPNV-Linien: Süd, West, Nord, Ost. */
+  readonly oepnvBbox: [number, number, number, number];
   readonly production: boolean;
 }
 
@@ -30,6 +34,12 @@ function int(name: string, fallback: number): number {
   const value = Number.parseInt(raw, 10);
   if (!Number.isFinite(value) || value < 0 || value > 65535) throw new Error(`Ungültiger Wert für ${name}`);
   return value;
+}
+
+function parseBbox(raw: string): [number, number, number, number] {
+  const parts = raw.split(',').map(Number);
+  if (parts.length !== 4 || parts.some((n) => !Number.isFinite(n))) throw new Error('SENTINEL_OEPNV_BBOX: vier Zahlen "Süd,West,Nord,Ost" erwartet');
+  return parts as [number, number, number, number];
 }
 
 export function loadConfig(env: NodeJS.ProcessEnv = process.env): Config {
@@ -56,6 +66,8 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): Config {
       keyId: env.SENTINEL_MAPKIT_KEY_ID ?? '',
       keyFile: env.SENTINEL_MAPKIT_KEY_FILE ?? '',
     },
+    overpassUrl: env.SENTINEL_OVERPASS_URL ?? 'https://overpass-api.de/api/interpreter',
+    oepnvBbox: parseBbox(env.SENTINEL_OEPNV_BBOX ?? '53.30,9.55,53.90,10.45'),
     production,
   };
 }

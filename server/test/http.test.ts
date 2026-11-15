@@ -80,7 +80,7 @@ test('Zwei Geräte sehen Änderungen, Positionen und Kommandos in Echtzeit', asy
   ca.send({ t: 'put', kind: 'member', id: a.deviceId, data: profil(), ref: 'r1' });
   assert.equal((await ca.next((m) => m.t === 'ack')).ref, 'r1');
   const put = await cb.next((m) => m.t === 'put' && m.kind === 'member');
-  assert.equal(put.entity.data.funkrufname, 'P 35/24');
+  assert.equal(put.entity.data.spitzname, 'Falke');
 
   ca.send({ t: 'pos', p: { lat: 53.55, lon: 9.99, ts: Date.now(), acc: 4 } });
   assert.equal((await cb.next((m) => m.t === 'pos')).id, a.deviceId);
@@ -88,6 +88,7 @@ test('Zwei Geräte sehen Änderungen, Positionen und Kommandos in Echtzeit', asy
   ca.send({ t: 'cmd', name: 'a.uebernehmen' });
   assert.equal((await cb.next((m) => m.t === 'operation' && m.operation.a)).operation.a.memberId, a.deviceId);
 
+  ca.send({ t: 'cmd', name: 'fortbewegung.setzen', args: { art: 'fuss' } });
   cb.send({ t: 'put', kind: 'member', id: a.deviceId, data: profil(), ref: 'r2' });
   assert.equal((await cb.next((m) => m.t === 'err')).code, 'verboten');
 
@@ -97,18 +98,32 @@ test('Zwei Geräte sehen Änderungen, Positionen und Kommandos in Echtzeit', asy
   cb.socket.close();
 });
 
-test('Bilder: nur echte Bilddaten, Abruf nur angemeldet', async () => {
+test('Dateien: Typ aus dem Inhalt, sichere Auslieferung, Abruf nur angemeldet', async () => {
   const { token } = await enroll();
   const auth = { authorization: `Bearer ${token}` };
-  const fake = await fetch(`${base}/api/v1/blobs`, { method: 'POST', headers: { ...auth, 'content-type': 'image/jpeg' }, body: Buffer.from('<script>') });
-  assert.equal(fake.status, 415);
+  const html = await fetch(`${base}/api/v1/blobs`, { method: 'POST', headers: { ...auth, 'content-type': 'text/html' }, body: Buffer.from('<script>alert(1)</script>') });
+  const htmlBlob = (await html.json()) as { id: string; mime: string };
+  assert.equal(htmlBlob.mime, 'application/octet-stream');
+  const served = await fetch(`${base}/api/v1/blobs/${htmlBlob.id}?name=x.html`, { headers: auth });
+  assert.match(served.headers.get('content-disposition') ?? '', /^attachment/);
+  assert.match(served.headers.get('content-security-policy') ?? '', /sandbox/);
+
   const jpeg = Buffer.concat([Buffer.from([0xff, 0xd8, 0xff, 0xe0]), Buffer.alloc(64)]);
   const upload = await fetch(`${base}/api/v1/blobs`, { method: 'POST', headers: { ...auth, 'content-type': 'image/jpeg' }, body: jpeg });
   const { id } = (await upload.json()) as { id: string };
   assert.equal((await fetch(`${base}/api/v1/blobs/${id}`)).status, 401);
   const download = await fetch(`${base}/api/v1/blobs/${id}`, { headers: auth });
   assert.equal(download.headers.get('content-type'), 'image/jpeg');
+  assert.match(download.headers.get('content-disposition') ?? '', /^inline/);
   assert.equal((await download.arrayBuffer()).byteLength, jpeg.length);
+});
+
+test('Verwaltung ist auch für Fahnder-Geräte erreichbar, das Verwaltungspasswort nicht', async () => {
+  const { token } = await enroll();
+  const auth = { authorization: `Bearer ${token}` };
+  assert.equal((await fetch(`${base}/api/v1/admin/status`, { headers: auth })).status, 200);
+  const password = await fetch(`${base}/api/v1/admin/passwort`, { method: 'POST', headers: { ...auth, 'content-type': 'application/json' }, body: JSON.stringify({ aktuell: 'x', neu: 'y'.repeat(12) }) });
+  assert.equal(password.status, 403);
 });
 
 test('Weg-Zeit-Berechnung liefert je Fortbewegungsart eine Fläche', async () => {

@@ -10,7 +10,9 @@ import { MapKitTokens } from '../src/mapkit.js';
 import { modelRadiusMeters, ReachService } from '../src/reach/reach.js';
 import { costingFor, decodePolyline6, RouteService } from '../src/reach/route.js';
 import { hashPassword, RateLimiter, Vault, verifyPassword } from '../src/security.js';
-import { parseH02Binary, parseH02Text } from '../src/trackers/h02.js';
+import { intervalCommand, parseH02Binary, parseH02Text } from '../src/trackers/h02.js';
+import { nextStopIndex, OepnvStore, parseRoutes } from '../src/oepnv.js';
+import { sniffMime } from '../src/http/device.js';
 
 test('UTM 32N nach WGS84 (Hamburger Rathaus)', () => {
   const p = utmToWgs84(565_835.6, 5_933_949.0);
@@ -127,4 +129,52 @@ test('Route: Sonderrechte ignorieren Einbahnstraßen und Abbiegeverbote, aber ke
   assert.equal(result?.anweisungen[0]?.text, 'Links abbiegen.');
   assert.equal(result?.sonderrechte, true);
   assert.equal(await new RouteService('', ok).route({ lat: 1, lon: 1 }, { lat: 2, lon: 2 }, { sonderrechte: false, zuFuss: false }), null);
+});
+
+test('ÖPNV: Routen aus OpenStreetMap werden zu Linien mit geordneten Halten', () => {
+  const node = (id: number, lat: number, name: string) => ({ type: 'node' as const, id, lat, lon: 10, tags: { name } });
+  const lines = parseRoutes([
+    node(1, 53.50, 'Start'), node(2, 53.5001, 'Start'), node(3, 53.51, 'Mitte'), node(4, 53.52, 'Ende'),
+    { type: 'relation', id: 99, tags: { ref: 'U3', route: 'subway', to: 'Ende' }, members: [
+      { type: 'node', ref: 1, role: 'stop' }, { type: 'node', ref: 2, role: 'platform' }, { type: 'node', ref: 3, role: 'stop' }, { type: 'node', ref: 4, role: 'stop_exit_only' }, { type: 'way', ref: 7, role: '' },
+    ] },
+    { type: 'relation', id: 100, tags: { route: 'bus' }, members: [] },
+  ]);
+  assert.equal(lines.length, 1);
+  assert.deepEqual(lines[0]!.halte.map((h) => h.name), ['Start', 'Mitte', 'Ende']);
+  assert.equal(lines[0]!.nach, 'Ende');
+});
+
+test('ÖPNV: nächster Halt ab Standort, Suche nach Linie und in der Nähe', () => {
+  const halte = [0, 1, 2, 3].map((i) => ({ lat: 53.5 + i * 0.01, lon: 10 }));
+  assert.equal(nextStopIndex(halte, { lat: 53.5, lon: 10 }), 1);
+  assert.equal(nextStopIndex(halte, { lat: 53.515, lon: 10.0005 }), 2);
+  assert.equal(nextStopIndex(halte, { lat: 53.53, lon: 10 }), 4);
+  const store = new OepnvStore(mkdtempSync(join(tmpdir(), 'sentinel-oepnv-')), [53, 9, 54, 11], null);
+  (store as unknown as { setLines(l: unknown[]): void }).setLines([
+    { id: '1', ref: 'U3', typ: 'subway', von: 'A', nach: 'Barmbek', halte: halte.map((h, i) => ({ ...h, name: `H${i}` })) },
+    { id: '2', ref: 'U3', typ: 'subway', von: 'B', nach: 'Wandsbek', halte: [...halte].reverse().map((h, i) => ({ ...h, name: `H${i}` })) },
+    { id: '3', ref: '269', typ: 'bus', von: 'C', nach: 'Ort', halte: [{ name: 'X', lat: 54, lon: 11 }, { name: 'Y', lat: 54.01, lon: 11 }] },
+  ]);
+  assert.deepEqual(store.search('u 3', null).map((r) => r.richtung), ['Barmbek', 'Wandsbek']);
+  assert.deepEqual(store.search('', { lat: 53.5, lon: 10 }).map((r) => r.id).sort(), ['1', '2']);
+  assert.deepEqual(store.upcoming('1', { lat: 53.515, lon: 10 }, 5).map((h) => h.name), ['H2', 'H3']);
+});
+
+test('Dateityp wird am Inhalt erkannt', () => {
+  assert.equal(sniffMime(Buffer.from([0xff, 0xd8, 0xff, 0xe0, 0])), 'image/jpeg');
+  assert.equal(sniffMime(Buffer.from('%PDF-1.7')), 'application/pdf');
+  assert.equal(sniffMime(Buffer.concat([Buffer.from([0, 0, 0, 0x20]), Buffer.from('ftypM4A '), Buffer.alloc(8)])), 'audio/mp4');
+  assert.equal(sniffMime(Buffer.from('<html>')), 'application/octet-stream');
+});
+
+test('SinoTrack: Befehl für das Sendeintervall', () => {
+  assert.equal(intervalCommand('9170123456', 30, new Date(Date.UTC(2026, 10, 15, 12, 5, 9))), '*HQ,9170123456,S71,120509,22,30#');
+});
+
+test('Route: Manöver tragen ihre Position im Linienzug', async () => {
+  const ok = (async () =>
+    new Response(JSON.stringify({ trip: { summary: { length: 1, time: 60 }, legs: [{ shape: '_izlhA~rlgdF_{geC~ywl@', maneuvers: [{ instruction: 'Los', length: 0.5, begin_shape_index: 0 }, { instruction: 'Rechts', length: 0.5, begin_shape_index: 1 }] }] } }))) as typeof fetch;
+  const result = await new RouteService('http://v', ok).route({ lat: 1, lon: 1 }, { lat: 2, lon: 2 }, { sonderrechte: false, zuFuss: false });
+  assert.deepEqual(result?.anweisungen.map((a) => a.index), [0, 1]);
 });

@@ -15,7 +15,7 @@ interface Connection {
 
 /**
  * Echtzeit-Verteiler: nimmt Nachrichten der verbundenen Clients entgegen, reicht sie an die Lage weiter
- * und verteilt deren Ereignisse an alle Verbindungen. Entwurfs-Ebenen gehen nur an die Kommandozentrale.
+ * und verteilt deren Ereignisse an alle Verbindungen. Entwürfe sehen alle, angezeigt werden sie erst nach dem Laden.
  */
 export class Hub {
   private readonly connections = new Set<Connection>();
@@ -33,7 +33,7 @@ export class Hub {
   attach(socket: WebSocket, actor: Actor): void {
     const connection: Connection = { socket, actor, alive: true, windowStart: Date.now(), windowCount: 0 };
     this.connections.add(connection);
-    this.send(connection, { t: 'snapshot', self: actor, server: this.serverInfo(), online: this.onlineIds(), ...this.lage.snapshot(actor.role) });
+    this.send(connection, { t: 'snapshot', self: actor, server: this.serverInfo(), online: this.onlineIds(), ...this.lage.snapshot() });
     this.broadcastOnline();
 
     socket.on('pong', () => (connection.alive = true));
@@ -103,11 +103,9 @@ export class Hub {
 
   private distribute(event: LageEvent): void {
     switch (event.type) {
-      case 'put': {
-        const draft = this.isDraft(event);
-        this.broadcast({ t: 'put', kind: event.kind, entity: event.entity }, draft ? 'zentrale' : undefined);
+      case 'put':
+        this.broadcast({ t: 'put', kind: event.kind, entity: event.entity });
         break;
-      }
       case 'del':
         this.broadcast({ t: 'del', kind: event.kind, id: event.id });
         break;
@@ -123,26 +121,9 @@ export class Hub {
       case 'bestreifungReset':
         this.broadcast({ t: 'bestreifungReset' });
         break;
-      case 'layerVisibility':
-        this.syncLayerVisibility(event.layerId, event.live);
+      case 'trackerIntervall':
+        // Wird vom Tracker-Empfang an das Gerät weitergegeben, nicht an die Clients.
         break;
-    }
-  }
-
-  private isDraft(event: Extract<LageEvent, { type: 'put' }>): boolean {
-    if (event.kind === 'layer') return (event.entity.data as { status: string }).status === 'entwurf';
-    if (event.kind === 'annotation') return !this.lage.isLayerLive((event.entity.data as { layerId: string }).layerId);
-    return false;
-  }
-
-  /** Beim Laden eines Pakets erhalten die Fahnder dessen Inhalt, beim Zurückziehen verschwindet er bei ihnen. */
-  private syncLayerVisibility(layerId: string, live: boolean): void {
-    const annotations = this.lage.list('annotation').filter((a) => a.data.layerId === layerId);
-    if (live) {
-      for (const entity of annotations) this.broadcast({ t: 'put', kind: 'annotation', entity }, 'fahnder');
-    } else {
-      this.broadcast({ t: 'del', kind: 'layer', id: layerId }, 'fahnder');
-      for (const a of annotations) this.broadcast({ t: 'del', kind: 'annotation', id: a.id }, 'fahnder');
     }
   }
 

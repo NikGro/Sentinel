@@ -96,10 +96,39 @@ const MAX_BUFFER = 2048;
 const IDLE_TIMEOUT_MS = 10 * 60_000;
 const MAX_CONNECTIONS = 200;
 
+/**
+ * Befehl zum Ändern des Sendeintervalls (H02 "S71", Unterbefehl 22).
+ * Nicht jedes baugleiche Gerät unterstützt ihn; Geräte ohne Unterstützung ignorieren ihn.
+ */
+export function intervalCommand(kennung: string, seconds: number, now = new Date()): string {
+  const hhmmss = [now.getUTCHours(), now.getUTCMinutes(), now.getUTCSeconds()].map((n) => String(n).padStart(2, '0')).join('');
+  return `*HQ,${kennung},S71,${hhmmss},22,${Math.round(seconds)}#`;
+}
+
+export interface H02Listener {
+  server: Server;
+  /** Schickt einen Befehl an das Gerät, sofort wenn es verbunden ist, sonst bei der nächsten Verbindung. */
+  send(kennung: string, frame: string): void;
+}
+
 /** TCP-Empfänger. Ruft `onFix` für jede gültige Position und `onSeen` für jede gemeldete Kennung auf. */
-export function startH02Listener(port: number, host: string, onFix: (fix: TrackerFix) => void, onSeen: (kennung: string) => void): Server {
+export function startH02Listener(port: number, host: string, onFix: (fix: TrackerFix) => void, onSeen: (kennung: string) => void): H02Listener {
+  const sockets = new Map<string, Socket>();
+  const pending = new Map<string, string>();
+  const seen = (kennung: string, socket: Socket) => {
+    sockets.set(kennung, socket);
+    const frame = pending.get(kennung);
+    if (frame && socket.writable) {
+      socket.write(frame);
+      pending.delete(kennung);
+    }
+    onSeen(kennung);
+  };
   const server = createServer((socket: Socket) => {
     let buffer = Buffer.alloc(0);
+    socket.on('close', () => {
+      for (const [kennung, s] of sockets) if (s === socket) sockets.delete(kennung);
+    });
     socket.setTimeout(IDLE_TIMEOUT_MS, () => socket.destroy());
     socket.on('error', () => socket.destroy());
     socket.on('data', (chunk: Buffer) => {
@@ -113,7 +142,7 @@ export function startH02Listener(port: number, host: string, onFix: (fix: Tracke
           const frame = buffer.subarray(0, end + 1).toString('latin1');
           buffer = buffer.subarray(end + 1);
           const kennung = frame.split(',')[1];
-          if (kennung && /^[0-9A-Za-z]{4,32}$/.test(kennung)) onSeen(kennung);
+          if (kennung && /^[0-9A-Za-z]{4,32}$/.test(kennung)) seen(kennung, socket);
           const fix = parseH02Text(frame);
           if (fix) onFix(fix);
         } else if (buffer[0] === 0x24 /* $ */) {
@@ -121,7 +150,7 @@ export function startH02Listener(port: number, host: string, onFix: (fix: Tracke
           const fix = parseH02Binary(buffer.subarray(0, 32));
           buffer = buffer.subarray(32);
           if (fix) {
-            onSeen(fix.kennung);
+            seen(fix.kennung, socket);
             onFix(fix);
           }
         } else {
@@ -134,5 +163,12 @@ export function startH02Listener(port: number, host: string, onFix: (fix: Tracke
   });
   server.maxConnections = MAX_CONNECTIONS;
   server.listen(port, host);
-  return server;
+  return {
+    server,
+    send(kennung, frame) {
+      const socket = sockets.get(kennung);
+      if (socket?.writable) socket.write(frame);
+      else pending.set(kennung, frame);
+    },
+  };
 }
