@@ -9,8 +9,8 @@ import { SystemPanel } from './panels/SystemPanel';
 import { TargetsPanel } from './panels/TargetsPanel';
 import { TeamPanel } from './panels/TeamPanel';
 import { TrackersPanel } from './panels/TrackersPanel';
-import { adminStatus, api, attempt, authed, command, connect, connected, disconnect, focusRequest, loadReach, messages, notice, online, operation, positions, reachModes, refreshStatus, tables } from './store';
-import { MODUS_TITEL, type Modus } from './types';
+import { adminStatus, api, attempt, authed, command, connect, connected, disconnect, focusRequest, hiddenLayers, loadCoverage, loadReach, memberLabel, messages, notice, online, operation, positions, reachModes, refreshStatus, showCoverage, tables } from './store';
+import { FORTBEWEGUNG_TITEL } from './types';
 import { ago } from './ui';
 
 const SECTIONS = [
@@ -23,12 +23,6 @@ const SECTIONS = [
   { id: 'system', title: 'System', panel: SystemPanel },
 ] as const;
 type SectionId = (typeof SECTIONS)[number]['id'];
-
-const MODUS_HINWEIS: Record<Modus, string> = {
-  observation: 'A-Position, Navigation zur A, Zielperson im Blick',
-  fahndung: 'Bestreifung, letzter Standort, Weg-Zeit-Berechnung',
-  oberflaeche: 'Nur Kräfte und Markierungen',
-};
 
 export function App() {
   useEffect(() => void refreshStatus(), []);
@@ -94,13 +88,21 @@ function Console() {
   useEffect(() => createMap(mapRef.current!, provider), [provider]);
 
   // Weg-Zeit-Flächen aktuell halten: sofort bei Änderungen, danach regelmäßig.
-  const lkp = operation.value.lkp;
-  const reachKey = `${operation.value.modus}:${lkp?.lat}:${lkp?.lon}:${lkp?.ts}:${JSON.stringify(reachModes.value)}`;
+  const rooms = Object.values(tables.annotation.value).filter((a) => a.data.typ === 'fahndungsraum');
+  const reachKey = `${rooms.map((r) => `${r.id}:${r.rev}`).join(',')}:${JSON.stringify(reachModes.value)}:${[...hiddenLayers.value].join(',')}`;
   useEffect(() => {
     void loadReach();
     const timer = window.setInterval(() => void loadReach(), 45_000);
     return () => window.clearInterval(timer);
   }, [reachKey]);
+
+  // Bestreifung regelmäßig nachladen, solange sie angezeigt wird.
+  useEffect(() => {
+    void loadCoverage();
+    if (!showCoverage.value) return;
+    const timer = window.setInterval(() => void loadCoverage(), 30_000);
+    return () => window.clearInterval(timer);
+  }, [showCoverage.value]);
 
   useEffect(() => {
     if (section.value === 'chat') chatSeen.value = Date.now();
@@ -111,7 +113,7 @@ function Console() {
   const Panel = active?.panel;
 
   return (
-    <div class={`console modus-${operation.value.modus} ${active ? '' : 'eingeklappt'}`}>
+    <div class={`console ${active ? '' : 'eingeklappt'}`}>
       <SituationBand />
 
       <nav class="rail" aria-label="Bereiche">
@@ -149,7 +151,7 @@ function Console() {
   );
 }
 
-/** Lageband: Modus, Funkkanal, A-Position und Kräfte, in jeder Ansicht sichtbar und in der Modusfarbe hinterlegt. */
+/** Lageband: Funkkanal, A-Position und Kräfte, in jeder Ansicht sichtbar. */
 function SituationBand() {
   const op = operation.value;
   const clock = useSignal(new Date());
@@ -157,30 +159,15 @@ function SituationBand() {
     const timer = window.setInterval(() => (clock.value = new Date()), 10_000);
     return () => window.clearInterval(timer);
   }, []);
-  const onlineCount = Object.keys(tables.member.value).filter((id) => online.value.has(id)).length;
-  const aHolder = op.a ? tables.member.value[op.a.memberId]?.data.funkrufname : null;
+  const activeMembers = Object.values(tables.member.value).filter((m) => m.data.aktiv && online.value.has(m.id)).length;
+  const aHolder = op.a ? tables.member.value[op.a.memberId] : null;
+  const aLine = aHolder?.data.fortbewegung === 'oepnv' ? aHolder.data.oepnv : null;
 
   return (
-    <header class="band">
+    <header class={`band ${aHolder ? 'mit-a' : ''}`}>
       <div class="brand">
         <img src="/icon.svg" alt="" width="26" height="26" />
         <strong>SENTINEL</strong>
-      </div>
-
-      <div class="modes" role="group" aria-label="Modus">
-        {(Object.keys(MODUS_TITEL) as Modus[]).map((modus) => (
-          <button
-            key={modus}
-            class={op.modus === modus ? 'active' : ''}
-            aria-pressed={op.modus === modus}
-            title={MODUS_HINWEIS[modus]}
-            onClick={() => {
-              if (op.modus !== modus && confirm(`Modus für alle auf „${MODUS_TITEL[modus]}“ ändern?\n\n${MODUS_HINWEIS[modus]}`)) command('modus.setzen', { modus });
-            }}
-          >
-            {MODUS_TITEL[modus]}
-          </button>
-        ))}
       </div>
 
       <dl class="facts">
@@ -188,26 +175,32 @@ function SituationBand() {
           <dt>Funkkanal</dt>
           <dd class="mono">{op.funkkanal ?? 'nicht gesetzt'}</dd>
         </div>
-        {op.modus === 'observation' && (
+        <div class="a-fact">
+          <dt>A-Position</dt>
+          <dd>
+            {aHolder ? memberLabel(aHolder.data) : 'frei'}
+            {aLine && <span class="sub">, {aLine.linie} Richtung {aLine.richtung}</span>}
+          </dd>
+        </div>
+        {op.ueberschlagen.naechste.length > 0 && (
           <div>
-            <dt>A-Position</dt>
-            <dd>{aHolder ?? 'frei'}</dd>
-          </div>
-        )}
-        {op.modus === 'fahndung' && (
-          <div>
-            <dt>Letzter Standort</dt>
-            <dd>{op.lkp ? ago(op.lkp.ts) : 'nicht gesetzt'}</dd>
+            <dt>Nächster Halt der A</dt>
+            <dd>{op.ueberschlagen.naechste[0]!.name}</dd>
           </div>
         )}
         <div>
           <dt>Kräfte verbunden</dt>
-          <dd class="mono">{onlineCount}</dd>
+          <dd class="mono">{activeMembers}</dd>
         </div>
       </dl>
 
       <div class="band-end">
         {!connected.value && <span class="offline">Keine Verbindung zum Server</span>}
+        {op.a && (
+          <button class="quiet" onClick={() => command('a.freigeben')} title="A-Position für alle freigeben">
+            A freigeben
+          </button>
+        )}
         <time>{clock.value.toLocaleTimeString('de-DE', { hour: '2-digit', minute: '2-digit' })}</time>
         <button
           class="quiet"
@@ -225,10 +218,10 @@ function SituationBand() {
   );
 }
 
-/** Kräfteliste am rechten Rand: wer ist verbunden, wer hält die A, wie alt ist die Position. Ein Klick zeigt die Kraft auf der Karte. */
+/** Kräfteliste am rechten Rand: wer ist verbunden, wie unterwegs, wer hält die A. Ein Klick zeigt die Kraft auf der Karte. */
 function Roster() {
-  const members = Object.values(tables.member.value).sort((a, b) => a.data.funkrufname.localeCompare(b.data.funkrufname, 'de', { numeric: true }));
-  const a = operation.value.modus === 'observation' ? operation.value.a?.memberId : undefined;
+  const members = Object.values(tables.member.value).sort((a, b) => Number(b.data.aktiv) - Number(a.data.aktiv) || a.data.spitzname.localeCompare(b.data.spitzname, 'de', { numeric: true }));
+  const a = operation.value.a?.memberId;
   return (
     <aside class="roster" aria-label="Kräfte">
       <h2>Kräfte</h2>
@@ -236,14 +229,14 @@ function Roster() {
       <ul>
         {members.map((m) => {
           const position = positions.value[m.id];
-          const isOnline = online.value.has(m.id);
+          const isOnline = online.value.has(m.id) && m.data.aktiv;
           return (
-            <li key={m.id}>
+            <li key={m.id} class={m.data.aktiv ? '' : 'ruhend'}>
               <button disabled={!position} onClick={() => position && (focusRequest.value = { ...position, at: Date.now() })} title={position ? 'Auf der Karte zeigen' : 'Keine Position bekannt'}>
                 <span class={`presence ${isOnline ? 'on' : ''}`} aria-label={isOnline ? 'verbunden' : 'nicht verbunden'} />
                 <span class="who">
-                  <b>{m.data.funkrufname}</b>
-                  <small>{position ? ago(position.ts) : 'keine Position'}</small>
+                  <b>{m.data.spitzname}</b>
+                  <small>{m.data.aktiv ? `${m.data.fortbewegung === 'fuss' ? FORTBEWEGUNG_TITEL.fuss : memberLabel(m.data)}, ${position ? ago(position.ts) : 'keine Position'}` : 'Ruhemodus'}</small>
                 </span>
                 {a === m.id && <span class="badge-a">A</span>}
               </button>

@@ -44,7 +44,7 @@ export function SystemPanel() {
           {devices.map((d) => (
             <li key={d.id}>
               <div class="grow">
-                <b>{tables.member.value[d.id]?.data.funkrufname ?? 'Ohne Profil'}</b>
+                <b>{tables.member.value[d.id]?.data.spitzname ?? 'Ohne Profil'}</b>
                 <small>
                   {d.name}, zuletzt {ago(d.lastSeen)}
                 </small>
@@ -79,6 +79,9 @@ export function SystemPanel() {
         <p>Karte: {status.karte === 'apple' ? 'Apple Maps' : 'OpenStreetMap (kein Apple-Maps-Schlüssel hinterlegt)'}</p>
         <p>Weg-Zeit-Berechnung: {status.routing ? 'Wegenetz (Valhalla) für Fuß und Kfz, ÖPNV als Näherung' : 'Näherungsmodell'}</p>
         <p>Tracker-Empfang: {status.tracker.h02Port ? `TCP-Port ${status.tracker.h02Port}` : 'abgeschaltet'}</p>
+        <p>
+          ÖPNV-Linien: {status.oepnv.linien > 0 ? `${status.oepnv.linien} Fahrtrichtungen, Stand ${status.oepnv.stand ? new Date(status.oepnv.stand).toLocaleDateString('de-DE') : '–'}` : status.oepnv.fehler ? `nicht geladen (${status.oepnv.fehler})` : 'werden geladen'}
+        </p>
         <p>Argus Predict: {status.argus.verfuegbar ? `${status.argus.projekte.length} Projekte` : 'nicht eingebunden'}</p>
       </Section>
 

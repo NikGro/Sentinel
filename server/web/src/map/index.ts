@@ -1,25 +1,29 @@
 import { effect, signal } from '@preact/signals';
 import {
   api,
-  command,
   coverage,
   focusRequest,
   hiddenLayers,
   newId,
   notice,
   online,
+  isLocked,
+  memberLabel,
   operation,
   positions,
+  put,
   reach,
   reachModes,
   saveObject,
   selectedObject,
+  showCoverage,
   tables,
   targetLayer,
   tool,
-  trackerPositions,
+  trackerPoint,
+  vehicleOf,
 } from '../store';
-import type { GeoPoint, MapObject } from '../types';
+import { ZIEL_TITEL, type GeoPoint, type MapObject } from '../types';
 import { createAppleBackend } from './apple';
 import type { ColorScheme, MapBackend, Pin, Shape } from './backend';
 import { createMapLibreBackend } from './maplibre';
@@ -105,7 +109,9 @@ export function createMap(container: HTMLElement, provider: 'apple' | 'osm'): ()
 }
 
 function bind(map: MapBackend, disposers: (() => void)[]): void {
-  const visibleObjects = () => Object.values(tables.annotation.value).filter((o) => !hiddenLayers.value.has(o.data.layerId) && tables.layer.value[o.data.layerId]);
+  // Entwürfe zeigt nur die Liste der Ebenen; auf der Karte erscheinen geladene Ebenen.
+  const visibleObjects = () =>
+    Object.values(tables.annotation.value).filter((o) => !hiddenLayers.value.has(o.data.layerId) && tables.layer.value[o.data.layerId]?.data.status === 'live');
 
   // Markierungen: Flächen, Kreise, Linien und ihre antippbaren Griffe
   disposers.push(
@@ -130,12 +136,15 @@ function bind(map: MapBackend, disposers: (() => void)[]): void {
           .map((o): Pin => {
             const draft = tables.layer.value[o.data.layerId]?.data.status === 'entwurf';
             const selected = selectedObject.value === o.id;
-            const dot = o.data.typ === 'marker' ? `<span class="dot" style="background:${o.data.farbe}"></span>` : o.data.titel ? '' : `<span class="dot klein" style="background:${o.data.farbe}"></span>`;
-            const label = o.data.titel ? `<span class="label" style="border-color:${o.data.farbe}">${escapeHtml(o.data.titel)}</span>` : '';
+            const isRoom = o.data.typ === 'fahndungsraum';
+            const dot = o.data.typ === 'marker' || isRoom ? `<span class="dot${isRoom ? ' raum' : ''}" style="background:${o.data.farbe}"></span>` : o.data.titel ? '' : `<span class="dot klein" style="background:${o.data.farbe}"></span>`;
+            const since = isRoom && o.data.zeit ? `seit ${new Date(o.data.zeit).toLocaleTimeString('de-DE', { hour: '2-digit', minute: '2-digit' })}` : '';
+            const title = [o.data.titel || (isRoom ? 'Fahndungsraum' : ''), since].filter(Boolean).join(', ');
+            const label = title ? `<span class="label" style="border-color:${o.data.farbe}">${escapeHtml(title)}</span>` : '';
             return {
               id: o.id,
-              point: anchorOf(o.data),
-              signature: `${o.rev}:${draft}:${selected}`,
+              point: trackerPoint(o.data.trackerId) ?? anchorOf(o.data),
+              signature: `${o.rev}:${draft}:${selected}:${trackerPoint(o.data.trackerId)?.ts ?? 0}`,
               build: () => pinElement(`pin pin-object ${o.data.typ} ${draft ? 'entwurf' : ''} ${selected ? 'gewaehlt' : ''}`, dot + label, () => (selectedObject.value = o.id)),
             };
           }),
@@ -143,62 +152,83 @@ function bind(map: MapBackend, disposers: (() => void)[]): void {
     }),
   );
 
-  // Kräfte
+  // Kräfte: zu Fuß einzeln mit Spitznamen, im Fahrzeug gemeinsam unter dem Funkrufnamen des Fahrzeugs.
   disposers.push(
     effect(() => {
-      const a = operation.value.modus === 'observation' ? operation.value.a?.memberId : undefined;
-      map.setPins(
-        'members',
-        Object.values(tables.member.value)
-          .filter((m) => positions.value[m.id])
-          .map((m): Pin => {
-            const isOnline = online.value.has(m.id);
-            const isA = a === m.id;
-            return {
-              id: m.id,
-              point: positions.value[m.id]!,
-              signature: `${m.rev}:${isOnline}:${isA}`,
-              build: () =>
-                pinElement(`pin pin-member ${isOnline ? 'online' : 'offline'} ${isA ? 'a' : ''}`, `<span class="dot">${isA ? 'A' : ''}</span><span class="label">${escapeHtml(m.data.funkrufname)}</span>`, () => {
-                  focusRequest.value = { ...positions.value[m.id]!, at: Date.now() };
-                }),
-            };
-          }),
-      );
+      const a = operation.value.a?.memberId;
+      const pins: Pin[] = [];
+      const crews = new Map<string, { names: string[]; point: GeoPoint; online: boolean; isA: boolean; ts: number }>();
+      for (const m of Object.values(tables.member.value)) {
+        const position = positions.value[m.id];
+        if (!position || !m.data.aktiv) continue;
+        const isOnline = online.value.has(m.id);
+        const isA = a === m.id;
+        const vehicle = vehicleOf(m.data);
+        if (vehicle) {
+          const crew = crews.get(vehicle.id);
+          if (!crew || position.ts > crew.ts) crews.set(vehicle.id, { names: [...(crew?.names ?? []), m.data.spitzname], point: position, online: isOnline || !!crew?.online, isA: isA || !!crew?.isA, ts: position.ts });
+          else crew.names.push(m.data.spitzname), (crew.isA ||= isA), (crew.online ||= isOnline);
+          continue;
+        }
+        pins.push({
+          id: m.id,
+          point: position,
+          signature: `${m.rev}:${isOnline}:${isA}`,
+          build: () =>
+            pinElement(`pin pin-member ${isOnline ? 'online' : 'offline'} ${isA ? 'a' : ''} ${m.data.fortbewegung}`, `<span class="dot">${isA ? 'A' : ''}</span><span class="label">${escapeHtml(memberLabel(m.data))}</span>`, () => {
+              focusRequest.value = { ...positions.value[m.id]!, at: Date.now() };
+            }),
+        });
+      }
+      for (const [vehicleId, crew] of crews) {
+        const vehicle = tables.vehicle.value[vehicleId]!;
+        const tracked = trackerPoint(vehicle.data.trackerId);
+        const point = tracked && tracked.ts >= crew.ts - 120_000 ? tracked : crew.point;
+        const label = `${vehicle.data.funkrufname} (${crew.names.join(', ')})`;
+        pins.push({
+          id: `fz-${vehicleId}`,
+          point,
+          signature: `${vehicle.rev}:${label}:${crew.online}:${crew.isA}`,
+          build: () => pinElement(`pin pin-vehicle besetzt ${crew.isA ? 'a' : ''}`, `<span class="dot">${crew.isA ? 'A' : ''}</span><span class="label">${escapeHtml(label)}</span>`),
+        });
+      }
+      map.setPins('members', pins);
     }),
   );
 
-  // Fahrzeuge (abgestellt oder mit Tracker), Zielpersonen mit Tracker, letzter bekannter Standort
+  // Unbesetzte Fahrzeuge (abgestellt oder mit Tracker) und Ziele mit Standort oder Tracker
   disposers.push(
     effect(() => {
-      const occupied = new Set(Object.values(tables.member.value).map((m) => m.data.fahrzeugId));
+      const occupied = new Set(Object.values(tables.member.value).filter((m) => m.data.aktiv && vehicleOf(m.data)).map((m) => m.data.fahrzeugId));
       map.setPins(
         'vehicles',
         Object.values(tables.vehicle.value).flatMap((v): Pin[] => {
-          const tracked = v.data.trackerId ? trackerPositions.value[v.data.trackerId] : undefined;
-          const point = tracked ?? (occupied.has(v.id) ? undefined : (v.data.abgestellt ?? undefined));
+          if (!v.data.aktiv || occupied.has(v.id)) return [];
+          const point = trackerPoint(v.data.trackerId) ?? v.data.abgestellt ?? undefined;
           if (!point) return [];
-          const title = v.data.kennzeichen || v.data.bezeichnung;
-          return [{ id: v.id, point, signature: `${v.rev}`, build: () => pinElement('pin pin-vehicle', `<span class="dot"></span><span class="label">${escapeHtml(title)}</span>`) }];
+          return [{ id: v.id, point, signature: `${v.rev}`, build: () => pinElement('pin pin-vehicle', `<span class="dot"></span><span class="label">${escapeHtml(v.data.funkrufname)}</span>`) }];
         }),
       );
       map.setPins(
         'targets',
         Object.values(tables.target.value).flatMap((t): Pin[] => {
-          const point = t.data.trackerId ? trackerPositions.value[t.data.trackerId] : undefined;
+          const point = trackerPoint(t.data.trackerId) ?? t.data.standort ?? undefined;
           if (!point) return [];
-          const name = [t.data.vorname, t.data.nachname].filter(Boolean).join(' ') || 'Zielperson';
-          return [{ id: t.id, point, signature: `${t.rev}`, build: () => pinElement('pin pin-target', `<span class="dot"></span><span class="label">${escapeHtml(name)}</span>`) }];
+          const name =
+            t.data.art === 'person'
+              ? [t.data.vorname, t.data.nachname].filter(Boolean).join(' ')
+              : t.data.art === 'fahrzeug'
+                ? t.data.kennzeichen || t.data.bezeichnung
+                : t.data.bezeichnung || t.data.anschrift;
+          return [
+            {
+              id: t.id,
+              point,
+              signature: `${t.rev}`,
+              build: () => pinElement(`pin pin-target ziel-${t.data.art}`, `<span class="dot"></span><span class="label">${escapeHtml(name || ZIEL_TITEL[t.data.art])}</span>`),
+            },
+          ];
         }),
-      );
-    }),
-    effect(() => {
-      const op = operation.value;
-      const lkp = op.modus === 'oberflaeche' ? null : op.lkp;
-      const time = lkp ? new Date(lkp.ts).toLocaleTimeString('de-DE', { hour: '2-digit', minute: '2-digit' }) : '';
-      map.setPins(
-        'lkp',
-        lkp ? [{ id: 'lkp', point: lkp, signature: `${lkp.ts}:${op.modus}`, build: () => pinElement(`pin pin-lkp ${op.modus === 'fahndung' ? '' : 'blass'}`, `<span class="dot">?</span><span class="label">Zuletzt ${time}</span>`) }] : [],
       );
     }),
   );
@@ -210,7 +240,7 @@ function bind(map: MapBackend, disposers: (() => void)[]): void {
       const add = (points: GeoPoint[]) => {
         if (points.length > 1) shapes.push({ kind: 'line', points, color: COVERAGE_COLOR, lineWidth: 12, lineOpacity: 0.3 });
       };
-      for (const track of coverage.value) {
+      for (const track of showCoverage.value ? coverage.value : []) {
         let segment: GeoPoint[] = [];
         let previousTs: number | undefined;
         for (const [lat, lon, ts] of track.punkte) {
@@ -228,7 +258,8 @@ function bind(map: MapBackend, disposers: (() => void)[]): void {
     effect(() => {
       map.setShapes(
         'reach',
-        reach.value
+        Object.values(reach.value)
+          .flat()
           .filter((area) => reachModes.value[area.modus])
           .flatMap((area) => area.ringe.map((ring): Shape => ({ kind: 'polygon', points: ring.map(([lat, lon]) => ({ lat, lon })), color: REACH_COLOR[area.modus], fillOpacity: 0.1, lineWidth: 2 }))),
       );
@@ -265,13 +296,15 @@ function bind(map: MapBackend, disposers: (() => void)[]): void {
       case 'auswahl':
         selectedObject.value = null;
         break;
-      case 'lkp':
-        command('lkp.setzen', { ...point, targetId: operation.value.lkp?.targetId ?? null });
+      case 'zielstandort': {
+        const target = tables.target.value[current.targetId];
+        if (target) put('target', target.id, { ...target.data, standort: { ...point, ts: Date.now() } });
         tool.value = { kind: 'auswahl' };
         break;
+      }
       case 'verschieben': {
         const object = tables.annotation.value[current.id]?.data;
-        if (object) {
+        if (object && !isLocked(object.layerId)) {
           const anchor = anchorOf(object);
           saveObject(current.id, { ...object, punkte: object.punkte.map((p) => ({ lat: p.lat + point.lat - anchor.lat, lon: p.lon + point.lon - anchor.lon })) });
         }
@@ -297,8 +330,9 @@ export function finishDrawing(shape: MapObject['typ'], punkte: GeoPoint[]): void
   const minimum = shape === 'linie' ? 2 : shape === 'flaeche' ? 3 : 1;
   if (punkte.length < minimum) return;
   const id = newId();
+  const layer = tables.layer.value[targetLayer.value] && !isLocked(targetLayer.value) ? targetLayer.value : 'lage';
   saveObject(id, {
-    layerId: tables.layer.value[targetLayer.value] ? targetLayer.value : 'lage',
+    layerId: layer,
     typ: shape,
     titel: shape === 'text' ? 'Text' : '',
     notiz: '',
@@ -307,6 +341,9 @@ export function finishDrawing(shape: MapObject['typ'], punkte: GeoPoint[]): void
     punkte,
     radius: shape === 'kreis' ? 150 : null,
     wert: null,
+    zeit: shape === 'fahndungsraum' ? Date.now() : null,
+    trackerId: null,
+    ...(shape === 'fahndungsraum' ? { farbe: '#C97C7C' } : {}),
   });
   tool.value = { kind: 'auswahl' };
   selectedObject.value = id;
