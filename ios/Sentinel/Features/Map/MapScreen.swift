@@ -480,7 +480,7 @@ struct MapScreen: View {
 
     private var stopCircles: [(point: GeoPoint, radius: Double)] {
         objects(.haltestellen).compactMap { object in
-            object.data.punkte.first.map { ($0, object.data.radius ?? 500) }
+            object.data.punkte.first.map { (point: $0, radius: object.data.radius ?? 500) }
         }
     }
 
