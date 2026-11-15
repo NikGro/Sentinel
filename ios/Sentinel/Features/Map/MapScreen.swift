@@ -267,7 +267,8 @@ struct MapScreen: View {
             }
         }
         .padding(.trailing, Theme.barInset)
-        .padding(.top, route.isActive ? 160 : 4 + Theme.barHeight + Theme.barSpacing)
+        // Unter Suchleiste und Kompass, damit Hinweisbanner und Kompass frei bleiben.
+        .padding(.top, route.isActive ? 160 : 4 + Theme.barHeight + Theme.barSpacing + 48)
     }
 
     // MARK: Untere Leiste
