@@ -28,7 +28,6 @@ services:
     cap_drop: [ALL]
     security_opt: ["no-new-privileges:true"]
     mem_limit: 512m
-    pids_limit: 256
 
 networks:
   sentinel:

@@ -55,7 +55,7 @@ export interface Guards {
 export async function buildApp(services: Services): Promise<FastifyInstance> {
   const { config, auth, hub } = services;
   const app = Fastify({
-    logger: config.production ? { level: 'info', redact: ['req.headers.authorization', 'req.headers.cookie'] } : false,
+    logger: config.production ? { level: 'warn', redact: ['req.headers.authorization', 'req.headers.cookie'] } : false,
     trustProxy: true,
     bodyLimit: 256 * 1024,
   });
