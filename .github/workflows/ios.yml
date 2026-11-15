@@ -4,6 +4,8 @@ on:
   push:
     branches: [main, "claude/**"]
     paths: ["ios/**", ".github/workflows/ios.yml"]
+    # Ein Versions-Tag (z. B. v0.1.0) erzeugt zusätzlich ein GitHub-Release mit der IPA.
+    tags: ["v*"]
   pull_request:
     paths: ["ios/**", ".github/workflows/ios.yml"]
   workflow_dispatch:
@@ -95,10 +97,19 @@ jobs:
           if-no-files-found: error
           retention-days: 30
 
+      # Für das Release-Job unter festem Namen, damit es die IPA ohne Kenntnis der Versionsnummer findet.
+      - uses: actions/upload-artifact@v5
+        if: startsWith(github.ref, 'refs/tags/v')
+        with:
+          name: release-ipa
+          path: ios/build/Sentinel.ipa
+          if-no-files-found: error
+          retention-days: 1
+
       # Veröffentlicht die IPA in der SideStore-Quelle des eigenen Servers.
-      # Läuft nur auf main bzw. bei manuellem Start und nur, wenn das Deploy-Token hinterlegt ist.
+      # Läuft auf main, bei einem Versions-Tag oder manuellem Start, und nur, wenn das Deploy-Token hinterlegt ist.
       - name: In SideStore-Quelle veröffentlichen
-        if: (github.ref == 'refs/heads/main' || github.event_name == 'workflow_dispatch') && env.SENTINEL_DEPLOY_TOKEN != ''
+        if: (github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/tags/v') || github.event_name == 'workflow_dispatch') && env.SENTINEL_DEPLOY_TOKEN != ''
         env:
           SENTINEL_DEPLOY_TOKEN: ${{ secrets.SENTINEL_DEPLOY_TOKEN }}
           SENTINEL_URL: ${{ vars.SENTINEL_URL || 'https://sentinel.ng-lab.de' }}
@@ -109,3 +120,28 @@ jobs:
             -H "Authorization: Bearer $SENTINEL_DEPLOY_TOKEN" \
             -H "Content-Type: application/octet-stream" \
             --data-binary @build/Sentinel.ipa
+
+  # Eigener Job mit Schreibrecht nur für das Release; der Build-Job selbst darf das Repository nur lesen.
+  release:
+    name: GitHub-Release
+    if: startsWith(github.ref, 'refs/tags/v')
+    needs: build
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@v5
+        with:
+          name: release-ipa
+      - name: Release anlegen
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ github.ref_name }}
+          BUILD: ${{ github.run_number }}
+        run: |
+          mv Sentinel.ipa "Sentinel-${TAG#v}-${BUILD}.ipa"
+          gh release create "$TAG" "Sentinel-${TAG#v}-${BUILD}.ipa" \
+            --repo "$GITHUB_REPOSITORY" \
+            --title "SENTINEL ${TAG#v}" \
+            --notes "Unsignierte IPA (Build ${BUILD}) für SideStore. Installation und Aktualisierung über die SideStore-Quelle des eigenen Servers; siehe docs/BETRIEB.md."
