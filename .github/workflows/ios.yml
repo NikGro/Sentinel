@@ -32,6 +32,8 @@ jobs:
         working-directory: ios
     env:
       BUILD_NUMBER: ${{ github.run_number }}
+    outputs:
+      version: ${{ steps.ipa.outputs.version }}
     steps:
       - uses: actions/checkout@v5
         with:
@@ -104,7 +106,7 @@ jobs:
 
       # Für das Release-Job unter festem Namen, damit es die IPA ohne Kenntnis der Versionsnummer findet.
       - uses: actions/upload-artifact@v5
-        if: startsWith(github.ref, 'refs/tags/v') || inputs.release_tag != ''
+        if: startsWith(github.ref, 'refs/tags/v') || inputs.release_tag != '' || github.ref == 'refs/heads/main'
         with:
           name: release-ipa
           path: ios/build/Sentinel.ipa
@@ -127,29 +129,49 @@ jobs:
             --data-binary @build/Sentinel.ipa
 
   # Eigener Job mit Schreibrecht nur für das Release; der Build-Job selbst darf das Repository nur lesen.
+  # Ein Release entsteht auf drei Wegen:
+  #   1. automatisch auf main, sobald die Versionsnummer in ios/project.yml noch kein Release hat,
+  #   2. durch ein gepushtes Versions-Tag (v0.1.0),
+  #   3. durch manuellen Start mit Angabe eines Tags.
   release:
     name: GitHub-Release
-    # Ausgelöst durch ein gepushtes Versions-Tag oder durch manuellen Start mit Angabe eines Tags.
-    if: startsWith(github.ref, 'refs/tags/v') || inputs.release_tag != ''
+    if: startsWith(github.ref, 'refs/tags/v') || inputs.release_tag != '' || github.ref == 'refs/heads/main'
     needs: build
     runs-on: ubuntu-latest
     timeout-minutes: 10
     permissions:
       contents: write
     steps:
+      - name: Tag bestimmen
+        id: tag
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GIVEN: ${{ inputs.release_tag || (startsWith(github.ref, 'refs/tags/v') && github.ref_name) || '' }}
+          VERSION: ${{ needs.build.outputs.version }}
+        run: |
+          TAG="${GIVEN:-v$VERSION}"
+          case "$TAG" in v[0-9]*.[0-9]*) ;; *) echo "Ungültiges Tag: $TAG"; exit 1 ;; esac
+          if gh release view "$TAG" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
+            echo "Release $TAG besteht bereits, nichts zu tun."
+            echo "create=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "create=true" >> "$GITHUB_OUTPUT"
+          fi
+          echo "tag=$TAG" >> "$GITHUB_OUTPUT"
       - uses: actions/download-artifact@v5
+        if: steps.tag.outputs.create == 'true'
         with:
           name: release-ipa
       - name: Release anlegen
+        if: steps.tag.outputs.create == 'true'
         env:
           GH_TOKEN: ${{ github.token }}
-          TAG: ${{ inputs.release_tag || github.ref_name }}
+          TAG: ${{ steps.tag.outputs.tag }}
           BUILD: ${{ github.run_number }}
         run: |
-          case "$TAG" in v[0-9]*.[0-9]*) ;; *) echo "Ungültiges Tag: $TAG"; exit 1 ;; esac
           mv Sentinel.ipa "Sentinel-${TAG#v}-${BUILD}.ipa"
           gh release create "$TAG" "Sentinel-${TAG#v}-${BUILD}.ipa" \
             --repo "$GITHUB_REPOSITORY" \
             --target "$GITHUB_SHA" \
             --title "SENTINEL ${TAG#v}" \
-            --notes "Unsignierte IPA (Build ${BUILD}) für SideStore. Installation und Aktualisierung über die SideStore-Quelle des eigenen Servers; siehe docs/BETRIEB.md."
+            --notes "Unsignierte IPA (Build ${BUILD}) für SideStore. Änderungen siehe CHANGELOG.md. Installation und Aktualisierung über die SideStore-Quelle des eigenen Servers; siehe docs/BETRIEB.md."

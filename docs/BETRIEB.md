@@ -47,7 +47,7 @@ Für SinoTrack muss TCP-Port 5013 vom Router auf den Server weitergeleitet sein.
 
 Der Server stellt unter `/sidestore/source.json` eine SideStore-Quelle bereit. Neue Versionen lädt die Pipeline
 (`.github/workflows/ios.yml`) hoch, wenn im Repository das Secret `SENTINEL_DEPLOY_TOKEN` gesetzt ist (derselbe
-Wert wie in `deploy/.env`) und auf `main` gebaut oder der Lauf von Hand gestartet wird. Die Serveradresse lässt
+Wert wie in `deploy/.env`). Ein Release entsteht automatisch, sobald auf `main` eine Versionsnummer landet, für die es noch keins gibt (`MARKETING_VERSION` in `ios/project.yml`); alternativ per Versions-Tag oder manuellem Start mit Tag-Angabe. Die Serveradresse lässt
 sich über die Repository-Variable `SENTINEL_URL` ändern.
 
 Von Hand:
