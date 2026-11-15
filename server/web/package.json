@@ -9,9 +9,9 @@
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
-    "@preact/signals": "^2.0.1",
-    "maplibre-gl": "^5.1.0",
-    "preact": "^10.26.2"
+    "@preact/signals": "^2.11.4",
+    "maplibre-gl": "^6.18.0",
+    "preact": "^11.2.0"
   },
   "devDependencies": {
     "@preact/preset-vite": "^2.10.1",
