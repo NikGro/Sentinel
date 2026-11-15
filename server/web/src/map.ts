@@ -1,5 +1,5 @@
 import { effect } from '@preact/signals';
-import { Map as MlMap, Marker, NavigationControl, ScaleControl, type GeoJSONSource, type MapMouseEvent } from 'maplibre-gl';
+import { Map as MlMap, Marker, NavigationControl, ScaleControl, setWorkerUrl, type GeoJSONSource, type MapMouseEvent } from 'maplibre-gl';
 import {
   coverage,
   focusRequest,
@@ -21,6 +21,9 @@ import {
 import type { GeoPoint, MapObject } from './types';
 
 /** Lagekarte der Kommandozentrale: zeichnet den Zustand aus dem Store und setzt Kartenklicks in Werkzeugaktionen um. */
+
+// Der Worker der Kartenbibliothek wird als eigene Datei von der eigenen Adresse geladen (siehe Skript "worker" in package.json).
+setWorkerUrl('/maplibre/maplibre-gl-worker.mjs');
 
 type FeatureCollection = GeoJSON.FeatureCollection;
 const empty: FeatureCollection = { type: 'FeatureCollection', features: [] };

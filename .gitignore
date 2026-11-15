@@ -24,3 +24,6 @@ xcuserdata/
 
 # Wird von XcodeGen aus ios/project.yml erzeugt
 ios/Sentinel/Resources/Info.plist
+
+# Wird beim Bauen aus node_modules kopiert
+server/web/public/maplibre/
