@@ -45,7 +45,22 @@ jobs:
             -project Sentinel.xcodeproj -scheme Sentinel \
             -destination "platform=iOS Simulator,name=$DEVICE" \
             -derivedDataPath build/DerivedData \
+            -resultBundlePath build/Tests.xcresult \
             CODE_SIGNING_ALLOWED=NO 2>&1 | tee build-test.log | xcbeautify --quiet
+
+      - name: Bildschirmfotos des Rundgangs
+        if: always()
+        run: |
+          xcrun xcresulttool export attachments --path build/Tests.xcresult --output-path build/Bildschirmfotos || true
+          ls build/Bildschirmfotos 2>/dev/null | head -40 || true
+
+      - uses: actions/upload-artifact@v5
+        if: always()
+        with:
+          name: Bildschirmfotos-${{ github.run_number }}
+          path: ios/build/Bildschirmfotos
+          if-no-files-found: ignore
+          retention-days: 14
 
       - name: Fehlerübersicht
         if: failure()

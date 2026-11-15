@@ -225,6 +225,14 @@ final class LageStore {
         }
     }
 
+    #if DEBUG
+    /// Lädt eine Beispiel-Lage ohne Serververbindung (Oberflächentests).
+    func loadDemo(_ snapshot: Data) {
+        receive(snapshot)
+        connection = .verbunden
+    }
+    #endif
+
     // MARK: Empfang
 
     private func receive(_ data: Data) {

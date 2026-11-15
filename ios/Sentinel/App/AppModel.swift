@@ -39,6 +39,13 @@ final class AppModel {
             guard let self, self.lage.operation.modus == .fahndung else { return }
             self.fahndung.appendLive(memberId: memberId, position: position)
         }
+        #if DEBUG
+        if DemoData.isRequested {
+            credentials = DemoData.credentials
+            lage.loadDemo(DemoData.snapshot(modus: DemoData.requestedMode))
+            return
+        }
+        #endif
         if credentials != nil { activate() }
     }
 

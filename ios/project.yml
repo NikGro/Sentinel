@@ -75,17 +75,33 @@ targets:
         GENERATE_INFOPLIST_FILE: YES
         CODE_SIGNING_ALLOWED: NO
 
+  SentinelUITests:
+    type: bundle.ui-testing
+    platform: iOS
+    sources:
+      - path: SentinelUITests
+    dependencies:
+      - target: Sentinel
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: de.nglab.sentinel.uitests
+        GENERATE_INFOPLIST_FILE: YES
+        CODE_SIGNING_ALLOWED: NO
+        TEST_TARGET_NAME: Sentinel
+
 schemes:
   Sentinel:
     build:
       targets:
         Sentinel: all
         SentinelTests: [test]
+        SentinelUITests: [test]
     run:
       config: Debug
     test:
       config: Debug
       targets:
         - SentinelTests
+        - SentinelUITests
     archive:
       config: Release
