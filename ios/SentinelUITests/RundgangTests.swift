@@ -22,6 +22,11 @@ final class RundgangTests: XCTestCase {
         return app
     }
 
+    /// Löst eine wartende Systemabfrage aus, ohne die App zu bedienen: Tipp in die Statusleiste, nicht auf die Karte.
+    private func settle(_ app: XCUIApplication) {
+        app.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.01)).tap()
+    }
+
     private func capture(_ name: String) {
         let attachment = XCTAttachment(screenshot: XCUIScreen.main.screenshot())
         attachment.name = name
@@ -32,7 +37,7 @@ final class RundgangTests: XCTestCase {
     func testObservationUndAlleBereiche() {
         let app = launch(modus: "observation")
         XCTAssertTrue(app.tabBars.buttons["Lage"].waitForExistence(timeout: 20), "Hauptansicht erscheint")
-        app.tap()
+        settle(app)
         sleep(3)
         XCTAssertTrue(app.buttons["A übernehmen"].exists, "A-Position lässt sich übernehmen")
         capture("01-observation")
@@ -65,7 +70,7 @@ final class RundgangTests: XCTestCase {
     func testFahndung() {
         let app = launch(modus: "fahndung")
         XCTAssertTrue(app.tabBars.buttons["Lage"].waitForExistence(timeout: 20))
-        app.tap()
+        settle(app)
         sleep(3)
         XCTAssertTrue(app.staticTexts.matching(NSPredicate(format: "label BEGINSWITH 'Letzter Standort'")).firstMatch.exists, "Letzter Standort wird angezeigt")
         XCTAssertFalse(app.buttons["A übernehmen"].exists, "Im Fahndungsmodus gibt es keine A-Position")
@@ -75,7 +80,7 @@ final class RundgangTests: XCTestCase {
     func testOberflaeche() {
         let app = launch(modus: "oberflaeche")
         XCTAssertTrue(app.tabBars.buttons["Lage"].waitForExistence(timeout: 20))
-        app.tap()
+        settle(app)
         sleep(3)
         XCTAssertFalse(app.buttons["A übernehmen"].exists)
         capture("09-oberflaeche")
