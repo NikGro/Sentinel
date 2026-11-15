@@ -93,8 +93,14 @@ struct MemberQuickLook: View {
                     LabeledContent("Position", value: "unbekannt")
                 }
                 if lage.operation.a?.memberId == member.id {
-                    Label("Hält die A-Position", systemImage: "a.circle.fill")
+                    Label { Text("Hält die A-Position") } icon: { ASymbol(size: 22) }
                         .foregroundStyle(Theme.aPosition)
+                    if member.id == lage.selfId {
+                        Button("A abgeben", role: .destructive) {
+                            lage.releaseA()
+                            dismiss()
+                        }
+                    }
                 }
                 if !member.data.telefon.isEmpty {
                     LabeledContent("Handynummer", value: member.data.telefon)

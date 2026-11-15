@@ -187,17 +187,17 @@ struct ChatRoomView: View {
         HStack(alignment: .bottom, spacing: Theme.barSpacing) {
             if audio.isRecording {
                 ComposerRoundButton(title: "Verwerfen", symbol: "trash", tint: .red) { _ = audio.stop(cancel: true) }
-                HStack {
+                HStack(spacing: 10) {
                     Circle().fill(.red).frame(width: 10, height: 10)
-                    Text("Aufnahme \(Format.clock(audio.elapsed))")
-                        .monospacedDigit()
-                    Spacer()
+                    Text(Format.clock(audio.elapsed))
+                        .font(.subheadline.monospacedDigit())
+                    WaveformView(levels: Array(audio.levels.suffix(60)), progress: 1, tint: .red, alignTrailing: true)
                 }
                 .padding(.horizontal, 18)
                 .frame(height: Theme.barHeight)
                 .glassEffect(.regular, in: .capsule)
                 ComposerRoundButton(title: "Senden", symbol: "arrow.up", prominent: true) {
-                    if let recording = audio.stop() { Task { await sendVoice(recording.data, duration: recording.duration) } }
+                    if let recording = audio.stop() { Task { await sendVoice(recording.data, duration: recording.duration, waveform: recording.waveform) } }
                 }
             } else {
                 Menu {
@@ -245,7 +245,7 @@ struct ChatRoomView: View {
 
     // MARK: Anhänge senden
 
-    private func upload(_ data: Data, contentType: String, art: ChatAttachment.Art, name: String, duration: Double? = nil) async {
+    private func upload(_ data: Data, contentType: String, art: ChatAttachment.Art, name: String, duration: Double? = nil, waveform: [Double]? = nil) async {
         guard let client = model.client else { return }
         guard data.count <= 15 * 1024 * 1024 else {
             failure = "Die Datei ist größer als 15 MB."
@@ -255,7 +255,7 @@ struct ChatRoomView: View {
         defer { isUploading = false }
         do {
             let blob = try await client.upload(data, contentType: contentType)
-            let attachment = ChatAttachment(blobId: blob.id, art: art, name: String(name.prefix(120)), mime: blob.mime, groesse: blob.groesse, dauer: duration)
+            let attachment = ChatAttachment(blobId: blob.id, art: art, name: String(name.prefix(120)), mime: blob.mime, groesse: blob.groesse, dauer: duration, wellenform: waveform)
             lage.sendMessage(draft, in: roomId, attachment: attachment)
             draft = ""
         } catch {
@@ -269,8 +269,8 @@ struct ChatRoomView: View {
         await upload(jpeg, contentType: "image/jpeg", art: .bild, name: "Foto.jpg")
     }
 
-    private func sendVoice(_ data: Data, duration: TimeInterval) async {
-        await upload(data, contentType: "audio/mp4", art: .audio, name: "Sprachnachricht.m4a", duration: duration)
+    private func sendVoice(_ data: Data, duration: TimeInterval, waveform: [Double]) async {
+        await upload(data, contentType: "audio/mp4", art: .audio, name: "Sprachnachricht.m4a", duration: duration, waveform: waveform)
     }
 
     private func sendFile(_ url: URL) async {
@@ -351,19 +351,30 @@ private struct AttachmentView: View {
                 Task { await play() }
             } label: {
                 HStack(spacing: 10) {
-                    Image(systemName: audio.playingId == attachment.blobId ? "stop.circle.fill" : "play.circle.fill")
-                        .font(.title)
-                    VStack(alignment: .leading, spacing: 1) {
-                        Text("Sprachnachricht")
-                            .font(.subheadline.weight(.semibold))
+                    if isLoading {
+                        ProgressView().frame(width: 30)
+                    } else {
+                        Image(systemName: isPlaying ? "pause.fill" : "play.fill")
+                            .font(.title3)
+                            .frame(width: 30)
+                    }
+                    VStack(alignment: .leading, spacing: 3) {
+                        WaveformView(
+                            levels: attachment.wellenform ?? Array(repeating: 0.25, count: 48),
+                            progress: isPlaying ? audio.playbackProgress : 0,
+                            tint: .primary
+                        )
+                        .frame(width: 170)
                         if let duration = attachment.dauer {
-                            Text(Format.clock(duration))
-                                .font(.caption.monospacedDigit())
+                            Text(Format.clock(isPlaying ? duration * audio.playbackProgress : duration))
+                                .font(.caption2.monospacedDigit())
                                 .opacity(0.8)
                         }
                     }
-                    if isLoading { ProgressView() }
                 }
+                .accessibilityElement(children: .ignore)
+                .accessibilityLabel("Sprachnachricht\(attachment.dauer.map { ", \(Format.clock($0))" } ?? "")")
+                .accessibilityHint(isPlaying ? "Anhalten" : "Abspielen")
             }
             .buttonStyle(.plain)
         default:
@@ -388,6 +399,8 @@ private struct AttachmentView: View {
             .quickLookPreview($previewURL)
         }
     }
+
+    private var isPlaying: Bool { audio.playingId == attachment.blobId }
 
     private func play() async {
         guard let client = model.client else { return }
@@ -432,5 +445,33 @@ private struct ComposerRoundButton: View {
         .buttonStyle(.plain)
         .glassEffect(prominent ? .regular.tint(Theme.accent).interactive() : .regular.interactive(), in: .circle)
         .accessibilityLabel(title)
+    }
+}
+
+/// Wellenform einer Sprachnachricht: gespielter Anteil kräftig, Rest blass.
+struct WaveformView: View {
+    let levels: [Double]
+    var progress: Double = 0
+    var tint: Color = .primary
+    /// Bei der Live-Aufnahme laufen neue Balken rechts herein.
+    var alignTrailing = false
+
+    var body: some View {
+        Canvas { context, size in
+            let gap: CGFloat = 2
+            let count = max(levels.count, 1)
+            let barWidth = max(2, min(3, (size.width - gap * CGFloat(count - 1)) / CGFloat(count)))
+            let used = CGFloat(levels.count) * (barWidth + gap) - gap
+            var x = alignTrailing ? max(0, size.width - used) : 0
+            for (index, level) in levels.enumerated() {
+                let height = max(3, size.height * level)
+                let rect = CGRect(x: x, y: (size.height - height) / 2, width: barWidth, height: height)
+                let played = Double(index) / Double(count) < progress
+                context.fill(Path(roundedRect: rect, cornerRadius: barWidth / 2), with: .color(tint.opacity(played ? 1 : 0.35)))
+                x += barWidth + gap
+            }
+        }
+        .frame(height: 24)
+        .accessibilityHidden(true)
     }
 }

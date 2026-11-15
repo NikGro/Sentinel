@@ -10,20 +10,6 @@ struct LayerSheet: View {
         @Bindable var settings = settings
         NavigationStack {
             List {
-                Section("Kartenstil") {
-                    Picker("Stil", selection: $settings.mapStyle) {
-                        ForEach(MapStyleChoice.allCases) { style in
-                            Label(style.title, systemImage: style.symbolName).tag(style)
-                        }
-                    }
-                    .pickerStyle(.segmented)
-                    Toggle("Verkehrslage", systemImage: "car.rear.road.lane", isOn: $settings.showsTraffic)
-                        .disabled(settings.mapStyle == .satellit)
-                    Text("3D: mit zwei Fingern nach oben wischen oder den Kippknopf unter dem Kompass verwenden.")
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-                }
-
                 Section {
                     Toggle("Bestreifte Wege", systemImage: "road.lanes", isOn: $settings.showsCoverage)
                     ForEach(ReachMode.allCases) { mode in
@@ -35,7 +21,7 @@ struct LayerSheet: View {
                 } header: {
                     Text("Anzeige")
                 } footer: {
-                    Text("Bestreifung wird immer für alle aufgezeichnet; angezeigt wird sie nur, wenn Sie sie hier einschalten.")
+                    Text("Bestreifung wird immer für alle aufgezeichnet; angezeigt wird sie nur, wenn Sie sie hier einschalten. Kartenstil und 3D: Knopf mit der Karte.")
                 }
 
                 Section {

@@ -53,7 +53,15 @@ final class RundgangTests: XCTestCase {
 
         // Zweistufige Übernahme: Der erste Druck schärft nur.
         app.buttons["A übernehmen"].tap()
-        XCTAssertTrue(app.buttons["Bestätigen: Ich habe A"].waitForExistence(timeout: 2), "Zweiter Druck wird verlangt")
+        XCTAssertTrue(app.buttons["A wirklich übernehmen?"].waitForExistence(timeout: 2), "Zweiter Druck wird verlangt")
+        capture("01b-a-bestaetigen")
+
+        // Kartenstil, 2D/3D und Verkehrslage in einem Knopf
+        app.buttons["Kartenstil und 3D"].tap()
+        XCTAssertTrue(app.buttons["3D-Ansicht"].waitForExistence(timeout: 3) || app.buttons["2D-Ansicht"].exists, "2D/3D im Kartenstil-Menü")
+        capture("01c-kartenstil")
+        app.buttons["Hybrid"].firstMatch.tap()
+        sleep(1)
 
         app.buttons["Hinzufügen"].tap()
         XCTAssertTrue(app.buttons["Fahndungsraum"].waitForExistence(timeout: 3), "Fahndungsraum im Plus-Menü")
@@ -61,13 +69,30 @@ final class RundgangTests: XCTestCase {
         app.buttons["Fahndungsraum"].tap()
         sleep(1)
         capture("03-fahndungsraum-setzen")
-        app.buttons["Abbrechen"].firstMatch.tap()
+        // Ort antippen öffnet den Editor mit Zeitwahl und Haltestellen-Option
+        app.coordinate(withNormalizedOffset: CGVector(dx: 0.4, dy: 0.5)).tap()
+        if app.navigationBars["Neu: Fahndungsraum"].waitForExistence(timeout: 3) {
+            capture("03b-fahndungsraum-editor")
+            app.buttons["Abbrechen"].firstMatch.tap()
+        } else {
+            app.buttons["Abbrechen"].firstMatch.tap()
+        }
 
-        app.buttons["Suchen oder navigieren"].tap()
+        app.buttons["Zu Objekten navigieren"].tap()
         XCTAssertTrue(app.staticTexts["Zur A-Position"].waitForExistence(timeout: 5), "A-Position steht oben in der Objektliste")
         XCTAssertTrue(app.staticTexts["Überschlagend: nächste Haltestellen"].exists, "Überschlagen wird angeboten, wenn die A im ÖPNV fährt")
         capture("04-suche-objekte")
-        app.buttons["Schließen"].firstMatch.tap()
+        // Navigation zur A starten und Navi-Ansicht fotografieren
+        app.staticTexts["Zur A-Position"].tap()
+        sleep(3)
+        capture("04b-navigation")
+        if app.buttons["Beenden"].waitForExistence(timeout: 3) { app.buttons["Beenden"].tap() }
+        sleep(1)
+
+        app.buttons["Ebenen"].tap()
+        XCTAssertTrue(app.navigationBars["Kartenebenen"].waitForExistence(timeout: 3))
+        capture("04c-ebenen")
+        app.buttons["Fertig"].firstMatch.tap()
 
         app.tabBars.buttons["Ziele"].tap()
         XCTAssertTrue(app.staticTexts["Max Mustermann"].waitForExistence(timeout: 5))
@@ -95,9 +120,10 @@ final class RundgangTests: XCTestCase {
         let app = launch()
         XCTAssertTrue(app.tabBars.buttons["Lage"].waitForExistence(timeout: 20))
         settle(app)
-        let chip = app.buttons.matching(NSPredicate(format: "label BEGINSWITH 'Fortbewegung'")).firstMatch
-        XCTAssertTrue(chip.waitForExistence(timeout: 5))
-        chip.tap()
+        let vehicle = app.buttons["Fahrzeug"].firstMatch
+        XCTAssertTrue(vehicle.waitForExistence(timeout: 5), "Fortbewegung als Dreier-Auswahl auf der Karte")
+        capture("09a-fortbewegung-karte")
+        vehicle.tap()
         XCTAssertTrue(app.navigationBars["Fortbewegung"].waitForExistence(timeout: 3))
         capture("09-fortbewegung")
     }

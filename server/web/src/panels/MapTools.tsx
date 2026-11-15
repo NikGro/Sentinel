@@ -171,7 +171,7 @@ function ObjectForm(props: { id: string; initial: MapObject; updatedBy: string; 
           </select>
         </Field>
       )}
-      {object.typ === 'kreis' && (
+      {(object.typ === 'kreis' || object.typ === 'haltestellen') && (
         <Field label="Radius in Metern">
           <input type="number" min={5} max={100000} value={object.radius ?? 150} onInput={(e) => change({ radius: Math.min(Math.max(Number(e.currentTarget.value) || 150, 5), 100000) })} />
         </Field>

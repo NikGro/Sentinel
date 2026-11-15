@@ -148,11 +148,12 @@ final class LageStore {
         activeMembers.filter { $0.data.fortbewegung == .fahrzeug && $0.data.fahrzeugId == vehicleId }
     }
 
-    /// Aktueller Standort eines Fahrzeugs: frischer Tracker vor Insassen vor Abstellort.
+    /// Aktueller Standort eines Fahrzeugs: Sitzt jemand drin, ist dessen Telefon die Quelle. Der Tracker zählt nur,
+    /// wenn niemand drinsitzt oder seine Meldung deutlich frischer ist; sonst gilt der Abstellort.
     func position(ofVehicle vehicle: Versioned<Vehicle>) -> (point: GeoPoint, date: Date, source: String)? {
         let occupantPosition = occupants(of: vehicle.id).compactMap { positions[$0.id] }.max { $0.ts < $1.ts }
         let trackerPosition = vehicle.data.trackerId.flatMap { trackerPositions[$0] }
-        if let trackerPosition, trackerPosition.ts >= (occupantPosition?.ts ?? 0) - 120_000 {
+        if let trackerPosition, let occupantPosition, trackerPosition.ts > occupantPosition.ts + 120_000 {
             return (trackerPosition.point, trackerPosition.date, "Tracker")
         }
         if let occupantPosition { return (occupantPosition.point, occupantPosition.date, "Besatzung") }

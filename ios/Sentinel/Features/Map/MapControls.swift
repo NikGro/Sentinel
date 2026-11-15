@@ -1,10 +1,10 @@
 import SwiftUI
 
-/// A-Position übernehmen, abgeben und zur A navigieren.
+/// A-Position übernehmen, abgeben und zur A navigieren. Ein Knopf, gleicher Wortlaut in allen Zuständen:
+/// „übernehmen“, nach dem ersten Druck „wirklich übernehmen?“, solange man sie hält „abgeben“.
 struct APositionControl: View {
     @Environment(AppModel.self) private var model
     @Environment(LageStore.self) private var lage
-    @Environment(RouteFollower.self) private var route
 
     /// Erster Druck schärft den Knopf, erst der zweite übernimmt die A-Position.
     @State private var isArmed = false
@@ -12,66 +12,63 @@ struct APositionControl: View {
 
     var body: some View {
         HStack(spacing: Theme.barSpacing) {
-            if lage.holdsA {
-                HStack(spacing: 10) {
-                    Label("Sie haben die A-Position", systemImage: "a.circle.fill")
+            if let holder = lage.aHolder, !lage.holdsA {
+                Button {
+                    model.navigate(to: .aPosition)
+                } label: {
+                    Label("Zur A", systemImage: "location.north.line.fill")
                         .font(.subheadline.weight(.semibold))
-                        .foregroundStyle(Theme.aPosition)
                         .lineLimit(1)
-                        .minimumScaleFactor(0.8)
-                    Spacer(minLength: 0)
-                }
-                .padding(.horizontal, 18)
-                .frame(height: Theme.barHeight)
-                .glassEffect(.regular, in: .capsule)
-                Button { lage.releaseA() } label: {
-                    Text("Abgeben")
-                        .font(.subheadline.weight(.semibold))
-                        .padding(.horizontal, 18)
-                        .frame(height: Theme.barHeight)
-                        .contentShape(.capsule)
-                }
-                .buttonStyle(.plain)
-                .glassEffect(.regular.interactive(), in: .capsule)
-            } else {
-                if let holder = lage.aHolder {
-                    Button {
-                        model.navigate(to: .aPosition)
-                    } label: {
-                        Label("Zur A", systemImage: "location.north.line.fill")
-                            .font(.subheadline.weight(.semibold))
-                            .lineLimit(1)
-                            .frame(maxWidth: .infinity)
-                            .frame(height: Theme.barHeight)
-                            .contentShape(.capsule)
-                    }
-                    .buttonStyle(.plain)
-                    .glassEffect(.regular.interactive(), in: .capsule)
-                    .accessibilityLabel("Zur A-Position von \(lage.label(of: holder.data)) führen")
-                }
-                Button(action: pressClaim) {
-                    Label(isArmed ? "Bestätigen: Ich habe A" : "A übernehmen", systemImage: isArmed ? "checkmark.circle.fill" : "a.circle")
-                        .font(.subheadline.weight(.semibold))
-                        .foregroundStyle(.white)
-                        .lineLimit(1)
-                        .minimumScaleFactor(0.75)
-                        .padding(.horizontal, 12)
                         .frame(maxWidth: .infinity)
                         .frame(height: Theme.barHeight)
                         .contentShape(.capsule)
                 }
                 .buttonStyle(.plain)
-                .glassEffect(.regular.tint(isArmed ? Theme.aPosition : Theme.accent).interactive(), in: .capsule)
-                .sensoryFeedback(.warning, trigger: isArmed) { _, armed in armed }
-                .accessibilityHint(isArmed ? "Erneut drücken, um die A-Position zu übernehmen" : "Zweimal drücken zum Übernehmen")
+                .glassEffect(.regular.interactive(), in: .capsule)
+                .accessibilityLabel("Zur A-Position von \(lage.label(of: holder.data)) führen")
             }
+            Button(action: press) {
+                HStack(spacing: 8) {
+                    ASymbol(size: 26, inverted: !lage.holdsA)
+                    Text(title)
+                        .font(.subheadline.weight(.semibold))
+                        .lineLimit(1)
+                        .minimumScaleFactor(0.8)
+                }
+                .foregroundStyle(lage.holdsA ? Theme.aPosition : .white)
+                .padding(.horizontal, 14)
+                .frame(maxWidth: .infinity)
+                .frame(height: Theme.barHeight)
+                .contentShape(.capsule)
+            }
+            .buttonStyle(.plain)
+            .glassEffect(glass, in: .capsule)
+            .sensoryFeedback(.warning, trigger: isArmed) { _, armed in armed }
+            .accessibilityLabel(lage.holdsA ? "A abgeben" : (isArmed ? "A wirklich übernehmen?" : "A übernehmen"))
+            .accessibilityHint(lage.holdsA || isArmed ? "" : "Zweimal drücken zum Übernehmen")
         }
         .animation(.snappy, value: isArmed)
+        .animation(.snappy, value: lage.holdsA)
+        .onChange(of: lage.holdsA) { _, _ in isArmed = false }
         .onDisappear { disarm?.cancel() }
     }
 
-    private func pressClaim() {
+    private var title: String {
+        if lage.holdsA { return "abgeben" }
+        return isArmed ? "wirklich übernehmen?" : "übernehmen"
+    }
+
+    private var glass: Glass {
+        if lage.holdsA { return .regular.interactive() }
+        return .regular.tint(isArmed ? Theme.aPosition : Theme.accent).interactive()
+    }
+
+    private func press() {
         disarm?.cancel()
+        if lage.holdsA {
+            lage.releaseA()
+            return
+        }
         if isArmed {
             isArmed = false
             lage.claimA()
@@ -85,33 +82,74 @@ struct APositionControl: View {
     }
 }
 
-/// Eigene Fortbewegung auf einen Blick; ein Tipp öffnet die Auswahl.
-struct MobilityChip: View {
-    let open: () -> Void
+/// Das rote „A“ als Symbol, überall gleich.
+struct ASymbol: View {
+    var size: CGFloat = 24
+    /// Weiß auf transparentem Grund (für farbige Knöpfe) statt Weiß auf Rot.
+    var inverted = false
+
+    var body: some View {
+        Text("A")
+            .font(.system(size: size * 0.6, weight: .heavy, design: .rounded))
+            .foregroundStyle(inverted ? Theme.aPosition : .white)
+            .frame(width: size, height: size)
+            .background(inverted ? Color.white : Theme.aPosition, in: .circle)
+            .accessibilityHidden(true)
+    }
+}
+
+/// Fortbewegung direkt auf der Karte wählen: zu Fuß sofort, Fahrzeug und ÖPNV öffnen die Auswahl.
+struct MobilityControl: View {
+    /// Öffnet die Auswahl für Fahrzeug oder ÖPNV.
+    let choose: (Fortbewegung) -> Void
 
     @Environment(LageStore.self) private var lage
 
     var body: some View {
         if let me = lage.me {
-            Button(action: open) {
-                HStack(spacing: 8) {
-                    Image(systemName: me.data.fortbewegung.symbolName)
-                    Text(lage.mobilityDescription(of: me.data))
-                        .lineLimit(1)
-                    Spacer(minLength: 0)
-                    Image(systemName: "chevron.up")
-                        .font(.caption.weight(.bold))
-                        .foregroundStyle(.secondary)
+            HStack(spacing: 10) {
+                Picker("Fortbewegung", selection: Binding(
+                    get: { me.data.fortbewegung },
+                    set: { mode in
+                        if mode == .fuss { lage.setMobility(.fuss) } else { choose(mode) }
+                    }
+                )) {
+                    ForEach(Fortbewegung.allCases) { mode in
+                        Image(systemName: mode.symbolName)
+                            .accessibilityLabel(mode.title)
+                            .tag(mode)
+                    }
                 }
-                .font(.subheadline.weight(.semibold))
-                .padding(.horizontal, 18)
-                .frame(height: Theme.barHeight)
-                .contentShape(.rect)
+                .pickerStyle(.segmented)
+                .frame(width: 150)
+                .disabled(!me.data.aktiv)
+
+                Button {
+                    if me.data.fortbewegung != .fuss { choose(me.data.fortbewegung) }
+                } label: {
+                    HStack(spacing: 4) {
+                        Text(me.data.aktiv ? lage.mobilityDescription(of: me.data) : "Ruhemodus")
+                            .font(.subheadline.weight(.semibold))
+                            .lineLimit(1)
+                            .minimumScaleFactor(0.8)
+                        Spacer(minLength: 0)
+                        if me.data.fortbewegung != .fuss {
+                            Image(systemName: "chevron.up")
+                                .font(.caption.weight(.bold))
+                                .foregroundStyle(.secondary)
+                        }
+                    }
+                    .frame(maxHeight: .infinity)
+                    .contentShape(.rect)
+                }
+                .buttonStyle(.plain)
+                .disabled(me.data.fortbewegung == .fuss)
+                .accessibilityLabel("Fortbewegung: \(lage.mobilityDescription(of: me.data))")
             }
-            .buttonStyle(.plain)
-            .glassEffect(.regular.interactive(), in: .capsule)
-            .accessibilityLabel("Fortbewegung: \(lage.mobilityDescription(of: me.data))")
-            .accessibilityHint("Ändern")
+            .padding(.leading, 8)
+            .padding(.trailing, 18)
+            .frame(height: Theme.barHeight)
+            .glassEffect(.regular, in: .capsule)
         }
     }
 }
@@ -145,7 +183,9 @@ struct NavigationBanner: View {
         .foregroundStyle(.white)
         .padding(16)
         .frame(maxWidth: .infinity, alignment: .leading)
-        .background((route.route?.usesSpecialRights == true ? Color.purple : Color(hex: "#1F6F5C")).gradient, in: .rect(cornerRadius: 22))
+        .background(route.route?.usesSpecialRights == true ? Color(hex: "#4B2A7B") : Color(hex: "#1C1C1E"), in: .rect(cornerRadius: 22))
+        .overlay(RoundedRectangle(cornerRadius: 22).strokeBorder(.white.opacity(0.08)))
+        .environment(\.colorScheme, .dark)
         .accessibilityElement(children: .combine)
     }
 
@@ -197,12 +237,16 @@ struct NavigationBottomBar: View {
                     model.stopNavigation()
                 } label: {
                     Text("Beenden")
-                        .fontWeight(.semibold)
-                        .padding(.horizontal, 6)
+                        .font(.subheadline.weight(.semibold))
+                        .foregroundStyle(.white)
+                        .lineLimit(1)
+                        .fixedSize()
+                        .padding(.horizontal, 18)
+                        .frame(height: 44)
+                        .contentShape(.capsule)
                 }
-                .buttonStyle(.glassProminent)
-                .tint(.red)
-                .controlSize(.large)
+                .buttonStyle(.plain)
+                .glassEffect(.regular.tint(.red).interactive(), in: .capsule)
             }
 
             if !route.walking {

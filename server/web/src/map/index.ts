@@ -8,6 +8,7 @@ import {
   notice,
   online,
   isLocked,
+  loadStopsNearby,
   memberLabel,
   operation,
   positions,
@@ -17,6 +18,8 @@ import {
   saveObject,
   selectedObject,
   showCoverage,
+  stopsKey,
+  stopsNearby,
   tables,
   targetLayer,
   tool,
@@ -123,6 +126,8 @@ function bind(map: MapBackend, disposers: (() => void)[]): void {
           shapes.push({ kind: 'polygon', points: data.punkte, color: data.farbe, fillOpacity: data.wert === null ? 0.18 : 0.32, lineWidth: data.wert === null ? 2 : 1 });
         } else if (data.typ === 'kreis' && data.punkte[0]) {
           shapes.push({ kind: 'polygon', points: circlePoints(data.punkte[0], data.radius ?? 100), color: data.farbe, fillOpacity: 0.15, lineWidth: 2 });
+        } else if (data.typ === 'haltestellen' && data.punkte[0]) {
+          shapes.push({ kind: 'polygon', points: circlePoints(data.punkte[0], data.radius ?? 500), color: '#0A84FF', fillOpacity: 0.06, lineWidth: 1.5 });
         } else if (data.typ === 'linie' && data.punkte.length >= 2) {
           shapes.push({ kind: 'line', points: data.punkte, color: data.farbe, lineWidth: 4 });
         }
@@ -149,6 +154,37 @@ function bind(map: MapBackend, disposers: (() => void)[]): void {
             };
           }),
       );
+    }),
+  );
+
+  // Haltestellen in Umkreis-Markierungen
+  disposers.push(
+    effect(() => {
+      const circles = visibleObjects().filter((o) => o.data.typ === 'haltestellen' && o.data.punkte[0]);
+      const pins: Pin[] = [];
+      const seen = new Set<string>();
+      for (const circle of circles) {
+        const center = circle.data.punkte[0]!;
+        const radius = circle.data.radius ?? 500;
+        const stops = stopsNearby.value[stopsKey(center, radius)];
+        if (!stops) {
+          void loadStopsNearby(center, radius);
+          continue;
+        }
+        for (const stop of stops) {
+          const id = `halt-${stop.name}-${stop.lat.toFixed(4)}-${stop.lon.toFixed(4)}`;
+          if (seen.has(id)) continue;
+          seen.add(id);
+          const lines = stop.linien.map((l) => l.ref).join(' ');
+          pins.push({
+            id,
+            point: stop,
+            signature: lines,
+            build: () => pinElement('pin pin-stop', `<span class="dot">H</span><span class="label">${escapeHtml(stop.name)}${lines ? ` · ${escapeHtml(lines)}` : ''}</span>`),
+          });
+        }
+      }
+      map.setPins('stops', pins);
     }),
   );
 
@@ -182,8 +218,9 @@ function bind(map: MapBackend, disposers: (() => void)[]): void {
       }
       for (const [vehicleId, crew] of crews) {
         const vehicle = tables.vehicle.value[vehicleId]!;
+        // Sitzt jemand im Fahrzeug, ist sein Telefon die Quelle; der Tracker nur, wenn er deutlich frischer ist.
         const tracked = trackerPoint(vehicle.data.trackerId);
-        const point = tracked && tracked.ts >= crew.ts - 120_000 ? tracked : crew.point;
+        const point = tracked && tracked.ts > crew.ts + 120_000 ? tracked : crew.point;
         const label = `${vehicle.data.funkrufname} (${crew.names.join(', ')})`;
         pins.push({
           id: `fz-${vehicleId}`,
@@ -339,7 +376,7 @@ export function finishDrawing(shape: MapObject['typ'], punkte: GeoPoint[]): void
     farbe: '#FF9F0A',
     symbol: '',
     punkte,
-    radius: shape === 'kreis' ? 150 : null,
+    radius: shape === 'kreis' ? 150 : shape === 'haltestellen' ? 500 : null,
     wert: null,
     zeit: shape === 'fahndungsraum' ? Date.now() : null,
     trackerId: null,

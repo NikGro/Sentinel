@@ -24,6 +24,12 @@ const lineQuery = z.object({
   lon: z.coerce.number().min(-180).max(180).optional(),
 });
 
+const stopsQuery = z.object({
+  lat: z.coerce.number().min(-90).max(90),
+  lon: z.coerce.number().min(-180).max(180),
+  radius: z.coerce.number().min(50).max(5000).default(500),
+});
+
 const crossingQuery = z.object({
   a: z.string().trim().min(2).max(80),
   b: z.string().trim().min(2).max(80),
@@ -131,6 +137,14 @@ export function registerDeviceRoutes(app: FastifyInstance, services: Services, g
     const { q, lat, lon } = query.data;
     const near = lat !== undefined && lon !== undefined ? { lat, lon } : null;
     return { linien: oepnv.search(q, near), verfuegbar: oepnv.count > 0 };
+  });
+
+  app.get('/api/v1/oepnv/haltestellen', async (request) => {
+    guards.actor(request);
+    const query = stopsQuery.safeParse(request.query);
+    if (!query.success) throw new HttpError(400, 'Ungültige Anfrage.');
+    const { lat, lon, radius } = query.data;
+    return { haltestellen: oepnv.stopsNear({ lat, lon }, radius), verfuegbar: oepnv.count > 0 };
   });
 
   app.get('/api/v1/oepnv/linien/:id', async (request) => {

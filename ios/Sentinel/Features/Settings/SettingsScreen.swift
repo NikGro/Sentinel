@@ -1,6 +1,6 @@
 import SwiftUI
 
-/// Mehr: Profil, Dienst und Fortbewegung, Geräteeinstellungen und die komplette Verwaltung des Einsatzes.
+/// Mehr: Profil, Dienst, Geräteeinstellungen und die komplette Verwaltung des Einsatzes.
 /// Alles, was die Kommandozentrale kann, ist auch hier erreichbar.
 struct SettingsScreen: View {
     @Environment(AppModel.self) private var model
@@ -8,7 +8,6 @@ struct SettingsScreen: View {
     @Environment(LocalSettings.self) private var settings
     @Environment(LocationService.self) private var location
     @Environment(\.openURL) private var openURL
-    @State private var showsMobility = false
 
     var body: some View {
         @Bindable var settings = settings
@@ -34,48 +33,28 @@ struct SettingsScreen: View {
 
                     Section {
                         Toggle(isOn: Binding(get: { me.data.aktiv }, set: { lage.setActive($0) })) {
-                            Label(me.data.aktiv ? "Im Dienst" : "Ruhemodus", systemImage: me.data.aktiv ? "person.fill.checkmark" : "moon.zzz.fill")
+                            Label("Im Dienst", systemImage: "person.badge.shield.checkmark.fill")
                         }
-                        Button {
-                            showsMobility = true
-                        } label: {
-                            LabeledContent {
-                                Text(lage.mobilityDescription(of: me.data))
-                            } label: {
-                                Label("Fortbewegung", systemImage: me.data.fortbewegung.symbolName)
+                        if location.isDenied {
+                            Button("Standortzugriff in den Einstellungen erlauben", systemImage: "exclamationmark.triangle.fill") {
+                                if let url = URL(string: UIApplication.openSettingsURLString) { openURL(url) }
                             }
+                            .foregroundStyle(.orange)
                         }
-                        .tint(.primary)
-                        .disabled(!me.data.aktiv)
-                    } header: {
-                        Text("Dienst")
                     } footer: {
-                        Text("Im Ruhemodus wird kein Standort geteilt und die A-Position ist nicht verfügbar.")
+                        Text(me.data.aktiv
+                            ? "Ihr Standort wird mit den eigenen Kräften geteilt, auch im Hintergrund, und nur an den eigenen Sentinel-Server übertragen."
+                            : "Ruhemodus: Es wird kein Standort geteilt und die A-Position ist nicht verfügbar.")
                     }
-                }
-
-                Section {
-                    Toggle("Eigene Position teilen", systemImage: "location.fill", isOn: $settings.sharesLocation)
-                    if location.isDenied {
-                        Button("Standortzugriff in den Einstellungen erlauben", systemImage: "exclamationmark.triangle.fill") {
-                            if let url = URL(string: UIApplication.openSettingsURLString) { openURL(url) }
-                        }
-                        .foregroundStyle(.orange)
-                    }
-                    Toggle("Bestreifte Wege anzeigen", systemImage: "road.lanes", isOn: $settings.showsCoverage)
-                } header: {
-                    Text("Standort und Karte")
-                } footer: {
-                    Text("Die Position geht nur an den eigenen Sentinel-Server, auch im Hintergrund. Bestreifung wird immer aufgezeichnet; die Anzeige schaltet jeder für sich.")
                 }
 
                 Section {
                     Toggle(isOn: $settings.permanentLayerUnlocked) {
-                        Label(settings.permanentLayerUnlocked ? "Dauerhafte Orte entsperrt" : "Dauerhafte Orte gesperrt", systemImage: settings.permanentLayerUnlocked ? "lock.open.fill" : "lock.fill")
+                        Label("Dauerhafte Orte bearbeiten", systemImage: "lock.open")
                     }
                     .tint(.orange)
                 } footer: {
-                    Text("Schützt die Ebene mit dauerhaft wichtigen Orten vor versehentlichem Bearbeiten. Die Sperre gilt wieder nach dem nächsten Start der App.")
+                    Text("Aus: Die Ebene mit dauerhaft wichtigen Orten ist vor versehentlichem Ändern geschützt. Nach jedem Neustart der App ist sie wieder geschützt.")
                 }
 
                 Section("Einsatz") {
@@ -112,10 +91,6 @@ struct SettingsScreen: View {
                 }
             }
             .navigationTitle("Mehr")
-            .sheet(isPresented: $showsMobility) {
-                MobilitySheet()
-                    .presentationDetents([.medium, .large])
-            }
         }
     }
 }

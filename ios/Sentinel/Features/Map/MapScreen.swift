@@ -60,10 +60,14 @@ struct MapScreen: View {
     @State private var editor: EditorContext?
     @State private var targetEditor: TargetEditorContext?
     @State private var showsLayers = false
-    @State private var showsSearch = false
-    @State private var showsMobility = false
+    @State private var mobilityChoice: Fortbewegung?
+    @State private var searchMode: SearchSheet.Mode?
     @State private var showsSituation = false
+    @State private var cameraState = MapCameraState()
+    /// In der Navi-Ansicht folgt die Kamera nah und in Fahrtrichtung, bis man die Karte selbst verschiebt.
+    @State private var navigationFollows = true
     @State private var now = Date.now
+    @State private var topAreaHeight: CGFloat = 60
 
     var body: some View {
         MapReader { proxy in
@@ -71,9 +75,10 @@ struct MapScreen: View {
                 UserAnnotation()
                 CoverageLayer(segments: coverageSegments)
                 ReachLayer(rings: reachRings)
-                MapObjectsLayer(lines: objects(.linie), areas: objects(.flaeche), circles: objects(.kreis), handles: handles) { id in
+                MapObjectsLayer(lines: objects(.linie), areas: objects(.flaeche), circles: objects(.kreis) + objects(.haltestellen), handles: handles) { id in
                     openEditor(for: id)
                 }
+                NearbyStopsLayer(stops: nearbyStops)
                 RouteLayer(lines: routeLines)
                 StopsLayer(stops: lage.operation.ueberschlagen.naechste, mine: lage.myLeapfrogStop)
                 SymbolLayer(pins: vehiclePins + targetPins) { selection = $0 }
@@ -83,10 +88,12 @@ struct MapScreen: View {
             }
             .mapStyle(mapStyle)
             .mapControls {
-                MapCompass()
-                MapPitchToggle()
                 MapScaleView()
             }
+            .onMapCameraChange(frequency: .continuous) { context in cameraState.update(context.camera) }
+            .simultaneousGesture(DragGesture(minimumDistance: 12).onChanged { _ in
+                if route.isActive { navigationFollows = false }
+            })
             .onTapGesture { point in
                 guard tapMode != .none, let coordinate = proxy.convert(point, from: .local) else { return }
                 handleTap(GeoPoint(coordinate))
@@ -115,15 +122,14 @@ struct MapScreen: View {
             LayerSheet()
                 .presentationDetents([.medium, .large])
         }
-        .sheet(isPresented: $showsSearch) {
-            SearchSheet { target in
+        .sheet(item: $searchMode) { mode in
+            SearchSheet(mode: mode) { target in
                 model.navigate(to: target)
-                camera = .userLocation(followsHeading: true, fallback: .automatic)
             }
             .presentationDetents([.large])
         }
-        .sheet(isPresented: $showsMobility) {
-            MobilitySheet()
+        .sheet(item: $mobilityChoice) { mode in
+            MobilitySheet(initialMode: mode)
                 .presentationDetents([.medium, .large])
         }
         .sheet(isPresented: $showsSituation) {
@@ -149,8 +155,15 @@ struct MapScreen: View {
                 now = .now
             }
         }
+        .task(id: stopCircles.map { FahndungStore.stopsKey($0.point, radius: $0.radius) }.joined(separator: ";")) {
+            await fahndung.loadStops(for: stopCircles)
+        }
         .onChange(of: route.isActive) { _, active in
-            if active { camera = .userLocation(followsHeading: true, fallback: .automatic) }
+            navigationFollows = true
+            if active { followForNavigation(animated: true) } else { camera = .userLocation(followsHeading: false, fallback: .automatic) }
+        }
+        .onChange(of: location.current?.timestamp) { _, _ in
+            if route.isActive, navigationFollows { followForNavigation(animated: true) }
         }
         .sensoryFeedback(.impact, trigger: lage.operation.a?.memberId)
     }
@@ -199,7 +212,8 @@ struct MapScreen: View {
             if route.isActive {
                 NavigationBanner()
             } else {
-                Button { showsSearch = true } label: {
+                HStack(spacing: Theme.barSpacing) {
+                Button { searchMode = .adresse } label: {
                     HStack(spacing: 10) {
                         Image(systemName: "magnifyingglass")
                         Text("Suchen oder navigieren")
@@ -213,8 +227,9 @@ struct MapScreen: View {
                 }
                 .buttonStyle(.plain)
                 .glassEffect(.regular.interactive(), in: .capsule)
-                .padding(.trailing, Theme.roundButton + Theme.barSpacing)
                 .accessibilityLabel("Suchen oder navigieren")
+                    MapRoundButton(title: "Zu Objekten navigieren", symbol: "location.viewfinder", prominent: true) { searchMode = .objekte }
+                }
             }
 
             if let hint = tapMode.hint {
@@ -238,6 +253,7 @@ struct MapScreen: View {
         }
         .padding(.horizontal, Theme.barInset)
         .padding(.top, 4)
+        .onGeometryChange(for: CGFloat.self) { $0.size.height } action: { topAreaHeight = $0 }
         .animation(.snappy, value: tapMode)
         .animation(.snappy, value: route.isActive)
     }
@@ -253,20 +269,54 @@ struct MapScreen: View {
                     case .target(let art): tapMode = .newTarget(art)
                     }
                 }
-                MapRoundButton(title: "Ebenen und Kartenstil", symbol: "square.3.layers.3d") { showsLayers = true }
-                MapRoundButton(title: isFollowing ? "Standort folgt" : "Eigener Standort", symbol: isFollowing ? "location.north.line.fill" : "location") {
-                    withAnimation { camera = .userLocation(followsHeading: route.isActive || isFollowing, fallback: .automatic) }
+                MapStyleButton(state: cameraState) { pitch in
+                    withAnimation { camera = .camera(cameraState.camera(pitch: pitch)) }
                 }
-                if let a = lage.aPosition {
-                    MapRoundButton(title: "A-Position zeigen", symbol: "a.circle.fill", tint: Theme.aPosition) {
-                        withAnimation { camera = .region(MKCoordinateRegion(center: a.point.coordinate, latitudinalMeters: 800, longitudinalMeters: 800)) }
+                MapRoundButton(title: "Ebenen", symbol: "square.3.layers.3d") { showsLayers = true }
+                MapRoundButton(title: isFollowing ? "Standort folgt" : "Eigener Standort", symbol: isFollowing || (route.isActive && navigationFollows) ? "location.fill" : "location") {
+                    if route.isActive {
+                        navigationFollows = true
+                        followForNavigation(animated: true)
+                    } else {
+                        withAnimation { camera = .userLocation(followsHeading: isFollowing, fallback: .automatic) }
                     }
+                }
+                if let a = lage.aPosition, !lage.holdsA {
+                    Button {
+                        withAnimation { camera = .region(MKCoordinateRegion(center: a.point.coordinate, latitudinalMeters: 800, longitudinalMeters: 800)) }
+                    } label: {
+                        ASymbol(size: 28)
+                            .frame(width: Theme.roundButton, height: Theme.roundButton)
+                            .contentShape(.circle)
+                    }
+                    .buttonStyle(.plain)
+                    .glassEffect(.regular.interactive(), in: .circle)
+                    .accessibilityLabel("A-Position zeigen")
+                }
+                CompassButton(state: cameraState) {
+                    withAnimation { camera = .camera(cameraState.camera(heading: 0)) }
                 }
             }
         }
         .padding(.trailing, Theme.barInset)
-        // Unter Suchleiste und Kompass, damit Hinweisbanner und Kompass frei bleiben.
-        .padding(.top, route.isActive ? 160 : 4 + Theme.barHeight + Theme.barSpacing + 48)
+        .padding(.top, topAreaHeight + Theme.barSpacing)
+    }
+
+    /// Navi-Kamera: nah am eigenen Standort, in Fahrtrichtung gedreht, je nach Tempo etwas weiter heraus.
+    private func followForNavigation(animated: Bool) {
+        guard let current = location.current else {
+            camera = .userLocation(followsHeading: true, fallback: .automatic)
+            return
+        }
+        let speed = max(current.speed, 0)
+        let distance = min(max(350 + speed * 28, 350), 1400)
+        let heading = current.course >= 0 && speed > 1 ? current.course : cameraState.heading
+        let next = MapCamera(centerCoordinate: current.coordinate, distance: distance, heading: heading, pitch: 55)
+        if animated {
+            withAnimation(.easeInOut(duration: 0.8)) { camera = .camera(next) }
+        } else {
+            camera = .camera(next)
+        }
     }
 
     // MARK: Untere Leiste
@@ -277,7 +327,7 @@ struct MapScreen: View {
                 NavigationBottomBar()
             } else {
                 APositionControl()
-                MobilityChip { showsMobility = true }
+                MobilityControl { mobilityChoice = $0 }
             }
             SituationBar { showsSituation = true }
         }
@@ -331,9 +381,9 @@ struct MapScreen: View {
         let object = MapObject(
             layerId: Layer.lageId,
             typ: shape,
-            farbe: isRoom ? "#C97C7C" : "#FF9F0A",
+            farbe: isRoom ? "#C97C7C" : shape == .haltestellen ? "#0A84FF" : "#FF9F0A",
             punkte: points,
-            radius: shape == .kreis ? 150 : nil,
+            radius: shape == .kreis ? 150 : shape == .haltestellen ? 500 : nil,
             zeit: isRoom ? (Date.now.timeIntervalSince1970 * 1000).rounded() : nil
         )
         editor = EditorContext(id: LageStore.newId(), object: object, isNew: true)
@@ -428,6 +478,18 @@ struct MapScreen: View {
         }
     }
 
+    private var stopCircles: [(point: GeoPoint, radius: Double)] {
+        objects(.haltestellen).compactMap { object in
+            object.data.punkte.first.map { ($0, object.data.radius ?? 500) }
+        }
+    }
+
+    private var nearbyStops: [NearbyStop] {
+        var seen = Set<String>()
+        return stopCircles.flatMap { fahndung.nearbyStops[FahndungStore.stopsKey($0.point, radius: $0.radius)] ?? [] }
+            .filter { seen.insert($0.id).inserted }
+    }
+
     private var enabledReachModes: [ReachMode] {
         ReachMode.allCases.filter(settings.isReachEnabled)
     }
@@ -472,57 +534,5 @@ struct MapScreen: View {
         guard case .drawing(_, let points) = tapMode, points.count > 1 else { return [] }
         let coordinates = points.map(\.coordinate)
         return [RouteLine(polyline: MKPolyline(coordinates: coordinates, count: coordinates.count), specialRights: false)]
-    }
-}
-
-/// Runder Glasknopf am Kartenrand.
-struct MapRoundButton: View {
-    let title: String
-    let symbol: String
-    var tint: Color = .primary
-    let action: () -> Void
-
-    var body: some View {
-        Button(action: action) {
-            Image(systemName: symbol)
-                .font(.system(size: 17, weight: .semibold))
-                .foregroundStyle(tint)
-                .frame(width: Theme.roundButton, height: Theme.roundButton)
-        }
-        .glassEffect(.regular.interactive(), in: .circle)
-        .accessibilityLabel(title)
-    }
-}
-
-/// Hervorgehobener Plus-Knopf: Markierungen, Fahndungsräume und Ziele hinzufügen.
-struct AddMenu: View {
-    enum Action {
-        case shape(MapObject.Shape)
-        case target(ZielArt)
-    }
-
-    let select: (Action) -> Void
-
-    var body: some View {
-        Menu {
-            Section("Fahndung") {
-                Button(MapObject.Shape.fahndungsraum.title, systemImage: MapObject.Shape.fahndungsraum.symbolName) { select(.shape(.fahndungsraum)) }
-                ForEach(ZielArt.allCases) { art in
-                    Button(art.title, systemImage: art.symbolName) { select(.target(art)) }
-                }
-            }
-            Section("Markierung") {
-                ForEach([MapObject.Shape.marker, .text, .linie, .flaeche, .kreis], id: \.self) { shape in
-                    Button(shape.title, systemImage: shape.symbolName) { select(.shape(shape)) }
-                }
-            }
-        } label: {
-            Image(systemName: "plus")
-                .font(.system(size: 20, weight: .bold))
-                .foregroundStyle(.white)
-                .frame(width: Theme.roundButton, height: Theme.roundButton)
-        }
-        .glassEffect(.regular.tint(Theme.accent).interactive(), in: .circle)
-        .accessibilityLabel("Hinzufügen")
     }
 }

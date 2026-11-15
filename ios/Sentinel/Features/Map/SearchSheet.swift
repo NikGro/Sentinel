@@ -6,6 +6,11 @@ import SwiftUI
 struct SearchSheet: View {
     let navigate: (NavigationTarget) -> Void
 
+    init(mode: Mode = .adresse, navigate: @escaping (NavigationTarget) -> Void) {
+        self.navigate = navigate
+        _mode = State(initialValue: mode)
+    }
+
     enum Mode: String, CaseIterable, Identifiable {
         case adresse, objekte
         var id: String { rawValue }
@@ -17,7 +22,7 @@ struct SearchSheet: View {
     @Environment(SearchService.self) private var search
     @Environment(\.dismiss) private var dismiss
 
-    @State private var mode: Mode = .objekte
+    @State private var mode: Mode
     @State private var query = ""
     @State private var places: [SearchService.Place] = []
     @FocusState private var focused: Bool
@@ -74,6 +79,7 @@ struct SearchSheet: View {
                 places = []
                 if mode == .adresse { search.update(query: value, near: region) }
             }
+            .onAppear { focused = mode == .adresse }
             .onChange(of: mode) { _, _ in
                 places = []
                 if mode == .adresse { search.update(query: query, near: region) }
@@ -82,7 +88,7 @@ struct SearchSheet: View {
     }
 
     private var region: MKCoordinateRegion? {
-        model.myPoint.map { MKCoordinateRegion(center: $0.coordinate, latitudinalMeters: 30_000, longitudinalMeters: 30_000) }
+        model.myPoint.map { MKCoordinateRegion(center: $0.coordinate, latitudinalMeters: 25_000, longitudinalMeters: 25_000) }
     }
 
     @ViewBuilder private var addressContent: some View {

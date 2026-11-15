@@ -40,8 +40,8 @@ final class AppModel {
         location.onPosition = { [weak self] position in
             guard let self else { return }
             if let current = self.location.current { self.locationContext.update(with: current) }
-            // Im Ruhemodus oder bei abgeschalteter Freigabe verlässt der Standort das Gerät nicht.
-            guard self.settings.sharesLocation, self.lage.me?.data.aktiv != false else { return }
+            // Im Ruhemodus verlässt der Standort das Gerät nicht.
+            guard self.lage.me?.data.aktiv != false else { return }
             self.lage.sendPosition(position)
         }
         lage.onMemberPosition = { [weak self] memberId, position in

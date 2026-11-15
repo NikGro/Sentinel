@@ -186,6 +186,8 @@ struct MapObject: LageEntity {
 
     enum Shape: String, Codable, CaseIterable, Sendable {
         case marker, text, linie, flaeche, kreis, fahndungsraum
+        /// Umkreis, in dem alle ÖPNV-Haltestellen angezeigt werden.
+        case haltestellen
 
         var title: String {
             switch self {
@@ -195,6 +197,7 @@ struct MapObject: LageEntity {
             case .flaeche: "Fläche"
             case .kreis: "Kreis"
             case .fahndungsraum: "Fahndungsraum"
+            case .haltestellen: "Haltestellen im Umkreis"
             }
         }
 
@@ -206,6 +209,7 @@ struct MapObject: LageEntity {
             case .flaeche: "pentagon"
             case .kreis: "circle.dashed"
             case .fahndungsraum: "scope"
+            case .haltestellen: "bus.fill"
             }
         }
 
@@ -419,6 +423,8 @@ struct ChatAttachment: Codable, Equatable, Sendable {
     var mime: String
     var groesse: Int
     var dauer: Double?
+    /// Sprachnachricht: Lautstärkeverlauf (0 bis 1) für die Wellenform.
+    var wellenform: [Double]?
 }
 
 struct ChatMessage: LageEntity {
@@ -528,6 +534,24 @@ struct CoverageTrack: Codable, Equatable, Sendable {
     var memberId: String
     /// [Breite, Länge, Zeit in ms]
     var punkte: [[Double]]
+}
+
+/// Haltestelle in einer Umkreis-Markierung mit den dort haltenden Linien.
+struct NearbyStop: Codable, Identifiable, Hashable, Sendable {
+    struct Line: Codable, Hashable, Sendable {
+        var ref: String
+        var typ: String
+    }
+
+    var name: String
+    var lat: Double
+    var lon: Double
+    var meter: Double
+    var linien: [Line]
+
+    var id: String { "\(name)|\(String(format: "%.4f,%.4f", lat, lon))" }
+    var point: GeoPoint { GeoPoint(lat: lat, lon: lon) }
+    var lineSummary: String { linien.prefix(8).map(\.ref).joined(separator: " ") + (linien.count > 8 ? " …" : "") }
 }
 
 /// Eine Fahrtrichtung einer ÖPNV-Linie aus der Suche.

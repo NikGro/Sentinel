@@ -181,6 +181,22 @@ struct APIClient: Sendable {
         return (result.linien, result.verfuegbar)
     }
 
+    private struct StopsNearby: Decodable {
+        let haltestellen: [NearbyStop]
+    }
+
+    func stops(near point: GeoPoint, radius: Double) async throws -> [NearbyStop] {
+        try await json(
+            StopsNearby.self,
+            "GET",
+            "api/v1/oepnv/haltestellen",
+            query: [
+                URLQueryItem(name: "lat", value: String(point.lat)), URLQueryItem(name: "lon", value: String(point.lon)),
+                URLQueryItem(name: "radius", value: String(Int(radius))),
+            ]
+        ).haltestellen
+    }
+
     private struct Crossing: Decodable {
         let punkte: [GeoPoint]
     }

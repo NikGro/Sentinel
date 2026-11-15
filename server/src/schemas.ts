@@ -76,7 +76,8 @@ const vehicle = z.object({
   abgestellt: geoPoint.extend({ ts: timestamp }).nullish().transform((v) => v ?? null),
 });
 
-export const SHAPES = ['marker', 'text', 'linie', 'flaeche', 'kreis', 'fahndungsraum'] as const;
+/** "haltestellen": Umkreis, in dem alle ÖPNV-Haltestellen angezeigt werden. */
+export const SHAPES = ['marker', 'text', 'linie', 'flaeche', 'kreis', 'fahndungsraum', 'haltestellen'] as const;
 
 const annotation = z
   .object({
@@ -99,7 +100,7 @@ const annotation = z
   .superRefine((a, ctx) => {
     const min = a.typ === 'linie' ? 2 : a.typ === 'flaeche' ? 3 : 1;
     if (a.punkte.length < min) ctx.addIssue({ code: 'custom', message: `Mindestens ${min} Punkte nötig` });
-    if (a.typ === 'kreis' && a.radius === null) ctx.addIssue({ code: 'custom', message: 'Radius fehlt' });
+    if ((a.typ === 'kreis' || a.typ === 'haltestellen') && a.radius === null) ctx.addIssue({ code: 'custom', message: 'Radius fehlt' });
     if (a.typ === 'fahndungsraum' && a.zeit === null) ctx.addIssue({ code: 'custom', message: 'Zeitpunkt fehlt' });
   });
 
@@ -164,6 +165,8 @@ const attachment = z.object({
   groesse: z.number().int().min(0).max(50 * 1024 * 1024),
   /** Dauer von Sprachnachrichten in Sekunden. */
   dauer: z.number().min(0).max(3600).nullish().transform((v) => v ?? null),
+  /** Sprachnachricht: Lautstärkeverlauf für die Wellenform, Werte 0 bis 1. */
+  wellenform: z.array(z.number().min(0).max(1)).max(80).nullish().transform((v) => v ?? null),
 });
 
 const message = z

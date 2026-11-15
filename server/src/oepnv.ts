@@ -127,6 +127,15 @@ export function nextStopIndex(halte: GeoPoint[], position: GeoPoint): number {
   return atStart && distanceMeters(halte[0]!, position) < 80 ? 1 : Math.min(nextIndex, halte.length);
 }
 
+/** Haltestelle mit allen Linien, die dort halten. */
+export interface HaltestelleImUmkreis {
+  name: string;
+  lat: number;
+  lon: number;
+  meter: number;
+  linien: { ref: string; typ: string }[];
+}
+
 export class OepnvStore {
   private lines = new Map<string, Linie>();
   private loading: Promise<void> | null = null;
@@ -215,6 +224,28 @@ export class OepnvStore {
     // Gleiche Linie und Richtung nur einmal (OpenStreetMap führt Varianten teils mehrfach).
     const seen = new Set<string>();
     return result.filter((r) => !seen.has(`${r.ref}|${r.richtung}`) && seen.add(`${r.ref}|${r.richtung}`)).slice(0, limit);
+  }
+
+  /**
+   * Alle Haltestellen im Umkreis, gleichnamige Halte dicht beieinander zusammengefasst (Steige beider Richtungen),
+   * jeweils mit den dort haltenden Linien. Nach Entfernung sortiert.
+   */
+  stopsNear(center: GeoPoint, radius: number, limit = 150): HaltestelleImUmkreis[] {
+    const result: HaltestelleImUmkreis[] = [];
+    for (const line of this.lines.values()) {
+      for (const halt of line.halte) {
+        const meter = distanceMeters(halt, center);
+        if (meter > radius) continue;
+        let entry = result.find((e) => e.name === halt.name && distanceMeters(e, halt) < 150);
+        if (!entry) {
+          entry = { name: halt.name, lat: halt.lat, lon: halt.lon, meter: Math.round(meter), linien: [] };
+          result.push(entry);
+        }
+        if (!entry.linien.some((l) => l.ref === line.ref && l.typ === line.typ)) entry.linien.push({ ref: line.ref, typ: line.typ });
+      }
+    }
+    for (const entry of result) entry.linien.sort((a, b) => a.ref.localeCompare(b.ref, 'de', { numeric: true }));
+    return result.sort((a, b) => a.meter - b.meter).slice(0, limit);
   }
 
   /** Die nächsten Halte auf einer Linie ab dem gegebenen Standort. */

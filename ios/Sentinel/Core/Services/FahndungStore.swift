@@ -10,6 +10,9 @@ final class FahndungStore {
     private(set) var segments: [CoverageSegment] = []
     /// Weg-Zeit-Flächen je Fahndungsraum (Kennung der Markierung).
     private(set) var reachAreas: [String: [ReachArea]] = [:]
+    /// Haltestellen je Umkreis-Markierung (Schlüssel: Mittelpunkt und Radius).
+    private(set) var nearbyStops: [String: [NearbyStop]] = [:]
+    @ObservationIgnored private var stopsLoading: Set<String> = []
 
     @ObservationIgnored var client: APIClient?
     @ObservationIgnored private var reachLoop: Task<Void, Never>?
@@ -86,6 +89,22 @@ final class FahndungStore {
                 await self?.loadReach(inputs, modes: modes)
                 try? await Task.sleep(for: .seconds(45))
             }
+        }
+    }
+
+    static func stopsKey(_ point: GeoPoint, radius: Double) -> String {
+        String(format: "%.5f,%.5f,%d", point.lat, point.lon, Int(radius))
+    }
+
+    /// Lädt die Haltestellen aller Umkreis-Markierungen einmalig nach.
+    func loadStops(for circles: [(point: GeoPoint, radius: Double)]) async {
+        guard let client else { return }
+        for circle in circles {
+            let key = Self.stopsKey(circle.point, radius: circle.radius)
+            guard nearbyStops[key] == nil, !stopsLoading.contains(key) else { continue }
+            stopsLoading.insert(key)
+            if let stops = try? await client.stops(near: circle.point, radius: circle.radius) { nearbyStops[key] = stops }
+            stopsLoading.remove(key)
         }
     }
 

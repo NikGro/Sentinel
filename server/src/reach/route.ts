@@ -66,6 +66,9 @@ interface ValhallaTrip {
   };
 }
 
+/** Tempofaktor bei Fahrt mit Sonderrechten. */
+export const SONDERRECHTE_TEMPO = 1.5;
+
 export class RouteService {
   constructor(
     private readonly valhallaUrl: string,
@@ -97,12 +100,14 @@ export class RouteService {
       const body = (await response.json()) as ValhallaTrip;
       const leg = body.trip?.legs[0];
       if (!body.trip || !leg) return null;
+      const sonderrechte = options.sonderrechte && !options.zuFuss;
       return {
         punkte: decodePolyline6(leg.shape),
         meter: Math.round(body.trip.summary.length * 1000),
-        sekunden: Math.round(body.trip.summary.time),
+        // Mit Sonderrechten wird zügiger gefahren: Annahme etwa 50 % über dem üblichen Tempo.
+        sekunden: Math.round(body.trip.summary.time / (sonderrechte ? SONDERRECHTE_TEMPO : 1)),
         anweisungen: leg.maneuvers.map((m) => ({ text: m.instruction, meter: Math.round(m.length * 1000), index: m.begin_shape_index ?? 0 })),
-        sonderrechte: options.sonderrechte && !options.zuFuss,
+        sonderrechte,
       };
     } catch {
       return null;

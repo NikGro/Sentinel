@@ -17,9 +17,9 @@
   --ink: #d9dadc;
   --ink-strong: #f0f1f2;
   --muted: #8b8d93;
-  --accent: #5aa8a1;
-  --accent-fill: #2f7d77;
-  --accent-bg: rgba(71, 144, 138, 0.16);
+  --accent: #409cff;
+  --accent-fill: #0a84ff;
+  --accent-bg: rgba(10, 132, 255, 0.16);
   --on-accent: #ffffff;
   --danger: #c97c7c;
   --ok: #6fae8c;
@@ -67,9 +67,9 @@
     --ink: #2b2d31;
     --ink-strong: #101113;
     --muted: #565960;
-    --accent: #256a65;
-    --accent-fill: #2f7d77;
-    --accent-bg: rgba(47, 125, 119, 0.12);
+    --accent: #0066d6;
+    --accent-fill: #007aff;
+    --accent-bg: rgba(0, 122, 255, 0.12);
     --danger: #a84444;
     --ok: #2f7a52;
     --warn: #7d5e15;
@@ -1005,6 +1005,18 @@ pre {
   font-size: 20px;
 }
 
+/* Haltestellen: grünes H wie das Haltestellenschild */
+.pin-stop .dot {
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  background: #f5c400;
+  color: #0b5d1e;
+  font-size: 12px;
+  font-weight: 800;
+  border: 2px solid #0b5d1e;
+}
+
 /* Fahrzeuge eckig, Zielpersonen als Raute: Form unterscheidet, nicht nur Farbe. */
 .pin-vehicle .dot {
   background: #4b45c6;
@@ -1036,7 +1048,7 @@ pre {
 
 .pin-object.gewaehlt .dot,
 .pin-object.gewaehlt .label {
-  outline: 2px solid #5aa8a1;
+  outline: 2px solid #409cff;
   outline-offset: 1px;
 }
 

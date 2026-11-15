@@ -165,3 +165,28 @@ struct NavigationTests {
         #expect(Format.clock(0) == "0:00")
     }
 }
+
+struct Version03Tests {
+    @Test func hausnummerVornWirdFuerVorschlaegeAbgetrennt() {
+        #expect(SearchService.leadingNumber("3 Heg")?.number == "3")
+        #expect(SearchService.leadingNumber("3 Heg")?.street == "Heg")
+        #expect(SearchService.leadingNumber("12 a Musterweg")?.number == "12a")
+        #expect(SearchService.leadingNumber("Hegpark 3") == nil)
+    }
+
+    @Test func wellenformHatFesteBalkenzahlUndBleibtImBereich() {
+        let levels = (0..<137).map { Double($0 % 10) / 10 }
+        let bars = AudioRecorder.waveform(levels, bars: 48)
+        #expect(bars.count == 48)
+        #expect(bars.allSatisfy { $0 >= 0 && $0 <= 1 })
+        #expect(AudioRecorder.waveform([]).isEmpty)
+        #expect(AudioRecorder.normalized(-80) == 0)
+        #expect(AudioRecorder.normalized(0) == 1)
+    }
+
+    @Test func unbekannteMarkierungsartMachtDenLagestandNichtUnbrauchbar() throws {
+        let json = #"{"self":{"id":"a","role":"device"},"server":{"version":"9","routing":false},"online":[],"members":[],"vehicles":[],"annotations":[{"id":"x","rev":1,"updatedAt":1,"updatedBy":"a","data":{"layerId":"lage","typ":"zukunft","punkte":[{"lat":1,"lon":2}]}},{"id":"y","rev":1,"updatedAt":1,"updatedBy":"a","data":{"layerId":"lage","typ":"haltestellen","titel":"","notiz":"","farbe":"#0A84FF","symbol":"","punkte":[{"lat":1,"lon":2}],"radius":500}}],"targets":[],"trackers":[],"layers":[],"rooms":[],"messages":[],"operation":{},"positions":[],"trackerPositions":[]}"#
+        let snapshot = try JSONDecoder().decode(Snapshot.self, from: Data(json.utf8))
+        #expect(snapshot.annotations.map(\.id) == ["y"])
+    }
+}

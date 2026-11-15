@@ -1,5 +1,39 @@
 # Änderungen
 
+## 0.3.0
+
+**Aussehen und Bedienung**
+- Akzentfarbe wieder Systemblau, in der App, im App-Icon und in der Kommandozentrale
+- Runde Kartenknöpfe einheitlich groß, keine Überlagerung mehr: eigener Kompass (nur wenn nicht genordet),
+  Kartenstil, 2D/3D und Verkehrslage in einem Knopf; Ebenen enthalten nur noch Ebenen und Anzeigen
+- Neuer hervorgehobener Knopf neben der Suche: zu Objekten navigieren
+- A-Position: ein Knopf mit gleichem Wortlaut („übernehmen“, „wirklich übernehmen?“, „abgeben“);
+  die eigene A lässt sich auch über den A-Pin abgeben
+- Fortbewegung als Dreier-Auswahl direkt auf der Karte; nur Fahrzeug und ÖPNV öffnen eine Auswahl
+- Mehr aufgeräumt: ein Schalter „Im Dienst“ (teilt den Standort), Fortbewegung und Bestreifung dort entfernt,
+  „Dauerhafte Orte bearbeiten“ mit gleichbleibendem Text
+- Fahndungsraum: Zeitwahl als iOS-Segmentsteuerung
+
+**Navigation und Suche**
+- Navi-Ansicht nah am eigenen Standort, in Fahrtrichtung und gekippt; verschiebt man die Karte, bleibt sie stehen,
+  der Standortknopf holt die Führung zurück
+- Abbiegehinweis ohne Farbverlauf, ruhig wie in Apple Karten; „Beenden“ einzeilig
+- Ohne Sonderrechte rechnet Apple Karten auf dem Gerät; mit Sonderrechten das eigene Wegenetz, Ankunftszeit mit
+  rund 50 % höherem Tempo
+- Adressvorschläge nur aus der Nähe; Hausnummer vorn („3 Heg…“) wird an die vervollständigte Straße gehängt
+
+**Lage**
+- Fahrzeugposition: Sitzt jemand drin, ist dessen Telefon die Quelle, der Tracker nur ohne Besatzung
+- Neue Markierung „Haltestellen im Umkreis“: zeigt alle Bus- und Bahnhaltestellen mit Linien; beim Fahndungsraum
+  optional gleich mitsetzen
+- Haltestellen beim überschlagenden Anfahren mit Haltestellenschild
+
+**Chat**
+- Sprachnachrichten mit Wellenform bei Aufnahme und Wiedergabe
+
+**Robustheit**
+- Unbekannte Einträge eines neueren Servers werden übersprungen statt den ganzen Lagestand zu verwerfen
+
 ## 0.2.2
 
 - Neues App-Icon: Schild mit Schriftzug SENTINEL auf Schwarz, wie der Startbildschirm; auch in SideStore und als Favicon der Kommandozentrale

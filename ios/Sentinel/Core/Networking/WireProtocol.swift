@@ -39,17 +39,17 @@ struct Snapshot: Decodable, Sendable {
         me = try c.decode(ActorInfo.self, forKey: .me)
         server = try c.decode(ServerInfo.self, forKey: .server)
         online = try c.decode([String].self, forKey: .online)
-        members = try c.decode([Versioned<Member>].self, forKey: .members)
-        vehicles = try c.decode([Versioned<Vehicle>].self, forKey: .vehicles)
-        annotations = try c.decode([Versioned<MapObject>].self, forKey: .annotations)
-        targets = try c.decode([Versioned<Target>].self, forKey: .targets)
-        trackers = try c.decode([Versioned<Tracker>].self, forKey: .trackers)
-        layers = try c.decode([Versioned<Layer>].self, forKey: .layers)
-        rooms = try c.decodeIfPresent([Versioned<ChatRoom>].self, forKey: .rooms) ?? []
-        messages = try c.decode([Versioned<ChatMessage>].self, forKey: .messages)
+        members = try c.lossy(Versioned<Member>.self, forKey: .members)
+        vehicles = try c.lossy(Versioned<Vehicle>.self, forKey: .vehicles)
+        annotations = try c.lossy(Versioned<MapObject>.self, forKey: .annotations)
+        targets = try c.lossy(Versioned<Target>.self, forKey: .targets)
+        trackers = try c.lossy(Versioned<Tracker>.self, forKey: .trackers)
+        layers = try c.lossy(Versioned<Layer>.self, forKey: .layers)
+        rooms = (try? c.lossy(Versioned<ChatRoom>.self, forKey: .rooms)) ?? []
+        messages = try c.lossy(Versioned<ChatMessage>.self, forKey: .messages)
         operation = try c.decode(OperationState.self, forKey: .operation)
-        positions = try c.decode([PositionEntry].self, forKey: .positions)
-        trackerPositions = try c.decode([PositionEntry].self, forKey: .trackerPositions)
+        positions = try c.lossy(PositionEntry.self, forKey: .positions)
+        trackerPositions = try c.lossy(PositionEntry.self, forKey: .trackerPositions)
     }
 
     private enum CodingKeys: String, CodingKey {
@@ -211,4 +211,17 @@ enum WireCodec {
     }
 
     static let ping = Data(#"{"t":"ping"}"#.utf8)
+}
+
+/// Einzelnes fehlerhaftes oder unbekanntes Element (z. B. eine neue Markierungsart eines neueren Servers)
+/// darf nicht den ganzen Lagestand unbrauchbar machen: Es wird übersprungen.
+private struct Lossy<T: Decodable>: Decodable {
+    let value: T?
+    init(from decoder: Decoder) throws { value = try? T(from: decoder) }
+}
+
+extension KeyedDecodingContainer {
+    func lossy<T: Decodable>(_ type: T.Type, forKey key: Key) throws -> [T] {
+        try decode([Lossy<T>].self, forKey: key).compactMap(\.value)
+    }
 }

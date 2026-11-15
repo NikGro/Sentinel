@@ -185,8 +185,8 @@ private struct MapObjectHandle: View {
 
     var body: some View {
         VStack(spacing: 2) {
-            if object.typ == .marker || object.typ == .fahndungsraum {
-                Image(systemName: object.typ == .fahndungsraum ? "scope" : (object.symbol.isEmpty ? "mappin" : object.symbol))
+            if object.typ == .marker || object.typ == .fahndungsraum || object.typ == .haltestellen {
+                Image(systemName: object.typ == .marker ? (object.symbol.isEmpty ? "mappin" : object.symbol) : object.typ.symbolName)
                     .font(.system(size: 14, weight: .bold))
                     .foregroundStyle(.white)
                     .frame(width: 30, height: 30)
@@ -314,16 +314,64 @@ struct StopsLayer: MapContent {
         ForEach(Array(stops.enumerated()), id: \.offset) { index, stop in
             Annotation(stop.name, coordinate: stop.point.coordinate, anchor: .center) {
                 VStack(spacing: 2) {
-                    Text("\(index + 1)")
-                        .font(.caption.weight(.heavy))
-                        .foregroundStyle(.white)
-                        .frame(width: 22, height: 22)
-                        .background(stop == mine ? Color.green : Color.blue, in: .rect(cornerRadius: 5))
-                        .overlay(RoundedRectangle(cornerRadius: 5).stroke(.white, lineWidth: 2))
+                    StopSign(highlighted: stop == mine)
+                        .overlay(alignment: .topTrailing) {
+                            Text("\(index + 1)")
+                                .font(.system(size: 10, weight: .heavy))
+                                .foregroundStyle(.white)
+                                .frame(width: 16, height: 16)
+                                .background(stop == mine ? Color.green : Color.blue, in: .circle)
+                                .offset(x: 7, y: -7)
+                        }
                     Text(stop.name)
                         .font(.caption2.weight(.semibold))
                         .padding(.horizontal, 4)
                         .background(.thinMaterial, in: .capsule)
+                }
+            }
+            .annotationTitles(.hidden)
+        }
+    }
+}
+
+/// Haltestellenschild: gelbes Rund mit grünem H, wie an deutschen Haltestellen.
+struct StopSign: View {
+    var highlighted = false
+    var size: CGFloat = 24
+
+    var body: some View {
+        Text("H")
+            .font(.system(size: size * 0.55, weight: .heavy))
+            .foregroundStyle(Color(hex: "#0B5D1E"))
+            .frame(width: size, height: size)
+            .background(Color(hex: "#F5C400"), in: .circle)
+            .overlay(Circle().stroke(highlighted ? Color.green : Color(hex: "#0B5D1E"), lineWidth: highlighted ? 3 : 2))
+            .accessibilityLabel("Haltestelle")
+    }
+}
+
+/// Alle Haltestellen in Umkreis-Markierungen, mit den dort haltenden Linien.
+struct NearbyStopsLayer: MapContent {
+    let stops: [NearbyStop]
+
+    var body: some MapContent {
+        ForEach(stops) { stop in
+            Annotation(stop.name, coordinate: stop.point.coordinate, anchor: .center) {
+                VStack(spacing: 2) {
+                    StopSign(size: 20)
+                    VStack(spacing: 0) {
+                        Text(stop.name)
+                            .font(.caption2.weight(.semibold))
+                        if !stop.lineSummary.isEmpty {
+                            Text(stop.lineSummary)
+                                .font(.system(size: 9, weight: .medium))
+                                .foregroundStyle(.secondary)
+                        }
+                    }
+                    .lineLimit(1)
+                    .padding(.horizontal, 5)
+                    .padding(.vertical, 1)
+                    .background(.thinMaterial, in: .rect(cornerRadius: 6))
                 }
             }
             .annotationTitles(.hidden)

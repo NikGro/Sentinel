@@ -125,7 +125,7 @@ test('Route: Sonderrechte ignorieren Einbahnstraßen und Abbiegeverbote, aber ke
   assert.equal(sent.costing_options.auto.ignore_oneways, true);
   assert.equal(sent.directions_options.language, 'de-DE');
   assert.equal(result?.meter, 760);
-  assert.equal(result?.sekunden, 105);
+  assert.equal(result?.sekunden, 70, 'mit Sonderrechten rund 50 % schneller als die 105 s des Wegenetzes');
   assert.equal(result?.anweisungen[0]?.text, 'Links abbiegen.');
   assert.equal(result?.sonderrechte, true);
   assert.equal(await new RouteService('', ok).route({ lat: 1, lon: 1 }, { lat: 2, lon: 2 }, { sonderrechte: false, zuFuss: false }), null);

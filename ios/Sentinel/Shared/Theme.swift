@@ -31,8 +31,8 @@ enum Theme {
         "tram.fill", "cross.fill", "star.fill", "xmark.circle.fill",
     ]
 
-    /// Akzent der App, passend zum Petrol der Kommandozentrale.
-    static let accent = Color(hex: "#2F7D77")
+    /// Akzent der App: Systemblau, wie in der Kommandozentrale.
+    static let accent = Color.accentColor
     static let force = Color(hex: "#30A46C")
     static let aPosition = Color.red
     static let target = Color(hex: "#FF375F")

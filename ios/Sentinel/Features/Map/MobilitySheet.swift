@@ -2,6 +2,9 @@ import SwiftUI
 
 /// Fortbewegung wählen: zu Fuß, in einem Fahrzeug der eigenen Kräfte oder mit einer ÖPNV-Linie samt Fahrtrichtung.
 struct MobilitySheet: View {
+    /// Vorgewählte Art, z. B. beim Antippen von „Fahrzeug“ auf der Karte.
+    var initialMode: Fortbewegung?
+
     @Environment(AppModel.self) private var model
     @Environment(LageStore.self) private var lage
     @Environment(\.dismiss) private var dismiss
@@ -50,7 +53,7 @@ struct MobilitySheet: View {
                     Button("Schließen") { dismiss() }
                 }
             }
-            .onAppear { mode = lage.me?.data.fortbewegung ?? .fuss }
+            .onAppear { mode = initialMode ?? lage.me?.data.fortbewegung ?? .fuss }
             .task(id: "\(mode.rawValue)|\(query)") {
                 guard mode == .oepnv else { return }
                 try? await Task.sleep(for: .milliseconds(250))

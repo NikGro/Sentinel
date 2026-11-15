@@ -12,6 +12,11 @@ struct MapObjectEditor: View {
     @Environment(\.dismiss) private var dismiss
     @State private var object: MapObject
     @State private var radiusText: String
+    /// Schnellwahl „vor x Minuten“; `nil`, sobald die Zeit von Hand gesetzt wurde.
+    @State private var minutesAgo: Int? = 0
+    /// Beim neuen Fahndungsraum: Haltestellen im Umkreis gleich mit anzeigen.
+    @State private var addsStops = false
+    @State private var stopsRadius = 500.0
 
     init(context: EditorContext, startMoving: @escaping (String) -> Void) {
         self.context = context
@@ -29,7 +34,10 @@ struct MapObjectEditor: View {
     private var sinceBinding: Binding<Date> {
         Binding(
             get: { object.since ?? .now },
-            set: { object.zeit = (min($0, .now).timeIntervalSince1970 * 1000).rounded() }
+            set: {
+                object.zeit = (min($0, .now).timeIntervalSince1970 * 1000).rounded()
+                minutesAgo = nil
+            }
         )
     }
 
@@ -43,7 +51,7 @@ struct MapObjectEditor: View {
         List {
             Section {
                 Label("Dauerhafte Orte sind gesperrt", systemImage: "lock.fill")
-                Text("Zum Bearbeiten unter Mehr, Dauerhafte Orte entsperren.")
+                Text("Zum Bearbeiten unter Mehr „Dauerhafte Orte bearbeiten“ einschalten.")
                     .foregroundStyle(.secondary)
             }
             if !object.notiz.isEmpty { Section("Notiz") { Text(object.notiz) } }
@@ -67,20 +75,42 @@ struct MapObjectEditor: View {
             Form {
                 if object.typ == .fahndungsraum {
                     Section {
-                        DatePicker("Seit", selection: sinceBinding, in: ...Date.now, displayedComponents: [.date, .hourAndMinute])
-                        HStack {
-                            ForEach([0, 5, 10, 15, 30], id: \.self) { minutes in
-                                Button(minutes == 0 ? "Jetzt" : "-\(minutes) Min") {
-                                    object.zeit = (Date.now.addingTimeInterval(TimeInterval(-minutes * 60)).timeIntervalSince1970 * 1000).rounded()
-                                }
-                                .buttonStyle(.bordered)
-                                .controlSize(.small)
+                        Picker("Vor", selection: Binding(
+                            get: { minutesAgo ?? -1 },
+                            set: { minutes in
+                                guard minutes >= 0 else { return }
+                                minutesAgo = minutes
+                                object.zeit = (Date.now.addingTimeInterval(TimeInterval(-minutes * 60)).timeIntervalSince1970 * 1000).rounded()
                             }
+                        )) {
+                            Text("Jetzt").tag(0)
+                            Text("5 Min").tag(5)
+                            Text("10").tag(10)
+                            Text("15").tag(15)
+                            Text("30").tag(30)
                         }
+                        .pickerStyle(.segmented)
+                        .listRowSeparator(.hidden)
+                        DatePicker("Seit", selection: sinceBinding, in: ...Date.now, displayedComponents: [.date, .hourAndMinute])
                     } header: {
                         Text("Letzte Sichtung")
                     } footer: {
                         Text("Ab diesem Zeitpunkt wächst der Raum, in dem sich die Zielperson zu Fuß, mit dem ÖPNV oder dem Fahrzeug befinden kann. Verschieben, um den Ort zu ändern.")
+                    }
+
+                    if context.isNew {
+                        Section {
+                            Toggle("Haltestellen im Umkreis", systemImage: "bus.fill", isOn: $addsStops)
+                            if addsStops {
+                                Picker("Umkreis", selection: $stopsRadius) {
+                                    ForEach([300.0, 500, 1000, 2000], id: \.self) { meter in
+                                        Text(Format.distance(meter)).tag(meter)
+                                    }
+                                }
+                            }
+                        } footer: {
+                            Text("Zeigt zusätzlich alle Bus- und Bahnhaltestellen rund um den Ort der letzten Sichtung.")
+                        }
                     }
                 }
 
@@ -134,7 +164,7 @@ struct MapObjectEditor: View {
                     }
                 }
 
-                if object.typ == .kreis {
+                if object.typ == .kreis || object.typ == .haltestellen {
                     Section("Radius in Metern") {
                         TextField("Radius", text: $radiusText)
                             .keyboardType(.numberPad)
@@ -209,7 +239,14 @@ struct MapObjectEditor: View {
         if result.typ == .kreis {
             result.radius = min(max(Double(radiusText) ?? 150, 5), 100_000)
         }
+        if result.typ == .haltestellen {
+            result.radius = min(max(Double(radiusText) ?? 500, 50), 5000)
+        }
         lage.saveMapObject(result, id: context.id)
+        if context.isNew, result.typ == .fahndungsraum, addsStops, let point = result.punkte.first {
+            let stops = MapObject(layerId: result.layerId, typ: .haltestellen, titel: "Haltestellen", farbe: "#0A84FF", punkte: [point], radius: stopsRadius)
+            lage.saveMapObject(stops, id: LageStore.newId())
+        }
         dismiss()
     }
 }

@@ -28,6 +28,36 @@ export const adminStatus = signal<AdminStatus | null>(null);
 export const coverage = signal<{ memberId: string; punkte: [number, number, number][] }[]>([]);
 /** Weg-Zeit-Flächen je Fahndungsraum (Kennung der Markierung). */
 export const reach = signal<Record<string, ReachArea[]>>({});
+
+export interface StopNearby {
+  name: string;
+  lat: number;
+  lon: number;
+  meter: number;
+  linien: { ref: string; typ: string }[];
+}
+/** Haltestellen je Umkreis-Markierung, Schlüssel: Mittelpunkt und Radius. */
+export const stopsNearby = signal<Record<string, StopNearby[]>>({});
+const stopsLoading = new Set<string>();
+
+export function stopsKey(point: { lat: number; lon: number }, radius: number): string {
+  return `${point.lat.toFixed(5)},${point.lon.toFixed(5)},${Math.round(radius)}`;
+}
+
+/** Lädt die Haltestellen eines Umkreises einmalig nach. */
+export async function loadStopsNearby(point: { lat: number; lon: number }, radius: number): Promise<void> {
+  const key = stopsKey(point, radius);
+  if (stopsNearby.value[key] || stopsLoading.has(key)) return;
+  stopsLoading.add(key);
+  try {
+    const body = await api(`/oepnv/haltestellen?lat=${point.lat}&lon=${point.lon}&radius=${Math.round(radius)}`);
+    stopsNearby.value = { ...stopsNearby.value, [key]: body.haltestellen };
+  } catch {
+    /* später erneut versuchen */
+  } finally {
+    stopsLoading.delete(key);
+  }
+}
 export const reachModes = signal<Record<ReachMode, boolean>>({ fuss: true, kfz: true, oepnv: true });
 
 // Nur für diese Sitzung: Kartenwerkzeug, Zielebene neuer Objekte, ausgeblendete Ebenen, Auswahl.
