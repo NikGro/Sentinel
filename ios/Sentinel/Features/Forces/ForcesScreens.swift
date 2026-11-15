@@ -1,14 +1,14 @@
 import SwiftUI
 
-/// Kräfte und Fahrzeuge des Einsatzes.
-struct TeamScreen: View {
+/// Kräfte: Fahnder und die Fahrzeugflotte. Fahnder schalten sich selbst aktiv; Fahrzeuge kann jeder für den Einsatz schalten.
+struct ForcesScreen: View {
     @Environment(LageStore.self) private var lage
     @State private var vehicleEditor: VehicleEditorContext?
 
     var body: some View {
         NavigationStack {
             List {
-                Section("Kräfte") {
+                Section {
                     ForEach(lage.sortedMembers) { member in
                         NavigationLink {
                             MemberQuickLook(member: member)
@@ -17,6 +17,10 @@ struct TeamScreen: View {
                             MemberRow(member: member)
                         }
                     }
+                } header: {
+                    Text("Fahnder")
+                } footer: {
+                    Text("Jeder Fahnder legt sich beim ersten Start selbst an und schaltet unter Mehr den Ruhemodus.")
                 }
 
                 Section {
@@ -26,17 +30,25 @@ struct TeamScreen: View {
                         } label: {
                             VehicleRow(vehicle: vehicle)
                         }
+                        .swipeActions(edge: .leading) {
+                            Button(vehicle.data.aktiv ? "Abschalten" : "Einschalten") {
+                                var next = vehicle.data
+                                next.aktiv.toggle()
+                                lage.put(next, id: vehicle.id)
+                            }
+                            .tint(vehicle.data.aktiv ? .gray : .green)
+                        }
                     }
                     Button("Fahrzeug anlegen", systemImage: "plus") {
-                        vehicleEditor = VehicleEditorContext(id: LageStore.newId(), vehicle: Vehicle(bezeichnung: ""), isNew: true)
+                        vehicleEditor = VehicleEditorContext(id: LageStore.newId(), vehicle: Vehicle(funkrufname: ""), isNew: true)
                     }
                 } header: {
                     Text("Fahrzeuge")
                 } footer: {
-                    Text("Einsteigen bindet das Fahrzeug an Ihren Standort. Beim Aussteigen bleibt es am aktuellen Ort stehen.")
+                    Text("Fahrzeuge bleiben dauerhaft angelegt und werden für den heutigen Einsatz eingeschaltet. Steigt der letzte Insasse aus, bleibt das Fahrzeug an Ort und Stelle.")
                 }
             }
-            .navigationTitle("Team")
+            .navigationTitle("Kräfte")
             .sheet(item: $vehicleEditor) { context in
                 VehicleEditor(context: context)
             }
@@ -50,10 +62,10 @@ private struct MemberRow: View {
 
     var body: some View {
         HStack(spacing: 12) {
-            Avatar(blobId: member.data.fotoBlob, fallbackText: member.data.funkrufname, size: 44, tint: lage.isOnline(member.id) ? .green : .gray)
+            Avatar(blobId: member.data.fotoBlob, fallbackText: member.data.spitzname, size: 44, tint: lage.isOnline(member.id) && member.data.aktiv ? .green : .gray)
             VStack(alignment: .leading, spacing: 2) {
                 HStack(spacing: 6) {
-                    Text(member.data.funkrufname)
+                    Text(member.data.spitzname)
                         .font(.headline)
                     if lage.operation.a?.memberId == member.id {
                         Text("A")
@@ -68,17 +80,16 @@ private struct MemberRow: View {
                             .foregroundStyle(.secondary)
                     }
                 }
-                Text("\(member.data.name) · \(member.data.dienststelle)")
+                Text("\(member.data.name), \(member.data.dienststelle)")
                     .font(.subheadline)
                     .foregroundStyle(.secondary)
                     .lineLimit(1)
-                if let vehicle = member.data.fahrzeugId.flatMap({ lage.vehicles[$0] }) {
-                    Label(vehicle.data.bezeichnung, systemImage: "car.fill")
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-                }
+                Label(member.data.aktiv ? lage.mobilityDescription(of: member.data) : "Ruhemodus", systemImage: member.data.aktiv ? member.data.fortbewegung.symbolName : "moon.zzz.fill")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
             }
         }
+        .opacity(member.data.aktiv ? 1 : 0.6)
     }
 }
 
@@ -99,26 +110,29 @@ struct VehicleRow: View {
             .clipShape(.rect(cornerRadius: 8))
 
             VStack(alignment: .leading, spacing: 2) {
-                Text(vehicle.data.bezeichnung)
+                Text(vehicle.data.funkrufname)
                     .font(.headline)
-                if !vehicle.data.kennzeichen.isEmpty {
-                    Text(vehicle.data.kennzeichen)
-                        .font(.caption.monospaced().weight(.semibold))
+                if !vehicle.data.subtitle.isEmpty {
+                    Text(vehicle.data.subtitle)
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
                 }
                 Text(occupancy)
                     .font(.caption)
                     .foregroundStyle(.secondary)
             }
         }
+        .opacity(vehicle.data.aktiv ? 1 : 0.55)
     }
 
     private var occupancy: String {
-        let names = lage.occupants(of: vehicle.id).map(\.data.funkrufname)
+        guard vehicle.data.aktiv else { return "Nicht im Einsatz" }
+        let names = lage.occupants(of: vehicle.id).map(\.data.spitzname)
         return names.isEmpty ? "Unbesetzt" : "Besetzt: \(names.joined(separator: ", "))"
     }
 }
 
-/// Fahrzeug mit Ein-/Aussteigen, Standort und Tracker.
+/// Fahrzeug mit Aktiv-Schalter, Besatzung, Standort und Tracker.
 struct VehicleDetail: View {
     let vehicleId: String
 
@@ -136,7 +150,7 @@ struct VehicleDetail: View {
     }
 
     private func content(_ vehicle: Versioned<Vehicle>) -> some View {
-        let isAboard = lage.me?.data.fahrzeugId == vehicle.id
+        let isAboard = lage.me?.data.fortbewegung == .fahrzeug && lage.me?.data.fahrzeugId == vehicle.id
         let position = lage.position(ofVehicle: vehicle)
         return List {
             if vehicle.data.fotoBlob != nil {
@@ -149,21 +163,23 @@ struct VehicleDetail: View {
             }
 
             Section {
-                Button {
-                    if isAboard { lage.leaveVehicle() } else { lage.board(vehicleId: vehicle.id) }
-                } label: {
-                    Label(isAboard ? "Aussteigen" : "Einsteigen", systemImage: isAboard ? "figure.walk.departure" : "car.side.arrowtriangle.down.fill")
-                        .fontWeight(.semibold)
-                        .frame(maxWidth: .infinity)
+                Toggle("Im heutigen Einsatz", isOn: Binding(
+                    get: { vehicle.data.aktiv },
+                    set: { active in
+                        var next = vehicle.data
+                        next.aktiv = active
+                        lage.put(next, id: vehicle.id)
+                    }
+                ))
+                if vehicle.data.aktiv {
+                    Button(isAboard ? "Zu Fuß weiter" : "Ich sitze in diesem Fahrzeug", systemImage: isAboard ? "figure.walk" : "car.fill") {
+                        if isAboard { lage.setMobility(.fuss) } else { lage.setMobility(.fahrzeug, vehicleId: vehicle.id) }
+                    }
                 }
-                .buttonStyle(.glassProminent)
-                .tint(isAboard ? .orange : .accentColor)
-                .controlSize(.large)
-                .listRowBackground(Color.clear)
-                .listRowInsets(EdgeInsets())
             }
 
             Section("Fahrzeug") {
+                if !vehicle.data.bezeichnung.isEmpty { LabeledContent("Bezeichnung", value: vehicle.data.bezeichnung) }
                 if !vehicle.data.kennzeichen.isEmpty {
                     LabeledContent("Kennzeichen") {
                         Text(vehicle.data.kennzeichen)
@@ -172,7 +188,7 @@ struct VehicleDetail: View {
                 }
                 if !vehicle.data.beschreibung.isEmpty { Text(vehicle.data.beschreibung) }
                 LabeledContent("Besatzung") {
-                    let names = lage.occupants(of: vehicle.id).map(\.data.funkrufname)
+                    let names = lage.occupants(of: vehicle.id).map(\.data.spitzname)
                     Text(names.isEmpty ? "Unbesetzt" : names.joined(separator: ", "))
                 }
             }
@@ -194,7 +210,7 @@ struct VehicleDetail: View {
                 }
             }
         }
-        .navigationTitle(vehicle.data.bezeichnung)
+        .navigationTitle(vehicle.data.funkrufname)
         .navigationBarTitleDisplayMode(.inline)
         .toolbar {
             ToolbarItem(placement: .primaryAction) {
@@ -219,7 +235,6 @@ struct VehicleEditor: View {
     @Environment(LageStore.self) private var lage
     @Environment(\.dismiss) private var dismiss
     @State private var vehicle: Vehicle
-    @State private var boardsAfterSave = true
     @State private var showsDelete = false
 
     init(context: VehicleEditorContext) {
@@ -227,10 +242,17 @@ struct VehicleEditor: View {
         _vehicle = State(initialValue: context.vehicle)
     }
 
+    private var callsignValid: Bool {
+        !vehicle.funkrufname.trimmingCharacters(in: .whitespaces).isEmpty
+    }
+
     var body: some View {
         NavigationStack {
             Form {
                 Section {
+                    TextField("Funkrufname, z. B. P 35/24", text: $vehicle.funkrufname)
+                        .textInputAutocapitalization(.characters)
+                        .autocorrectionDisabled()
                     TextField("Bezeichnung, z. B. Golf grau", text: $vehicle.bezeichnung)
                     TextField("Kennzeichen", text: $vehicle.kennzeichen)
                         .textInputAutocapitalization(.characters)
@@ -238,9 +260,14 @@ struct VehicleEditor: View {
                     TextField("Beschreibung", text: $vehicle.beschreibung, axis: .vertical)
                         .lineLimit(1...4)
                     PhotoField(title: "Fahrzeugbild", blobId: $vehicle.fotoBlob)
+                } footer: {
+                    if !vehicle.funkrufname.isEmpty, Callsign.normalize(vehicle.funkrufname) == nil {
+                        Text("Empfohlen ist das Format „P 35/24“.")
+                    }
                 }
 
                 Section {
+                    Toggle("Im heutigen Einsatz", isOn: $vehicle.aktiv)
                     Picker("GPS-Tracker", selection: $vehicle.trackerId) {
                         Text("Keiner").tag(String?.none)
                         ForEach(lage.trackers.values.sorted { $0.data.name < $1.data.name }) { tracker in
@@ -248,14 +275,10 @@ struct VehicleEditor: View {
                         }
                     }
                 } footer: {
-                    Text("Mit Tracker meldet das Fahrzeug seinen Standort selbst, auch wenn das Einsteigen vergessen wurde.")
+                    Text("Mit Tracker meldet das Fahrzeug seinen Standort selbst, auch wenn niemand eingetragen ist.")
                 }
 
-                if context.isNew {
-                    Section {
-                        Toggle("Nach dem Anlegen einsteigen", isOn: $boardsAfterSave)
-                    }
-                } else {
+                if !context.isNew {
                     Section {
                         Button("Fahrzeug löschen", systemImage: "trash", role: .destructive) { showsDelete = true }
                     }
@@ -269,7 +292,7 @@ struct VehicleEditor: View {
                 }
                 ToolbarItem(placement: .confirmationAction) {
                     Button("Sichern", action: save)
-                        .disabled(vehicle.bezeichnung.trimmingCharacters(in: .whitespaces).isEmpty)
+                        .disabled(!callsignValid)
                 }
             }
             .confirmationDialog("Fahrzeug für alle löschen?", isPresented: $showsDelete, titleVisibility: .visible) {
@@ -283,9 +306,8 @@ struct VehicleEditor: View {
 
     private func save() {
         var result = vehicle
+        result.funkrufname = Callsign.normalize(result.funkrufname) ?? result.funkrufname.trimmingCharacters(in: .whitespaces)
         result.bezeichnung = result.bezeichnung.trimmingCharacters(in: .whitespaces)
-        guard lage.put(result, id: context.id) else { return }
-        if context.isNew, boardsAfterSave { lage.board(vehicleId: context.id) }
-        dismiss()
+        if lage.put(result, id: context.id) { dismiss() }
     }
 }

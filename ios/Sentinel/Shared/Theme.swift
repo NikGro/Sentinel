@@ -31,6 +31,9 @@ enum Theme {
         "tram.fill", "cross.fill", "star.fill", "xmark.circle.fill",
     ]
 
+    /// Akzent der App, passend zum Petrol der Kommandozentrale.
+    static let accent = Color(hex: "#2F7D77")
+    static let force = Color(hex: "#30A46C")
     static let aPosition = Color.red
     static let target = Color(hex: "#FF375F")
     static let coverage = Color(hex: "#FF9F0A")
@@ -40,14 +43,6 @@ enum Theme {
         case .fuss: .green
         case .kfz: .red
         case .oepnv: .blue
-        }
-    }
-
-    static func color(for modus: Modus) -> Color {
-        switch modus {
-        case .observation: .red
-        case .fahndung: .orange
-        case .oberflaeche: .blue
         }
     }
 }
@@ -62,6 +57,12 @@ enum Format {
 
     static func duration(_ seconds: TimeInterval) -> String {
         Duration.seconds(seconds).formatted(.units(allowed: [.hours, .minutes], width: .narrow).locale(locale))
+    }
+
+    /// Dauer als Minuten und Sekunden, z. B. "1:05".
+    static func clock(_ seconds: TimeInterval) -> String {
+        let total = max(0, Int(seconds.rounded()))
+        return String(format: "%d:%02d", total / 60, total % 60)
     }
 
     static func time(_ date: Date) -> String {

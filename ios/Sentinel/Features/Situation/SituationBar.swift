@@ -1,6 +1,6 @@
 import SwiftUI
 
-/// Lageleiste: in jeder Ansicht sichtbar, zeigt Modus, Funkkanal, A-Position und Verbindungszustand.
+/// Lageleiste: in jeder Ansicht sichtbar, zeigt Funkkanal, A-Position, eigene Fortbewegung und Verbindungszustand.
 struct SituationBar: View {
     let onTap: () -> Void
 
@@ -9,25 +9,25 @@ struct SituationBar: View {
     var body: some View {
         Button(action: onTap) {
             HStack(spacing: 10) {
-                Label(lage.operation.modus.shortTitle, systemImage: lage.operation.modus.symbolName)
-                    .font(.caption.weight(.bold))
-                    .foregroundStyle(Theme.color(for: lage.operation.modus))
-
-                Divider().frame(height: 16)
-
                 Label(lage.operation.funkkanal ?? "–", systemImage: "antenna.radiowaves.left.and.right")
                     .font(.caption.weight(.semibold).monospacedDigit())
 
-                if lage.operation.modus == .observation {
+                Divider().frame(height: 16)
+
+                HStack(spacing: 4) {
+                    Text("A")
+                        .font(.caption.weight(.heavy))
+                        .foregroundStyle(Theme.aPosition)
+                    Text(lage.aHolder.map { lage.label(of: $0.data) } ?? "frei")
+                        .font(.caption.weight(.semibold))
+                        .lineLimit(1)
+                }
+
+                if let me = lage.me {
                     Divider().frame(height: 16)
-                    HStack(spacing: 4) {
-                        Text("A")
-                            .font(.caption.weight(.heavy))
-                            .foregroundStyle(Theme.aPosition)
-                        Text(lage.aHolder?.data.funkrufname ?? "frei")
-                            .font(.caption.weight(.semibold))
-                            .lineLimit(1)
-                    }
+                    Image(systemName: me.data.aktiv ? me.data.fortbewegung.symbolName : "moon.zzz.fill")
+                        .font(.caption.weight(.semibold))
+                        .foregroundStyle(me.data.aktiv ? Color.primary : Color.orange)
                 }
 
                 Spacer(minLength: 4)
@@ -55,7 +55,7 @@ struct SituationBar: View {
     }
 
     private var onlineCount: Int {
-        lage.members.keys.filter { lage.isOnline($0) }.count
+        lage.activeMembers.filter { lage.isOnline($0.id) }.count
     }
 
     private var connectionColor: Color {
@@ -67,8 +67,8 @@ struct SituationBar: View {
     }
 
     private var accessibilitySummary: String {
-        var parts = ["Modus \(lage.operation.modus.title)", "Funkkanal \(lage.operation.funkkanal ?? "nicht gesetzt")"]
-        if lage.operation.modus == .observation { parts.append("A-Position \(lage.aHolder?.data.funkrufname ?? "frei")") }
+        var parts = ["Funkkanal \(lage.operation.funkkanal ?? "nicht gesetzt")"]
+        parts.append("A-Position \(lage.aHolder.map { lage.label(of: $0.data) } ?? "frei")")
         parts.append(lage.connection == .verbunden ? "\(onlineCount) Kräfte verbunden" : lage.connection.title)
         return parts.joined(separator: ", ")
     }

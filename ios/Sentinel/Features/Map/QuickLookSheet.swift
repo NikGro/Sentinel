@@ -3,7 +3,8 @@ import SwiftUI
 /// Kurzübersicht zu einem angetippten Kartenobjekt.
 struct QuickLookSheet: View {
     let selection: MapSelection
-    let placeLastKnown: () -> Void
+    /// Standort eines Ziels auf der Karte neu setzen.
+    let placeTarget: (String) -> Void
 
     @Environment(LageStore.self) private var lage
 
@@ -14,11 +15,9 @@ struct QuickLookSheet: View {
                 case .member(let id):
                     if let member = lage.members[id] { MemberQuickLook(member: member) } else { gone }
                 case .vehicle(let id):
-                    if let vehicle = lage.vehicles[id] { VehicleDetail(vehicleId: vehicle.id) } else { gone }
+                    if lage.vehicles[id] != nil { VehicleDetail(vehicleId: id) } else { gone }
                 case .target(let id):
-                    if lage.targets[id] != nil { TargetDetail(targetId: id) } else { gone }
-                case .lastKnown:
-                    LastKnownQuickLook(placeLastKnown: placeLastKnown)
+                    if lage.targets[id] != nil { TargetDetail(targetId: id, placeOnMap: placeTarget) } else { gone }
                 }
             }
             .navigationBarTitleDisplayMode(.inline)
@@ -40,15 +39,14 @@ struct MemberQuickLook: View {
     @Environment(\.dismiss) private var dismiss
 
     private var position: Position? { lage.positions[member.id] }
-    private var vehicle: Versioned<Vehicle>? { member.data.fahrzeugId.flatMap { lage.vehicles[$0] } }
 
     var body: some View {
         List {
             Section {
                 HStack(spacing: 16) {
-                    Avatar(blobId: member.data.fotoBlob, fallbackText: member.data.funkrufname, size: 72, tint: lage.isOnline(member.id) ? .green : .gray)
+                    Avatar(blobId: member.data.fotoBlob, fallbackText: member.data.spitzname, size: 72, tint: lage.isOnline(member.id) && member.data.aktiv ? .green : .gray)
                     VStack(alignment: .leading, spacing: 4) {
-                        Text(member.data.funkrufname)
+                        Text(member.data.spitzname)
                             .font(.title2.weight(.bold))
                         Text(member.data.name)
                         Text(member.data.dienststelle)
@@ -59,7 +57,7 @@ struct MemberQuickLook: View {
                 .listRowBackground(Color.clear)
 
                 HStack(spacing: 12) {
-                    if let url = PhoneNumber.callURL(member.data.telefon) {
+                    if let url = PhoneNumber.callURL(member.data.telefon), member.id != lage.selfId {
                         Button { openURL(url) } label: {
                             Label("Anrufen", systemImage: "phone.fill")
                                 .frame(maxWidth: .infinity)
@@ -84,7 +82,8 @@ struct MemberQuickLook: View {
             }
 
             Section("Status") {
-                LabeledContent("Verbindung", value: lage.isOnline(member.id) ? "Verbunden" : "Nicht verbunden")
+                LabeledContent("Dienst", value: member.data.aktiv ? (lage.isOnline(member.id) ? "Verbunden" : "Nicht verbunden") : "Ruhemodus")
+                LabeledContent("Unterwegs", value: lage.mobilityDescription(of: member.data))
                 if let position {
                     LabeledContent("Position", value: Format.ago(position.date))
                     if let speed = position.spd, speed > 1 {
@@ -102,7 +101,7 @@ struct MemberQuickLook: View {
                 }
             }
 
-            if let vehicle {
+            if let vehicle = lage.vehicle(of: member.data) {
                 Section("Fahrzeug") {
                     NavigationLink {
                         VehicleDetail(vehicleId: vehicle.id)
@@ -112,48 +111,6 @@ struct MemberQuickLook: View {
                 }
             }
         }
-        .navigationTitle(member.data.funkrufname)
-    }
-}
-
-private struct LastKnownQuickLook: View {
-    let placeLastKnown: () -> Void
-
-    @Environment(AppModel.self) private var model
-    @Environment(LageStore.self) private var lage
-    @Environment(\.dismiss) private var dismiss
-
-    var body: some View {
-        List {
-            if let lkp = lage.operation.lkp {
-                Section {
-                    LabeledContent("Zeitpunkt", value: Format.dateTime(lkp.date))
-                    LabeledContent("Verstrichen", value: Format.ago(lkp.date))
-                    LabeledContent("Quelle", value: lkp.quelle == "a" ? "A-Position beim Moduswechsel" : lkp.quelle == "tracker" ? "Tracker" : "Manuell gesetzt")
-                    if let target = lkp.targetId.flatMap({ lage.targets[$0] }) {
-                        LabeledContent("Zielperson", value: target.data.displayName)
-                    }
-                }
-                Section {
-                    Button("Hinführen", systemImage: "location.north.line.fill") {
-                        model.navigate(to: .point(lkp.point, title: "Letzter Standort"))
-                        dismiss()
-                    }
-                    if lage.operation.modus == .fahndung {
-                        Button("Auf Karte neu setzen", systemImage: "hand.tap") {
-                            placeLastKnown()
-                            dismiss()
-                        }
-                    }
-                    Button("Entfernen", systemImage: "trash", role: .destructive) {
-                        lage.clearLastKnownPosition()
-                        dismiss()
-                    }
-                }
-            } else {
-                ContentUnavailableView("Kein letzter Standort", systemImage: "questionmark.circle")
-            }
-        }
-        .navigationTitle("Letzter bekannter Standort")
+        .navigationTitle(member.data.spitzname)
     }
 }

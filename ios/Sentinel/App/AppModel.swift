@@ -10,12 +10,17 @@ final class AppModel {
     let settings = LocalSettings()
     let lage = LageStore()
     let location = LocationService()
+    let locationContext = LocationContext()
     let photos = PhotoStore()
     let fahndung = FahndungStore()
     let route = RouteFollower()
+    let search = SearchService()
+    let audio = AudioRecorder()
     let lock = AppLock()
 
     private(set) var credentials: Credentials?
+    /// HTTP-Zugriff mit der Anmeldung dieses Geräts; `nil`, solange nicht angemeldet.
+    private(set) var client: APIClient?
 
     enum Phase {
         case onboarding
@@ -33,17 +38,20 @@ final class AppModel {
     init() {
         credentials = Credentials.load()
         location.onPosition = { [weak self] position in
-            guard let self, self.settings.sharesLocation else { return }
+            guard let self else { return }
+            if let current = self.location.current { self.locationContext.update(with: current) }
+            // Im Ruhemodus oder bei abgeschalteter Freigabe verlässt der Standort das Gerät nicht.
+            guard self.settings.sharesLocation, self.lage.me?.data.aktiv != false else { return }
             self.lage.sendPosition(position)
         }
         lage.onMemberPosition = { [weak self] memberId, position in
-            guard let self, self.lage.operation.modus == .fahndung else { return }
+            guard let self, self.settings.showsCoverage else { return }
             self.fahndung.appendLive(memberId: memberId, position: position)
         }
         #if DEBUG
         if DemoData.isRequested {
             credentials = DemoData.credentials
-            lage.loadDemo(DemoData.snapshot(modus: DemoData.requestedMode))
+            lage.loadDemo(DemoData.snapshot(now: .now))
             return
         }
         #endif
@@ -70,6 +78,7 @@ final class AppModel {
         route.serverRoute = nil
         photos.reset()
         lage.disconnect()
+        client = nil
         Credentials.clear()
         credentials = nil
     }
@@ -77,16 +86,17 @@ final class AppModel {
     private func activate() {
         guard let credentials else { return }
         let client = APIClient(baseURL: credentials.serverURL, token: credentials.token)
+        self.client = client
         photos.client = client
         fahndung.client = client
         route.serverRoute = { from, to, specialRights, walking in
             let result = try await client.route(from: from, to: to, specialRights: specialRights, walking: walking)
+            let coordinates = result.punkte.filter { $0.count >= 2 }.map { CLLocationCoordinate2D(latitude: $0[0], longitude: $0[1]) }
             return RouteResult(
-                coordinates: result.punkte.filter { $0.count >= 2 }.map { CLLocationCoordinate2D(latitude: $0[0], longitude: $0[1]) },
+                coordinates: coordinates,
                 distance: result.meter,
                 travelTime: result.sekunden,
-                // Die erste Anweisung beschreibt nur die Abfahrtsrichtung; hilfreicher ist das nächste Manöver.
-                nextInstruction: (result.anweisungen.dropFirst().first ?? result.anweisungen.first)?.text,
+                steps: result.anweisungen.map { RouteStep(instruction: $0.text, distance: $0.meter, startIndex: $0.index ?? 0) },
                 usesSpecialRights: result.sonderrechte
             )
         }
@@ -106,29 +116,44 @@ final class AppModel {
 
     // MARK: Navigation
 
+    var myPoint: GeoPoint? { location.current.map { GeoPoint($0.coordinate) } }
+
     /// Startet die dynamische Routenführung zu einem (auch bewegten) Ziel.
     func navigate(to target: NavigationTarget) {
+        if target == .leapfrog, !lage.joinedLeapfrog { lage.joinLeapfrog() }
+        if case .leapfrog = route.target, target != .leapfrog { lage.leaveLeapfrog() }
         route.start(
             target,
-            origin: { [weak self] in self?.location.current.map { GeoPoint($0.coordinate) } },
+            origin: { [weak self] in self?.myPoint },
             resolve: { [weak self] target in self?.resolve(target) }
         )
     }
 
-    private func resolve(_ target: NavigationTarget) -> (point: GeoPoint, title: String)? {
+    func stopNavigation() {
+        if route.target == .leapfrog { lage.leaveLeapfrog() }
+        route.stop()
+    }
+
+    func resolve(_ target: NavigationTarget) -> (point: GeoPoint, title: String)? {
         switch target {
         case .aPosition:
             guard let holder = lage.aHolder, let position = lage.aPosition else { return nil }
-            return (position.point, "A-Position (\(holder.data.funkrufname))")
+            return (position.point, "A-Position (\(lage.label(of: holder.data)))")
+        case .leapfrog:
+            guard let stop = lage.myLeapfrogStop else { return nil }
+            return (stop.point, "Haltestelle \(stop.name)")
         case .member(let id):
             guard let member = lage.members[id], let position = lage.positions[id] else { return nil }
-            return (position.point, member.data.funkrufname)
+            return (position.point, lage.label(of: member.data))
         case .vehicle(let id):
             guard let vehicle = lage.vehicles[id], let position = lage.position(ofVehicle: vehicle) else { return nil }
-            return (position.point, vehicle.data.bezeichnung)
+            return (position.point, vehicle.data.funkrufname)
         case .target(let id):
             guard let target = lage.targets[id], let position = lage.position(ofTarget: target) else { return nil }
             return (position.point, target.data.displayName)
+        case .object(let id):
+            guard let object = lage.mapObjects[id]?.data else { return nil }
+            return (lage.position(ofObject: object), object.titel.isEmpty ? object.typ.title : object.titel)
         case .point(let point, let title):
             return (point, title)
         }

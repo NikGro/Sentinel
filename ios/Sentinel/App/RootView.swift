@@ -90,7 +90,7 @@ private struct ConnectingView: View {
 /// Hauptnavigation. Die Lageleiste über der Tableiste ist in jeder Ansicht sichtbar.
 struct MainView: View {
     enum Section: Hashable {
-        case lage, ziele, team, chat, mehr
+        case lage, ziele, kraefte, chat, mehr
     }
 
     @Environment(LageStore.self) private var lage
@@ -106,8 +106,8 @@ struct MainView: View {
             Tab("Ziele", systemImage: "person.crop.rectangle.stack", value: Section.ziele) {
                 TargetListScreen()
             }
-            Tab("Team", systemImage: "person.3", value: Section.team) {
-                TeamScreen()
+            Tab("Kräfte", systemImage: "person.3", value: Section.kraefte) {
+                ForcesScreen()
             }
             Tab("Chat", systemImage: "bubble.left.and.bubble.right", value: Section.chat) {
                 ChatScreen()

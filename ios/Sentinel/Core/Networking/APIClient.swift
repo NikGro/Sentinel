@@ -27,7 +27,7 @@ struct APIClient: Sendable {
         configuration.httpCookieAcceptPolicy = .never
         configuration.httpShouldSetCookies = false
         configuration.urlCache = nil
-        configuration.timeoutIntervalForRequest = 20
+        configuration.timeoutIntervalForRequest = 30
         configuration.waitsForConnectivity = false
         return URLSession(configuration: configuration)
     }()
@@ -45,8 +45,11 @@ struct APIClient: Sendable {
         let fehler: String
     }
 
-    private func request(_ method: String, _ path: String, body: Data? = nil, contentType: String = "application/json") async throws -> Data {
-        var request = URLRequest(url: baseURL.appending(path: path))
+    private func request(_ method: String, _ path: String, query: [URLQueryItem] = [], body: Data? = nil, contentType: String = "application/json") async throws -> Data {
+        var components = URLComponents(url: baseURL.appending(path: path), resolvingAgainstBaseURL: false)
+        if !query.isEmpty { components?.queryItems = query }
+        guard let url = components?.url else { throw APIError.invalidServer }
+        var request = URLRequest(url: url)
         request.httpMethod = method
         request.httpBody = body
         if body != nil { request.setValue(contentType, forHTTPHeaderField: "Content-Type") }
@@ -67,6 +70,14 @@ struct APIClient: Sendable {
         return data
     }
 
+    private func json<T: Decodable>(_ type: T.Type, _ method: String, _ path: String, query: [URLQueryItem] = []) async throws -> T {
+        try JSONDecoder().decode(T.self, from: try await request(method, path, query: query))
+    }
+
+    private func json<T: Decodable, B: Encodable>(_ type: T.Type, _ method: String, _ path: String, query: [URLQueryItem] = [], body: B) async throws -> T {
+        try JSONDecoder().decode(T.self, from: try await request(method, path, query: query, body: try JSONEncoder().encode(body)))
+    }
+
     // MARK: Anmeldung
 
     struct Enrollment: Decodable {
@@ -75,32 +86,41 @@ struct APIClient: Sendable {
     }
 
     func enroll(code: String, deviceName: String) async throws -> Enrollment {
-        let body = try JSONEncoder().encode(["code": code, "geraet": deviceName])
-        return try JSONDecoder().decode(Enrollment.self, from: try await request("POST", "api/v1/enroll", body: body))
+        try await json(Enrollment.self, "POST", "api/v1/enroll", body: ["code": code, "geraet": deviceName])
     }
 
-    // MARK: Bilder
+    // MARK: Dateien
 
-    private struct BlobID: Decodable {
+    struct UploadedBlob: Decodable {
         let id: String
+        let mime: String
+        let groesse: Int
+    }
+
+    func upload(_ data: Data, contentType: String) async throws -> UploadedBlob {
+        try JSONDecoder().decode(UploadedBlob.self, from: try await request("POST", "api/v1/blobs", body: data, contentType: contentType))
     }
 
     func uploadImage(_ jpeg: Data) async throws -> String {
-        try JSONDecoder().decode(BlobID.self, from: try await request("POST", "api/v1/blobs", body: jpeg, contentType: "image/jpeg")).id
+        try await upload(jpeg, contentType: "image/jpeg").id
     }
 
-    func image(id: String) async throws -> Data {
+    func blob(id: String) async throws -> Data {
         try await request("GET", "api/v1/blobs/\(id)")
     }
 
-    // MARK: Fahndung
+    func image(id: String) async throws -> Data {
+        try await blob(id: id)
+    }
+
+    // MARK: Bestreifung, Weg-Zeit, Routen
 
     private struct Coverage: Decodable {
         let tracks: [CoverageTrack]
     }
 
     func coverage() async throws -> [CoverageTrack] {
-        try JSONDecoder().decode(Coverage.self, from: try await request("GET", "api/v1/coverage")).tracks
+        try await json(Coverage.self, "GET", "api/v1/coverage").tracks
     }
 
     private struct ReachRequest: Encodable {
@@ -115,16 +135,14 @@ struct APIClient: Sendable {
     }
 
     func reach(from origin: GeoPoint, minutes: Double, modes: [ReachMode]) async throws -> [ReachArea] {
-        let body = try JSONEncoder().encode(ReachRequest(lat: origin.lat, lon: origin.lon, minuten: minutes, modi: modes))
-        return try JSONDecoder().decode(ReachResponse.self, from: try await request("POST", "api/v1/reach", body: body)).flaechen
+        try await json(ReachResponse.self, "POST", "api/v1/reach", body: ReachRequest(lat: origin.lat, lon: origin.lon, minuten: minutes, modi: modes)).flaechen
     }
-
-    // MARK: Routen auf dem eigenen Wegenetz
 
     struct ServerRoute: Decodable {
         struct Step: Decodable {
             let text: String
             let meter: Double
+            let index: Int?
         }
 
         /// Linienzug als [Breite, Länge].
@@ -143,7 +161,153 @@ struct APIClient: Sendable {
     }
 
     func route(from origin: GeoPoint, to destination: GeoPoint, specialRights: Bool, walking: Bool) async throws -> ServerRoute {
-        let body = try JSONEncoder().encode(RouteRequest(von: origin, nach: destination, sonderrechte: specialRights, zuFuss: walking))
-        return try JSONDecoder().decode(ServerRoute.self, from: try await request("POST", "api/v1/route", body: body))
+        try await json(ServerRoute.self, "POST", "api/v1/route", body: RouteRequest(von: origin, nach: destination, sonderrechte: specialRights, zuFuss: walking))
+    }
+
+    // MARK: ÖPNV und Kreuzungen
+
+    private struct LineSearch: Decodable {
+        let linien: [LineHit]
+        let verfuegbar: Bool
+    }
+
+    func lines(query: String, near: GeoPoint?) async throws -> (lines: [LineHit], available: Bool) {
+        var items = [URLQueryItem(name: "q", value: query)]
+        if let near {
+            items.append(URLQueryItem(name: "lat", value: String(near.lat)))
+            items.append(URLQueryItem(name: "lon", value: String(near.lon)))
+        }
+        let result = try await json(LineSearch.self, "GET", "api/v1/oepnv/linien", query: items)
+        return (result.linien, result.verfuegbar)
+    }
+
+    private struct Crossing: Decodable {
+        let punkte: [GeoPoint]
+    }
+
+    func intersections(_ a: String, _ b: String, near: GeoPoint) async throws -> [GeoPoint] {
+        try await json(
+            Crossing.self,
+            "GET",
+            "api/v1/kreuzung",
+            query: [
+                URLQueryItem(name: "a", value: a), URLQueryItem(name: "b", value: b),
+                URLQueryItem(name: "lat", value: String(near.lat)), URLQueryItem(name: "lon", value: String(near.lon)),
+            ]
+        ).punkte
+    }
+
+    // MARK: Verwaltung (auch in der App verfügbar)
+
+    struct AdminStatus: Decodable {
+        struct Device: Decodable, Identifiable {
+            let id: String
+            let name: String
+            let lastSeen: Double
+            let revoked: Bool
+        }
+
+        struct UnknownTracker: Decodable, Identifiable {
+            let kennung: String
+            let zuletzt: Double
+            var id: String { kennung }
+        }
+
+        struct Trackers: Decodable {
+            struct Paj: Decodable {
+                let aktiv: Bool
+                let fehler: String?
+            }
+
+            let h02Port: Int
+            let unbekannt: [UnknownTracker]
+            let paj: Paj
+        }
+
+        struct ArgusProject: Decodable, Identifiable, Hashable {
+            let name: String
+            let tage: [String]
+            var id: String { name }
+        }
+
+        struct Argus: Decodable {
+            let verfuegbar: Bool
+            let projekte: [ArgusProject]
+        }
+
+        struct Oepnv: Decodable {
+            let linien: Int
+            let stand: Double?
+            let fehler: String?
+        }
+
+        struct Release: Decodable {
+            let version: String
+            let build: String
+        }
+
+        let zugangscode: String
+        let geraete: [Device]
+        let tracker: Trackers
+        let argus: Argus
+        let routing: Bool
+        let oepnv: Oepnv?
+        let release: Release?
+        let sidestoreQuelle: String
+    }
+
+    func adminStatus() async throws -> AdminStatus {
+        try await json(AdminStatus.self, "GET", "api/v1/admin/status")
+    }
+
+    private struct JoinCode: Decodable {
+        let zugangscode: String
+    }
+
+    func rotateJoinCode() async throws -> String {
+        try await json(JoinCode.self, "POST", "api/v1/admin/zugangscode").zugangscode
+    }
+
+    func revokeDevice(_ id: String) async throws {
+        _ = try await request("POST", "api/v1/admin/geraete/\(id)/sperren")
+    }
+
+    func configurePaj(email: String, password: String) async throws {
+        _ = try await request("PUT", "api/v1/admin/paj", body: try JSONEncoder().encode(["email": email, "passwort": password]))
+    }
+
+    func removePaj() async throws {
+        _ = try await request("DELETE", "api/v1/admin/paj")
+    }
+
+    struct PajDevice: Decodable, Identifiable {
+        let kennung: String
+        let name: String
+        var id: String { kennung }
+    }
+
+    private struct PajDevices: Decodable {
+        let geraete: [PajDevice]
+    }
+
+    func pajDevices() async throws -> [PajDevice] {
+        try await json(PajDevices.self, "GET", "api/v1/admin/paj/geraete").geraete
+    }
+
+    private struct ArgusRequest: Encodable {
+        let projekt: String
+        let datum: String
+        let vonStunde: Int
+        let bisStunde: Int
+        let top: Int
+        let alsEntwurf: Bool
+    }
+
+    private struct ArgusResult: Decodable {
+        let zellen: Int
+    }
+
+    func importArgus(project: String, day: String, fromHour: Int, toHour: Int, top: Int, asDraft: Bool) async throws -> Int {
+        try await json(ArgusResult.self, "POST", "api/v1/admin/argus/import", body: ArgusRequest(projekt: project, datum: day, vonStunde: fromHour, bisStunde: toHour, top: top, alsEntwurf: asDraft)).zellen
     }
 }

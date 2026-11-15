@@ -17,6 +17,7 @@ final class LageStore {
     private(set) var targets: [String: Versioned<Target>] = [:]
     private(set) var trackers: [String: Versioned<Tracker>] = [:]
     private(set) var layers: [String: Versioned<Layer>] = [:]
+    private(set) var rooms: [String: Versioned<ChatRoom>] = [:]
     private(set) var messages: [Versioned<ChatMessage>] = []
 
     private(set) var operation = OperationState()
@@ -28,8 +29,6 @@ final class LageStore {
     private(set) var coverageGeneration = 0
     /// Letzte Fehlermeldung des Servers, zur Anzeige.
     var lastError: String?
-
-    private(set) var undoStack = UndoStack()
 
     private let realtime = RealtimeClient()
     private var onUnauthorized: () -> Void = {}
@@ -59,12 +58,12 @@ final class LageStore {
         targets = [:]
         trackers = [:]
         layers = [:]
+        rooms = [:]
         messages = []
         positions = [:]
         trackerPositions = [:]
         online = []
         operation = OperationState()
-        undoStack.clear()
     }
 
     // MARK: Abgeleitete Sichten
@@ -74,18 +73,32 @@ final class LageStore {
     var holdsA: Bool { operation.a?.memberId == selfId && selfId != nil }
     var aHolder: Versioned<Member>? { operation.a.flatMap { members[$0.memberId] } }
     var aPosition: Position? { operation.a.flatMap { positions[$0.memberId] } }
+    /// Fährt die A gerade im ÖPNV mit bekannter Linie? Dann ist überschlagendes Anfahren möglich.
+    var aRidesTransit: Bool { aHolder?.data.fortbewegung == .oepnv && aHolder?.data.oepnv != nil }
+    var joinedLeapfrog: Bool { selfId.map { operation.ueberschlagen.teilnehmer.contains($0) } ?? false }
+    var myLeapfrogStop: LeapfrogStop? { selfId.flatMap { operation.ueberschlagen.zuweisungen[$0] } }
 
     var sortedMembers: [Versioned<Member>] {
-        members.values.sorted { $0.data.funkrufname.localizedStandardCompare($1.data.funkrufname) == .orderedAscending }
+        members.values.sorted { lhs, rhs in
+            if lhs.data.aktiv != rhs.data.aktiv { return lhs.data.aktiv }
+            return lhs.data.spitzname.localizedStandardCompare(rhs.data.spitzname) == .orderedAscending
+        }
     }
+
+    var activeMembers: [Versioned<Member>] { sortedMembers.filter(\.data.aktiv) }
 
     var sortedTargets: [Versioned<Target>] {
         targets.values.sorted { $0.data.displayName.localizedStandardCompare($1.data.displayName) == .orderedAscending }
     }
 
     var sortedVehicles: [Versioned<Vehicle>] {
-        vehicles.values.sorted { $0.data.bezeichnung.localizedStandardCompare($1.data.bezeichnung) == .orderedAscending }
+        vehicles.values.sorted { lhs, rhs in
+            if lhs.data.aktiv != rhs.data.aktiv { return lhs.data.aktiv }
+            return lhs.data.funkrufname.localizedStandardCompare(rhs.data.funkrufname) == .orderedAscending
+        }
     }
+
+    var activeVehicles: [Versioned<Vehicle>] { sortedVehicles.filter(\.data.aktiv) }
 
     var sortedLayers: [Versioned<Layer>] {
         layers.values.sorted { lhs, rhs in
@@ -96,10 +109,43 @@ final class LageStore {
         }
     }
 
+    var sortedRooms: [Versioned<ChatRoom>] {
+        rooms.values.sorted { lhs, rhs in
+            if lhs.id == ChatRoom.generalId { return true }
+            if rhs.id == ChatRoom.generalId { return false }
+            return lhs.data.name.localizedStandardCompare(rhs.data.name) == .orderedAscending
+        }
+    }
+
+    func messages(in roomId: String) -> [Versioned<ChatMessage>] {
+        messages.filter { $0.data.roomId == roomId }
+    }
+
     func isOnline(_ memberId: String) -> Bool { online.contains(memberId) }
 
+    func vehicle(of member: Member) -> Versioned<Vehicle>? {
+        guard member.fortbewegung == .fahrzeug, let id = member.fahrzeugId else { return nil }
+        return vehicles[id]
+    }
+
+    /// Bezeichnung auf der Karte: zu Fuß der Spitzname, im Fahrzeug dessen Funkrufname, im ÖPNV mit Linie.
+    func label(of member: Member) -> String {
+        if let vehicle = vehicle(of: member) { return vehicle.data.funkrufname }
+        if member.fortbewegung == .oepnv, let line = member.oepnv { return "\(member.spitzname) (\(line.linie))" }
+        return member.spitzname
+    }
+
+    /// Kurzbeschreibung der Fortbewegung, z. B. "Fahrzeug P 35/24" oder "U3 Richtung Barmbek".
+    func mobilityDescription(of member: Member) -> String {
+        switch member.fortbewegung {
+        case .fuss: return Fortbewegung.fuss.title
+        case .fahrzeug: return vehicle(of: member).map { "Fahrzeug \($0.data.funkrufname)" } ?? Fortbewegung.fahrzeug.title
+        case .oepnv: return member.oepnv.map { "\($0.linie) Richtung \($0.richtung)" } ?? Fortbewegung.oepnv.title
+        }
+    }
+
     func occupants(of vehicleId: String) -> [Versioned<Member>] {
-        sortedMembers.filter { $0.data.fahrzeugId == vehicleId }
+        activeMembers.filter { $0.data.fortbewegung == .fahrzeug && $0.data.fahrzeugId == vehicleId }
     }
 
     /// Aktueller Standort eines Fahrzeugs: frischer Tracker vor Insassen vor Abstellort.
@@ -111,20 +157,26 @@ final class LageStore {
         }
         if let occupantPosition { return (occupantPosition.point, occupantPosition.date, "Besatzung") }
         if let trackerPosition { return (trackerPosition.point, trackerPosition.date, "Tracker") }
-        if let parked = vehicle.data.abgestellt {
-            return (GeoPoint(lat: parked.lat, lon: parked.lon), Date(timeIntervalSince1970: parked.ts / 1000), "Abgestellt")
-        }
+        if let parked = vehicle.data.abgestellt { return (parked.point, parked.date, "Abgestellt") }
         return nil
     }
 
-    func position(ofTarget target: Versioned<Target>) -> Position? {
-        target.data.trackerId.flatMap { trackerPositions[$0] }
+    /// Standort eines Ziels: Tracker vor von Hand gesetztem Standort.
+    func position(ofTarget target: Versioned<Target>) -> (point: GeoPoint, date: Date, fromTracker: Bool)? {
+        if let tracker = target.data.trackerId.flatMap({ trackerPositions[$0] }) { return (tracker.point, tracker.date, true) }
+        if let standort = target.data.standort { return (standort.point, standort.date, false) }
+        return nil
+    }
+
+    /// Standort einer Markierung: bei verbundenem Tracker dessen Position, sonst der gesetzte Punkt.
+    func position(ofObject object: MapObject) -> GeoPoint {
+        object.trackerId.flatMap { trackerPositions[$0]?.point } ?? object.anchor
     }
 
     func name(of actorId: String) -> String {
         if actorId == "zentrale" { return "Zentrale" }
         if actorId == "system" { return "System" }
-        return members[actorId]?.data.funkrufname ?? "Unbekannt"
+        return members[actorId]?.data.spitzname ?? "Unbekannt"
     }
 
     // MARK: Schreiben
@@ -166,77 +218,58 @@ final class LageStore {
 
     // MARK: Einsatz-Kommandos
 
-    func setMode(_ modus: Modus) { command("modus.setzen", args: ["modus": modus.rawValue]) }
     func claimA() { command("a.uebernehmen") }
     func releaseA() { command("a.freigeben") }
     func setChannel(_ channel: String?) { command("funkkanal.setzen", args: ["kanal": channel]) }
     func setSituation(title: String, notes: String) { command("lage.setzen", args: ["titel": title, "hinweise": notes]) }
-    func clearLastKnownPosition() { command("lkp.loeschen") }
-    func board(vehicleId: String) { command("fahrzeug.einsteigen", args: ["fahrzeugId": vehicleId]) }
-    func leaveVehicle() { command("fahrzeug.aussteigen") }
     func resetCoverage() { command("bestreifung.zuruecksetzen") }
+    func joinLeapfrog() { command("ueberschlagen.beitreten") }
+    func leaveLeapfrog() { command("ueberschlagen.verlassen") }
+    func resetSituation(includingTargets: Bool) { command("lage.zuruecksetzen", args: ["ziele": includingTargets]) }
 
-    private struct LastKnownArgs: Encodable {
-        let lat: Double
-        let lon: Double
-        let ts: Double
-        let targetId: String?
+    func setActive(_ active: Bool) { command("aktiv.setzen", args: ["aktiv": active]) }
+
+    private struct MobilityArgs: Encodable {
+        let art: Fortbewegung
+        let fahrzeugId: String?
+        let oepnv: OepnvFahrt?
     }
 
-    func setLastKnownPosition(_ point: GeoPoint, at date: Date = .now, targetId: String? = nil) {
-        let ts = (date.timeIntervalSince1970 * 1000).rounded()
-        command("lkp.setzen", args: LastKnownArgs(lat: point.lat, lon: point.lon, ts: ts, targetId: targetId))
+    func setMobility(_ art: Fortbewegung, vehicleId: String? = nil, transit: OepnvFahrt? = nil) {
+        command("fortbewegung.setzen", args: MobilityArgs(art: art, fahrzeugId: vehicleId, oepnv: transit))
     }
 
-    func sendMessage(_ text: String) {
+    private struct IntervalArgs: Encodable {
+        let trackerId: String
+        let sekunden: Int
+    }
+
+    func setTrackerInterval(_ trackerId: String, seconds: Int) {
+        command("tracker.intervall", args: IntervalArgs(trackerId: trackerId, sekunden: seconds))
+    }
+
+    func sendMessage(_ text: String, in roomId: String, attachment: ChatAttachment? = nil) {
         let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !trimmed.isEmpty else { return }
-        put(ChatMessage(text: String(trimmed.prefix(1000))), id: Self.newId())
+        guard !trimmed.isEmpty || attachment != nil else { return }
+        put(ChatMessage(roomId: roomId, text: String(trimmed.prefix(1000)), anhang: attachment), id: Self.newId())
     }
 
-    // MARK: Markierungen mit Rückgängig/Wiederholen
-
-    /// Legt eine Markierung an oder ändert sie und merkt den Schritt für Rückgängig.
     func saveMapObject(_ object: MapObject, id: String) {
-        let before = mapObjects[id]?.data
-        if put(object, id: id) { undoStack.record(MapEdit(id: id, before: before, after: object)) }
+        put(object, id: id)
     }
 
     func deleteMapObject(id: String) {
-        guard let before = mapObjects[id]?.data else { return }
-        if delete(MapObject.self, id: id) { undoStack.record(MapEdit(id: id, before: before, after: nil)) }
+        delete(MapObject.self, id: id)
     }
-
-    func undo() {
-        guard let step = undoStack.undo() else { return }
-        apply(step)
-    }
-
-    func redo() {
-        guard let step = undoStack.redo() else { return }
-        apply(step)
-    }
-
-    private func apply(_ step: (id: String, restore: MapObject?)) {
-        if let restore = step.restore {
-            put(restore, id: step.id)
-        } else {
-            delete(MapObject.self, id: step.id)
-        }
-    }
-
-    #if DEBUG
-    /// Lädt eine Beispiel-Lage ohne Serververbindung (Oberflächentests).
-    func loadDemo(_ snapshot: Data) {
-        receive(snapshot)
-        connection = .verbunden
-    }
-    #endif
 
     // MARK: Empfang
 
     private func receive(_ data: Data) {
         guard let message = try? WireCodec.decode(data) else { return }
+        apply(message)
+    }
+
+    private func apply(_ message: ServerMessage) {
         switch message {
         case .snapshot(let snapshot):
             selfId = snapshot.me.id
@@ -247,6 +280,7 @@ final class LageStore {
             targets = index(snapshot.targets)
             trackers = index(snapshot.trackers)
             layers = index(snapshot.layers)
+            rooms = index(snapshot.rooms)
             messages = snapshot.messages
             operation = snapshot.operation
             positions = Dictionary(snapshot.positions.map { ($0.id, $0.p) }, uniquingKeysWith: { _, new in new })
@@ -260,12 +294,12 @@ final class LageStore {
         case .putTarget(let entity): targets[entity.id] = entity
         case .putTracker(let entity): trackers[entity.id] = entity
         case .putLayer(let entity): layers[entity.id] = entity
+        case .putRoom(let entity): rooms[entity.id] = entity
         case .putMessage(let entity):
             if !messages.contains(where: { $0.id == entity.id }) { messages.append(entity) }
         case .delete(let kind, let id):
             remove(kind: kind, id: id)
         case .operation(let next):
-            if next.modus != operation.modus || next.bestreifungSeit != operation.bestreifungSeit { coverageGeneration += 1 }
             operation = next
         case .position(let id, let position):
             positions[id] = position
@@ -295,6 +329,9 @@ final class LageStore {
             trackers[id] = nil
             trackerPositions[id] = nil
         case Layer.kind: layers[id] = nil
+        case ChatRoom.kind:
+            rooms[id] = nil
+            messages.removeAll { $0.data.roomId == id }
         case ChatMessage.kind: messages.removeAll { $0.id == id }
         default: break
         }
@@ -303,4 +340,12 @@ final class LageStore {
     private func index<T: Codable & Equatable & Sendable>(_ list: [Versioned<T>]) -> [String: Versioned<T>] {
         Dictionary(list.map { ($0.id, $0) }, uniquingKeysWith: { _, new in new })
     }
+
+    #if DEBUG
+    /// Lädt eine Beispiel-Lage ohne Serververbindung (Oberflächentests).
+    func loadDemo(_ snapshot: Data) {
+        receive(snapshot)
+        connection = .verbunden
+    }
+    #endif
 }

@@ -11,7 +11,7 @@ options:
 
 settings:
   base:
-    MARKETING_VERSION: "0.1.1"
+    MARKETING_VERSION: "0.2.0"
     CURRENT_PROJECT_VERSION: "1"
     SWIFT_VERSION: "5.0"
     SWIFT_STRICT_CONCURRENCY: minimal
@@ -56,7 +56,8 @@ targets:
         ITSAppUsesNonExemptEncryption: false
         NSLocationWhenInUseUsageDescription: Ihr Standort wird mit dem Einsatzteam auf der Lagekarte geteilt.
         NSLocationAlwaysAndWhenInUseUsageDescription: Ihr Standort wird auch im Hintergrund mit dem Einsatzteam geteilt.
-        NSCameraUsageDescription: Für Fotos von Profil, Fahrzeug und Zielperson.
+        NSCameraUsageDescription: Für Fotos von Profil, Fahrzeug, Ziel und im Chat.
+        NSMicrophoneUsageDescription: Für Sprachnachrichten im Einsatz-Chat.
         NSFaceIDUsageDescription: Schützt die App vor unbefugtem Zugriff.
         # Ausschließlich verschlüsselte Verbindungen, keine Ausnahmen.
         NSAppTransportSecurity:

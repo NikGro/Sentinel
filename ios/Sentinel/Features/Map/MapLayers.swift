@@ -6,44 +6,45 @@ import SwiftUI
 
 // MARK: Kräfte
 
-struct MemberPin: Identifiable, Equatable {
+/// Ein Fahnder zu Fuß bzw. im ÖPNV, oder ein besetztes Fahrzeug samt Besatzung.
+struct ForcePin: Identifiable, Equatable {
     let id: String
-    let callsign: String
+    let label: String
     let coordinate: CLLocationCoordinate2D
     let isA: Bool
     let isStale: Bool
-    let inVehicle: Bool
+    let symbol: String
+    let target: MapSelection
 
-    static func == (lhs: MemberPin, rhs: MemberPin) -> Bool {
-        lhs.id == rhs.id && lhs.callsign == rhs.callsign && lhs.isA == rhs.isA && lhs.isStale == rhs.isStale
-            && lhs.inVehicle == rhs.inVehicle && lhs.coordinate.latitude == rhs.coordinate.latitude
-            && lhs.coordinate.longitude == rhs.coordinate.longitude
+    static func == (lhs: ForcePin, rhs: ForcePin) -> Bool {
+        lhs.id == rhs.id && lhs.label == rhs.label && lhs.isA == rhs.isA && lhs.isStale == rhs.isStale && lhs.symbol == rhs.symbol
+            && lhs.coordinate.latitude == rhs.coordinate.latitude && lhs.coordinate.longitude == rhs.coordinate.longitude
     }
 }
 
-struct MembersLayer: MapContent {
-    let pins: [MemberPin]
-    let onSelect: (String) -> Void
+struct ForcesLayer: MapContent {
+    let pins: [ForcePin]
+    let onSelect: (MapSelection) -> Void
 
     var body: some MapContent {
         ForEach(pins) { pin in
-            Annotation(pin.callsign, coordinate: pin.coordinate, anchor: .center) {
-                MemberMarker(pin: pin)
-                    .onTapGesture { onSelect(pin.id) }
+            Annotation(pin.label, coordinate: pin.coordinate, anchor: .center) {
+                ForceMarker(pin: pin)
+                    .onTapGesture { onSelect(pin.target) }
             }
             .annotationTitles(.hidden)
         }
     }
 }
 
-private struct MemberMarker: View {
-    let pin: MemberPin
+private struct ForceMarker: View {
+    let pin: ForcePin
 
     var body: some View {
         VStack(spacing: 2) {
             ZStack {
                 Circle()
-                    .fill(pin.isA ? Theme.aPosition : (pin.isStale ? Color.gray : Color.green))
+                    .fill(pin.isA ? Theme.aPosition : (pin.isStale ? Color.gray : Theme.force))
                     .frame(width: pin.isA ? 40 : 28, height: pin.isA ? 40 : 28)
                     .overlay(Circle().stroke(.white, lineWidth: 2))
                     .shadow(radius: 2)
@@ -52,85 +53,55 @@ private struct MemberMarker: View {
                         .font(.system(size: 22, weight: .heavy, design: .rounded))
                         .foregroundStyle(.white)
                 } else {
-                    Image(systemName: pin.inVehicle ? "car.fill" : "person.fill")
+                    Image(systemName: pin.symbol)
                         .font(.system(size: 12, weight: .bold))
                         .foregroundStyle(.white)
                 }
             }
-            Text(pin.callsign)
+            Text(pin.label)
                 .font(.caption2.weight(.bold))
+                .lineLimit(1)
                 .padding(.horizontal, 5)
                 .padding(.vertical, 1)
                 .background(.thinMaterial, in: .capsule)
         }
         .opacity(pin.isStale && !pin.isA ? 0.7 : 1)
         .accessibilityElement(children: .ignore)
-        .accessibilityLabel(pin.isA ? "A-Position, \(pin.callsign)" : pin.callsign)
+        .accessibilityLabel(pin.isA ? "A-Position, \(pin.label)" : pin.label)
         .accessibilityAddTraits(.isButton)
     }
 }
 
-// MARK: Fahrzeuge, Zielpersonen, letzter Standort
+// MARK: Fahrzeuge, Ziele
 
 struct SymbolPin: Identifiable {
     let id: String
     let title: String
-    let subtitle: String
+    let symbol: String
+    let color: Color
     let coordinate: CLLocationCoordinate2D
+    let selection: MapSelection
 }
 
-struct VehiclesLayer: MapContent {
+struct SymbolLayer: MapContent {
     let pins: [SymbolPin]
-    let onSelect: (String) -> Void
+    let onSelect: (MapSelection) -> Void
 
     var body: some MapContent {
         ForEach(pins) { pin in
             Annotation(pin.title, coordinate: pin.coordinate, anchor: .center) {
-                BadgeMarker(symbol: "car.fill", color: .indigo, title: pin.title, shape: .rect(cornerRadius: 8))
-                    .onTapGesture { onSelect(pin.id) }
+                BadgeMarker(symbol: pin.symbol, color: pin.color, title: pin.title)
+                    .onTapGesture { onSelect(pin.selection) }
             }
             .annotationTitles(.hidden)
         }
     }
 }
 
-struct TargetsLayer: MapContent {
-    let pins: [SymbolPin]
-    let onSelect: (String) -> Void
-
-    var body: some MapContent {
-        ForEach(pins) { pin in
-            Annotation(pin.title, coordinate: pin.coordinate, anchor: .center) {
-                BadgeMarker(symbol: "scope", color: Theme.target, title: pin.title, shape: .circle)
-                    .onTapGesture { onSelect(pin.id) }
-            }
-            .annotationTitles(.hidden)
-        }
-    }
-}
-
-struct LastKnownLayer: MapContent {
-    let pins: [SymbolPin]
-    let faded: Bool
-    let onSelect: () -> Void
-
-    var body: some MapContent {
-        ForEach(pins) { pin in
-            Annotation(pin.title, coordinate: pin.coordinate, anchor: .center) {
-                BadgeMarker(symbol: "questionmark", color: Theme.target, title: pin.subtitle, shape: .circle)
-                    .opacity(faded ? 0.55 : 1)
-                    .onTapGesture(perform: onSelect)
-            }
-            .annotationTitles(.hidden)
-        }
-    }
-}
-
-private struct BadgeMarker<S: Shape>: View {
+private struct BadgeMarker: View {
     let symbol: String
     let color: Color
     let title: String
-    let shape: S
 
     var body: some View {
         VStack(spacing: 2) {
@@ -138,8 +109,8 @@ private struct BadgeMarker<S: Shape>: View {
                 .font(.system(size: 14, weight: .bold))
                 .foregroundStyle(.white)
                 .frame(width: 30, height: 30)
-                .background(color, in: shape)
-                .overlay(shape.stroke(.white, lineWidth: 2))
+                .background(color, in: .rect(cornerRadius: 8))
+                .overlay(RoundedRectangle(cornerRadius: 8).stroke(.white, lineWidth: 2))
                 .shadow(radius: 2)
             if !title.isEmpty {
                 Text(title)
@@ -158,12 +129,19 @@ private struct BadgeMarker<S: Shape>: View {
 
 // MARK: Markierungen
 
+/// Antippbarer Griff einer Markierung an ihrer aktuellen Position (bei Trackern die Trackerposition).
+struct ObjectHandle: Identifiable {
+    let id: String
+    let object: MapObject
+    let coordinate: CLLocationCoordinate2D
+    let locked: Bool
+}
+
 struct MapObjectsLayer: MapContent {
     let lines: [Versioned<MapObject>]
     let areas: [Versioned<MapObject>]
     let circles: [Versioned<MapObject>]
-    /// Objekte mit antippbarem Symbol bzw. Titel (Marker, Beschriftungen und die Griffe der Formen).
-    let handles: [Versioned<MapObject>]
+    let handles: [ObjectHandle]
     let onSelect: (String) -> Void
 
     var body: some MapContent {
@@ -181,10 +159,10 @@ struct MapObjectsLayer: MapContent {
             MapPolyline(coordinates: object.data.punkte.map(\.coordinate))
                 .stroke(Color(hex: object.data.farbe), style: StrokeStyle(lineWidth: 4, lineCap: .round, lineJoin: .round))
         }
-        ForEach(handles) { object in
-            Annotation(object.data.titel, coordinate: object.data.anchor.coordinate, anchor: .center) {
-                MapObjectHandle(object: object.data)
-                    .onTapGesture { onSelect(object.id) }
+        ForEach(handles) { handle in
+            Annotation(handle.object.titel, coordinate: handle.coordinate, anchor: .center) {
+                MapObjectHandle(object: handle.object, locked: handle.locked)
+                    .onTapGesture { onSelect(handle.id) }
             }
             .annotationTitles(.hidden)
         }
@@ -193,29 +171,47 @@ struct MapObjectsLayer: MapContent {
 
 private struct MapObjectHandle: View {
     let object: MapObject
+    let locked: Bool
 
     private var color: Color { Color(hex: object.farbe) }
 
+    private var label: String {
+        if object.typ == .fahndungsraum {
+            let since = object.since.map { "seit \(Format.time($0))" } ?? ""
+            return [object.titel.isEmpty ? "Fahndungsraum" : object.titel, since].filter { !$0.isEmpty }.joined(separator: ", ")
+        }
+        return object.titel
+    }
+
     var body: some View {
         VStack(spacing: 2) {
-            if object.typ == .marker {
-                Image(systemName: object.symbol.isEmpty ? "mappin" : object.symbol)
+            if object.typ == .marker || object.typ == .fahndungsraum {
+                Image(systemName: object.typ == .fahndungsraum ? "scope" : (object.symbol.isEmpty ? "mappin" : object.symbol))
                     .font(.system(size: 14, weight: .bold))
                     .foregroundStyle(.white)
                     .frame(width: 30, height: 30)
                     .background(color, in: .circle)
-                    .overlay(Circle().stroke(.white, lineWidth: 2))
+                    .overlay(Circle().stroke(.white, style: StrokeStyle(lineWidth: 2, dash: object.typ == .fahndungsraum ? [4, 3] : [])))
+                    .overlay(alignment: .bottomTrailing) {
+                        if locked {
+                            Image(systemName: "lock.fill")
+                                .font(.system(size: 8, weight: .bold))
+                                .foregroundStyle(.white)
+                                .padding(2)
+                                .background(.black.opacity(0.6), in: .circle)
+                        }
+                    }
                     .shadow(radius: 2)
             }
-            if !object.titel.isEmpty {
-                Text(object.titel)
+            if !label.isEmpty {
+                Text(label)
                     .font(object.typ == .text ? .footnote.weight(.bold) : .caption2.weight(.bold))
                     .lineLimit(2)
                     .multilineTextAlignment(.center)
                     .padding(.horizontal, 6)
                     .padding(.vertical, 2)
                     .background(.thinMaterial, in: .capsule)
-                    .overlay(Capsule().stroke(color, lineWidth: object.typ == .marker ? 0 : 1.5))
+                    .overlay(Capsule().stroke(color, lineWidth: object.typ == .marker || object.typ == .fahndungsraum ? 0 : 1.5))
             } else if object.typ != .marker {
                 Circle()
                     .fill(color)
@@ -225,12 +221,12 @@ private struct MapObjectHandle: View {
             }
         }
         .accessibilityElement(children: .ignore)
-        .accessibilityLabel(object.titel.isEmpty ? object.typ.title : object.titel)
+        .accessibilityLabel(label.isEmpty ? object.typ.title : label)
         .accessibilityAddTraits(.isButton)
     }
 }
 
-// MARK: Fahndung
+// MARK: Bestreifung und Fahndungsräume
 
 struct CoverageLayer: MapContent {
     let segments: [CoverageSegment]
@@ -277,7 +273,7 @@ struct RouteLayer: MapContent {
     var body: some MapContent {
         ForEach(lines) { line in
             MapPolyline(line.polyline)
-                .stroke(line.specialRights ? Color.purple : Color.blue, style: StrokeStyle(lineWidth: 6, lineCap: .round, lineJoin: .round))
+                .stroke(line.specialRights ? Color.purple : Color.blue, style: StrokeStyle(lineWidth: 7, lineCap: .round, lineJoin: .round))
         }
     }
 }
@@ -304,6 +300,33 @@ struct DraftLayer: MapContent {
                     .frame(width: 12, height: 12)
                     .overlay(Circle().stroke(.black.opacity(0.6), lineWidth: 1))
             }
+        }
+    }
+}
+
+// MARK: Haltestellen beim überschlagenden Anfahren
+
+struct StopsLayer: MapContent {
+    let stops: [LeapfrogStop]
+    let mine: LeapfrogStop?
+
+    var body: some MapContent {
+        ForEach(Array(stops.enumerated()), id: \.offset) { index, stop in
+            Annotation(stop.name, coordinate: stop.point.coordinate, anchor: .center) {
+                VStack(spacing: 2) {
+                    Text("\(index + 1)")
+                        .font(.caption.weight(.heavy))
+                        .foregroundStyle(.white)
+                        .frame(width: 22, height: 22)
+                        .background(stop == mine ? Color.green : Color.blue, in: .rect(cornerRadius: 5))
+                        .overlay(RoundedRectangle(cornerRadius: 5).stroke(.white, lineWidth: 2))
+                    Text(stop.name)
+                        .font(.caption2.weight(.semibold))
+                        .padding(.horizontal, 4)
+                        .background(.thinMaterial, in: .capsule)
+                }
+            }
+            .annotationTitles(.hidden)
         }
     }
 }

@@ -7,10 +7,39 @@ struct LayerSheet: View {
     @Environment(\.dismiss) private var dismiss
 
     var body: some View {
+        @Bindable var settings = settings
         NavigationStack {
             List {
+                Section("Kartenstil") {
+                    Picker("Stil", selection: $settings.mapStyle) {
+                        ForEach(MapStyleChoice.allCases) { style in
+                            Label(style.title, systemImage: style.symbolName).tag(style)
+                        }
+                    }
+                    .pickerStyle(.segmented)
+                    Toggle("Verkehrslage", systemImage: "car.rear.road.lane", isOn: $settings.showsTraffic)
+                        .disabled(settings.mapStyle == .satellit)
+                    Text("3D: mit zwei Fingern nach oben wischen oder den Kippknopf unter dem Kompass verwenden.")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
+
                 Section {
-                    ForEach(lage.sortedLayers) { layer in
+                    Toggle("Bestreifte Wege", systemImage: "road.lanes", isOn: $settings.showsCoverage)
+                    ForEach(ReachMode.allCases) { mode in
+                        Toggle(isOn: Binding(get: { settings.isReachEnabled(mode) }, set: { _ in settings.toggleReach(mode) })) {
+                            Label("Fahndungsraum \(mode.title)", systemImage: mode.symbolName)
+                        }
+                        .tint(Theme.color(for: mode))
+                    }
+                } header: {
+                    Text("Anzeige")
+                } footer: {
+                    Text("Bestreifung wird immer für alle aufgezeichnet; angezeigt wird sie nur, wenn Sie sie hier einschalten.")
+                }
+
+                Section {
+                    ForEach(lage.sortedLayers.filter(\.data.isLive)) { layer in
                         Toggle(isOn: visibility(of: layer.id)) {
                             Label {
                                 VStack(alignment: .leading, spacing: 2) {
@@ -27,7 +56,7 @@ struct LayerSheet: View {
                 } header: {
                     Text("Ebenen")
                 } footer: {
-                    Text("Vorbereitete Pakete und Argus-Prognosen lädt die Kommandozentrale in die Lage. Hier bestimmen Sie nur, was Ihre Karte anzeigt.")
+                    Text("Hier bestimmen Sie nur, was Ihre Karte anzeigt. Pakete laden und Argus-Prognosen importieren: Mehr, Ebenen und Pakete.")
                 }
             }
             .navigationTitle("Kartenebenen")
