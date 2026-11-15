@@ -1,5 +1,9 @@
 # Änderungen
 
+## 0.2.2
+
+- Neues App-Icon: Schild mit Schriftzug SENTINEL auf Schwarz, wie der Startbildschirm; auch in SideStore und als Favicon der Kommandozentrale
+
 ## 0.2.1
 
 - App hing beim Start (Logo, schwarzer Bildschirm oder „Verbinde mit dem Server“): Die Karte wurde bei jeder
