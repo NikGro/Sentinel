@@ -118,4 +118,32 @@ struct APIClient: Sendable {
         let body = try JSONEncoder().encode(ReachRequest(lat: origin.lat, lon: origin.lon, minuten: minutes, modi: modes))
         return try JSONDecoder().decode(ReachResponse.self, from: try await request("POST", "api/v1/reach", body: body)).flaechen
     }
+
+    // MARK: Routen auf dem eigenen Wegenetz
+
+    struct ServerRoute: Decodable {
+        struct Step: Decodable {
+            let text: String
+            let meter: Double
+        }
+
+        /// Linienzug als [Breite, Länge].
+        let punkte: [[Double]]
+        let meter: Double
+        let sekunden: Double
+        let anweisungen: [Step]
+        let sonderrechte: Bool
+    }
+
+    private struct RouteRequest: Encodable {
+        let von: GeoPoint
+        let nach: GeoPoint
+        let sonderrechte: Bool
+        let zuFuss: Bool
+    }
+
+    func route(from origin: GeoPoint, to destination: GeoPoint, specialRights: Bool, walking: Bool) async throws -> ServerRoute {
+        let body = try JSONEncoder().encode(RouteRequest(von: origin, nach: destination, sonderrechte: specialRights, zuFuss: walking))
+        return try JSONDecoder().decode(ServerRoute.self, from: try await request("POST", "api/v1/route", body: body))
+    }
 }

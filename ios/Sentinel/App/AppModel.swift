@@ -1,3 +1,4 @@
+import CoreLocation
 import Observation
 import SwiftUI
 import UIKit
@@ -66,6 +67,7 @@ final class AppModel {
         fahndung.stopReach()
         fahndung.clearCoverage()
         fahndung.client = nil
+        route.serverRoute = nil
         photos.reset()
         lage.disconnect()
         Credentials.clear()
@@ -77,6 +79,17 @@ final class AppModel {
         let client = APIClient(baseURL: credentials.serverURL, token: credentials.token)
         photos.client = client
         fahndung.client = client
+        route.serverRoute = { from, to, specialRights, walking in
+            let result = try await client.route(from: from, to: to, specialRights: specialRights, walking: walking)
+            return RouteResult(
+                coordinates: result.punkte.filter { $0.count >= 2 }.map { CLLocationCoordinate2D(latitude: $0[0], longitude: $0[1]) },
+                distance: result.meter,
+                travelTime: result.sekunden,
+                // Die erste Anweisung beschreibt nur die Abfahrtsrichtung; hilfreicher ist das nächste Manöver.
+                nextInstruction: (result.anweisungen.dropFirst().first ?? result.anweisungen.first)?.text,
+                usesSpecialRights: result.sonderrechte
+            )
+        }
         lage.connect(credentials: credentials) { [weak self] in self?.signOut() }
         location.start()
     }

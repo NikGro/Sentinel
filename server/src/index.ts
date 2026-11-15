@@ -8,6 +8,7 @@ import { Hub } from './hub.js';
 import { Lage } from './lage.js';
 import { MapKitTokens } from './mapkit.js';
 import { ReachService } from './reach/reach.js';
+import { RouteService } from './reach/route.js';
 import { ReleaseStore } from './release.js';
 import { Vault } from './security.js';
 import { startH02Listener } from './trackers/h02.js';
@@ -40,6 +41,7 @@ export async function createServices(config: Config, database?: Database): Promi
     lage,
     hub,
     reach,
+    routes: new RouteService(config.valhallaUrl),
     vault,
     paj,
     mapkit: new MapKitTokens(config.mapkit, new URL(config.publicUrl).origin),

@@ -21,12 +21,17 @@ Kommandozentrale und wird bei Bedarf in die Lage geladen. Ebenen lassen sich je 
 
 | Modus | Besonderheiten |
 | --- | --- |
-| Observation | A-Position (Übernahme mit zweitem Druck zur Bestätigung), dynamische Routenführung zur A |
+| Observation | A-Position (Übernahme mit zweitem Druck zur Bestätigung), dynamische Routenführung zur A, auf Wunsch mit Sonderrechten |
 | Fahndung | Bestreifung (wo war wer schon), letzter bekannter Standort, Weg-Zeit-Flächen für Fuß, Kfz und ÖPNV |
 | Oberfläche | nur Kräfte, Markierungen und Ebenen (z. B. Argus-Predict-Prognose) |
 
 Beim Wechsel von Observation zu Fahndung wird die A-Position zum letzten bekannten Standort; beim Rückwechsel
 bleiben Standort und Bestreifung gespeichert. Hängt an der Zielperson ein Tracker, führt er den Standort nach.
+
+**Routenführung mit Sonderrechten.** Ein Schalter in der Routenanzeige lässt die Route Einbahnstraßen und
+Abbiegeverbote ignorieren und Anliegerstraßen nicht meiden. Physische Sperren wie Poller bleiben beachtet, ebenso
+Straßen, die für Kfz ganz gesperrt sind (z. B. Fußgängerzonen), weil die Kartendaten dort nicht zwischen Schild und
+Sperre unterscheiden. Gerechnet wird auf dem eigenen Server; die Route erscheint violett statt blau.
 
 **Weitere Funktionen**
 

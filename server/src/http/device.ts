@@ -10,6 +10,13 @@ const reachBody = geoPoint.extend({
   modi: z.array(z.enum(REACH_MODES)).min(1).max(3),
 });
 
+const routeBody = z.object({
+  von: geoPoint,
+  nach: geoPoint,
+  sonderrechte: z.boolean().default(false),
+  zuFuss: z.boolean().default(false),
+});
+
 const MAX_IMAGE_BYTES = 3 * 1024 * 1024;
 
 function imageMime(bytes: Buffer): 'image/jpeg' | 'image/png' | null {
@@ -20,7 +27,7 @@ function imageMime(bytes: Buffer): 'image/jpeg' | 'image/png' | null {
 
 /** Routen für angemeldete Geräte und die Kommandozentrale: Bilder, Bestreifung, Weg-Zeit-Berechnung. */
 export function registerDeviceRoutes(app: FastifyInstance, services: Services, guards: Guards): void {
-  const { db, lage, reach } = services;
+  const { db, lage, reach, routes } = services;
   const uploadLimiter = new RateLimiter(60, 10 * 60_000);
   const reachLimiter = new RateLimiter(120, 60_000);
 
@@ -61,5 +68,17 @@ export function registerDeviceRoutes(app: FastifyInstance, services: Services, g
     if (!body.success) throw new HttpError(400, 'Ungültige Anfrage.');
     const { lat, lon, minuten, modi } = body.data;
     return { flaechen: await reach.compute({ lat, lon }, minuten, modi) };
+  });
+
+  app.post('/api/v1/route', async (request) => {
+    guards.actor(request);
+    guards.limit(reachLimiter, request);
+    const body = routeBody.safeParse(request.body);
+    if (!body.success) throw new HttpError(400, 'Ungültige Anfrage.');
+    if (!routes.available) throw new HttpError(503, 'Auf diesem Server ist kein Wegenetz eingerichtet.');
+    const { von, nach, sonderrechte, zuFuss } = body.data;
+    const result = await routes.route(von, nach, { sonderrechte, zuFuss });
+    if (!result) throw new HttpError(404, 'Keine Route gefunden.');
+    return result;
   });
 }

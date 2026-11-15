@@ -8,6 +8,7 @@ import { cellCorners, selectCells } from '../src/argus.js';
 import { distanceMeters, utmToWgs84 } from '../src/geo.js';
 import { MapKitTokens } from '../src/mapkit.js';
 import { modelRadiusMeters, ReachService } from '../src/reach/reach.js';
+import { costingFor, decodePolyline6, RouteService } from '../src/reach/route.js';
 import { hashPassword, RateLimiter, Vault, verifyPassword } from '../src/security.js';
 import { parseH02Binary, parseH02Text } from '../src/trackers/h02.js';
 
@@ -98,4 +99,32 @@ test('Apple Maps: Token ist ES256-signiert und an die eigene Adresse gebunden', 
   assert.equal(claims.origin, 'https://sentinel.example.org');
   assert.equal(claims.exp - claims.iat, 1800);
   assert.ok(verify('sha256', Buffer.from(`${header}.${payload}`), { key: publicKey, dsaEncoding: 'ieee-p1363' }, Buffer.from(signature, 'base64url')));
+});
+
+test('Route: Linienzug wird entpackt', () => {
+  // Bekanntes Beispiel des Polyline-Verfahrens, hier mit sechs Nachkommastellen kodiert.
+  assert.deepEqual(decodePolyline6('_izlhA~rlgdF_{geC~ywl@_kwzCn`{nI'), [[38.5, -120.2], [40.7, -120.95], [43.252, -126.453]]);
+});
+
+test('Route: Sonderrechte ignorieren Einbahnstraßen und Abbiegeverbote, aber keine Zufahrtssperren', async () => {
+  const special = costingFor({ sonderrechte: true, zuFuss: false }).costing_options.auto as Record<string, unknown>;
+  assert.equal(special.ignore_oneways, true);
+  assert.equal(special.ignore_restrictions, true);
+  assert.equal('ignore_access' in special, false, 'Poller und andere Sperren bleiben beachtet');
+  assert.deepEqual(costingFor({ sonderrechte: false, zuFuss: false }).costing_options, {});
+  assert.equal(costingFor({ sonderrechte: true, zuFuss: true }).costing, 'pedestrian');
+
+  let sent: any;
+  const ok = (async (_url: string, init: RequestInit) => {
+    sent = JSON.parse(init.body as string);
+    return new Response(JSON.stringify({ trip: { summary: { length: 0.76, time: 105 }, legs: [{ shape: '_izlhA~rlgdF_{geC~ywl@', maneuvers: [{ instruction: 'Links abbiegen.', length: 0.2 }] }] } }));
+  }) as typeof fetch;
+  const result = await new RouteService('http://valhalla', ok).route({ lat: 53.55, lon: 9.99 }, { lat: 53.56, lon: 10 }, { sonderrechte: true, zuFuss: false });
+  assert.equal(sent.costing_options.auto.ignore_oneways, true);
+  assert.equal(sent.directions_options.language, 'de-DE');
+  assert.equal(result?.meter, 760);
+  assert.equal(result?.sekunden, 105);
+  assert.equal(result?.anweisungen[0]?.text, 'Links abbiegen.');
+  assert.equal(result?.sonderrechte, true);
+  assert.equal(await new RouteService('', ok).route({ lat: 1, lon: 1 }, { lat: 2, lon: 2 }, { sonderrechte: false, zuFuss: false }), null);
 });

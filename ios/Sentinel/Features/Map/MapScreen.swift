@@ -355,7 +355,8 @@ struct MapScreen: View {
     }
 
     private var routeLines: [RouteLine] {
-        route.route.map { [RouteLine(polyline: $0.polyline)] } ?? []
+        guard let current = route.route, current.coordinates.count > 1 else { return [] }
+        return [RouteLine(polyline: MKPolyline(coordinates: current.coordinates, count: current.coordinates.count), specialRights: current.usesSpecialRights)]
     }
 
     private var draftPoints: [DraftPoint] {
@@ -366,7 +367,7 @@ struct MapScreen: View {
     private var draftOutline: [RouteLine] {
         guard case .drawing(_, let points) = tapMode, points.count > 1 else { return [] }
         let coordinates = points.map(\.coordinate)
-        return [RouteLine(polyline: MKPolyline(coordinates: coordinates, count: coordinates.count))]
+        return [RouteLine(polyline: MKPolyline(coordinates: coordinates, count: coordinates.count), specialRights: false)]
     }
 }
 

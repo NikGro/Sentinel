@@ -267,6 +267,8 @@ struct ReachLayer: MapContent {
 struct RouteLine: Identifiable {
     let id = "route"
     let polyline: MKPolyline
+    /// Route mit Sonderrechten: andere Farbe, damit sie nie mit einer regelkonformen Route verwechselt wird.
+    let specialRights: Bool
 }
 
 struct RouteLayer: MapContent {
@@ -275,7 +277,7 @@ struct RouteLayer: MapContent {
     var body: some MapContent {
         ForEach(lines) { line in
             MapPolyline(line.polyline)
-                .stroke(.blue, style: StrokeStyle(lineWidth: 6, lineCap: .round, lineJoin: .round))
+                .stroke(line.specialRights ? Color.purple : Color.blue, style: StrokeStyle(lineWidth: 6, lineCap: .round, lineJoin: .round))
         }
     }
 }

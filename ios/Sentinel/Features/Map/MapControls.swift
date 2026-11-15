@@ -182,52 +182,79 @@ struct DrawingToolbar: View {
     }
 }
 
-/// Anzeige der laufenden Routenführung zu einem (auch bewegten) Ziel.
+/// Anzeige der laufenden Routenführung zu einem (auch bewegten) Ziel, mit schnellem Umschalter für Sonderrechte.
 struct RouteBanner: View {
     @Environment(RouteFollower.self) private var route
+    @Environment(LageStore.self) private var lage
 
     var body: some View {
         @Bindable var route = route
-        HStack(spacing: 12) {
-            Image(systemName: "arrow.triangle.turn.up.right.diamond.fill")
-                .font(.title2)
-                .foregroundStyle(.blue)
-            VStack(alignment: .leading, spacing: 2) {
-                Text(route.title.isEmpty ? "Route" : route.title)
-                    .font(.footnote.weight(.bold))
-                    .lineLimit(1)
-                Text(summary)
-                    .font(.caption.monospacedDigit())
-                    .foregroundStyle(.secondary)
-                if let instruction = route.nextInstruction {
-                    Text(instruction)
-                        .font(.caption)
-                        .lineLimit(2)
+        VStack(alignment: .leading, spacing: 8) {
+            HStack(spacing: 12) {
+                Image(systemName: "arrow.triangle.turn.up.right.diamond.fill")
+                    .font(.title2)
+                    .foregroundStyle(route.route?.usesSpecialRights == true ? Color.purple : Color.blue)
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(route.title.isEmpty ? "Route" : route.title)
+                        .font(.footnote.weight(.bold))
+                        .lineLimit(1)
+                    Text(summary)
+                        .font(.caption.monospacedDigit())
+                        .foregroundStyle(.secondary)
+                    if let instruction = route.route?.nextInstruction {
+                        Text(instruction)
+                            .font(.caption)
+                            .lineLimit(2)
+                    }
                 }
-            }
-            Spacer(minLength: 0)
-            Menu {
-                Toggle("Zu Fuß", systemImage: "figure.walk", isOn: $route.walking)
-                Button("In Apple Karten öffnen", systemImage: "map") { route.openInMaps() }
-                Button("Führung beenden", systemImage: "xmark", role: .destructive) { route.stop() }
-            } label: {
-                Image(systemName: "ellipsis.circle")
+                Spacer(minLength: 0)
+                Menu {
+                    Toggle("Zu Fuß", systemImage: "figure.walk", isOn: $route.walking)
+                    Button("In Apple Karten öffnen", systemImage: "map") { route.openInMaps() }
+                    Button("Führung beenden", systemImage: "xmark", role: .destructive) { route.stop() }
+                } label: {
+                    Image(systemName: "ellipsis.circle")
+                        .font(.title3)
+                }
+                .accessibilityLabel("Routenoptionen")
+                Button("Beenden", systemImage: "xmark.circle.fill") { route.stop() }
+                    .labelStyle(.iconOnly)
                     .font(.title3)
+                    .foregroundStyle(.secondary)
             }
-            .accessibilityLabel("Routenoptionen")
-            Button("Beenden", systemImage: "xmark.circle.fill") { route.stop() }
-                .labelStyle(.iconOnly)
-                .font(.title3)
-                .foregroundStyle(.secondary)
+
+            if !route.walking {
+                Toggle(isOn: $route.specialRights) {
+                    Label {
+                        VStack(alignment: .leading, spacing: 1) {
+                            Text("Sonderrechte")
+                                .font(.footnote.weight(.semibold))
+                            Text(specialRightsHint)
+                                .font(.caption2)
+                                .foregroundStyle(.secondary)
+                        }
+                    } icon: {
+                        Image(systemName: "light.beacon.max.fill")
+                            .foregroundStyle(route.specialRights ? Color.purple : Color.secondary)
+                    }
+                }
+                .tint(.purple)
+                .disabled(!lage.routingAvailable)
+            }
         }
         .padding(.horizontal, 14)
         .padding(.vertical, 10)
         .glassEffect(.regular, in: .rect(cornerRadius: 18))
     }
 
+    private var specialRightsHint: String {
+        if !lage.routingAvailable { return "Auf diesem Server nicht verfügbar" }
+        return route.specialRights ? "Einbahnstraßen und Abbiegeverbote werden ignoriert" : "Route beachtet alle Verkehrsregeln"
+    }
+
     private var summary: String {
         if let current = route.route {
-            return "\(Format.distance(current.distance)) · \(Format.duration(current.expectedTravelTime))"
+            return "\(Format.distance(current.distance)), \(Format.duration(current.travelTime))"
         }
         if let failure = route.failure { return failure }
         if let beeline = route.beeline { return "Luftlinie \(Format.distance(beeline))" }

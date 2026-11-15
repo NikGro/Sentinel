@@ -11,6 +11,7 @@ import type { Hub } from '../hub.js';
 import type { Actor, Lage } from '../lage.js';
 import type { MapKitTokens } from '../mapkit.js';
 import type { ReachService } from '../reach/reach.js';
+import type { RouteService } from '../reach/route.js';
 import type { ReleaseStore } from '../release.js';
 import { RateLimiter, type Vault } from '../security.js';
 import type { PajPoller } from '../trackers/paj.js';
@@ -27,6 +28,7 @@ export interface Services {
   lage: Lage;
   hub: Hub;
   reach: ReachService;
+  routes: RouteService;
   argus: ArgusImporter;
   releases: ReleaseStore;
   vault: Vault;
