@@ -55,7 +55,7 @@ struct APositionControl: View {
 
     private var title: String {
         if lage.holdsA { return "abgeben" }
-        return isArmed ? "wirklich übernehmen?" : "übernehmen"
+        return isArmed ? "übernehmen?" : "übernehmen"
     }
 
     private var glass: Glass {
@@ -143,7 +143,7 @@ struct MobilityControl: View {
                     .contentShape(.rect)
                 }
                 .buttonStyle(.plain)
-                .disabled(me.data.fortbewegung == .fuss)
+                .allowsHitTesting(me.data.fortbewegung != .fuss)
                 .accessibilityLabel("Fortbewegung: \(lage.mobilityDescription(of: me.data))")
             }
             .padding(.leading, 8)
