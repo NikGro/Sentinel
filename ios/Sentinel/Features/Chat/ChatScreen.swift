@@ -50,11 +50,11 @@ struct ChatScreen: View {
             } message: {
                 Text("Jeder im Einsatz kann den Raum betreten und löschen.")
             }
-            .confirmationDialog(
+            .alert(
                 "Chatraum „\(roomToDelete?.data.name ?? "")“ samt Nachrichten für alle löschen?",
-                isPresented: Binding(get: { roomToDelete != nil }, set: { if !$0 { roomToDelete = nil } }),
-                titleVisibility: .visible
+                isPresented: Binding(get: { roomToDelete != nil }, set: { if !$0 { roomToDelete = nil } })
             ) {
+                Button("Abbrechen", role: .cancel) {}
                 Button("Löschen", role: .destructive) {
                     if let room = roomToDelete { lage.delete(ChatRoom.self, id: room.id) }
                 }

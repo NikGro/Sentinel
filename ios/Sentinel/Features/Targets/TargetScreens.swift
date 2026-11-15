@@ -5,6 +5,7 @@ import SwiftUI
 struct TargetListScreen: View {
     @Environment(LageStore.self) private var lage
     @State private var editing: TargetEditorContext?
+    @State private var targetToDelete: Versioned<Target>?
 
     var body: some View {
         NavigationStack {
@@ -13,7 +14,21 @@ struct TargetListScreen: View {
                     NavigationLink(value: target.id) {
                         TargetRow(target: target)
                     }
+                    .swipeActions(edge: .trailing, allowsFullSwipe: false) {
+                        Button("Löschen", systemImage: "trash", role: .destructive) { targetToDelete = target }
+                    }
                 }
+            }
+            .alert(
+                "„\(targetToDelete?.data.displayName ?? "")“ für alle löschen?",
+                isPresented: Binding(get: { targetToDelete != nil }, set: { if !$0 { targetToDelete = nil } })
+            ) {
+                Button("Abbrechen", role: .cancel) {}
+                Button("Löschen", role: .destructive) {
+                    if let target = targetToDelete { lage.delete(Target.self, id: target.id) }
+                }
+            } message: {
+                Text("Das Ziel verschwindet bei allen Kräften und in der Kommandozentrale.")
             }
             .overlay {
                 if lage.targets.isEmpty {
@@ -348,7 +363,8 @@ struct TargetEditor: View {
                         .disabled(target.vorname.isEmpty && target.nachname.isEmpty && target.merkmale.isEmpty && target.bezeichnung.isEmpty && target.kennzeichen.isEmpty && target.anschrift.isEmpty)
                 }
             }
-            .confirmationDialog("Ziel für alle löschen?", isPresented: $showsDelete, titleVisibility: .visible) {
+            .alert("Ziel für alle löschen?", isPresented: $showsDelete) {
+                Button("Abbrechen", role: .cancel) {}
                 Button("Löschen", role: .destructive) {
                     lage.delete(Target.self, id: context.id)
                     dismiss()

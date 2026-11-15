@@ -79,7 +79,8 @@ private struct ConnectingView: View {
                 .padding(.top, 24)
         }
         .padding()
-        .confirmationDialog("Dieses Gerät vom Server abmelden?", isPresented: $showsSignOut, titleVisibility: .visible) {
+        .alert("Dieses Gerät vom Server abmelden?", isPresented: $showsSignOut) {
+            Button("Abbrechen", role: .cancel) {}
             Button("Abmelden", role: .destructive) { model.signOut() }
         } message: {
             Text("Für eine erneute Anmeldung wird der Zugangscode benötigt.")

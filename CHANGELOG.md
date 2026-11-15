@@ -31,6 +31,12 @@
 **Chat**
 - Sprachnachrichten mit Wellenform bei Aufnahme und Wiedergabe
 
+**Listen und Dialoge**
+- Ziele und Fahrzeuge per Wischen löschen
+- Bestätigungen als zentrierte iOS-Hinweise statt Sprechblasen
+- Fahrzeuge zeigen in Liste und Karte nur den Funkrufnamen; aus 0.1 übernommene Fahrzeuge erhalten den
+  Funkrufnamen ihres Trackers, falls dieser einen gültigen trägt
+
 **Robustheit**
 - Unbekannte Einträge eines neueren Servers werden übersprungen statt den ganzen Lagestand zu verwerfen
 

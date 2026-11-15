@@ -14,6 +14,7 @@ import {
   type OepnvFahrt,
   type Operation,
   type Position,
+  normalizeCallsign,
 } from './schemas.js';
 
 export type Role = 'fahnder' | 'zentrale';
@@ -107,6 +108,9 @@ export class Lage extends EventEmitter<{ event: [LageEvent] }> {
    */
   private migrate(): void {
     const rows = this.db.sql.prepare('SELECT kind, id, data FROM entities').all() as unknown as { kind: string; id: string; data: string }[];
+    const trackerNames = new Map(
+      rows.filter((r) => r.kind === 'tracker').map((r) => [r.id, String((JSON.parse(r.data) as { name?: unknown }).name ?? '')]),
+    );
     for (const row of rows) {
       if (!(KINDS as string[]).includes(row.kind)) continue;
       const raw = JSON.parse(row.data) as Record<string, unknown>;
@@ -115,7 +119,15 @@ export class Lage extends EventEmitter<{ event: [LageEvent] }> {
         if (raw.fahrzeugId && !raw.fortbewegung) raw.fortbewegung = 'fahrzeug';
         delete raw.funkrufname;
       }
-      if (row.kind === 'vehicle' && !raw.funkrufname) raw.funkrufname = String(raw.bezeichnung || 'Fahrzeug').slice(0, 20);
+      if (row.kind === 'vehicle') {
+        if (!raw.funkrufname) raw.funkrufname = String(raw.bezeichnung || 'Fahrzeug').slice(0, 20);
+        // Aus 0.1 übernommene Fahrzeuge trugen Marke und Modell als Namen. Hat der verbundene Tracker einen
+        // gültigen Funkrufnamen, gilt dieser.
+        if (normalizeCallsign(String(raw.funkrufname)) === null && typeof raw.trackerId === 'string') {
+          const callsign = normalizeCallsign(trackerNames.get(raw.trackerId) ?? '');
+          if (callsign) raw.funkrufname = callsign;
+        }
+      }
       const parsed = ENTITY_SCHEMAS[row.kind as Kind].safeParse(raw);
       if (!parsed.success) continue;
       const next = JSON.stringify(parsed.data);

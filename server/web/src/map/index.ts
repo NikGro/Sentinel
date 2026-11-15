@@ -221,7 +221,7 @@ function bind(map: MapBackend, disposers: (() => void)[]): void {
         // Sitzt jemand im Fahrzeug, ist sein Telefon die Quelle; der Tracker nur, wenn er deutlich frischer ist.
         const tracked = trackerPoint(vehicle.data.trackerId);
         const point = tracked && tracked.ts > crew.ts + 120_000 ? tracked : crew.point;
-        const label = `${vehicle.data.funkrufname} (${crew.names.join(', ')})`;
+        const label = vehicle.data.funkrufname;
         pins.push({
           id: `fz-${vehicleId}`,
           point,

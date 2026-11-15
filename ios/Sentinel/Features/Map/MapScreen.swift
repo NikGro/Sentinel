@@ -453,7 +453,7 @@ struct MapScreen: View {
             let point = lage.position(ofVehicle: vehicle)?.point ?? crew.position.point
             pins.append(ForcePin(
                 id: "fz-\(vehicleId)",
-                label: "\(vehicle.data.funkrufname) (\(crew.names.joined(separator: ", ")))",
+                label: vehicle.data.funkrufname,
                 coordinate: point.coordinate,
                 isA: crew.isA,
                 isStale: crew.stale,

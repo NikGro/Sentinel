@@ -81,7 +81,8 @@ struct ProfileEditor: View {
             ContactNumberPicker { phone = PhoneNumber.sanitize($0) }
                 .ignoresSafeArea()
         }
-        .confirmationDialog("Dieses Gerät vom Server abmelden?", isPresented: $showsSignOut, titleVisibility: .visible) {
+        .alert("Dieses Gerät vom Server abmelden?", isPresented: $showsSignOut) {
+            Button("Abbrechen", role: .cancel) {}
             Button("Abmelden", role: .destructive) { model.signOut() }
         } message: {
             Text("Alle Einsatzdaten werden von diesem Gerät entfernt. Für eine erneute Anmeldung wird der Zugangscode benötigt.")

@@ -93,7 +93,8 @@ struct SituationAdminScreen: View {
             ChannelEditor(current: lage.operation.funkkanal)
                 .presentationDetents([.height(260)])
         }
-        .confirmationDialog("Lage für alle zurücksetzen?", isPresented: $showsReset, titleVisibility: .visible) {
+        .alert("Lage für alle zurücksetzen?", isPresented: $showsReset) {
+            Button("Abbrechen", role: .cancel) {}
             Button("Zurücksetzen", role: .destructive) { lage.resetSituation(includingTargets: resetTargets) }
         } message: {
             Text("Das kann nicht rückgängig gemacht werden.")
@@ -492,11 +493,11 @@ struct DevicesAdminScreen: View {
         .task { await state.reload(model.client) }
         .refreshable { await state.reload(model.client) }
         .modifier(FailureAlert(state: state))
-        .confirmationDialog(
+        .alert(
             "Gerät „\(deviceToRevoke?.name ?? "")“ sperren?",
-            isPresented: Binding(get: { deviceToRevoke != nil }, set: { if !$0 { deviceToRevoke = nil } }),
-            titleVisibility: .visible
+            isPresented: Binding(get: { deviceToRevoke != nil }, set: { if !$0 { deviceToRevoke = nil } })
         ) {
+            Button("Abbrechen", role: .cancel) {}
             Button("Sperren", role: .destructive) {
                 if let id = deviceToRevoke?.id { Task { await state.run(model.client) { try await $0.revokeDevice(id) } } }
             }

@@ -4,6 +4,7 @@ import SwiftUI
 struct ForcesScreen: View {
     @Environment(LageStore.self) private var lage
     @State private var vehicleEditor: VehicleEditorContext?
+    @State private var vehicleToDelete: Versioned<Vehicle>?
 
     var body: some View {
         NavigationStack {
@@ -30,6 +31,9 @@ struct ForcesScreen: View {
                         } label: {
                             VehicleRow(vehicle: vehicle)
                         }
+                        .swipeActions(edge: .trailing, allowsFullSwipe: false) {
+                            Button("Löschen", systemImage: "trash", role: .destructive) { vehicleToDelete = vehicle }
+                        }
                         .swipeActions(edge: .leading) {
                             Button(vehicle.data.aktiv ? "Abschalten" : "Einschalten") {
                                 var next = vehicle.data
@@ -49,6 +53,15 @@ struct ForcesScreen: View {
                 }
             }
             .navigationTitle("Kräfte")
+            .alert(
+                "Fahrzeug „\(vehicleToDelete?.data.funkrufname ?? "")“ für alle löschen?",
+                isPresented: Binding(get: { vehicleToDelete != nil }, set: { if !$0 { vehicleToDelete = nil } })
+            ) {
+                Button("Abbrechen", role: .cancel) {}
+                Button("Löschen", role: .destructive) {
+                    if let vehicle = vehicleToDelete { lage.delete(Vehicle.self, id: vehicle.id) }
+                }
+            }
             .sheet(item: $vehicleEditor) { context in
                 VehicleEditor(context: context)
             }
@@ -112,11 +125,6 @@ struct VehicleRow: View {
             VStack(alignment: .leading, spacing: 2) {
                 Text(vehicle.data.funkrufname)
                     .font(.headline)
-                if !vehicle.data.subtitle.isEmpty {
-                    Text(vehicle.data.subtitle)
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-                }
                 Text(occupancy)
                     .font(.caption)
                     .foregroundStyle(.secondary)
@@ -295,7 +303,8 @@ struct VehicleEditor: View {
                         .disabled(!callsignValid)
                 }
             }
-            .confirmationDialog("Fahrzeug für alle löschen?", isPresented: $showsDelete, titleVisibility: .visible) {
+            .alert("Fahrzeug für alle löschen?", isPresented: $showsDelete) {
+                Button("Abbrechen", role: .cancel) {}
                 Button("Löschen", role: .destructive) {
                     lage.delete(Vehicle.self, id: context.id)
                     dismiss()

@@ -78,7 +78,7 @@ struct MobilitySheet: View {
                             Text(vehicle.data.funkrufname)
                                 .font(.headline)
                             let crew = lage.occupants(of: vehicle.id).map(\.data.spitzname)
-                            Text([vehicle.data.subtitle, crew.isEmpty ? "" : "Besetzt: \(crew.joined(separator: ", "))"].filter { !$0.isEmpty }.joined(separator: ", "))
+                            Text(crew.isEmpty ? "Frei" : "Besetzt: \(crew.joined(separator: ", "))")
                                 .font(.caption)
                                 .foregroundStyle(.secondary)
                         }
