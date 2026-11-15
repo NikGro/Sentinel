@@ -1,5 +1,13 @@
 # Änderungen
 
+## 0.2.1
+
+- App hing beim Start (Logo, schwarzer Bildschirm oder „Verbinde mit dem Server“): Die Karte wurde bei jeder
+  Kamerabewegung neu berechnet; das Straßenschild unter dem eigenen Punkt ist jetzt eine Kartenannotation
+- Einheitliche Höhen und Breiten aller Leisten und Knöpfe, Lageleiste nur noch auf der Karte
+- Spitzname im Avatar zentriert, Chat-Eingabe angeglichen
+- Rundgang-Test läuft mit echtem Standort im Simulator
+
 ## 0.2.0
 
 **Grundlegend neu**
