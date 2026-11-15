@@ -1,0 +1,26 @@
+# Abhängigkeiten und Build-Ergebnisse
+node_modules/
+dist/
+*.tsbuildinfo
+
+# Laufzeitdaten und Geheimnisse gehören nie ins Repo
+data/
+.env
+.env.*
+!.env.example
+*.sqlite*
+ERSTZUGANG.txt
+
+# Xcode (das Projekt wird mit XcodeGen aus ios/project.yml erzeugt)
+ios/*.xcodeproj/
+ios/build/
+DerivedData/
+*.xcuserstate
+xcuserdata/
+*.ipa
+*.xcarchive
+
+.DS_Store
+
+# Wird von XcodeGen aus ios/project.yml erzeugt
+ios/Sentinel/Resources/Info.plist

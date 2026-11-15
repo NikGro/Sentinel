@@ -1,0 +1,193 @@
+import Foundation
+
+// Nachrichten des Echtzeit-Protokolls (WebSocket, JSON). Gegenstück: server/src/hub.ts.
+
+struct ActorInfo: Codable, Equatable, Sendable {
+    var id: String
+    var role: String
+}
+
+struct ServerInfo: Codable, Equatable, Sendable {
+    var version: String
+    var routing: Bool
+}
+
+struct PositionEntry: Codable, Equatable, Sendable {
+    var id: String
+    var p: Position
+}
+
+/// Vollständiger Zustand beim Verbindungsaufbau.
+struct Snapshot: Decodable, Sendable {
+    var me: ActorInfo
+    var server: ServerInfo
+    var online: [String]
+    var members: [Versioned<Member>]
+    var vehicles: [Versioned<Vehicle>]
+    var annotations: [Versioned<MapObject>]
+    var targets: [Versioned<Target>]
+    var trackers: [Versioned<Tracker>]
+    var layers: [Versioned<Layer>]
+    var messages: [Versioned<ChatMessage>]
+    var operation: OperationState
+    var positions: [PositionEntry]
+    var trackerPositions: [PositionEntry]
+
+    private enum CodingKeys: String, CodingKey {
+        case me = "self"
+        case server, online, members, vehicles, annotations, targets, trackers, layers, messages, operation, positions, trackerPositions
+    }
+}
+
+enum ServerMessage: Sendable {
+    case snapshot(Snapshot)
+    case putMember(Versioned<Member>)
+    case putVehicle(Versioned<Vehicle>)
+    case putMapObject(Versioned<MapObject>)
+    case putTarget(Versioned<Target>)
+    case putTracker(Versioned<Tracker>)
+    case putLayer(Versioned<Layer>)
+    case putMessage(Versioned<ChatMessage>)
+    case delete(kind: String, id: String)
+    case operation(OperationState)
+    case position(id: String, Position)
+    case trackerPosition(id: String, Position)
+    case online([String])
+    case coverageReset
+    case ack(ref: String)
+    case error(ref: String?, message: String)
+    case pong
+    case unknown
+}
+
+enum WireCodec {
+    private static let decoder = JSONDecoder()
+    private static let encoder = JSONEncoder()
+
+    private struct Head: Decodable {
+        let t: String
+        let kind: String?
+    }
+
+    private struct Put<T: LageEntity>: Decodable {
+        let entity: Versioned<T>
+    }
+
+    private struct Del: Decodable {
+        let kind: String
+        let id: String
+    }
+
+    private struct OperationBody: Decodable {
+        let operation: OperationState
+    }
+
+    private struct Online: Decodable {
+        let ids: [String]
+    }
+
+    private struct Ack: Decodable {
+        let ref: String
+    }
+
+    private struct Failure: Decodable {
+        let ref: String?
+        let message: String
+    }
+
+    static func decode(_ data: Data) throws -> ServerMessage {
+        let head = try decoder.decode(Head.self, from: data)
+        switch head.t {
+        case "snapshot":
+            return .snapshot(try decoder.decode(Snapshot.self, from: data))
+        case "put":
+            switch head.kind {
+            case Member.kind: return .putMember(try decoder.decode(Put<Member>.self, from: data).entity)
+            case Vehicle.kind: return .putVehicle(try decoder.decode(Put<Vehicle>.self, from: data).entity)
+            case MapObject.kind: return .putMapObject(try decoder.decode(Put<MapObject>.self, from: data).entity)
+            case Target.kind: return .putTarget(try decoder.decode(Put<Target>.self, from: data).entity)
+            case Tracker.kind: return .putTracker(try decoder.decode(Put<Tracker>.self, from: data).entity)
+            case Layer.kind: return .putLayer(try decoder.decode(Put<Layer>.self, from: data).entity)
+            case ChatMessage.kind: return .putMessage(try decoder.decode(Put<ChatMessage>.self, from: data).entity)
+            default: return .unknown
+            }
+        case "del":
+            let body = try decoder.decode(Del.self, from: data)
+            return .delete(kind: body.kind, id: body.id)
+        case "operation":
+            return .operation(try decoder.decode(OperationBody.self, from: data).operation)
+        case "pos":
+            let body = try decoder.decode(PositionEntry.self, from: data)
+            return .position(id: body.id, body.p)
+        case "tpos":
+            let body = try decoder.decode(PositionEntry.self, from: data)
+            return .trackerPosition(id: body.id, body.p)
+        case "online":
+            return .online(try decoder.decode(Online.self, from: data).ids)
+        case "bestreifungReset":
+            return .coverageReset
+        case "ack":
+            return .ack(ref: try decoder.decode(Ack.self, from: data).ref)
+        case "err":
+            let body = try decoder.decode(Failure.self, from: data)
+            return .error(ref: body.ref, message: body.message)
+        case "pong":
+            return .pong
+        default:
+            return .unknown
+        }
+    }
+
+    // MARK: Ausgehend
+
+    private struct PutOut<T: Encodable>: Encodable {
+        let t = "put"
+        let kind: String
+        let id: String
+        let data: T
+        let ref: String
+    }
+
+    private struct DelOut: Encodable {
+        let t = "del"
+        let kind: String
+        let id: String
+        let ref: String
+    }
+
+    private struct PosOut: Encodable {
+        let t = "pos"
+        let p: Position
+    }
+
+    private struct CmdOut<A: Encodable>: Encodable {
+        let t = "cmd"
+        let name: String
+        let args: A
+        let ref: String
+    }
+
+    private struct NoArgs: Encodable {}
+
+    static func put<T: LageEntity>(id: String, data: T, ref: String) -> Data? {
+        try? encoder.encode(PutOut(kind: T.kind, id: id, data: data, ref: ref))
+    }
+
+    static func delete(kind: String, id: String, ref: String) -> Data? {
+        try? encoder.encode(DelOut(kind: kind, id: id, ref: ref))
+    }
+
+    static func position(_ position: Position) -> Data? {
+        try? encoder.encode(PosOut(p: position))
+    }
+
+    static func command<A: Encodable>(_ name: String, args: A, ref: String) -> Data? {
+        try? encoder.encode(CmdOut(name: name, args: args, ref: ref))
+    }
+
+    static func command(_ name: String, ref: String) -> Data? {
+        command(name, args: NoArgs(), ref: ref)
+    }
+
+    static let ping = Data(#"{"t":"ping"}"#.utf8)
+}

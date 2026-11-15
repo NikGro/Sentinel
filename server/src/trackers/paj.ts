@@ -1,0 +1,132 @@
+import type { Position } from '../schemas.js';
+
+/**
+ * Abruf von PAJ-GPS-Trackern über die offizielle Schnittstelle des Herstellers (connect.paj-gps.de).
+ * PAJ-Geräte melden sich ausschließlich beim Hersteller, deshalb wird dort regelmäßig die letzte Position abgeholt.
+ * Hinweis: Diese Anbindung ist nach der öffentlichen Dokumentation umgesetzt und noch nicht mit echten Geräten erprobt.
+ */
+
+const BASE_URL = 'https://connect.paj-gps.de/api/v1';
+const POLL_INTERVAL_MS = 20_000;
+
+export interface PajCredentials {
+  email: string;
+  password: string;
+}
+
+export interface PajDevice {
+  kennung: string;
+  name: string;
+}
+
+interface Envelope<T> {
+  success?: T;
+}
+
+export class PajClient {
+  private token: string | null = null;
+
+  constructor(
+    private readonly credentials: PajCredentials,
+    private readonly fetchFn: typeof fetch = fetch,
+  ) {}
+
+  private async request<T>(method: 'GET' | 'POST', path: string, body?: unknown, retry = true): Promise<T> {
+    if (!this.token) await this.login();
+    const response = await this.fetchFn(`${BASE_URL}${path}`, {
+      method,
+      headers: { authorization: `Bearer ${this.token}`, accept: 'application/json', ...(body ? { 'content-type': 'application/json' } : {}) },
+      body: body ? JSON.stringify(body) : undefined,
+      signal: AbortSignal.timeout(15_000),
+    });
+    if (response.status === 401 && retry) {
+      this.token = null;
+      return this.request<T>(method, path, body, false);
+    }
+    if (!response.ok) throw new Error(`PAJ antwortet mit ${response.status}`);
+    const envelope = (await response.json()) as Envelope<T>;
+    if (envelope.success === undefined) throw new Error('PAJ: unerwartete Antwort');
+    return envelope.success;
+  }
+
+  private async login(): Promise<void> {
+    const query = new URLSearchParams({ email: this.credentials.email, password: this.credentials.password });
+    const response = await this.fetchFn(`${BASE_URL}/login?${query}`, { method: 'POST', headers: { accept: 'application/json' }, signal: AbortSignal.timeout(15_000) });
+    if (!response.ok) throw new Error('PAJ-Anmeldung fehlgeschlagen');
+    const envelope = (await response.json()) as Envelope<{ token?: string }>;
+    if (!envelope.success?.token) throw new Error('PAJ-Anmeldung fehlgeschlagen');
+    this.token = envelope.success.token;
+  }
+
+  async devices(): Promise<PajDevice[]> {
+    const list = await this.request<{ id: number; name?: string }[]>('GET', '/device');
+    return list.map((d) => ({ kennung: String(d.id), name: d.name ?? `PAJ ${d.id}` }));
+  }
+
+  async lastPositions(kennungen: string[]): Promise<{ kennung: string; position: Position }[]> {
+    if (kennungen.length === 0) return [];
+    const rows = await this.request<{ iddevice: number; lat: number; lng: number; dateunix: number; speed?: number; direction?: number }[]>(
+      'POST',
+      '/trackerdata/getalllastpositions',
+      { deviceIDs: kennungen.map(Number), fromLastPoint: false },
+    );
+    return rows
+      .filter((r) => Number.isFinite(r.lat) && Number.isFinite(r.lng) && Math.abs(r.lat) <= 90 && Math.abs(r.lng) <= 180)
+      .map((r) => ({
+        kennung: String(r.iddevice),
+        position: {
+          lat: r.lat,
+          lon: r.lng,
+          ts: r.dateunix * 1000,
+          spd: r.speed !== undefined ? Math.min(Math.max(r.speed / 3.6, 0), 200) : undefined,
+          hdg: r.direction !== undefined && r.direction >= 0 && r.direction <= 360 ? r.direction : undefined,
+        },
+      }));
+  }
+}
+
+/** Fragt in festem Takt die Positionen aller in Sentinel angelegten PAJ-Tracker ab. */
+export class PajPoller {
+  private timer: NodeJS.Timeout | null = null;
+  private client: PajClient | null = null;
+  lastError: string | null = null;
+
+  constructor(
+    private readonly kennungen: () => string[],
+    private readonly onFix: (kennung: string, position: Position) => void,
+  ) {}
+
+  configure(credentials: PajCredentials | null): void {
+    this.client = credentials ? new PajClient(credentials) : null;
+    this.lastError = null;
+    if (this.timer) clearInterval(this.timer);
+    this.timer = null;
+    if (!this.client) return;
+    this.timer = setInterval(() => void this.poll(), POLL_INTERVAL_MS);
+    this.timer.unref();
+    void this.poll();
+  }
+
+  get active(): boolean {
+    return this.client !== null;
+  }
+
+  async listDevices(): Promise<PajDevice[]> {
+    if (!this.client) return [];
+    return this.client.devices();
+  }
+
+  private async poll(): Promise<void> {
+    if (!this.client) return;
+    try {
+      for (const fix of await this.client.lastPositions(this.kennungen())) this.onFix(fix.kennung, fix.position);
+      this.lastError = null;
+    } catch (error) {
+      this.lastError = error instanceof Error ? error.message : 'Unbekannter Fehler';
+    }
+  }
+
+  stop(): void {
+    if (this.timer) clearInterval(this.timer);
+  }
+}
