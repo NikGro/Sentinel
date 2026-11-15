@@ -52,6 +52,8 @@ final class AppModel {
         if DemoData.isRequested {
             credentials = DemoData.credentials
             lage.loadDemo(DemoData.snapshot(now: .now))
+            // Echter Standortdienst auch im Rundgang, damit Kamera-Nachführung und Straßenschild mitgetestet werden.
+            location.start()
             return
         }
         #endif

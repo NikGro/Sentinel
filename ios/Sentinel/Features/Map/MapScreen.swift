@@ -63,7 +63,6 @@ struct MapScreen: View {
     @State private var showsSearch = false
     @State private var showsMobility = false
     @State private var showsSituation = false
-    @State private var cameraTick = 0
     @State private var now = Date.now
 
     var body: some View {
@@ -80,6 +79,7 @@ struct MapScreen: View {
                 SymbolLayer(pins: vehiclePins + targetPins) { selection = $0 }
                 ForcesLayer(pins: forcePins) { selection = $0 }
                 DraftLayer(points: draftPoints, outline: draftOutline)
+                streetLabel
             }
             .mapStyle(mapStyle)
             .mapControls {
@@ -87,12 +87,10 @@ struct MapScreen: View {
                 MapPitchToggle()
                 MapScaleView()
             }
-            .onMapCameraChange(frequency: .continuous) { _ in cameraTick &+= 1 }
             .onTapGesture { point in
                 guard tapMode != .none, let coordinate = proxy.convert(point, from: .local) else { return }
                 handleTap(GeoPoint(coordinate))
             }
-            .overlay { streetLabel(proxy) }
         }
         .safeAreaInset(edge: .top, spacing: 0) { topArea }
         .safeAreaInset(edge: .bottom, spacing: 0) { bottomArea }
@@ -174,12 +172,11 @@ struct MapScreen: View {
 
     // MARK: Statuszeile unter dem eigenen Standort
 
-    @ViewBuilder
-    private func streetLabel(_ proxy: MapProxy) -> some View {
-        let _ = cameraTick
-        if isFollowing || route.isActive, let summary = locationContext.summary, let current = location.current,
-           let point = proxy.convert(current.coordinate, to: .local) {
-            GeometryReader { geometry in
+    /// Straße und Fahrtrichtung direkt unter dem eigenen Punkt. Als Kartenannotation bewegt sie sich mit der Karte,
+    /// ohne dass die Ansicht bei jeder Kamerabewegung neu berechnet werden muss.
+    @MapContentBuilder private var streetLabel: some MapContent {
+        if isFollowing || route.isActive, let summary = locationContext.summary, let current = location.current {
+            Annotation("Eigener Standort", coordinate: current.coordinate, anchor: .top) {
                 Text(summary)
                     .font(.footnote.weight(.semibold))
                     .lineLimit(1)
@@ -187,10 +184,11 @@ struct MapScreen: View {
                     .padding(.vertical, 5)
                     .glassEffect(.regular, in: .capsule)
                     .fixedSize()
-                    .position(x: min(max(point.x, 120), geometry.size.width - 120), y: point.y + 34)
+                    .padding(.top, 22)
                     .allowsHitTesting(false)
                     .accessibilityLabel("Eigener Standort: \(summary)")
             }
+            .annotationTitles(.hidden)
         }
     }
 

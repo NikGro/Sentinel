@@ -1,3 +1,4 @@
+import CoreLocation
 import XCTest
 
 /// Rundgang durch die App mit Beispieldaten: prüft, dass jede Hauptansicht startet und ihre Kernelemente zeigt.
@@ -38,7 +39,12 @@ final class RundgangTests: XCTestCase {
         let app = launch()
         XCTAssertTrue(app.tabBars.buttons["Lage"].waitForExistence(timeout: 20), "Hauptansicht erscheint")
         settle(app)
-        sleep(3)
+        // Wie auf dem Gerät: echter Standort, Karte folgt dem eigenen Punkt. Friert die Karte dabei ein, scheitern alle weiteren Schritte.
+        XCUIDevice.shared.location = XCUILocation(location: CLLocation(latitude: 53.5503, longitude: 9.9930))
+        if app.buttons["Eigener Standort"].waitForExistence(timeout: 3) { app.buttons["Eigener Standort"].tap() }
+        sleep(2)
+        XCUIDevice.shared.location = XCUILocation(location: CLLocation(latitude: 53.5512, longitude: 9.9951))
+        sleep(2)
         XCTAssertTrue(app.buttons["A übernehmen"].exists, "A-Position lässt sich übernehmen")
         XCTAssertTrue(app.buttons["Hinzufügen"].exists, "Plus-Knopf ist da")
         XCTAssertTrue(app.buttons["Suchen oder navigieren"].exists, "Suche ist da")

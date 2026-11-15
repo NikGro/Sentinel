@@ -50,6 +50,10 @@ jobs:
           set -o pipefail
           DEVICE=$(xcrun simctl list devices available | grep -E '^\s+iPhone' | head -1 | sed -E 's/^ +//; s/ \([0-9A-F-]{36}\).*//')
           echo "Simulator: $DEVICE"
+          # Mit echtem Standort testen: Kamera folgt dem eigenen Punkt wie auf dem Gerät.
+          xcrun simctl boot "$DEVICE" || true
+          xcrun simctl privacy "$DEVICE" grant location-always de.nglab.sentinel || true
+          xcrun simctl location "$DEVICE" set 53.5503,9.9930 || true
           xcodebuild test \
             -project Sentinel.xcodeproj -scheme Sentinel \
             -destination "platform=iOS Simulator,name=$DEVICE" \
