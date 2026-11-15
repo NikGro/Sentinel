@@ -9,6 +9,11 @@ on:
   pull_request:
     paths: ["ios/**", ".github/workflows/ios.yml"]
   workflow_dispatch:
+    inputs:
+      release_tag:
+        description: "Versions-Tag für ein GitHub-Release, z. B. v0.1.0 (leer = nur bauen)"
+        required: false
+        default: ""
 
 permissions:
   contents: read
@@ -99,7 +104,7 @@ jobs:
 
       # Für das Release-Job unter festem Namen, damit es die IPA ohne Kenntnis der Versionsnummer findet.
       - uses: actions/upload-artifact@v5
-        if: startsWith(github.ref, 'refs/tags/v')
+        if: startsWith(github.ref, 'refs/tags/v') || inputs.release_tag != ''
         with:
           name: release-ipa
           path: ios/build/Sentinel.ipa
@@ -124,7 +129,8 @@ jobs:
   # Eigener Job mit Schreibrecht nur für das Release; der Build-Job selbst darf das Repository nur lesen.
   release:
     name: GitHub-Release
-    if: startsWith(github.ref, 'refs/tags/v')
+    # Ausgelöst durch ein gepushtes Versions-Tag oder durch manuellen Start mit Angabe eines Tags.
+    if: startsWith(github.ref, 'refs/tags/v') || inputs.release_tag != ''
     needs: build
     runs-on: ubuntu-latest
     timeout-minutes: 10
@@ -137,11 +143,13 @@ jobs:
       - name: Release anlegen
         env:
           GH_TOKEN: ${{ github.token }}
-          TAG: ${{ github.ref_name }}
+          TAG: ${{ inputs.release_tag || github.ref_name }}
           BUILD: ${{ github.run_number }}
         run: |
+          case "$TAG" in v[0-9]*.[0-9]*) ;; *) echo "Ungültiges Tag: $TAG"; exit 1 ;; esac
           mv Sentinel.ipa "Sentinel-${TAG#v}-${BUILD}.ipa"
           gh release create "$TAG" "Sentinel-${TAG#v}-${BUILD}.ipa" \
             --repo "$GITHUB_REPOSITORY" \
+            --target "$GITHUB_SHA" \
             --title "SENTINEL ${TAG#v}" \
             --notes "Unsignierte IPA (Build ${BUILD}) für SideStore. Installation und Aktualisierung über die SideStore-Quelle des eigenen Servers; siehe docs/BETRIEB.md."
