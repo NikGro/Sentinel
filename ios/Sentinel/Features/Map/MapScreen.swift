@@ -122,6 +122,106 @@ struct MapScreen: View {
     @State private var virtualVehicle: TransitVehiclePin?
 
     var body: some View {
+        dialogs(sheets(mainBody))
+    }
+
+    /// Alle Fenster über der Karte.
+    private func sheets(_ content: some View) -> some View {
+        content
+        .sheet(item: $selection) { selection in
+            QuickLookSheet(selection: selection, placeTarget: { targetId in
+                tapMode = .placingTarget(targetId)
+            }, moveObject: { objectId in
+                self.selection = nil
+                tapMode = .moving(objectId: objectId)
+            })
+            .presentationDetents([.medium, .large])
+            .presentationBackgroundInteraction(.enabled(upThrough: .medium))
+        }
+        .sheet(item: $editor) { context in
+            MapObjectEditor(context: context) { objectId in
+                tapMode = .moving(objectId: objectId)
+            }
+            .presentationDetents([.medium, .large])
+        }
+        .sheet(item: $targetEditor) { context in
+            TargetEditor(context: context)
+        }
+        .sheet(isPresented: $showsLayers) {
+            LayerSheet()
+                .presentationDetents([.medium, .large])
+        }
+        .sheet(item: $searchMode) { mode in
+            SearchSheet(mode: mode, navigate: { target in
+                searchPin = nil
+                model.navigate(to: target)
+            }, showOnMap: { point, title in
+                show(SearchPin(point: point, title: title))
+            }, create: { point, title, kind in
+                create(kind, at: point, title: title)
+            })
+            // Knapp unter voller Höhe bleibt das Fenster im Glas-Stil wie die Detailfenster.
+            .presentationDetents([.fraction(0.94)])
+        }
+        .sheet(item: $mobilityChoice) { mode in
+            MobilitySheet(initialMode: mode)
+                .presentationDetents([.medium, .large])
+        }
+        .sheet(isPresented: $showsSituation) {
+            SituationSheet()
+        }
+    }
+
+    /// Rückfragen zu Suchtreffern und ÖPNV-Fahrzeugen, getrennt vom Rest, damit der Compiler die Ansicht schafft.
+    private func dialogs(_ content: some View) -> some View {
+        content
+        .confirmationDialog(searchPin?.title ?? "", isPresented: $showsSearchPinActions, titleVisibility: .visible) {
+            if let pin = searchPin {
+                Button("Hierhin navigieren") {
+                    searchPin = nil
+                    model.navigate(to: .point(pin.point, title: pin.title))
+                }
+                Button("Hier anlegen …") {
+                    Task {
+                        try? await Task.sleep(for: .milliseconds(350))
+                        showsSearchPinCreate = true
+                    }
+                }
+                Button("Suchtreffer ausblenden", role: .destructive) { searchPin = nil }
+            }
+        }
+        .confirmationDialog("Hier anlegen", isPresented: $showsSearchPinCreate, titleVisibility: .visible) {
+            if let pin = searchPin {
+                ForEach(PlaceableKind.all) { kind in
+                    Button(kind.title) {
+                        searchPin = nil
+                        create(kind, at: pin.point, title: pin.title, delayed: false)
+                    }
+                }
+            }
+        }
+        .task(id: hasTransit) {
+            while hasTransit, !Task.isCancelled {
+                try? await Task.sleep(for: .seconds(2))
+                transitNow = .now
+            }
+        }
+        .confirmationDialog(
+            virtualVehicle.map { "\($0.line.ref) Richtung \($0.line.richtung)" } ?? "",
+            isPresented: Binding(get: { virtualVehicle != nil }, set: { if !$0 { virtualVehicle = nil } }),
+            titleVisibility: .visible,
+            presenting: virtualVehicle
+        ) { pin in
+            Button("Als ÖPNV-Fahrzeug anlegen") { _ = createVehicle(from: pin) }
+            Button("Hinführen") {
+                if let id = createVehicle(from: pin) { model.navigate(to: .object(id)) }
+            }
+        } message: { pin in
+            Text("Im Takt geschätzt, Abfahrt am ersten Halt \(Format.time(pin.departure)). Keine Echtzeitdaten.")
+        }
+    }
+
+    private var mainBody: some View {
         MapReader { proxy in
             Map(position: $camera, scope: mapScope) {
                 if !followsMe {
@@ -224,73 +324,6 @@ struct MapScreen: View {
         }
         .overlay(alignment: .topTrailing) { sideButtons }
         .mapScope(mapScope)
-        .sheet(item: $selection) { selection in
-            QuickLookSheet(selection: selection, placeTarget: { targetId in
-                tapMode = .placingTarget(targetId)
-            }, moveObject: { objectId in
-                self.selection = nil
-                tapMode = .moving(objectId: objectId)
-            })
-            .presentationDetents([.medium, .large])
-            .presentationBackgroundInteraction(.enabled(upThrough: .medium))
-        }
-        .confirmationDialog(searchPin?.title ?? "", isPresented: $showsSearchPinActions, titleVisibility: .visible) {
-            if let pin = searchPin {
-                Button("Hierhin navigieren") {
-                    searchPin = nil
-                    model.navigate(to: .point(pin.point, title: pin.title))
-                }
-                Button("Hier anlegen …") {
-                    Task {
-                        try? await Task.sleep(for: .milliseconds(350))
-                        showsSearchPinCreate = true
-                    }
-                }
-                Button("Suchtreffer ausblenden", role: .destructive) { searchPin = nil }
-            }
-        }
-        .confirmationDialog("Hier anlegen", isPresented: $showsSearchPinCreate, titleVisibility: .visible) {
-            if let pin = searchPin {
-                ForEach(PlaceableKind.all) { kind in
-                    Button(kind.title) {
-                        searchPin = nil
-                        create(kind, at: pin.point, title: pin.title, delayed: false)
-                    }
-                }
-            }
-        }
-        .sheet(item: $editor) { context in
-            MapObjectEditor(context: context) { objectId in
-                tapMode = .moving(objectId: objectId)
-            }
-            .presentationDetents([.medium, .large])
-        }
-        .sheet(item: $targetEditor) { context in
-            TargetEditor(context: context)
-        }
-        .sheet(isPresented: $showsLayers) {
-            LayerSheet()
-                .presentationDetents([.medium, .large])
-        }
-        .sheet(item: $searchMode) { mode in
-            SearchSheet(mode: mode, navigate: { target in
-                searchPin = nil
-                model.navigate(to: target)
-            }, showOnMap: { point, title in
-                show(SearchPin(point: point, title: title))
-            }, create: { point, title, kind in
-                create(kind, at: point, title: title)
-            })
-            // Knapp unter voller Höhe bleibt das Fenster im Glas-Stil wie die Detailfenster.
-            .presentationDetents([.fraction(0.94)])
-        }
-        .sheet(item: $mobilityChoice) { mode in
-            MobilitySheet(initialMode: mode)
-                .presentationDetents([.medium, .large])
-        }
-        .sheet(isPresented: $showsSituation) {
-            SituationSheet()
-        }
         .task(id: CoverageKey(enabled: settings.showsCoverage, since: settings.coverageSince, generation: lage.coverageGeneration)) {
             guard settings.showsCoverage else {
                 fahndung.clearCoverage()
@@ -303,25 +336,6 @@ struct MapScreen: View {
         }
         .task(id: reachInputs.map { "\($0.id)|\($0.since.timeIntervalSince1970)|\($0.point.lat)|\($0.point.lon)" }.joined() + enabledReachModes.map(\.rawValue).joined()) {
             fahndung.trackReach(reachInputs, modes: enabledReachModes)
-        }
-        .task(id: hasTransit) {
-            while hasTransit, !Task.isCancelled {
-                try? await Task.sleep(for: .seconds(2))
-                transitNow = .now
-            }
-        }
-        .confirmationDialog(
-            virtualVehicle.map { "\($0.line.ref) Richtung \($0.line.richtung)" } ?? "",
-            isPresented: Binding(get: { virtualVehicle != nil }, set: { if !$0 { virtualVehicle = nil } }),
-            titleVisibility: .visible,
-            presenting: virtualVehicle
-        ) { pin in
-            Button("Als ÖPNV-Fahrzeug anlegen") { _ = createVehicle(from: pin) }
-            Button("Hinführen") {
-                if let id = createVehicle(from: pin) { model.navigate(to: .object(id)) }
-            }
-        } message: { pin in
-            Text("Im Takt geschätzt, Abfahrt am ersten Halt \(Format.time(pin.departure)). Keine Echtzeitdaten.")
         }
         .task {
             // Takt für Altersangaben und veraltete Positionen.
