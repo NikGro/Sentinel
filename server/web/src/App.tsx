@@ -163,7 +163,28 @@ function SituationBand() {
   const aHolder = op.a ? tables.member.value[op.a.memberId] : null;
   const aLine = aHolder?.data.fortbewegung === 'oepnv' ? aHolder.data.oepnv : null;
 
+  const sosMember = op.sos ? tables.member.value[op.sos.memberId] : null;
+  const sosPosition = op.sos ? positions.value[op.sos.memberId] : null;
+
   return (
+    <>
+    {op.sos && (
+      <div class="sos-band" role="alert">
+        <strong>SOS</strong>
+        <span>
+          Notruf von {sosMember?.data.spitzname ?? 'unbekannt'} seit{' '}
+          {new Date(op.sos.seit).toLocaleTimeString('de-DE', { hour: '2-digit', minute: '2-digit' })} Uhr. Alle Kräfte werden mit Sonderrechten hingeführt.
+        </span>
+        {sosPosition && (
+          <button class="quiet" onClick={() => (focusRequest.value = { ...sosPosition, at: Date.now() })}>
+            Auf der Karte zeigen
+          </button>
+        )}
+        <button class="danger" onClick={() => command('sos.beenden')}>
+          Notruf beenden
+        </button>
+      </div>
+    )}
     <header class={`band ${aHolder ? 'mit-a' : ''}`}>
       <div class="brand">
         <img src="/icon.svg" alt="" width="26" height="26" />
@@ -215,6 +236,7 @@ function SituationBand() {
         </button>
       </div>
     </header>
+    </>
   );
 }
 

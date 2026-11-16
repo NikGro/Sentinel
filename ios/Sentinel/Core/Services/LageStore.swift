@@ -34,6 +34,8 @@ final class LageStore {
     private var onUnauthorized: () -> Void = {}
     /// Empfänger für Positionsmeldungen, z. B. die Bestreifungsanzeige.
     var onMemberPosition: (String, Position) -> Void = { _, _ in }
+    /// Meldet bemerkenswerte Änderungen (A, Notruf, Nachrichten) für Hinweise und Vibration.
+    var onEvent: (LageEvent) -> Void = { _ in }
 
     init() {
         realtime.onMessage = { [weak self] data in self?.receive(data) }
@@ -220,6 +222,34 @@ final class LageStore {
     // MARK: Einsatz-Kommandos
 
     func claimA() { command("a.uebernehmen") }
+    func triggerSOS() { command("sos.ausloesen") }
+    func endSOS() { command("sos.beenden") }
+
+    /// Notruf eines anderen läuft gerade.
+    var foreignSOS: Versioned<Member>? {
+        guard let sos = operation.sos, sos.memberId != selfId else { return nil }
+        return members[sos.memberId]
+    }
+
+    var ownSOS: Bool { operation.sos?.memberId == selfId && selfId != nil }
+
+    private func announce(from old: OperationState, to new: OperationState) {
+        guard hasSnapshot else { return }
+        if old.sos?.memberId != new.sos?.memberId {
+            if let sos = new.sos {
+                onEvent(.sosStarted(memberId: sos.memberId, mine: sos.memberId == selfId))
+            } else if let ended = old.sos {
+                onEvent(.sosEnded(memberId: ended.memberId))
+            }
+        }
+        if old.a?.memberId != new.a?.memberId {
+            if let a = new.a {
+                onEvent(.aTaken(memberId: a.memberId, mine: a.memberId == selfId))
+            } else if let previous = old.a {
+                onEvent(.aReleased(previousMemberId: previous.memberId))
+            }
+        }
+    }
     func releaseA() { command("a.freigeben") }
     func setChannel(_ channel: String?) { command("funkkanal.setzen", args: ["kanal": channel]) }
     func setSituation(title: String, notes: String) { command("lage.setzen", args: ["titel": title, "hinweise": notes]) }
@@ -273,6 +303,13 @@ final class LageStore {
     private func apply(_ message: ServerMessage) {
         switch message {
         case .snapshot(let snapshot):
+            let previousSOS = operation.sos?.memberId
+            defer {
+                // Läuft beim Verbinden bereits ein Notruf, gilt er als neu (nicht erneut nach einem Wiederverbinden).
+                if let sos = snapshot.operation.sos, sos.memberId != previousSOS {
+                    onEvent(.sosStarted(memberId: sos.memberId, mine: sos.memberId == snapshot.me.id))
+                }
+            }
             selfId = snapshot.me.id
             routingAvailable = snapshot.server.routing
             members = index(snapshot.members)
@@ -296,11 +333,15 @@ final class LageStore {
         case .putTracker(let entity): trackers[entity.id] = entity
         case .putLayer(let entity): layers[entity.id] = entity
         case .putRoom(let entity): rooms[entity.id] = entity
+        case .putMessage(let entity) where !messages.contains(where: { $0.id == entity.id }) && entity.updatedBy != selfId && hasSnapshot:
+            messages.append(entity)
+            onEvent(.message(entity))
         case .putMessage(let entity):
             if !messages.contains(where: { $0.id == entity.id }) { messages.append(entity) }
         case .delete(let kind, let id):
             remove(kind: kind, id: id)
         case .operation(let next):
+            announce(from: operation, to: next)
             operation = next
         case .position(let id, let position):
             positions[id] = position
@@ -349,4 +390,13 @@ final class LageStore {
         connection = .verbunden
     }
     #endif
+}
+
+/// Bemerkenswerte Änderung der Lage, aus der ein Hinweis wird.
+enum LageEvent {
+    case aTaken(memberId: String, mine: Bool)
+    case aReleased(previousMemberId: String)
+    case sosStarted(memberId: String, mine: Bool)
+    case sosEnded(memberId: String)
+    case message(Versioned<ChatMessage>)
 }

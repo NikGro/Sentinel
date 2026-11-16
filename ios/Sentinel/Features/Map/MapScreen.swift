@@ -301,6 +301,11 @@ struct MapScreen: View {
                 }
             }
 
+            SOSBanner { memberId in
+                model.navigate(to: .member(memberId))
+                route.specialRights = true
+            }
+
             if let hint = tapMode.hint {
                 HStack(spacing: 12) {
                     Label(hint, systemImage: "hand.tap.fill")
@@ -332,6 +337,7 @@ struct MapScreen: View {
     private var sideButtons: some View {
         GlassEffectContainer(spacing: Theme.barSpacing) {
             VStack(spacing: Theme.barSpacing) {
+                SOSButton()
                 CompassButton(state: cameraState, mode: orientation) { cycleOrientation() }
                 MapStyleButton { on in
                     if followsMe {

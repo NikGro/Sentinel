@@ -274,3 +274,126 @@ struct CompassButton: View {
         }
     }
 }
+
+/// Notrufknopf: 1,5 Sekunden gedrückt halten (Ring füllt sich), damit er nicht versehentlich auslöst.
+/// Läuft der eigene Notruf, beendet ein Tipp ihn nach Rückfrage.
+struct SOSButton: View {
+    @Environment(LageStore.self) private var lage
+    @State private var holding = false
+    @State private var progress: Double = 0
+    @State private var hint = false
+    @State private var confirmEnd = false
+    @State private var timer: Task<Void, Never>?
+    /// Das Loslassen nach dem Auslösen ist kein eigener Tipp.
+    @State private var triggeredAt = Date.distantPast
+
+    private static let holdSeconds = 1.5
+
+    var body: some View {
+        ZStack {
+            Circle()
+                .fill(lage.ownSOS ? Color.red : Color.red.opacity(0.85))
+            Circle()
+                .trim(from: 0, to: progress)
+                .stroke(.white, style: StrokeStyle(lineWidth: 4, lineCap: .round))
+                .rotationEffect(.degrees(-90))
+                .padding(3)
+            Text("SOS")
+                .font(.system(size: 13, weight: .heavy, design: .rounded))
+                .foregroundStyle(.white)
+        }
+        .frame(width: Theme.roundButton, height: Theme.roundButton)
+        .scaleEffect(holding ? 1.12 : 1)
+        .shadow(color: .red.opacity(0.4), radius: holding ? 10 : 4)
+        .contentShape(.circle)
+        .onLongPressGesture(minimumDuration: Self.holdSeconds, maximumDistance: 30) {
+            timer?.cancel()
+            holding = false
+            progress = 0
+            if !lage.ownSOS {
+                triggeredAt = .now
+                lage.triggerSOS()
+            }
+        } onPressingChanged: { pressing in
+            guard !lage.ownSOS else { return }
+            holding = pressing
+            timer?.cancel()
+            if pressing {
+                let start = Date.now
+                timer = Task {
+                    while !Task.isCancelled {
+                        progress = min(1, Date.now.timeIntervalSince(start) / Self.holdSeconds)
+                        try? await Task.sleep(for: .milliseconds(30))
+                    }
+                }
+            } else {
+                withAnimation(.snappy) { progress = 0 }
+            }
+        }
+        .simultaneousGesture(TapGesture().onEnded {
+            guard Date.now.timeIntervalSince(triggeredAt) > 1.5 else { return }
+            if lage.ownSOS { confirmEnd = true } else if progress < 1 { hint = true }
+        })
+        .sensoryFeedback(.impact(weight: .heavy), trigger: holding) { _, now in now }
+        .animation(.snappy, value: holding)
+        .alert("Gedrückt halten", isPresented: $hint) {
+            Button("OK", role: .cancel) {}
+        } message: {
+            Text("Zum Auslösen des Notrufs den Knopf 1,5 Sekunden gedrückt halten. Alle Kräfte werden dann mit Sonderrechten zu Ihnen geführt.")
+        }
+        .alert("Notruf beenden?", isPresented: $confirmEnd) {
+            Button("Weiter Notruf", role: .cancel) {}
+            Button("Beenden", role: .destructive) { lage.endSOS() }
+        } message: {
+            Text("Die Navigation der anderen Kräfte zu Ihnen läuft weiter, bis sie sie selbst beenden.")
+        }
+        .accessibilityLabel(lage.ownSOS ? "Notruf läuft, beenden" : "Notruf, gedrückt halten")
+    }
+}
+
+/// Roter Balken, solange ein Notruf läuft.
+struct SOSBanner: View {
+    let navigate: (String) -> Void
+
+    @Environment(LageStore.self) private var lage
+    @Environment(RouteFollower.self) private var route
+
+    var body: some View {
+        if let sos = lage.operation.sos {
+            let mine = sos.memberId == lage.selfId
+            let name = lage.members[sos.memberId]?.data.spitzname ?? "Unbekannt"
+            HStack(spacing: 10) {
+                Image(systemName: "sos.circle.fill")
+                    .font(.title2)
+                VStack(alignment: .leading, spacing: 1) {
+                    Text(mine ? "Ihr Notruf läuft" : "SOS: \(name)")
+                        .font(.subheadline.weight(.bold))
+                    Text("seit \(Format.time(Date(timeIntervalSince1970: sos.seit / 1000)))")
+                        .font(.caption)
+                        .opacity(0.85)
+                }
+                Spacer(minLength: 0)
+                if mine {
+                    Button("Beenden") { lage.endSOS() }
+                        .font(.subheadline.weight(.semibold))
+                        .buttonStyle(.plain)
+                        .padding(.horizontal, 12)
+                        .padding(.vertical, 6)
+                        .background(.white.opacity(0.25), in: .capsule)
+                } else if route.target != .member(sos.memberId) {
+                    Button("Hinführen") { navigate(sos.memberId) }
+                        .font(.subheadline.weight(.semibold))
+                        .buttonStyle(.plain)
+                        .padding(.horizontal, 12)
+                        .padding(.vertical, 6)
+                        .background(.white.opacity(0.25), in: .capsule)
+                }
+            }
+            .foregroundStyle(.white)
+            .padding(.horizontal, 14)
+            .frame(minHeight: Theme.barHeight)
+            .background(Color.red.gradient, in: .rect(cornerRadius: Theme.barHeight / 2))
+            .accessibilityElement(children: .combine)
+        }
+    }
+}

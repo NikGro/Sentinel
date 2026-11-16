@@ -223,6 +223,8 @@ export interface Operation {
    * `zuweisungen` ordnet jedem Teilnehmer die anzufahrende Haltestelle zu; `naechste` sind die kommenden Halte der A.
    */
   ueberschlagen: { teilnehmer: string[]; zuweisungen: Record<string, LeapfrogStop>; naechste: LeapfrogStop[] };
+  /** Notruf eines Fahnders: Alle anderen werden sofort mit Sonderrechten zu ihm geführt. */
+  sos: { memberId: string; seit: number } | null;
   rev: number;
 }
 
@@ -239,6 +241,8 @@ export type ClientMessage = z.output<typeof clientMessage>;
 export const commandArgs = {
   'a.uebernehmen': z.object({}).optional(),
   'a.freigeben': z.object({}).optional(),
+  'sos.ausloesen': z.object({}).optional(),
+  'sos.beenden': z.object({}).optional(),
   'funkkanal.setzen': z.object({ kanal: funkkanal.nullable() }),
   'lage.setzen': z.object({ titel: text(80), hinweise: text(4000) }),
   'fortbewegung.setzen': z.object({

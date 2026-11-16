@@ -13,6 +13,13 @@
 - Bewegte Ziele (A, Kräfte) werden laufend nachgeführt
 - Keine Sprachansagen
 
+**Hinweise und Notruf**
+- Hinweise oben im Bild in drei Stufen (grün, gelb, rot) mit passender Vibration, rot kräftig und mehrfach;
+  im Hintergrund als iOS-Mitteilung (A übernommen oder frei, Notruf, neue Nachrichten)
+- SOS-Knopf auf der Karte (1,5 s gedrückt halten): Bei allen anderen startet sofort die Navigation mit
+  Sonderrechten zum Absender; roter Balken, solange der Notruf läuft; beenden durch Absender oder Zentrale
+- Kommandozentrale zeigt den Notruf als roten Balken mit „Auf der Karte zeigen“ und „Notruf beenden“
+
 **Kartenausrichtung**
 - Kompassknopf schaltet durch: Fahrtrichtung (Standard), Norden, Übersicht der ganzen Route
 - Mit zwei Fingern gedreht bleibt die Ausrichtung fest, bis man am Kompass wieder umschaltet

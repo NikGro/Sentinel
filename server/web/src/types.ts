@@ -135,6 +135,7 @@ export interface Operation {
   hinweise: string;
   a: { memberId: string; seit: number } | null;
   ueberschlagen: { teilnehmer: string[]; zuweisungen: Record<string, LeapfrogStop>; naechste: LeapfrogStop[] };
+  sos: { memberId: string; seit: number } | null;
   rev: number;
 }
 

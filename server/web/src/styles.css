@@ -1219,3 +1219,36 @@ pre {
   transform: none;
   margin: 0;
 }
+
+/* Notruf: unübersehbar über allem */
+.sos-band {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  padding: var(--space-2) var(--space-4);
+  background: #c4262e;
+  color: #fff;
+  font-weight: 600;
+  animation: sos-puls 1.2s ease-in-out infinite;
+}
+.sos-band strong {
+  font-size: 15px;
+  letter-spacing: 0.08em;
+}
+.sos-band span {
+  flex: 1;
+}
+.sos-band button.quiet {
+  color: #fff;
+  border-color: rgba(255, 255, 255, 0.5);
+}
+@keyframes sos-puls {
+  50% {
+    background: #8f1a20;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .sos-band {
+    animation: none;
+  }
+}

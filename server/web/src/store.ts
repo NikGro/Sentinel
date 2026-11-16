@@ -20,7 +20,7 @@ export const tables = {
   message: signal<Table<'message'>>({}),
 };
 
-export const operation = signal<Operation>({ funkkanal: null, titel: '', hinweise: '', a: null, ueberschlagen: { teilnehmer: [], zuweisungen: {}, naechste: [] }, rev: 0 });
+export const operation = signal<Operation>({ funkkanal: null, titel: '', hinweise: '', a: null, ueberschlagen: { teilnehmer: [], zuweisungen: {}, naechste: [] }, sos: null, rev: 0 });
 export const positions = signal<Record<string, Position>>({});
 export const trackerPositions = signal<Record<string, Position>>({});
 export const online = signal<Set<string>>(new Set());

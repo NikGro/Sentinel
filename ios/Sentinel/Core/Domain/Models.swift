@@ -478,12 +478,14 @@ struct OperationState: Codable, Equatable, Sendable {
     var hinweise: String = ""
     var a: APosition?
     var ueberschlagen = Leapfrog()
+    /// Notruf eines Fahnders.
+    var sos: APosition?
     var rev: Int = 0
 
     init() {}
 
     private enum CodingKeys: String, CodingKey {
-        case funkkanal, titel, hinweise, a, ueberschlagen, rev
+        case funkkanal, titel, hinweise, a, ueberschlagen, sos, rev
     }
 
     init(from decoder: Decoder) throws {
@@ -493,6 +495,7 @@ struct OperationState: Codable, Equatable, Sendable {
         hinweise = try c.decodeIfPresent(String.self, forKey: .hinweise) ?? ""
         a = try c.decodeIfPresent(APosition.self, forKey: .a)
         ueberschlagen = try c.decodeIfPresent(Leapfrog.self, forKey: .ueberschlagen) ?? Leapfrog()
+        sos = try c.decodeIfPresent(APosition.self, forKey: .sos)
         rev = try c.decodeIfPresent(Int.self, forKey: .rev) ?? 0
     }
 }

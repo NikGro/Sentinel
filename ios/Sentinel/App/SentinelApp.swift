@@ -20,6 +20,7 @@ struct SentinelApp: App {
                 .environment(model.search)
                 .environment(model.audio)
                 .environment(model.lock)
+                .environment(model.alerts)
                 .environment(\.locale, Format.locale)
                 .onAppear(perform: Appearance.apply)
                 .onChange(of: scenePhase) { _, phase in

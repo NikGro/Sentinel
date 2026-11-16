@@ -61,6 +61,7 @@ const DEFAULT_OPERATION: Operation = {
   hinweise: '',
   a: null,
   ueberschlagen: { teilnehmer: [], zuweisungen: {}, naechste: [] },
+  sos: null,
   rev: 0,
 };
 
@@ -91,6 +92,7 @@ export class Lage extends EventEmitter<{ event: [LageEvent] }> {
       hinweise: parsed.hinweise ?? '',
       a: parsed.a ?? null,
       ueberschlagen: parsed.ueberschlagen ?? DEFAULT_OPERATION.ueberschlagen,
+      sos: parsed.sos ?? null,
       rev: parsed.rev ?? 0,
     };
     const trackerPos = db.getKv('trackerPositions');
@@ -348,6 +350,17 @@ export class Lage extends EventEmitter<{ event: [LageEvent] }> {
         this.updateLeapfrog();
         break;
       }
+      case 'sos.ausloesen': {
+        if (actor.role !== 'fahnder') throw new LageError('verboten', 'Einen Notruf kann nur ein Fahnder auslösen.');
+        if (!this.get('member', actor.id)) throw new LageError('unbekannt', 'Profil fehlt.');
+        if (op.sos && op.sos.memberId !== actor.id) throw new LageError('konflikt', 'Es läuft bereits ein Notruf.');
+        this.updateOperation({ sos: { memberId: actor.id, seit: now } });
+        break;
+      }
+      case 'sos.beenden':
+        // Beenden darf, wer ihn ausgelöst hat, oder die Kommandozentrale; jeder andere nimmt ihn nur für sich zur Kenntnis.
+        if (op.sos && (op.sos.memberId === actor.id || actor.role === 'zentrale')) this.updateOperation({ sos: null });
+        break;
       case 'a.freigeben':
         if (op.a && (op.a.memberId === actor.id || actor.role === 'zentrale')) {
           this.updateOperation({ a: null });
@@ -509,7 +522,7 @@ export class Lage extends EventEmitter<{ event: [LageEvent] }> {
     for (const l of layers) if (doomed.has(l.id) && !PROTECTED_LAYERS.has(l.id)) this.remove('layer', l.id);
     for (const m of this.list('message')) this.remove('message', m.id);
     if (includeTargets) for (const t of this.list('target')) this.remove('target', t.id);
-    this.updateOperation({ a: null, titel: '', hinweise: '', ueberschlagen: DEFAULT_OPERATION.ueberschlagen });
+    this.updateOperation({ a: null, titel: '', hinweise: '', ueberschlagen: DEFAULT_OPERATION.ueberschlagen, sos: null });
     this.resetCoverage();
     this.db.audit(actor.id, 'lage.zurueckgesetzt', includeTargets ? 'inklusive Zielpersonen' : '');
   }

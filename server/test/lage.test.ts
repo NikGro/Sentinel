@@ -175,3 +175,19 @@ test('Bestehende Daten werden auf das neue Modell übertragen', () => {
   assert.equal(lage.operation.funkkanal, '12');
   assert.equal('modus' in lage.operation, false);
 });
+
+test('Notruf: Fahnder lösen aus, nur Absender oder Zentrale beenden', () => {
+  const lage = newLage();
+  lage.put(fahnder('a'), 'member', 'a', profil('Falke'));
+  lage.put(fahnder('b'), 'member', 'b', profil('Adler'));
+  lage.command(fahnder('a'), 'sos.ausloesen', {});
+  assert.equal(lage.operation.sos?.memberId, 'a');
+  assert.throws(() => lage.command(fahnder('b'), 'sos.ausloesen', {}), /bereits/);
+  lage.command(fahnder('b'), 'sos.beenden', {});
+  assert.equal(lage.operation.sos?.memberId, 'a', 'andere beenden ihn nicht für alle');
+  lage.command(zentrale, 'sos.beenden', {});
+  assert.equal(lage.operation.sos, null);
+  lage.command(fahnder('a'), 'sos.ausloesen', {});
+  lage.command(fahnder('a'), 'sos.beenden', {});
+  assert.equal(lage.operation.sos, null);
+});

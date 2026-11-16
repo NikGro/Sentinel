@@ -17,6 +17,7 @@ final class AppModel {
     let search = SearchService()
     let audio = AudioRecorder()
     let lock = AppLock()
+    let alerts = AlertCenter()
 
     private(set) var credentials: Credentials?
     /// HTTP-Zugriff mit der Anmeldung dieses Geräts; `nil`, solange nicht angemeldet.
@@ -44,6 +45,7 @@ final class AppModel {
             guard self.lage.me?.data.aktiv != false else { return }
             self.lage.sendPosition(position)
         }
+        lage.onEvent = { [weak self] event in self?.handle(event) }
         lage.onMemberPosition = { [weak self] memberId, position in
             guard let self, self.settings.showsCoverage else { return }
             self.fahndung.appendLive(memberId: memberId, position: position)
@@ -92,6 +94,7 @@ final class AppModel {
         photos.client = client
         fahndung.client = client
         route.configure(serverURL: credentials.serverURL, token: credentials.token)
+        alerts.requestPermission()
         lage.connect(credentials: credentials) { [weak self] in self?.signOut() }
         location.start()
     }
@@ -104,6 +107,42 @@ final class AppModel {
 
     func didBecomeActive() async {
         await lock.unlock()
+    }
+
+    // MARK: Hinweise
+
+    /// Hinweise und Vibration zu Änderungen der Lage; beim Notruf eines anderen sofort mit Sonderrechten hinführen.
+    private func handle(_ event: LageEvent) {
+        func name(_ id: String) -> String { lage.members[id]?.data.spitzname ?? "Unbekannt" }
+        switch event {
+        case .aTaken(let id, let mine):
+            if mine {
+                alerts.post(.info, "Sie haben die A")
+            } else {
+                alerts.post(.warning, "A übernommen", "\(name(id)) hat die A-Position.")
+            }
+        case .aReleased(let previous):
+            if previous == lage.selfId {
+                alerts.post(.info, "A abgegeben")
+            } else {
+                alerts.post(.warning, "A ist frei", "\(name(previous)) hat die A-Position abgegeben.")
+            }
+        case .sosStarted(let id, let mine):
+            if mine {
+                alerts.post(.critical, "Notruf ausgelöst", "Alle Kräfte werden mit Sonderrechten zu Ihnen geführt.")
+            } else {
+                alerts.post(.critical, "SOS: \(name(id))", "Navigation mit Sonderrechten wurde gestartet.")
+                navigate(to: .member(id))
+                route.specialRights = true
+            }
+        case .sosEnded(let id):
+            alerts.post(.info, "Notruf beendet", id == lage.selfId ? "Ihr Notruf ist beendet." : "Notruf von \(name(id)) ist beendet.")
+        case .message(let message):
+            guard !alerts.chatIsVisible else { return }
+            let room = lage.rooms[message.data.roomId]?.data.name
+            let text = message.data.text.isEmpty ? (message.data.anhang.map { $0.art == .audio ? "Sprachnachricht" : ($0.art == .bild ? "Foto" : "Datei") } ?? "") : message.data.text
+            alerts.post(.info, "\(name(message.updatedBy))\(room.map { " in \($0)" } ?? "")", text)
+        }
     }
 
     // MARK: Navigation

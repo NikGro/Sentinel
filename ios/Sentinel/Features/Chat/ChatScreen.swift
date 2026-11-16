@@ -122,6 +122,7 @@ struct ChatRoomView: View {
     @Environment(PhotoStore.self) private var photos
     @Environment(AppModel.self) private var model
     @Environment(AudioRecorder.self) private var audio
+    @Environment(AlertCenter.self) private var alerts
 
     @State private var draft = ""
     @State private var pickerItem: PhotosPickerItem?
@@ -170,7 +171,11 @@ struct ChatRoomView: View {
         .safeAreaInset(edge: .bottom) { composer }
         .navigationTitle(lage.rooms[roomId]?.data.name ?? "Chat")
         .navigationBarTitleDisplayMode(.inline)
-        .onAppear(perform: markRead)
+        .onAppear {
+            markRead()
+            alerts.chatIsVisible = true
+        }
+        .onDisappear { alerts.chatIsVisible = false }
         .onChange(of: pickerItem) { _, item in
             guard let item else { return }
             Task {

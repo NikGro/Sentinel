@@ -96,6 +96,7 @@ struct MainView: View {
 
     @Environment(LageStore.self) private var lage
     @Environment(LocalSettings.self) private var settings
+    @Environment(AlertCenter.self) private var alerts
     @State private var selection: Section = .lage
 
     var body: some View {
@@ -115,6 +116,14 @@ struct MainView: View {
             .badge(unreadCount)
             Tab("Mehr", systemImage: "ellipsis", value: Section.mehr) {
                 SettingsScreen()
+            }
+        }
+        .overlay(alignment: .top) {
+            if let alert = alerts.current {
+                AlertBanner(alert: alert) { alerts.dismiss() }
+                    .padding(.top, 4)
+                    .transition(.move(edge: .top).combined(with: .opacity))
+                    .id(alert.id)
             }
         }
         .alert("Hinweis", isPresented: Binding(get: { lage.lastError != nil }, set: { if !$0 { lage.lastError = nil } })) {
