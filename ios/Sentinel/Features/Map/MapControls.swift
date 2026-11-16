@@ -12,10 +12,11 @@ struct APositionControl: View {
     var body: some View {
         Button(action: press) {
             HStack(spacing: 7) {
+                // Natives Symbol, einfarbig: weiß auf dem blauen Knopf, rot, solange man die A hält.
                 Image(systemName: "a.circle.fill")
                     .font(.system(size: 22, weight: .semibold))
-                    .symbolRenderingMode(.palette)
-                    .foregroundStyle(lage.holdsA ? .white : Theme.aPosition, lage.holdsA ? Theme.aPosition : .white)
+                    .symbolRenderingMode(.monochrome)
+                    .foregroundStyle(lage.holdsA ? Theme.aPosition : .white)
                 Text(title)
                     .font(.subheadline.weight(.semibold))
                     .lineLimit(1)

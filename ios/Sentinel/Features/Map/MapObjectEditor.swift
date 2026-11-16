@@ -164,7 +164,27 @@ struct MapObjectEditor: View {
                     }
                 }
 
-                if object.typ == .kreis || object.typ == .haltestellen {
+                if object.typ == .haltestellen {
+                    Section("Umkreis") {
+                        HStack(spacing: 12) {
+                            Slider(
+                                value: Binding(
+                                    get: { min(max(Double(radiusText) ?? 500, 100), 3000) },
+                                    set: { radiusText = String(Int(($0 / 50).rounded() * 50)) }
+                                ),
+                                in: 100...3000
+                            )
+                            TextField("Meter", text: $radiusText)
+                                .keyboardType(.numberPad)
+                                .multilineTextAlignment(.trailing)
+                                .frame(width: 64)
+                            Text("m")
+                                .foregroundStyle(.secondary)
+                        }
+                    }
+                }
+
+                if object.typ == .kreis {
                     Section("Radius in Metern") {
                         TextField("Radius", text: $radiusText)
                             .keyboardType(.numberPad)

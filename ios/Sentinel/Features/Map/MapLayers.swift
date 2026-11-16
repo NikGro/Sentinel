@@ -271,9 +271,14 @@ struct RouteLayer: MapContent {
     let lines: [RouteLine]
 
     var body: some MapContent {
+        // Breite Routenlinie mit dunklem Rand, wie in einer Navi-App gut vom Straßennetz abgesetzt.
         ForEach(lines) { line in
             MapPolyline(line.polyline)
-                .stroke(line.specialRights ? Color.red : Color.blue, style: StrokeStyle(lineWidth: 7, lineCap: .round, lineJoin: .round))
+                .stroke(Color.black.opacity(0.35), style: StrokeStyle(lineWidth: 16, lineCap: .round, lineJoin: .round))
+        }
+        ForEach(lines) { line in
+            MapPolyline(line.polyline)
+                .stroke(line.specialRights ? Color.red : Color(hex: "#0A84FF"), style: StrokeStyle(lineWidth: 11, lineCap: .round, lineJoin: .round))
         }
     }
 }
@@ -357,24 +362,156 @@ struct NearbyStopsLayer: MapContent {
     var body: some MapContent {
         ForEach(stops) { stop in
             Annotation(stop.name, coordinate: stop.point.coordinate, anchor: .center) {
-                VStack(spacing: 2) {
-                    StopSign(size: 20)
-                    VStack(spacing: 0) {
+                VStack(spacing: 3) {
+                    StationSymbol(lines: stop.linien)
+                    VStack(spacing: 2) {
                         Text(stop.name)
                             .font(.caption2.weight(.semibold))
-                        if !stop.lineSummary.isEmpty {
-                            Text(stop.lineSummary)
-                                .font(.system(size: 9, weight: .medium))
-                                .foregroundStyle(.secondary)
-                        }
+                            .lineLimit(1)
+                        LineBadges(lines: stop.linien)
                     }
-                    .lineLimit(1)
                     .padding(.horizontal, 5)
-                    .padding(.vertical, 1)
+                    .padding(.vertical, 3)
                     .background(.thinMaterial, in: .rect(cornerRadius: 6))
                 }
             }
             .annotationTitles(.hidden)
+        }
+    }
+}
+
+/// Art einer Linie für die Darstellung, abgeleitet aus OpenStreetMap-Typ und Liniennummer.
+enum LineKind {
+    case sBahn, uBahn, bahn, tram, bus, faehre
+
+    init(_ line: NearbyStop.Line) {
+        let ref = line.ref.uppercased()
+        switch line.typ {
+        case "subway": self = .uBahn
+        case "tram": self = .tram
+        case "ferry": self = .faehre
+        case "train", "light_rail": self = ref.hasPrefix("S") ? .sBahn : .bahn
+        default: self = ref.hasPrefix("U") ? .uBahn : (ref.hasPrefix("S") && ref.count <= 3 ? .sBahn : .bus)
+        }
+    }
+
+    var order: Int {
+        switch self {
+        case .sBahn: 0
+        case .uBahn: 1
+        case .bahn: 2
+        case .tram: 3
+        case .faehre: 4
+        case .bus: 5
+        }
+    }
+}
+
+/// Liniennummern im Stil der Haltestellenschilder: S-Bahn grün und rund, U-Bahn als Quadrat in Linienfarbe,
+/// Busse schwarz auf weiß, Regionalbahnen grau, Fähren blau.
+struct LineBadges: View {
+    let lines: [NearbyStop.Line]
+    var limit = 6
+
+    var body: some View {
+        let sorted = lines.sorted { (LineKind($0).order, $0.ref.count, $0.ref) < (LineKind($1).order, $1.ref.count, $1.ref) }
+        HStack(spacing: 3) {
+            ForEach(Array(sorted.prefix(limit).enumerated()), id: \.offset) { _, line in
+                LineBadge(line: line)
+            }
+            if sorted.count > limit {
+                Text("+\(sorted.count - limit)")
+                    .font(.system(size: 9, weight: .bold))
+                    .foregroundStyle(.secondary)
+            }
+        }
+    }
+}
+
+struct LineBadge: View {
+    let line: NearbyStop.Line
+
+    var body: some View {
+        let kind = LineKind(line)
+        Text(line.ref)
+            .font(.system(size: 9, weight: .heavy))
+            .foregroundStyle(foreground(kind))
+            .lineLimit(1)
+            .padding(.horizontal, 4)
+            .frame(minWidth: 18, minHeight: 14)
+            .background(background(kind), in: shape(kind))
+            .overlay(shape(kind).stroke(kind == .bus ? Color.black.opacity(0.7) : .clear, lineWidth: 1))
+            .accessibilityLabel(label(kind))
+    }
+
+    private func shape(_ kind: LineKind) -> RoundedRectangle {
+        RoundedRectangle(cornerRadius: kind == .sBahn ? 7 : (kind == .uBahn ? 1.5 : 3))
+    }
+
+    /// Hamburger Linienfarben für die U-Bahn, sonst die üblichen Farben je Verkehrsmittel.
+    private func background(_ kind: LineKind) -> Color {
+        switch kind {
+        case .sBahn: return Color(hex: "#00A651")
+        case .uBahn:
+            switch line.ref.uppercased() {
+            case "U1": return Color(hex: "#0066B3")
+            case "U2": return Color(hex: "#E2001A")
+            case "U3": return Color(hex: "#FFDD00")
+            case "U4": return Color(hex: "#00A8A8")
+            case "U5": return Color(hex: "#7C4A9A")
+            default: return Color(hex: "#0066B3")
+            }
+        case .bahn: return Color(hex: "#6B6B6B")
+        case .tram: return Color(hex: "#C8102E")
+        case .faehre: return Color(hex: "#0095DA")
+        case .bus: return .white
+        }
+    }
+
+    private func foreground(_ kind: LineKind) -> Color {
+        if kind == .bus { return .black }
+        if kind == .uBahn, line.ref.uppercased() == "U3" { return .black }
+        return .white
+    }
+
+    private func label(_ kind: LineKind) -> String {
+        switch kind {
+        case .sBahn: "S-Bahn \(line.ref)"
+        case .uBahn: "U-Bahn \(line.ref)"
+        case .bahn: "Bahn \(line.ref)"
+        case .tram: "Straßenbahn \(line.ref)"
+        case .faehre: "Fähre \(line.ref)"
+        case .bus: "Bus \(line.ref)"
+        }
+    }
+}
+
+/// Symbol einer Haltestelle: S-Bahn-Logo, U-Bahn-Logo oder das grüne H im gelben Kreis für Busse.
+struct StationSymbol: View {
+    let lines: [NearbyStop.Line]
+
+    var body: some View {
+        let kinds = Set(lines.map(LineKind.init))
+        HStack(spacing: 2) {
+            if kinds.contains(.sBahn) {
+                Text("S")
+                    .font(.system(size: 13, weight: .heavy))
+                    .foregroundStyle(.white)
+                    .frame(width: 20, height: 20)
+                    .background(Color(hex: "#00A651"), in: .circle)
+                    .overlay(Circle().stroke(.white, lineWidth: 1.5))
+            }
+            if kinds.contains(.uBahn) {
+                Text("U")
+                    .font(.system(size: 13, weight: .heavy))
+                    .foregroundStyle(.white)
+                    .frame(width: 20, height: 20)
+                    .background(Color(hex: "#0066B3"), in: .rect(cornerRadius: 2))
+                    .overlay(RoundedRectangle(cornerRadius: 2).stroke(.white, lineWidth: 1.5))
+            }
+            if kinds.isDisjoint(with: [.sBahn, .uBahn]) {
+                StopSign(size: 20)
+            }
         }
     }
 }
@@ -408,7 +545,8 @@ struct MyLocationLayer: MapContent {
                 .annotationTitles(.hidden)
             }
         } else if let location {
-            Annotation("Eigener Standort", coordinate: location.coordinate, anchor: .center) {
+            // Vom System geführte Standortanzeige mit eigenem Aussehen: bewegt sich flüssig wie der blaue Punkt.
+            UserAnnotation(anchor: .center) { _ in
                 MyLocationMarker(style: style, holdsA: holdsA, course: location.course, cameraState: cameraState)
                     .overlay(alignment: .bottom) {
                         if let label {

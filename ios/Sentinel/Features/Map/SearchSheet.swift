@@ -137,7 +137,8 @@ struct SearchSheet: View {
 
     private func choose(_ suggestion: SearchService.Suggestion?) async {
         let result = await search.resolve(suggestion, query: query, near: model.myPoint, client: model.client)
-        if result.count == 1, let place = result.first {
+        // Direkt losfahren nur bei genau einem Treffer, der zur Eingabe passt; sonst bewusst auswählen lassen.
+        if result.filter(\.matchesQuery).count == 1, let place = result.first(where: \.matchesQuery) {
             navigate(.point(place.point, title: place.title))
             dismiss()
         } else {

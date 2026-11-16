@@ -23,6 +23,22 @@ final class SearchService: NSObject, MKLocalSearchCompleterDelegate {
         let title: String
         let subtitle: String
         let point: GeoPoint
+        /// Stimmen Straße und Hausnummer mit der Eingabe überein? Nur dann startet die Navigation ohne Rückfrage.
+        var matchesQuery = true
+    }
+
+    /// Zerlegt "Hegbarg 1" bzw. "Hegbarg 1, Hamburg" in Straße und Hausnummer; ohne Hausnummer `nil`.
+    nonisolated static func streetAndNumber(_ text: String) -> (street: String, number: String)? {
+        let first = text.components(separatedBy: ",").first?.trimmingCharacters(in: .whitespaces) ?? text
+        guard let match = first.wholeMatch(of: #/(.+?)\s+(\d+\s?[a-zA-Z]?)/#) else { return nil }
+        return (String(match.1), String(match.2).replacingOccurrences(of: " ", with: "").lowercased())
+    }
+
+    /// Vergleichbare Schreibweise eines Straßennamens: "Musterstr." und "Musterstraße" gelten als gleich.
+    nonisolated static func normalizedStreet(_ name: String) -> String {
+        var value = name.lowercased().replacingOccurrences(of: "ß", with: "ss")
+        value = value.replacing(#/str\.?$/#, with: "strasse")
+        return value.filter { $0.isLetter || $0.isNumber }
     }
 
     private(set) var suggestions: [Suggestion] = []
@@ -134,6 +150,28 @@ final class SearchService: NSObject, MKLocalSearchCompleterDelegate {
         Task { @MainActor in self.suggestions = [] }
     }
 
+    nonisolated static func matches(_ placemark: CLPlacemark, _ text: String) -> Bool {
+        guard let wanted = streetAndNumber(text) else { return true }
+        guard let street = placemark.thoroughfare else { return false }
+        let number = (placemark.subThoroughfare ?? "").replacingOccurrences(of: " ", with: "").lowercased()
+        return normalizedStreet(street) == normalizedStreet(wanted.street) && (number.isEmpty || number == wanted.number)
+    }
+
+    /// Adresssuche über den Geocoder als zweite Quelle, wenn die Ortssuche keine passende Straße liefert.
+    private func geocode(_ text: String, near: GeoPoint?) async -> [Place] {
+        let region = near.map { CLCircularRegion(center: $0.coordinate, radius: 30_000, identifier: "umkreis") }
+        guard let placemarks = try? await CLGeocoder().geocodeAddressString(text, in: region, preferredLocale: Locale(identifier: "de_DE")) else { return [] }
+        return placemarks.compactMap { placemark in
+            guard let location = placemark.location else { return nil }
+            return Place(
+                title: [placemark.thoroughfare, placemark.subThoroughfare].compactMap { $0 }.joined(separator: " "),
+                subtitle: [placemark.postalCode, placemark.locality].compactMap { $0 }.joined(separator: " "),
+                point: GeoPoint(location.coordinate),
+                matchesQuery: Self.matches(placemark, text)
+            )
+        }
+    }
+
     /// Löst einen Vorschlag oder eine freie Eingabe in Orte auf.
     func resolve(_ suggestion: Suggestion?, query: String, near: GeoPoint?, client: APIClient?) async -> [Place] {
         isSearching = true
@@ -166,13 +204,20 @@ final class SearchService: NSObject, MKLocalSearchCompleterDelegate {
         }
         do {
             let response = try await MKLocalSearch(request: request).start()
-            let places = response.mapItems.map { item in
+            var places = response.mapItems.map { item in
                 Place(
                     title: item.name ?? text,
                     subtitle: [item.placemark.thoroughfare, item.placemark.subThoroughfare, item.placemark.locality].compactMap { $0 }.joined(separator: " "),
-                    point: GeoPoint(item.placemark.coordinate)
+                    point: GeoPoint(item.placemark.coordinate),
+                    matchesQuery: Self.matches(item.placemark, text)
                 )
             }
+            // Treffer mit falscher Straße (z. B. "Hempbarg" statt "Hegbarg") nicht übernehmen, sondern genauer suchen.
+            if Self.streetAndNumber(text) != nil, !places.contains(where: \.matchesQuery) {
+                let geocoded = await geocode(text, near: near)
+                if !geocoded.isEmpty { places = geocoded + places }
+            }
+            places.sort { $0.matchesQuery && !$1.matchesQuery }
             if places.isEmpty { failure = "Nichts gefunden." }
             return places
         } catch {

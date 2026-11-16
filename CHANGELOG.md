@@ -1,5 +1,26 @@
 # Änderungen
 
+## 0.5.0
+
+**Navigation und Fahrmodus**
+- Fahrmodus (Standortknopf, Navigation): Kamera gleitet gleichmäßig zwischen den GPS-Meldungen, gekippt und in
+  Fahrtrichtung; der eigene Navi-Pfeil sitzt fest in der Bildmitte statt in Sprüngen über die Karte zu hüpfen
+- Straße und Fahrtrichtung mit festem Abstand unter dem Pfeil, nie mehr im Symbol
+- Geschwindigkeitsanzeige im Fahrmodus und in der Navigation
+- Breite Routenlinie mit Rand; die gefahrene Strecke verschwindet hinter einem
+- Abbiegehinweise passen zur Stelle: Manöver werden im Linienzug gesucht statt aufsummiert (vorher verrutschten
+  sie mit jedem Schritt)
+- Adresssuche prüft Straße und Hausnummer; „Hegbarg 1“ führt nie mehr ohne Rückfrage zu „Hempbarg 1“
+
+**Karte**
+- Runde Knöpfe wieder so hoch wie die Suchleiste, eigener Kompass in derselben Größe mit Tippfeedback,
+  ohne Wirbeln über Nord
+- 3D wieder im Kartenstil-Menü schaltbar
+- A-Knopf mit klarem, einfarbigem A-Symbol
+- Eigenes Symbol (Fahrzeug) bewegt sich flüssig wie der Systempunkt
+- Haltestellen mit S-Bahn-, U-Bahn- und Haltestellensymbol, Linien als farbige Liniennummern
+- Umkreis der Haltestellen-Markierung per Schieberegler oder Eingabe
+
 ## 0.4.0
 
 **Eigener Standort**

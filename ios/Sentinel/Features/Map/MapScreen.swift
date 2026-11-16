@@ -66,20 +66,25 @@ struct MapScreen: View {
     @State private var cameraState = MapCameraState()
     @Namespace private var mapScope
     /// In der Navi-Ansicht folgt die Kamera nah und in Fahrtrichtung, bis man die Karte selbst verschiebt.
-    @State private var navigationFollows = true
+    /// Fahrmodus: Die Kamera folgt einem selbst gekippt und in Fahrtrichtung; der eigene Pfeil sitzt fest in der Bildmitte.
+    /// Wer die Karte verschiebt, beendet ihn; der Standortknopf startet ihn wieder.
+    @State private var followsMe = false
+    @State private var bottomAreaHeight: CGFloat = 120
     @State private var now = Date.now
     @State private var topAreaHeight: CGFloat = 60
 
     var body: some View {
         MapReader { proxy in
             Map(position: $camera, scope: mapScope) {
-                MyLocationLayer(
-                    location: location.current,
-                    style: myLocationStyle,
-                    holdsA: lage.holdsA,
-                    label: isFollowing || route.isActive ? locationContext.summary : nil,
-                    cameraState: cameraState
-                )
+                if !followsMe {
+                    MyLocationLayer(
+                        location: location.current,
+                        style: myLocationStyle,
+                        holdsA: lage.holdsA,
+                        label: nil,
+                        cameraState: cameraState
+                    )
+                }
                 CoverageLayer(segments: coverageSegments)
                 ReachLayer(rings: reachRings)
                 MapObjectsLayer(lines: objects(.linie), areas: objects(.flaeche), circles: objects(.kreis) + objects(.haltestellen), handles: handles) { id in
@@ -101,15 +106,36 @@ struct MapScreen: View {
             .ignoresSafeArea(.container, edges: .bottom)
             .onMapCameraChange(frequency: .continuous) { context in cameraState.update(context.camera) }
             .simultaneousGesture(DragGesture(minimumDistance: 12).onChanged { _ in
-                if route.isActive { navigationFollows = false }
+                if followsMe { followsMe = false }
             })
+            .overlay {
+                if followsMe {
+                    FollowPuckOverlay(
+                        proxy: proxy,
+                        state: cameraState,
+                        inVehicle: { if case .vehicle = myLocationStyle { true } else { false } }(),
+                        holdsA: lage.holdsA,
+                        label: locationContext.summary
+                    )
+                }
+            }
             .onTapGesture { point in
                 guard tapMode != .none, let coordinate = proxy.convert(point, from: .local) else { return }
                 handleTap(GeoPoint(coordinate))
             }
         }
         .safeAreaInset(edge: .top, spacing: 0) { topArea }
-        .safeAreaInset(edge: .bottom, spacing: 0) { bottomArea }
+        .safeAreaInset(edge: .bottom, spacing: 0) {
+            bottomArea
+                .onGeometryChange(for: CGFloat.self) { $0.size.height } action: { bottomAreaHeight = $0 }
+        }
+        .overlay(alignment: .bottomLeading) {
+            if followsMe || route.isActive, let speed = location.current?.speed, speed >= 0 {
+                SpeedBadge(metersPerSecond: speed)
+                    .padding(.leading, Theme.barInset)
+                    .padding(.bottom, bottomAreaHeight + Theme.barSpacing)
+            }
+        }
         .overlay(alignment: .topTrailing) { sideButtons }
         .mapScope(mapScope)
         .sheet(item: $selection) { selection in
@@ -169,16 +195,19 @@ struct MapScreen: View {
             await fahndung.loadStops(for: stopCircles)
         }
         .onChange(of: route.isActive) { _, active in
-            navigationFollows = true
-            if active { followForNavigation(animated: true) } else { followUserIn3D() }
+            followsMe = true
+            followMe(duration: 0.8)
         }
         .task {
-            // Beim Öffnen wie in einer Navi-App: dreidimensional auf den eigenen Standort.
+            // Beim Öffnen: auf den eigenen Standort, gekippt wie in einer Navi-App.
             for _ in 0..<40 where location.current == nil { try? await Task.sleep(for: .milliseconds(250)) }
-            if !route.isActive { followUserIn3D() }
+            if let current = location.current {
+                camera = .camera(MapCamera(centerCoordinate: current.coordinate, distance: 1200, heading: 0, pitch: settings.prefers3D ? 55 : 0))
+            }
         }
         .onChange(of: location.current?.timestamp) { _, _ in
-            if route.isActive, navigationFollows { followForNavigation(animated: true) }
+            // Gleichmäßig bis zur nächsten Meldung weitergleiten: so bewegt sich die Karte flüssig statt in Sprüngen.
+            if followsMe { followMe(duration: 1.0) }
         }
         .sensoryFeedback(.impact, trigger: lage.operation.a?.memberId)
     }
@@ -197,7 +226,7 @@ struct MapScreen: View {
         }
     }
 
-    private var isFollowing: Bool { camera.followsUserLocation }
+    private var isFollowing: Bool { followsMe }
 
     // MARK: Statuszeile unter dem eigenen Standort
 
@@ -266,21 +295,24 @@ struct MapScreen: View {
     private var sideButtons: some View {
         GlassEffectContainer(spacing: Theme.barSpacing) {
             VStack(spacing: Theme.barSpacing) {
-                MapCompass(scope: mapScope)
-                    .mapControlVisibility(.visible)
-                    .frame(width: Theme.roundButton, height: Theme.roundButton)
-                MapStyleButton()
+                CompassButton(state: cameraState) {
+                    followsMe = false
+                    withAnimation(.easeInOut(duration: 0.5)) { camera = .camera(cameraState.camera(heading: 0)) }
+                }
+                MapStyleButton { on in
+                    if followsMe {
+                        followMe(duration: 0.6)
+                    } else {
+                        withAnimation(.easeInOut(duration: 0.6)) { camera = .camera(cameraState.camera(pitch: on ? 55 : 0)) }
+                    }
+                }
                 MapRoundButton(title: "Ebenen", symbol: "square.3.layers.3d") { showsLayers = true }
                 MapRoundButton(
                     title: "Auf eigenen Standort zentrieren",
-                    symbol: isFollowing || (route.isActive && navigationFollows) ? "location.circle.fill" : "location.circle"
+                    symbol: followsMe ? "location.circle.fill" : "location.circle"
                 ) {
-                    if route.isActive {
-                        navigationFollows = true
-                        followForNavigation(animated: true)
-                    } else {
-                        followUserIn3D()
-                    }
+                    followsMe = true
+                    followMe(duration: 0.8)
                 }
                 if let a = lage.aPosition, !lage.holdsA {
                     Button {
@@ -306,36 +338,15 @@ struct MapScreen: View {
         .padding(.top, topAreaHeight + Theme.barSpacing)
     }
 
-    /// Folgt dem eigenen Standort in 3D: erst gekippt dorthin, dann in die Standortverfolgung, die die Neigung behält.
-    private func followUserIn3D() {
-        guard let current = location.current else {
-            camera = .userLocation(fallback: .automatic)
-            return
-        }
-        withAnimation(.easeInOut(duration: 0.6)) {
-            camera = .camera(MapCamera(centerCoordinate: current.coordinate, distance: 1100, heading: cameraState.heading, pitch: 55))
-        }
-        Task {
-            try? await Task.sleep(for: .milliseconds(700))
-            if !route.isActive { camera = .userLocation(followsHeading: false, fallback: .automatic) }
-        }
-    }
-
-    /// Navi-Kamera: nah am eigenen Standort, in Fahrtrichtung gedreht, je nach Tempo etwas weiter heraus.
-    private func followForNavigation(animated: Bool) {
-        guard let current = location.current else {
-            camera = .userLocation(followsHeading: true, fallback: .automatic)
-            return
-        }
+    /// Kamera auf den eigenen Standort: nah, in Fahrtrichtung, gekippt (falls 3D an), je nach Tempo etwas weiter heraus.
+    /// Lineare Animation über die Zeit bis zur nächsten Meldung, damit die Bewegung durchgehend wirkt.
+    private func followMe(duration: Double) {
+        guard let current = location.current else { return }
         let speed = max(current.speed, 0)
-        let distance = min(max(350 + speed * 28, 350), 1400)
+        let distance = route.isActive ? min(max(350 + speed * 28, 350), 1400) : min(max(600 + speed * 20, 600), 1500)
         let heading = current.course >= 0 && speed > 1 ? current.course : cameraState.heading
-        let next = MapCamera(centerCoordinate: current.coordinate, distance: distance, heading: heading, pitch: 55)
-        if animated {
-            withAnimation(.easeInOut(duration: 0.8)) { camera = .camera(next) }
-        } else {
-            camera = .camera(next)
-        }
+        let next = MapCamera(centerCoordinate: current.coordinate, distance: distance, heading: heading, pitch: settings.prefers3D ? 55 : 0)
+        withAnimation(.linear(duration: duration)) { camera = .camera(next) }
     }
 
     // MARK: Untere Leiste
@@ -546,7 +557,10 @@ struct MapScreen: View {
 
     private var routeLines: [RouteLine] {
         guard let current = route.route, current.coordinates.count > 1 else { return [] }
-        return [RouteLine(polyline: MKPolyline(coordinates: current.coordinates, count: current.coordinates.count), specialRights: current.usesSpecialRights)]
+        // Bereits gefahrene Strecke verschwindet hinter einem.
+        var remaining = Array(current.coordinates.dropFirst(min(route.progressIndex, current.coordinates.count - 2)))
+        if let here = location.current?.coordinate { remaining.insert(here, at: 0) }
+        return [RouteLine(polyline: MKPolyline(coordinates: remaining, count: remaining.count), specialRights: current.usesSpecialRights)]
     }
 
     private var draftPoints: [DraftPoint] {

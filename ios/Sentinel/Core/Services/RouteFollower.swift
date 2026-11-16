@@ -75,7 +75,8 @@ final class RouteFollower {
     @ObservationIgnored private var lastCalculation: (origin: GeoPoint, destination: GeoPoint, at: Date)?
     @ObservationIgnored private var resolve: (NavigationTarget) -> (point: GeoPoint, title: String)? = { _ in nil }
     @ObservationIgnored private var origin: () -> GeoPoint? = { nil }
-    @ObservationIgnored private var progressIndex = 0
+    /// Stelle im Linienzug, an der man sich gerade befindet; davor liegt der bereits gefahrene Teil.
+    private(set) var progressIndex = 0
 
     private static let tick: Duration = .seconds(1)
     private static let destinationThreshold: CLLocationDistance = 30
@@ -250,12 +251,25 @@ final class RouteFollower {
         guard let route = try await MKDirections(request: request).calculate().routes.first else { throw RouteError.noRoute }
         var coordinates = [CLLocationCoordinate2D](repeating: kCLLocationCoordinate2DInvalid, count: route.polyline.pointCount)
         route.polyline.getCoordinates(&coordinates, range: NSRange(location: 0, length: route.polyline.pointCount))
-        // Die Linienzüge der Manöver ergeben aneinandergereiht die Route; daraus folgt, wo jedes Manöver beginnt.
+        // Jedes Manöver beginnt am ersten Punkt seines Teilstücks. Diesen Punkt im Linienzug der Route suchen
+        // (nur vorwärts), statt Punktzahlen aufzusummieren: die Teilstücke überlappen sich und würden sonst
+        // mit jedem Schritt weiter danebenliegen.
         var steps: [RouteStep] = []
-        var index = 0
-        for step in route.steps {
-            steps.append(RouteStep(instruction: step.instructions, distance: step.distance, startIndex: index))
-            index += max(step.polyline.pointCount - 1, 0)
+        var searchFrom = 0
+        for step in route.steps where step.polyline.pointCount > 0 {
+            let start = step.polyline.points()[0].coordinate
+            var best = searchFrom
+            var bestDistance = CLLocationDistance.greatestFiniteMagnitude
+            for i in searchFrom..<coordinates.count {
+                let d = GeoPoint(coordinates[i]).distance(to: GeoPoint(start))
+                if d < bestDistance {
+                    bestDistance = d
+                    best = i
+                }
+                if bestDistance < 1 { break }
+            }
+            steps.append(RouteStep(instruction: step.instructions, distance: step.distance, startIndex: best))
+            searchFrom = best
         }
         return RouteResult(coordinates: coordinates, distance: route.distance, travelTime: route.expectedTravelTime, steps: steps, usesSpecialRights: false)
     }
