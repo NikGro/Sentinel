@@ -263,6 +263,7 @@ export class OepnvStore {
       this.lastError = null;
     } catch (error) {
       this.lastError = error instanceof Error ? error.message : 'Unbekannter Fehler';
+      console.warn(`ÖPNV-Linien nicht geladen: ${this.lastError}`);
     }
   }
 

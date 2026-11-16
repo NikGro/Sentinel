@@ -84,7 +84,8 @@ async function main(): Promise<void> {
   const app = await buildApp(services);
   const trackerListener = startTrackerListener(services);
   services.oepnv.refreshIfStale();
-  setInterval(() => services.oepnv.refreshIfStale(), 6 * 3600_000).unref();
+  // Viertelstündlich prüfen: frische Daten werden nicht neu geladen, ein Fehler (z. B. Overpass überlastet) aber bald wiederholt.
+  setInterval(() => services.oepnv.refreshIfStale(), 15 * 60_000).unref();
   // Markierungen mit Lebensdauer verschwinden von selbst.
   setInterval(() => services.lage.expireAnnotations(), 30_000).unref();
   await app.listen({ host: config.host, port: config.port });
