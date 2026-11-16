@@ -175,7 +175,6 @@ struct VehicleDetail: View {
     }
 
     private func content(_ vehicle: Versioned<Vehicle>) -> some View {
-        let isAboard = lage.me?.data.fortbewegung == .fahrzeug && lage.me?.data.fahrzeugId == vehicle.id
         let position = lage.position(ofVehicle: vehicle)
         return List {
             if vehicle.data.fotoBlob != nil {
@@ -196,11 +195,6 @@ struct VehicleDetail: View {
                         lage.put(next, id: vehicle.id)
                     }
                 ))
-                if vehicle.data.aktiv {
-                    Button(isAboard ? "Zu Fuß weiter" : "Ich sitze in diesem Fahrzeug", systemImage: isAboard ? "figure.walk" : "car.fill") {
-                        if isAboard { lage.setMobility(.fuss) } else { lage.setMobility(.fahrzeug, vehicleId: vehicle.id) }
-                    }
-                }
             }
 
             Section("Fahrzeug") {
