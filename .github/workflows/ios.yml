@@ -121,12 +121,16 @@ jobs:
       # Veröffentlicht die IPA in der SideStore-Quelle des eigenen Servers.
       # Läuft auf main, bei einem Versions-Tag oder manuellem Start, und nur, wenn das Deploy-Token hinterlegt ist.
       - name: In SideStore-Quelle veröffentlichen
-        if: (github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/tags/v') || github.event_name == 'workflow_dispatch') && env.SENTINEL_DEPLOY_TOKEN != ''
+        if: github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/tags/v') || github.event_name == 'workflow_dispatch'
         env:
           SENTINEL_DEPLOY_TOKEN: ${{ secrets.SENTINEL_DEPLOY_TOKEN }}
           SENTINEL_URL: ${{ vars.SENTINEL_URL || 'https://sentinel.ng-lab.de' }}
           VERSION: ${{ steps.ipa.outputs.version }}
         run: |
+          if [ -z "$SENTINEL_DEPLOY_TOKEN" ]; then
+            echo "::notice::SENTINEL_DEPLOY_TOKEN fehlt; SideStore-Veröffentlichung wird übersprungen."
+            exit 0
+          fi
           curl --fail --silent --show-error \
             -X POST "$SENTINEL_URL/api/v1/deploy/release?version=$VERSION&build=$BUILD_NUMBER" \
             -H "Authorization: Bearer $SENTINEL_DEPLOY_TOKEN" \
