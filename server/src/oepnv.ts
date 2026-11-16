@@ -1,5 +1,6 @@
 import { existsSync, readFileSync, renameSync, statSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
+import { transitCircles, unionOutlines } from './reach/transit.js';
 import { distanceMeters, type GeoPoint } from './geo.js';
 import type { LeapfrogStop } from './schemas.js';
 
@@ -246,6 +247,12 @@ export class OepnvStore {
     }
     for (const entry of result) entry.linien.sort((a, b) => a.ref.localeCompare(b.ref, 'de', { numeric: true }));
     return result.sort((a, b) => a.meter - b.meter).slice(0, limit);
+  }
+
+  /** Fluchtraum im ÖPNV als Umrisse; `null`, solange keine Linien geladen sind. */
+  reach(origin: GeoPoint, minutes: number): [number, number][][] | null {
+    if (this.lines.size === 0) return null;
+    return unionOutlines(transitCircles(this.lines.values(), origin, minutes));
   }
 
   /** Die nächsten Halte auf einer Linie ab dem gegebenen Standort. */

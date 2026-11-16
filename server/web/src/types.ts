@@ -154,7 +154,7 @@ export type Kind = keyof KindMap;
 export type ReachMode = 'fuss' | 'kfz' | 'oepnv';
 export interface ReachArea {
   modus: ReachMode;
-  quelle: 'valhalla' | 'modell';
+  quelle: 'valhalla' | 'netz' | 'modell';
   ringe: [number, number][][];
 }
 

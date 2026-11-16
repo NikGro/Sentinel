@@ -26,6 +26,7 @@ export async function createServices(config: Config, database?: Database): Promi
   const oepnv = new OepnvStore(config.dataDir, config.oepnvBbox, overpass);
   const lage = new Lage(db, (linienId, position, count) => oepnv.upcoming(linienId, position, count));
   const reach = new ReachService(config.valhallaUrl);
+  reach.useTransit((origin, minutes) => oepnv.reach(origin, minutes));
   const hub = new Hub(lage, () => ({ version: SERVER_VERSION, routing: reach.routingConfigured }));
   const vault = new Vault(config.dataKey);
   const paj = new PajPoller(

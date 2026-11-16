@@ -20,6 +20,12 @@
   Sonderrechten zum Absender; roter Balken, solange der Notruf läuft; beenden durch Absender oder Zentrale
 - Kommandozentrale zeigt den Notruf als roten Balken mit „Auf der Karte zeigen“ und „Notruf beenden“
 
+**Fahndungsraum**
+- ÖPNV-Fluchtraum entlang der tatsächlichen Linien: zu Fuß zu nahen Halten, Bus und Bahn mit typischem Tempo,
+  Umsteigen, vom letzten Halt zu Fuß weiter; als zusammenhängende Fläche statt Kreis (ohne Fahrpläne, Wartezeit pauschal)
+- Letzte Sichtung: Datum und Uhrzeit plus Knöpfe „Jetzt“ und „vor 5/10/15/30/45/60“ Minuten
+- Nach dem Verschieben fragt die App, ob die Sichtung auf jetzt gesetzt werden soll
+
 **Kartenausrichtung**
 - Kompassknopf schaltet durch: Fahrtrichtung (Standard), Norden, Übersicht der ganzen Route
 - Mit zwei Fingern gedreht bleibt die Ausrichtung fest, bis man am Kompass wieder umschaltet

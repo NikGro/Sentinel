@@ -76,6 +76,8 @@ struct MapScreen: View {
     @State private var orientation: MapOrientation = .course
     /// Die letzte Kamerabewegung kam vom Finger (nicht von der App): Neigung danach als 2D/3D-Einstellung übernehmen.
     @State private var userMovedCamera = false
+    /// Gerade verschobener Fahndungsraum, für die Rückfrage zum Sichtungszeitpunkt.
+    @State private var movedRoom: String?
     @State private var bottomAreaHeight: CGFloat = 120
     @State private var now = Date.now
     @State private var topAreaHeight: CGFloat = 60
@@ -248,6 +250,17 @@ struct MapScreen: View {
             if followsMe { followMe(duration: 1.0) }
         }
         .sensoryFeedback(.impact, trigger: lage.operation.a?.memberId)
+        .alert("Sichtung jetzt?", isPresented: Binding(get: { movedRoom != nil }, set: { if !$0 { movedRoom = nil } })) {
+            Button("Zeit beibehalten", role: .cancel) {}
+            Button("Auf jetzt setzen") {
+                if let id = movedRoom, var room = lage.mapObjects[id]?.data {
+                    room.zeit = (Date.now.timeIntervalSince1970 * 1000).rounded()
+                    lage.saveMapObject(room, id: id)
+                }
+            }
+        } message: {
+            Text("Der Fahndungsraum wurde an einen neuen Ort verschoben. Soll die letzte Sichtung auf jetzt gesetzt werden?")
+        }
     }
 
     private struct CoverageKey: Equatable {
@@ -482,6 +495,8 @@ struct MapScreen: View {
             object.punkte = object.punkte.map { GeoPoint(lat: $0.lat + dLat, lon: $0.lon + dLon) }
             lage.saveMapObject(object, id: objectId)
             tapMode = .none
+            // Neuer Ort einer Sichtung: fragen, ob sie auch jetzt war.
+            if object.typ == .fahndungsraum { movedRoom = objectId }
         case .drawing(let shape, var points):
             points.append(point)
             if shape.isMultiPoint {

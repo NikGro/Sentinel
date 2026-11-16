@@ -79,27 +79,32 @@ struct MapObjectEditor: View {
                 }
                 if object.typ == .fahndungsraum {
                     Section {
-                        Picker("Vor", selection: Binding(
-                            get: { minutesAgo ?? -1 },
-                            set: { minutes in
-                                guard minutes >= 0 else { return }
-                                minutesAgo = minutes
-                                object.zeit = (Date.now.addingTimeInterval(TimeInterval(-minutes * 60)).timeIntervalSince1970 * 1000).rounded()
+                        DatePicker("Datum und Uhrzeit", selection: sinceBinding, in: ...Date.now, displayedComponents: [.date, .hourAndMinute])
+                        LazyVGrid(columns: Array(repeating: GridItem(.flexible(), spacing: 8), count: 4), spacing: 8) {
+                            ForEach([0, 5, 10, 15, 30, 45, 60], id: \.self) { minutes in
+                                let selected = minutesAgo == minutes
+                                Button {
+                                    minutesAgo = minutes
+                                    object.zeit = (Date.now.addingTimeInterval(TimeInterval(-minutes * 60)).timeIntervalSince1970 * 1000).rounded()
+                                } label: {
+                                    Text(minutes == 0 ? "Jetzt" : "vor \(minutes)")
+                                        .font(.subheadline.weight(.semibold))
+                                        .lineLimit(1)
+                                        .minimumScaleFactor(0.8)
+                                        .frame(maxWidth: .infinity)
+                                }
+                                .buttonStyle(.bordered)
+                                .buttonBorderShape(.capsule)
+                                .tint(selected ? .accentColor : .secondary)
+                                .accessibilityLabel(minutes == 0 ? "Jetzt" : "vor \(minutes) Minuten")
+                                .accessibilityAddTraits(selected ? .isSelected : [])
                             }
-                        )) {
-                            Text("Jetzt").tag(0)
-                            Text("5 Min").tag(5)
-                            Text("10").tag(10)
-                            Text("15").tag(15)
-                            Text("30").tag(30)
                         }
-                        .pickerStyle(.segmented)
-                        .listRowSeparator(.hidden)
-                        DatePicker("Seit", selection: sinceBinding, in: ...Date.now, displayedComponents: [.date, .hourAndMinute])
+                        .padding(.vertical, 4)
                     } header: {
                         Text("Letzte Sichtung")
                     } footer: {
-                        Text("Ab diesem Zeitpunkt wächst der Raum, in dem sich die Zielperson zu Fuß, mit dem ÖPNV oder dem Fahrzeug befinden kann. Verschieben, um den Ort zu ändern.")
+                        Text("Knöpfe: Minuten vor jetzt. Ab diesem Zeitpunkt wächst der Raum, in dem sich die Zielperson zu Fuß, mit dem ÖPNV oder dem Fahrzeug befinden kann.")
                     }
 
                     if context.isNew {

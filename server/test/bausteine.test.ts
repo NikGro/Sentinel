@@ -213,3 +213,21 @@ test('Route: Manöver tragen ihre Position im Linienzug', async () => {
   const result = await new RouteService('http://v', ok).route({ lat: 1, lon: 1 }, { lat: 2, lon: 2 }, { sonderrechte: false, zuFuss: false });
   assert.deepEqual(result?.anweisungen.map((a) => a.index), [0, 1]);
 });
+
+test('ÖPNV-Fluchtraum: entlang der Linien statt Kreis, als zusammenhängende Umrisse', async () => {
+  const { transitCircles, unionOutlines } = await import('../src/reach/transit.js');
+  // U-Bahn nach Osten ab dem Start, Bus nach Norden ab dem dritten Halt (Umsteigen).
+  const u = { id: 'u', typ: 'subway', halte: [0, 1, 2, 3, 4, 5].map((i) => ({ lat: 53.55, lon: 10 + i * 0.01 })) };
+  const bus = { id: 'b', typ: 'bus', halte: [0, 1, 2, 3].map((i) => ({ lat: 53.55 + i * 0.008, lon: 10.02 })) };
+  const fern = { id: 'f', typ: 'bus', halte: [{ lat: 54, lon: 11 }, { lat: 54.01, lon: 11 }] };
+  const circles = transitCircles([u, bus, fern], { lat: 53.55, lon: 10 }, 20);
+  assert.ok(circles.length > 3, 'Start und erreichte Halte');
+  assert.ok(circles.some((c) => c.center.lon >= 10.04), 'mit der U-Bahn weiter nach Osten');
+  assert.ok(circles.some((c) => c.center.lat >= 53.555), 'nach dem Umsteigen mit dem Bus nach Norden');
+  assert.ok(!circles.some((c) => c.center.lat > 53.9), 'unerreichbare Linie bleibt außen vor');
+  const rings = unionOutlines(circles);
+  assert.ok(rings.length >= 1);
+  for (const ring of rings) assert.ok(ring.length >= 8 && ring.every(([lat, lon]) => Number.isFinite(lat) && Number.isFinite(lon)));
+  // Zwei getrennte Kreise ergeben zwei Umrisse.
+  assert.equal(unionOutlines([{ center: { lat: 53.5, lon: 10 }, radius: 100 }, { center: { lat: 53.6, lon: 10 }, radius: 100 }]).length, 2);
+});
