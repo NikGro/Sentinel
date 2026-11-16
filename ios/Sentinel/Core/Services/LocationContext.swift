@@ -8,6 +8,8 @@ import Observation
 final class LocationContext: NSObject, CLLocationManagerDelegate {
     private(set) var street: String?
     private(set) var heading: String?
+    /// Kompassrichtung des Geräts in Grad (nur im Stand), für die Kartenausrichtung „Kurs“.
+    private(set) var compassDegrees: CLLocationDirection?
 
     @ObservationIgnored private let geocoder = CLGeocoder()
     @ObservationIgnored private let compass = CLLocationManager()
@@ -21,7 +23,7 @@ final class LocationContext: NSObject, CLLocationManagerDelegate {
     override init() {
         super.init()
         compass.delegate = self
-        compass.headingFilter = 10
+        compass.headingFilter = 4
         if CLLocationManager.headingAvailable() { compass.startUpdatingHeading() }
     }
 
@@ -48,6 +50,7 @@ final class LocationContext: NSObject, CLLocationManagerDelegate {
         let degrees = newHeading.trueHeading >= 0 ? newHeading.trueHeading : newHeading.magneticHeading
         Task { @MainActor in
             guard !self.isMoving, degrees >= 0 else { return }
+            self.compassDegrees = degrees
             self.setHeading(Self.cardinal(degrees))
         }
     }

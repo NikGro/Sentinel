@@ -11,7 +11,7 @@ options:
 
 settings:
   base:
-    MARKETING_VERSION: "0.6.0"
+    MARKETING_VERSION: "0.7.0"
     CURRENT_PROJECT_VERSION: "1"
     SWIFT_VERSION: "5.0"
     SWIFT_STRICT_CONCURRENCY: minimal
@@ -65,7 +65,8 @@ targets:
         NSLocationWhenInUseUsageDescription: Ihr Standort wird mit dem Einsatzteam auf der Lagekarte geteilt.
         NSLocationAlwaysAndWhenInUseUsageDescription: Ihr Standort wird auch im Hintergrund mit dem Einsatzteam geteilt.
         NSCameraUsageDescription: Für Fotos von Profil, Fahrzeug, Ziel und im Chat.
-        NSMicrophoneUsageDescription: Für Sprachnachrichten im Einsatz-Chat.
+        NSMicrophoneUsageDescription: Für Sprachnachrichten im Einsatz-Chat und die Spracheingabe des Navigationsziels.
+        NSSpeechRecognitionUsageDescription: Das gesprochene Navigationsziel wird auf dem Gerät in Text umgewandelt.
         NSFaceIDUsageDescription: Schützt die App vor unbefugtem Zugriff.
         # Ausschließlich verschlüsselte Verbindungen, keine Ausnahmen.
         NSAppTransportSecurity:

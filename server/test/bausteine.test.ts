@@ -231,3 +231,24 @@ test('ÖPNV-Fluchtraum: entlang der Linien statt Kreis, als zusammenhängende Um
   // Zwei getrennte Kreise ergeben zwei Umrisse.
   assert.equal(unionOutlines([{ center: { lat: 53.5, lon: 10 }, radius: 100 }, { center: { lat: 53.6, lon: 10 }, radius: 100 }]).length, 2);
 });
+
+test('ÖPNV: Fahrweg aus den Wegen der Linie, Farbe aus OpenStreetMap', async () => {
+  const { stitchWays } = await import('../src/oepnv.js');
+  // Zweiter Weg liegt verkehrt herum und wird angeschlossen.
+  const path = stitchWays([
+    [{ lat: 53.5, lon: 10 }, { lat: 53.501, lon: 10 }],
+    [{ lat: 53.503, lon: 10.002 }, { lat: 53.502, lon: 10.001 }, { lat: 53.501, lon: 10 }],
+  ]);
+  assert.deepEqual(path[0], [53.5, 10]);
+  assert.deepEqual(path.at(-1), [53.503, 10.002]);
+  const lines = parseRoutes([
+    { type: 'relation', id: 9, tags: { route: 'subway', ref: 'U1', colour: '#0072bc' }, members: [
+      { type: 'node', ref: 1, role: 'stop' }, { type: 'node', ref: 2, role: 'stop' }, { type: 'way', ref: 5, role: '' },
+    ] },
+    { type: 'node', id: 1, lat: 53.5, lon: 10, tags: { name: 'A' } },
+    { type: 'node', id: 2, lat: 53.51, lon: 10, tags: { name: 'B' } },
+    { type: 'way', id: 5, geometry: [{ lat: 53.5, lon: 10 }, { lat: 53.505, lon: 10.003 }, { lat: 53.51, lon: 10 }] },
+  ]);
+  assert.equal(lines[0]?.farbe, '#0072BC');
+  assert.equal(lines[0]?.weg?.length, 3);
+});

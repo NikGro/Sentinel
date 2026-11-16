@@ -117,9 +117,17 @@ const annotation = z
     anhaenge: z.array(attachment).max(100).default([]),
     /** ÖPNV-Linie und -Fahrzeug: befahrene Linie; `punkte` sind die Halte des Abschnitts. */
     linie: z
-      .object({ id: z.string().max(20), ref: optionalText(20), typ: z.string().max(20), richtung: optionalText(120) })
+      .object({
+        id: z.string().max(20),
+        ref: optionalText(20),
+        typ: z.string().max(20),
+        richtung: optionalText(120),
+        farbe: z.string().regex(/^#[0-9A-Fa-f]{6}$/).nullish().transform((v) => v ?? null),
+      })
       .nullish()
       .transform((v) => v ?? null),
+    /** Tatsächlicher Fahrweg des Abschnitts (Straßen, Gleise). */
+    weg: z.array(geoPoint).max(5000).default([]),
     /** Namen der Halte zu `punkte`. */
     haltNamen: z.array(z.string().max(120)).max(400).default([]),
     /** ÖPNV-Linie: Fahrzeuge im Takt (Minuten) einblenden, ab der Abfahrt `zeit` am ersten Halt; `null` aus. */

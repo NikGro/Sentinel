@@ -5,38 +5,12 @@ statt jede Änderung sofort einzubauen. Erledigtes wandert mit Version ins CHANG
 
 ## Geplant
 
-### Runde nach 0.6.0 (Rückmeldung vom 16.11.)
-**ÖPNV-Darstellung**
-- Echte HVV-Symbole für Bus, Regionalbahn, S-Bahn, U-Bahn (Form und Farben recherchieren).
-- Ein einheitliches Haltestellen-Symbol überall: Haltestellen im Umkreis, ÖPNV-Linie, ÖPNV-Fahrzeug,
-  Überschlagen/A im ÖPNV.
-- Strecke zwischen den Halten als tatsächlicher Fahrweg (Straße/Gleis aus den OSM-Wegen der Linie),
-  in der offiziellen Linienfarbe.
-- Linie und Fahrzeug anlegen: neben Antippen auch per Texteingabe suchen (z. B. „369“),
-  Treffer nach aktuellem Kartenausschnitt sortiert.
-
-**Karte und Bedienelemente**
-- Dreier-Auswahl Fortbewegung im selben Liquid-Glass-Look wie die Tab-Leiste (nur schmaler).
-- SOS-Knopf in Liquid Glass, der weiße Ring beim Gedrückthalten bleibt.
-- Kompassknopf wie nativ: Norden = Pfeil mit „N“; Kurs = natives Kompass-Symbol mit Strichen und rotem N;
-  fest = gedreht. Bei Kurs muss sich die Karte mit dem Gerätekompass drehen (tut sie nicht).
-- Fahrmodus: eigenes Symbol verschwindet manchmal (Fehler); Navi-Pfeil flach auf der Karte liegend statt zum Bildschirm.
-- 3D-Synchronisation in beide Richtungen: Zwei-Finger-Kippen setzt den Haken und darf nicht zurückspringen.
-- Sonderrechts-Navigation: Route immer rot (derzeit nicht).
-- Hinweise oben flach ohne Farbverlauf.
-- Navigation: Namen der nächsten Querstraßen als kleine Marker; Spracheingabe für das Ziel (natürliche Sprache).
-- Beim Navigieren weiterhin die Dreier-Auswahl Auto/zu Fuß/ÖPNV zeigen statt im Drei-Punkte-Menü; ÖPNV-Navigation ergänzen.
-
-**Suche und Anlegen**
-- Suchtreffer: keine Sprechblase mehr. Antippen springt mit der Karte hin, unten kleines Feld mit
-  „Hierhin navigieren“ und „Hier anlegen“ (wie Apple/Google Maps).
-- Standort setzen (Plus-Menü, Ziel „Standort neu setzen“): wahlweise antippen oder über die Suche.
-
-**Fehler**
-- Sehr breites Foto in der Fotoliste sprengt die Kachel und lässt sich nicht mehr entfernen.
-
-**Mehr**
-- Knopf „Lage zurücksetzen“ unter Mehr (dauerhafte Orte bleiben).
+### Offen aus der Runde nach 0.6.0
+- **Querstraßen in der Navigation:** Valhalla liefert die Namen kreuzender Straßen nicht mit; braucht eigene
+  Abfrage der Kreuzungen entlang der Route (OSM). Noch nicht umgesetzt.
+- **ÖPNV-Navigation in der App:** derzeit Ankunft über Apple Karten und Übergabe dorthin; eigene Führung erst
+  mit Fahrplänen (siehe ÖPNV unten).
+- **Lage zurücksetzen:** gibt es unter Mehr → Einsatz („Funkkanal, Einsatzinfos, Lage zurücksetzen“).
 
 ### Tracker
 - **PAJ-Tracker mit eigenem Konto je Tracker:** Beim Hinzufügen nicht nur die Geräte-ID, sondern einmalig

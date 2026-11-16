@@ -1,5 +1,33 @@
 # Änderungen
 
+## 0.7.0
+
+**ÖPNV**
+- Linien folgen dem tatsächlichen Fahrweg (Straßen, Gleise aus OpenStreetMap) in der offiziellen Linienfarbe;
+  Fahrzeuge fahren auf diesem Weg
+- Ein Haltestellensymbol überall (H-Schild, S- und U-Bahn-Logo): Haltestellen im Umkreis, ÖPNV-Linie, Überschlagen
+- Linienkennzeichen in den Farben aus OpenStreetMap; Apple-eigene Haltestellen-Symbole ausgeblendet
+- ÖPNV-Linie und -Fahrzeug: ohne Antippen anlegen, Linien rund um den Kartenausschnitt, Suche nach Nummer nach Entfernung sortiert
+
+**Karte und Navigation**
+- Fortbewegung als Glas-Auswahl im Stil der Tab-Leiste, auch in der Navigation (Auto, zu Fuß, ÖPNV);
+  ÖPNV zeigt die Ankunft mit Bus und Bahn und öffnet die Verbindung in Apple Karten
+- SOS-Knopf in Liquid Glass; Kompassknopf als Kompassrose mit rotem N, Norden als Pfeil mit N
+- Ausrichtung „Kurs“ dreht die Karte im Stand mit dem Gerätekompass
+- Navi-Pfeil liegt flach auf der Karte und zeigt in Fahrtrichtung; verschwindet nicht mehr
+- 3D-Haken folgt auch dem Kippen mit zwei Fingern, die Karte springt nicht mehr zurück
+- Sonderrechte: Route immer rot
+- Spracheingabe für das Ziel (auf dem Gerät), z. B. „Navigiere zur A-Position“ oder „Fahr zum Hauptbahnhof“
+- Hinweise oben flach ohne Farbverlauf
+
+**Suche und Anlegen**
+- Suchtreffer: Karte springt hin, unten ein Feld mit „Hierhin navigieren“ und „Hier anlegen“
+- Beim Setzen eines Orts (Plus-Menü, Ziel-Standort, Verschieben) Lupe zum Suchen statt Antippen
+
+**Fehler**
+- Sehr breite Fotos sprengen die Fotoliste nicht mehr
+
+
 ## 0.6.0
 
 **Navigation neu auf dem quelloffenen Navigationskern Ferrostar**

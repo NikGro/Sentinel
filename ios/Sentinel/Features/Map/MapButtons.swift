@@ -137,11 +137,17 @@ struct FollowPuckOverlay: View {
     let inVehicle: Bool
     let holdsA: Bool
     let label: String?
+    var course: CLLocationDirection?
 
     var body: some View {
-        if let point = proxy.convert(state.center, to: .local) {
+        GeometryReader { geometry in
+            // Fällt die Umrechnung kurz aus (z. B. während MapKit die Kamera setzt), bleibt der Pfeil in der Mitte statt zu verschwinden.
+            let point = proxy.convert(state.center, to: .local) ?? CGPoint(x: geometry.size.width / 2, y: geometry.size.height / 2)
             ZStack {
                 NavigationArrow()
+                    // Flach auf der Karte: in Fahrtrichtung gedreht und mit der Kartenneigung gekippt.
+                    .rotationEffect(.degrees((course ?? state.heading) - state.heading))
+                    .rotation3DEffect(.degrees(state.pitch), axis: (x: 1, y: 0, z: 0), perspective: 0.4)
                     .overlay(alignment: .topTrailing) {
                         if holdsA {
                             ASymbol(size: 18)
@@ -241,20 +247,21 @@ struct CompassButton: View {
                         .font(.system(size: 18, weight: .semibold))
                         .foregroundStyle(.primary)
                 case .north:
-                    Text("N")
-                        .font(.system(size: 19, weight: .heavy, design: .rounded))
-                        .foregroundStyle(.red)
-                case .course, .fixed:
-                    VStack(spacing: 0) {
+                    // Norden fest oben: rotes N über dem Pfeil.
+                    VStack(spacing: -1) {
+                        Text("N")
+                            .font(.system(size: 11, weight: .heavy, design: .rounded))
+                            .foregroundStyle(.red)
                         Image(systemName: "location.north.fill")
                             .font(.system(size: 17, weight: .bold))
-                            .foregroundStyle(.red)
-                            .rotationEffect(.degrees(-state.heading))
-                            .animation(nil, value: state.heading)
-                        Text(mode == .course ? "Kurs" : "fest")
-                            .font(.system(size: 8, weight: .bold))
-                            .foregroundStyle(.secondary)
+                            .foregroundStyle(.primary)
                     }
+                case .course, .fixed:
+                    // Kompassrose wie in Apple Karten: Striche, rotes N; dreht sich mit der Karte.
+                    CompassDial(locked: mode != .course)
+                        .frame(width: 36, height: 36)
+                        .rotationEffect(.degrees(-state.heading))
+                        .animation(nil, value: state.heading)
                 }
             }
             .frame(width: Theme.roundButton, height: Theme.roundButton)
@@ -277,6 +284,45 @@ struct CompassButton: View {
     }
 }
 
+/// Kompassrose: Teilstriche rundum, rote Nadel und rotes N oben. `locked`: von Hand gedreht und festgehalten.
+struct CompassDial: View {
+    var locked = false
+
+    var body: some View {
+        ZStack {
+            Canvas { context, size in
+                let center = CGPoint(x: size.width / 2, y: size.height / 2)
+                let radius = min(size.width, size.height) / 2
+                for i in 0..<36 {
+                    let angle = Double(i) * .pi / 18
+                    let major = i % 9 == 0
+                    let inner = radius - (major ? 6 : 3.5)
+                    var tick = Path()
+                    tick.move(to: CGPoint(x: center.x + sin(angle) * inner, y: center.y - cos(angle) * inner))
+                    tick.addLine(to: CGPoint(x: center.x + sin(angle) * radius, y: center.y - cos(angle) * radius))
+                    context.stroke(tick, with: .color(i == 0 ? .red : .primary.opacity(major ? 0.9 : 0.45)), lineWidth: major ? 1.6 : 1)
+                }
+                var needle = Path()
+                needle.move(to: CGPoint(x: center.x, y: center.y - radius + 7))
+                needle.addLine(to: CGPoint(x: center.x - 3.5, y: center.y))
+                needle.addLine(to: CGPoint(x: center.x + 3.5, y: center.y))
+                needle.closeSubpath()
+                context.fill(needle, with: .color(.red))
+                var tail = Path()
+                tail.move(to: CGPoint(x: center.x, y: center.y + radius - 7))
+                tail.addLine(to: CGPoint(x: center.x - 3.5, y: center.y))
+                tail.addLine(to: CGPoint(x: center.x + 3.5, y: center.y))
+                tail.closeSubpath()
+                context.fill(tail, with: .color(.primary.opacity(locked ? 0.35 : 0.7)))
+            }
+            Text("N")
+                .font(.system(size: 8, weight: .heavy))
+                .foregroundStyle(.red)
+                .offset(y: -9)
+        }
+    }
+}
+
 /// Notrufknopf: 1,5 Sekunden gedrückt halten (Ring füllt sich), damit er nicht versehentlich auslöst.
 /// Läuft der eigene Notruf, beendet ein Tipp ihn nach Rückfrage.
 struct SOSButton: View {
@@ -294,8 +340,6 @@ struct SOSButton: View {
     var body: some View {
         ZStack {
             Circle()
-                .fill(lage.ownSOS ? Color.red : Color.red.opacity(0.85))
-            Circle()
                 .trim(from: 0, to: progress)
                 .stroke(.white, style: StrokeStyle(lineWidth: 4, lineCap: .round))
                 .rotationEffect(.degrees(-90))
@@ -305,8 +349,9 @@ struct SOSButton: View {
                 .foregroundStyle(.white)
         }
         .frame(width: Theme.roundButton, height: Theme.roundButton)
+        // Liquid Glass in Rot wie die übrigen runden Knöpfe; der weiße Ring füllt sich beim Halten.
+        .glassEffect(.regular.tint(lage.ownSOS ? .red : .red.opacity(0.75)).interactive(), in: .circle)
         .scaleEffect(holding ? 1.12 : 1)
-        .shadow(color: .red.opacity(0.4), radius: holding ? 10 : 4)
         .contentShape(.circle)
         .onLongPressGesture(minimumDuration: Self.holdSeconds, maximumDistance: 30) {
             timer?.cancel()

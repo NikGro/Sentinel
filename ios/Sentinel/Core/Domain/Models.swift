@@ -256,6 +256,8 @@ struct MapObject: LageEntity {
     var linie: TransitRef?
     /// Namen der Halte zu `punkte`.
     var haltNamen: [String]?
+    /// Tatsächlicher Fahrweg des Abschnitts.
+    var weg: [GeoPoint]?
     /// ÖPNV-Linie: Fahrzeuge im Takt (Minuten) ab der Abfahrt `zeit` am ersten Halt; `nil` aus.
     var takt: Int?
 
@@ -637,6 +639,8 @@ struct NearbyStop: Codable, Identifiable, Hashable, Sendable {
     struct Line: Codable, Hashable, Sendable {
         var ref: String
         var typ: String
+        /// Offizielle Linienfarbe aus OpenStreetMap.
+        var farbe: String?
     }
 
     var name: String
@@ -657,8 +661,10 @@ struct TransitRef: Codable, Equatable, Hashable, Sendable {
     var ref: String
     var typ: String
     var richtung: String
+    var farbe: String?
 
     var symbolName: String { LineHit(id: id, ref: ref, typ: typ, richtung: richtung).symbolName }
+    var badge: NearbyStop.Line { NearbyStop.Line(ref: ref, typ: typ, farbe: farbe) }
 }
 
 /// Vollständige Linie mit allen Halten in Fahrtrichtung.
@@ -669,6 +675,11 @@ struct TransitLine: Codable, Identifiable, Sendable {
     var von: String
     var nach: String
     var halte: [LeapfrogStop]
+    var farbe: String?
+    /// Fahrweg als [lat, lon].
+    var weg: [[Double]]?
+
+    var path: [GeoPoint] { (weg ?? []).compactMap { $0.count == 2 ? GeoPoint(lat: $0[0], lon: $0[1]) : nil } }
 }
 
 struct LineHit: Codable, Identifiable, Hashable, Sendable {
@@ -676,7 +687,10 @@ struct LineHit: Codable, Identifiable, Hashable, Sendable {
     var ref: String
     var typ: String
     var richtung: String
+    var farbe: String?
     var meter: Double?
+
+    var badge: NearbyStop.Line { NearbyStop.Line(ref: ref, typ: typ, farbe: farbe) }
 
     var symbolName: String {
         switch typ {

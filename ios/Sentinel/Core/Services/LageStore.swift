@@ -175,7 +175,7 @@ final class LageStore {
     func position(ofObject object: MapObject, at now: Date = .now) -> GeoPoint {
         if object.typ == .oepnvfahrzeug, let line = object.linie, let departure = object.since {
             // Vor der Abfahrt am ersten Halt, danach geschätzt unterwegs, am Ende am letzten Halt.
-            if let state = TransitSimulation.state(object.punkte, typ: line.typ, departure: departure, at: now) { return state.point }
+            if let state = TransitSimulation.state(object.punkte, typ: line.typ, path: object.weg ?? [], departure: departure, at: now) { return state.point }
             return now < departure ? (object.punkte.first ?? object.anchor) : (object.punkte.last ?? object.anchor)
         }
         return object.trackerId.flatMap { trackerPositions[$0]?.point } ?? object.anchor

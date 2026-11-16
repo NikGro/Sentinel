@@ -139,7 +139,10 @@ struct AttachmentsSection: View {
         } label: {
             ZStack(alignment: .bottomLeading) {
                 if attachment.art == .bild {
-                    RemoteImage(blobId: attachment.blobId) { Color.secondary.opacity(0.15) }
+                    // Das Bild füllt die Kachel, bestimmt aber nicht ihre Größe (sehr breite Fotos sprengten sie).
+                    Color.secondary.opacity(0.15)
+                        .overlay { RemoteImage(blobId: attachment.blobId) { Color.clear } }
+                        .clipped()
                 } else {
                     VStack(spacing: 4) {
                         Image(systemName: attachment.art == .audio ? "waveform" : "doc.fill")

@@ -142,8 +142,7 @@ struct AlertBanner: View {
         }
         .padding(14)
         .frame(maxWidth: .infinity, alignment: .leading)
-        .background(alert.level.color.gradient.opacity(alert.level == .info ? 0.92 : 1), in: .rect(cornerRadius: 20))
-        .overlay(RoundedRectangle(cornerRadius: 20).strokeBorder(.white.opacity(0.25)))
+        .background(alert.level.color, in: .rect(cornerRadius: 20))
         .shadow(color: .black.opacity(0.3), radius: 10, y: 4)
         .padding(.horizontal, Theme.barInset)
         .onTapGesture(perform: dismiss)

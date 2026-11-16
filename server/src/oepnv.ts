@@ -22,6 +22,10 @@ export interface Linie {
   von: string;
   nach: string;
   halte: Halt[];
+  /** Offizielle Linienfarbe aus OpenStreetMap (`colour`), z. B. "#0072BC". */
+  farbe?: string | null;
+  /** Tatsächlicher Fahrweg (Straßen, Gleise) als [lat, lon], vereinfacht. */
+  weg?: [number, number][];
 }
 
 export interface LinienTreffer {
@@ -29,6 +33,7 @@ export interface LinienTreffer {
   ref: string;
   typ: string;
   richtung: string;
+  farbe: string | null;
   /** Entfernung zur nächstgelegenen Haltestelle dieser Linie, nur bei Suche in der Nähe. */
   meter: number | null;
 }
@@ -63,12 +68,68 @@ interface OsmElement {
   lon?: number;
   tags?: Record<string, string>;
   members?: { type: string; ref: number; role: string }[];
+  geometry?: { lat: number; lon: number }[];
+}
+
+/** Fügt die Wege einer Linie in Fahrtrichtung zu einem Linienzug zusammen und vereinfacht ihn auf etwa 6 m. */
+export function stitchWays(ways: { lat: number; lon: number }[][]): [number, number][] {
+  const path: { lat: number; lon: number }[] = [];
+  const same = (a: { lat: number; lon: number }, b: { lat: number; lon: number }) => distanceMeters(a, b) < 3;
+  for (const raw of ways) {
+    if (raw.length < 2) continue;
+    let way = raw;
+    if (path.length === 0) {
+      path.push(...way);
+      continue;
+    }
+    const end = path[path.length - 1]!;
+    if (same(end, way[way.length - 1]!)) way = [...way].reverse();
+    else if (!same(end, way[0]!)) {
+      // Erster Weg evtl. falsch herum: umdrehen, wenn das den Anschluss herstellt.
+      if (path.length === raw.length || same(path[0]!, way[0]!) || same(path[0]!, way[way.length - 1]!)) {
+        path.reverse();
+        const e = path[path.length - 1]!;
+        if (same(e, way[way.length - 1]!)) way = [...way].reverse();
+      }
+    }
+    path.push(...way.slice(same(path[path.length - 1]!, way[0]!) ? 1 : 0));
+  }
+  return simplify(path, 6).map((p) => [Math.round(p.lat * 1e5) / 1e5, Math.round(p.lon * 1e5) / 1e5]);
+}
+
+function simplify(points: { lat: number; lon: number }[], tolerance: number): { lat: number; lon: number }[] {
+  if (points.length < 3) return points;
+  const keep = new Uint8Array(points.length);
+  keep[0] = keep[points.length - 1] = 1;
+  const k = Math.cos((points[0]!.lat * Math.PI) / 180) * 111_320;
+  const stack: [number, number][] = [[0, points.length - 1]];
+  while (stack.length) {
+    const [a, b] = stack.pop()!;
+    const pa = points[a]!, pb = points[b]!;
+    const dx = (pb.lon - pa.lon) * k, dy = (pb.lat - pa.lat) * 111_320;
+    const len = Math.hypot(dx, dy) || 1;
+    let worst = -1, index = -1;
+    for (let i = a + 1; i < b; i++) {
+      const p = points[i]!;
+      const d = Math.abs(dy * (p.lon - pa.lon) * k - dx * (p.lat - pa.lat) * 111_320) / len;
+      if (d > worst) { worst = d; index = i; }
+    }
+    if (worst > tolerance && index > 0) {
+      keep[index] = 1;
+      stack.push([a, index], [index, b]);
+    }
+  }
+  return points.filter((_, i) => keep[i]);
 }
 
 /** Wandelt die Overpass-Antwort in Linien mit geordneten Haltestellen um. */
 export function parseRoutes(elements: OsmElement[]): Linie[] {
   const nodes = new Map<number, OsmElement>();
-  for (const e of elements) if (e.type === 'node') nodes.set(e.id, e);
+  const ways = new Map<number, { lat: number; lon: number }[]>();
+  for (const e of elements) {
+    if (e.type === 'node') nodes.set(e.id, e);
+    else if (e.type === 'way' && e.geometry) ways.set(e.id, e.geometry);
+  }
   const lines: Linie[] = [];
   for (const rel of elements) {
     if (rel.type !== 'relation' || !rel.tags || !rel.members) continue;
@@ -96,6 +157,13 @@ export function parseRoutes(elements: OsmElement[]): Linie[] {
       von: rel.tags.from ?? halte[0]!.name,
       nach: rel.tags.to ?? halte.at(-1)!.name,
       halte,
+      farbe: /^#[0-9A-Fa-f]{6}$/.test(rel.tags.colour ?? '') ? rel.tags.colour!.toUpperCase() : null,
+      weg: stitchWays(
+        rel.members
+          .filter((m) => m.type === 'way' && !m.role.startsWith('platform'))
+          .map((m) => ways.get(m.ref))
+          .filter((w): w is { lat: number; lon: number }[] => !!w),
+      ),
     });
   }
   return lines;
@@ -134,7 +202,7 @@ export interface HaltestelleImUmkreis {
   lat: number;
   lon: number;
   meter: number;
-  linien: { ref: string; typ: string }[];
+  linien: { ref: string; typ: string; farbe: string | null }[];
 }
 
 export class OepnvStore {
@@ -174,13 +242,15 @@ export class OepnvStore {
   /** Lädt die Linien neu, wenn noch keine vorliegen oder der Stand älter als eine Woche ist. Blockiert nicht. */
   refreshIfStale(now = Date.now()): void {
     if (!this.overpass || this.loading) return;
-    if (this.loadedAt !== null && now - this.loadedAt < REFRESH_MS && this.lines.size > 0) return;
+    // Ältere Stände ohne Fahrweg sofort neu laden.
+    const hasGeometry = this.lines.size > 0 && [...this.lines.values()].some((l) => l.weg !== undefined);
+    if (this.loadedAt !== null && now - this.loadedAt < REFRESH_MS && hasGeometry) return;
     this.loading = this.refresh().finally(() => (this.loading = null));
   }
 
   private async refresh(): Promise<void> {
     const [s, w, n, e] = this.bbox;
-    const ql = `[out:json][timeout:300][maxsize:536870912];rel["type"="route"]["route"~"^(${TYPEN})$"](${s},${w},${n},${e})->.r;.r out body;node(r.r);out qt;`;
+    const ql = `[out:json][timeout:300][maxsize:536870912];rel["type"="route"]["route"~"^(${TYPEN})$"](${s},${w},${n},${e})->.r;.r out body;node(r.r);out qt;way(r.r);out skel geom qt;`;
     try {
       const body = (await this.overpass!.query(ql, 300)) as { elements?: OsmElement[] };
       const lines = parseRoutes(body.elements ?? []);
@@ -215,7 +285,7 @@ export class OepnvStore {
         meter = Math.min(...line.halte.map((h) => distanceMeters(h, near)));
         if (!normalized && meter > 600) continue;
       }
-      result.push({ id: line.id, ref: line.ref, typ: line.typ, richtung: line.nach, meter: meter === null ? null : Math.round(meter) });
+      result.push({ id: line.id, ref: line.ref, typ: line.typ, richtung: line.nach, farbe: line.farbe ?? null, meter: meter === null ? null : Math.round(meter) });
     }
     result.sort((a, b) =>
       near && !normalized
@@ -242,7 +312,7 @@ export class OepnvStore {
           entry = { name: halt.name, lat: halt.lat, lon: halt.lon, meter: Math.round(meter), linien: [] };
           result.push(entry);
         }
-        if (!entry.linien.some((l) => l.ref === line.ref && l.typ === line.typ)) entry.linien.push({ ref: line.ref, typ: line.typ });
+        if (!entry.linien.some((l) => l.ref === line.ref && l.typ === line.typ)) entry.linien.push({ ref: line.ref, typ: line.typ, farbe: line.farbe ?? null });
       }
     }
     for (const entry of result) entry.linien.sort((a, b) => a.ref.localeCompare(b.ref, 'de', { numeric: true }));

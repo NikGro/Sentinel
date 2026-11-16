@@ -114,8 +114,8 @@ struct MapScreen: View {
     @State private var topAreaHeight: CGFloat = 60
     /// Über die Suche gezeigter Ort; Antippen bietet Navigation oder Marker an.
     @State private var searchPin: SearchPin?
-    @State private var showsSearchPinActions = false
-    @State private var showsSearchPinCreate = false
+    /// Ort für das gerade gewählte Werkzeug über die Adresssuche statt per Tipp bestimmen.
+    @State private var pickingBySearch = false
     /// Takt für die geschätzten ÖPNV-Fahrzeuge (alle 2 Sekunden, solange welche sichtbar sind).
     @State private var transitNow = Date.now
     /// Angetipptes, nur im Takt eingeblendetes Fahrzeug.
@@ -128,6 +128,19 @@ struct MapScreen: View {
     /// Alle Fenster über der Karte.
     private func sheets(_ content: some View) -> some View {
         content
+        .sheet(isPresented: $pickingBySearch) {
+            SearchSheet(mode: .adresse, navigate: { _ in }, pick: { point, _ in
+                withAnimation(.easeInOut(duration: 0.6)) {
+                    camera = .camera(MapCamera(centerCoordinate: point.coordinate, distance: 900, heading: 0, pitch: settings.prefers3D ? 55 : 0))
+                }
+                // Erst wenn das Suchfenster zu ist, sonst kollidiert es mit dem Editor-Fenster.
+                Task {
+                    try? await Task.sleep(for: .milliseconds(450))
+                    handleTap(point)
+                }
+            })
+            .presentationDetents([.fraction(0.94)])
+        }
         .sheet(item: $selection) { selection in
             QuickLookSheet(selection: selection, placeTarget: { targetId in
                 tapMode = .placingTarget(targetId)
@@ -175,37 +188,6 @@ struct MapScreen: View {
     /// Rückfragen zu Suchtreffern und ÖPNV-Fahrzeugen, getrennt vom Rest, damit der Compiler die Ansicht schafft.
     private func dialogs(_ content: some View) -> some View {
         content
-        .confirmationDialog(searchPin?.title ?? "", isPresented: $showsSearchPinActions, titleVisibility: .visible) {
-            if let pin = searchPin {
-                Button("Hierhin navigieren") {
-                    searchPin = nil
-                    model.navigate(to: .point(pin.point, title: pin.title))
-                }
-                Button("Hier anlegen …") {
-                    Task {
-                        try? await Task.sleep(for: .milliseconds(350))
-                        showsSearchPinCreate = true
-                    }
-                }
-                Button("Suchtreffer ausblenden", role: .destructive) { searchPin = nil }
-            }
-        }
-        .confirmationDialog("Hier anlegen", isPresented: $showsSearchPinCreate, titleVisibility: .visible) {
-            if let pin = searchPin {
-                ForEach(PlaceableKind.all) { kind in
-                    Button(kind.title) {
-                        searchPin = nil
-                        create(kind, at: pin.point, title: pin.title, delayed: false)
-                    }
-                }
-            }
-        }
-        .task(id: hasTransit) {
-            while hasTransit, !Task.isCancelled {
-                try? await Task.sleep(for: .seconds(2))
-                transitNow = .now
-            }
-        }
         .confirmationDialog(
             virtualVehicle.map { "\($0.line.ref) Richtung \($0.line.richtung)" } ?? "",
             isPresented: Binding(get: { virtualVehicle != nil }, set: { if !$0 { virtualVehicle = nil } }),
@@ -241,7 +223,7 @@ struct MapScreen: View {
                 }
                 NearbyStopsLayer(stops: nearbyStops)
                 RouteLayer(lines: routeLines)
-                StopsLayer(stops: lage.operation.ueberschlagen.naechste, mine: lage.myLeapfrogStop)
+                StopsLayer(stops: lage.operation.ueberschlagen.naechste, mine: lage.myLeapfrogStop, line: lage.aHolder?.data.oepnv.map { NearbyStop.Line(ref: $0.linie, typ: "", farbe: nil) })
                 SymbolLayer(pins: vehiclePins + targetPins) { selection = $0 }
                 ForcesLayer(pins: forcePins) { selection = $0 }
                 DraftLayer(points: draftPoints, outline: draftOutline)
@@ -259,8 +241,8 @@ struct MapScreen: View {
                 if followsMe { followsMe = false }
             })
             .onMapCameraChange(frequency: .onEnd) { context in
-                // Mit zwei Fingern gekippt: Haken bei „3D-Ansicht“ im Kartenstil-Menü mitziehen.
-                guard userMovedCamera else { return }
+                // Gekippt (auch mit zwei Fingern, das meldet keine Wischgeste): Haken bei „3D-Ansicht“ mitziehen.
+                // Die App selbst setzt nur 0° oder 55°; MapKit begrenzt die Neigung beim Herauszoomen, bleibt aber über 10°.
                 userMovedCamera = false
                 guard orientation != .overview else { return }
                 let is3D = context.camera.pitch > 10
@@ -277,7 +259,8 @@ struct MapScreen: View {
                         state: cameraState,
                         inVehicle: { if case .vehicle = myLocationStyle { true } else { false } }(),
                         holdsA: lage.holdsA,
-                        label: locationContext.summary
+                        label: locationContext.summary,
+                        course: myCourse
                     )
                 }
             }
@@ -289,11 +272,6 @@ struct MapScreen: View {
                     let nearSymbol = symbolCoordinates.contains { symbol in
                         guard let screen = proxy.convert(symbol, to: .local) else { return false }
                         return hypot(screen.x - point.x, screen.y - point.y) < 26
-                    }
-                    if !nearSymbol, let searchPin, let screen = proxy.convert(searchPin.point.coordinate, to: .local),
-                       hypot(screen.x - point.x, screen.y - point.y) < 34 {
-                        showsSearchPinActions = true
-                        return
                     }
                     if !nearSymbol, let id = shape(at: GeoPoint(coordinate)) {
                         if lage.mapObjects[id] != nil { openEditor(for: id) }
@@ -358,6 +336,10 @@ struct MapScreen: View {
                 camera = .camera(MapCamera(centerCoordinate: current.coordinate, distance: 1200, heading: 0, pitch: settings.prefers3D ? 55 : 0))
             }
         }
+        .onChange(of: locationContext.compassDegrees) { _, _ in
+            // Im Stand dreht „Kurs“ die Karte mit dem Gerätekompass.
+            if followsMe, orientation == .course, (location.current?.speed ?? 0) <= 1 { followMe(duration: 0.3) }
+        }
         .onChange(of: location.current?.timestamp) { _, _ in
             // Gleichmäßig bis zur nächsten Meldung weitergleiten: so bewegt sich die Karte flüssig statt in Sprüngen.
             if followsMe, route.snappedLocation == nil { followMe(duration: 1.0) }
@@ -388,8 +370,8 @@ struct MapScreen: View {
 
     private var mapStyle: MapStyle {
         switch settings.mapStyle {
-        case .standard: .standard(elevation: .realistic, pointsOfInterest: .all, showsTraffic: settings.showsTraffic)
-        case .hybrid: .hybrid(elevation: .realistic, pointsOfInterest: .all, showsTraffic: settings.showsTraffic)
+        case .standard: .standard(elevation: .realistic, pointsOfInterest: .excluding([.publicTransport]), showsTraffic: settings.showsTraffic)
+        case .hybrid: .hybrid(elevation: .realistic, pointsOfInterest: .excluding([.publicTransport]), showsTraffic: settings.showsTraffic)
         case .satellit: .imagery(elevation: .realistic)
         }
     }
@@ -442,6 +424,10 @@ struct MapScreen: View {
                     Label(hint, systemImage: "hand.tap.fill")
                         .font(.footnote.weight(.semibold))
                     Spacer(minLength: 0)
+                    // Statt antippen: Adresse suchen; der Treffer gilt wie ein Tipp auf die Karte.
+                    Button("Suchen", systemImage: "magnifyingglass") { pickingBySearch = true }
+                        .labelStyle(.iconOnly)
+                        .fontWeight(.semibold)
                     if case .drawing(let shape, let points) = tapMode, shape.isMultiPoint {
                         Button("Fertig") { finishDrawing(shape, points) }
                             .disabled(points.count < shape.minimumPoints)
@@ -500,6 +486,9 @@ struct MapScreen: View {
                 }
                 AddMenu { action in
                     switch action {
+                    case .shape(let shape) where shape.isTransit:
+                        // ÖPNV: kein Antippen nötig, Linien werden rund um den Kartenausschnitt vorgeschlagen.
+                        editor = EditorContext(id: LageStore.newId(), object: draft(shape, [GeoPoint(cameraState.center)]), isNew: true)
                     case .shape(let shape): tapMode = .drawing(shape, points: [])
                     case .target(let art): tapMode = .newTarget(art)
                     }
@@ -512,13 +501,19 @@ struct MapScreen: View {
 
     /// Kamera auf den eigenen Standort: nah, in Fahrtrichtung, gekippt (falls 3D an), je nach Tempo etwas weiter heraus.
     /// Lineare Animation über die Zeit bis zur nächsten Meldung, damit die Bewegung durchgehend wirkt.
+    /// Eigene Bewegungs- bzw. Blickrichtung für den Navi-Pfeil.
+    private var myCourse: CLLocationDirection? {
+        if let current = route.snappedLocation ?? location.current, current.course >= 0, current.speed > 1 { return current.course }
+        return locationContext.compassDegrees
+    }
+
     private func followMe(duration: Double) {
         guard let current = route.snappedLocation ?? location.current else { return }
         if orientation == .overview { orientation = .course }
         let speed = max(location.current?.speed ?? current.speed, 0)
         let distance = route.isActive ? min(max(350 + speed * 28, 350), 1400) : min(max(600 + speed * 20, 600), 1500)
         let heading: CLLocationDirection = switch orientation {
-        case .course, .overview: current.course >= 0 && speed > 1 ? current.course : cameraState.heading
+        case .course, .overview: current.course >= 0 && speed > 1 ? current.course : (locationContext.compassDegrees ?? cameraState.heading)
         case .north: 0
         case .fixed(let value): value
         }
@@ -568,6 +563,14 @@ struct MapScreen: View {
 
     private var bottomArea: some View {
         VStack(spacing: Theme.barSpacing) {
+            if let pin = searchPin, !route.isActive {
+                SearchPinCard(pin: pin, navigate: {
+                    searchPin = nil
+                    model.navigate(to: .point(pin.point, title: pin.title))
+                }, create: { kind in
+                    create(kind, at: pin.point, title: pin.title, delayed: false)
+                }, close: { searchPin = nil })
+            }
             if route.isActive {
                 NavigationBottomBar()
             } else {
@@ -661,7 +664,8 @@ struct MapScreen: View {
         var vehicle = MapObject(layerId: Layer.lageId, typ: .oepnvfahrzeug, titel: "\(pin.line.ref) → \(pin.line.richtung)", farbe: section.farbe, punkte: section.punkte, zeit: (pin.departure.timeIntervalSince1970 * 1000).rounded())
         vehicle.linie = pin.line
         vehicle.haltNamen = section.haltNamen
-        let end = pin.departure.addingTimeInterval(TransitSimulation.duration(section.punkte, typ: pin.line.typ) + 300)
+        vehicle.weg = section.weg
+        let end = pin.departure.addingTimeInterval(TransitSimulation.duration(section.punkte, typ: pin.line.typ, path: section.weg ?? []) + 300)
         vehicle.ablauf = (end.timeIntervalSince1970 * 1000).rounded()
         let id = LageStore.newId()
         lage.saveMapObject(vehicle, id: id)
@@ -930,7 +934,7 @@ struct MapScreen: View {
         // Bereits gefahrene Strecke verschwindet hinter einem.
         var remaining = Array(current.coordinates.dropFirst(min(route.progressIndex, current.coordinates.count - 2)))
         if let here = location.current?.coordinate { remaining.insert(here, at: 0) }
-        return [RouteLine(polyline: MKPolyline(coordinates: remaining, count: remaining.count), specialRights: current.usesSpecialRights)]
+        return [RouteLine(polyline: MKPolyline(coordinates: remaining, count: remaining.count), specialRights: route.specialRights)]
     }
 
     private var draftPoints: [DraftPoint] {

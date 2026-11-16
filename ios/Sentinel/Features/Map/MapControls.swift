@@ -116,24 +116,56 @@ struct MobilityControl: View {
 
     var body: some View {
         if let me = lage.me {
-            Picker("Fortbewegung", selection: Binding(
-                get: { me.data.fortbewegung },
-                set: { mode in
-                    if mode == .fuss { lage.setMobility(.fuss) } else { choose(mode) }
-                }
-            )) {
-                ForEach(Fortbewegung.allCases) { mode in
-                    Image(systemName: mode.symbolName)
-                        .accessibilityLabel(mode.title)
-                        .tag(mode)
-                }
+            GlassSegmentedControl(
+                items: Fortbewegung.allCases.map { ($0, $0.symbolName, $0.title) },
+                selection: me.data.fortbewegung
+            ) { mode in
+                if mode == .fuss { lage.setMobility(.fuss) } else { choose(mode) }
             }
-            .pickerStyle(.segmented)
-            .controlSize(.extraLarge)
-            .frame(maxWidth: .infinity)
-            .frame(height: Theme.barHeight)
             .disabled(!me.data.aktiv)
         }
+    }
+}
+
+/// Auswahl im Stil der Tab-Leiste: Glas-Kapsel, die gewählte Option als hellere Kapsel darin.
+struct GlassSegmentedControl<Value: Hashable>: View {
+    let items: [(value: Value, symbol: String, title: String)]
+    let selection: Value
+    let select: (Value) -> Void
+
+    @Namespace private var namespace
+
+    var body: some View {
+        HStack(spacing: 0) {
+            ForEach(items, id: \.value) { item in
+                let selected = item.value == selection
+                Button {
+                    select(item.value)
+                } label: {
+                    Image(systemName: item.symbol)
+                        .font(.system(size: 18, weight: .semibold))
+                        .foregroundStyle(selected ? Color.accentColor : .primary)
+                        .frame(maxWidth: .infinity, maxHeight: .infinity)
+                        .background {
+                            if selected {
+                                Capsule()
+                                    .fill(.primary.opacity(0.12))
+                                    .matchedGeometryEffect(id: "auswahl", in: namespace)
+                                    .padding(4)
+                            }
+                        }
+                        .contentShape(.capsule)
+                }
+                .buttonStyle(.plain)
+                .accessibilityLabel(item.title)
+                .accessibilityAddTraits(selected ? .isSelected : [])
+            }
+        }
+        .frame(maxWidth: .infinity)
+        .frame(height: Theme.barHeight)
+        .glassEffect(.regular.interactive(), in: .capsule)
+        .animation(.snappy, value: selection)
+        .sensoryFeedback(.selection, trigger: selection)
     }
 }
 
@@ -182,7 +214,7 @@ struct NavigationBanner: View {
         .foregroundStyle(.white)
         .padding(16)
         .frame(maxWidth: .infinity, alignment: .leading)
-        .background(route.route?.usesSpecialRights == true ? Color(hex: "#6E1A1A") : Color(hex: "#1C1C1E"), in: .rect(cornerRadius: 22))
+        .background(route.specialRights ? Color(hex: "#6E1A1A") : Color(hex: "#1C1C1E"), in: .rect(cornerRadius: 22))
         .overlay(RoundedRectangle(cornerRadius: 22).strokeBorder(.white.opacity(0.08)))
         .environment(\.colorScheme, .dark)
         .accessibilityElement(children: .combine)
@@ -222,15 +254,6 @@ struct NavigationBottomBar: View {
                         .lineLimit(1)
                 }
                 Spacer(minLength: 0)
-                Menu {
-                    Toggle("Zu Fuß", systemImage: "figure.walk", isOn: $route.walking)
-                } label: {
-                    Image(systemName: "ellipsis")
-                        .font(.title3.weight(.semibold))
-                        .frame(width: 44, height: 44)
-                }
-                .glassEffect(.regular.interactive(), in: .circle)
-                .accessibilityLabel("Routenoptionen")
                 Button {
                     model.stopNavigation()
                 } label: {
@@ -245,6 +268,27 @@ struct NavigationBottomBar: View {
                 }
                 .buttonStyle(.plain)
                 .glassEffect(.regular.tint(.red).interactive(), in: .capsule)
+            }
+
+            // Dieselbe Dreier-Auswahl wie auf der Karte: Auto, zu Fuß, ÖPNV.
+            GlassSegmentedControl(
+                items: Fortbewegung.allCases.map { ($0, $0.symbolName, $0.title) },
+                selection: route.transit ? .oepnv : (route.walking ? .fuss : .fahrzeug)
+            ) { mode in
+                route.transit = mode == .oepnv
+                route.walking = mode != .fahrzeug
+            }
+
+            if route.transit {
+                HStack {
+                    Image(systemName: "tram.fill")
+                        .foregroundStyle(.tint)
+                    Text(route.transitArrival.map { "Mit Bus und Bahn: Ankunft ca. \(Format.time($0))" } ?? "Verbindung wird gesucht …")
+                        .font(.subheadline.monospacedDigit())
+                    Spacer(minLength: 0)
+                    Button("Verbindung") { route.openInMaps() }
+                        .buttonStyle(.glass)
+                }
             }
 
             if !route.walking {
@@ -300,5 +344,48 @@ struct SpeedLimitSign: View {
             .overlay(Circle().strokeBorder(Color.red, lineWidth: 5))
             .shadow(color: .black.opacity(0.25), radius: 3, y: 1)
             .accessibilityLabel("Höchstgeschwindigkeit \(kmh) Kilometer pro Stunde")
+    }
+}
+
+/// Feld unten zu einem Suchtreffer, wie in Apple Karten: Name, Hierhin navigieren, Hier anlegen.
+struct SearchPinCard: View {
+    let pin: SearchPin
+    let navigate: () -> Void
+    let create: (PlaceableKind) -> Void
+    let close: () -> Void
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            HStack {
+                Text(pin.title)
+                    .font(.headline)
+                    .lineLimit(2)
+                Spacer(minLength: 0)
+                Button("Schließen", systemImage: "xmark", action: close)
+                    .labelStyle(.iconOnly)
+                    .font(.subheadline.weight(.bold))
+                    .frame(width: 32, height: 32)
+                    .glassEffect(.regular.interactive(), in: .circle)
+            }
+            HStack(spacing: Theme.barSpacing) {
+                Button(action: navigate) {
+                    Label("Hierhin navigieren", systemImage: "location.north.line.fill")
+                        .frame(maxWidth: .infinity)
+                }
+                .buttonStyle(.glassProminent)
+                Menu {
+                    ForEach(PlaceableKind.all) { kind in
+                        Button(kind.title) { create(kind) }
+                    }
+                } label: {
+                    Label("Hier anlegen", systemImage: "plus")
+                        .frame(maxWidth: .infinity)
+                }
+                .buttonStyle(.glass)
+            }
+            .controlSize(.large)
+        }
+        .padding(14)
+        .glassEffect(.regular, in: .rect(cornerRadius: 22))
     }
 }

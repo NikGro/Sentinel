@@ -314,12 +314,16 @@ struct DraftLayer: MapContent {
 struct StopsLayer: MapContent {
     let stops: [LeapfrogStop]
     let mine: LeapfrogStop?
+    /// Linie der A, für dasselbe Haltestellensymbol wie überall.
+    var line: NearbyStop.Line?
 
     var body: some MapContent {
         ForEach(Array(stops.enumerated()), id: \.offset) { index, stop in
             Annotation(stop.name, coordinate: stop.point.coordinate, anchor: .center) {
                 VStack(spacing: 2) {
-                    StopSign(highlighted: stop == mine)
+                    StationSymbol(lines: line.map { [$0] } ?? [])
+                        .padding(2)
+                        .overlay { if stop == mine { Capsule().stroke(.green, lineWidth: 3) } }
                         .overlay(alignment: .topTrailing) {
                             Text("\(index + 1)")
                                 .font(.system(size: 10, weight: .heavy))
@@ -440,7 +444,7 @@ struct LineBadge: View {
             .padding(.horizontal, 4)
             .frame(minWidth: 18, minHeight: 14)
             .background(background(kind), in: shape(kind))
-            .overlay(shape(kind).stroke(kind == .bus ? Color.black.opacity(0.7) : .clear, lineWidth: 1))
+            .overlay(shape(kind).stroke(Self.colorHex(line) == "#FFFFFF" ? Color.black.opacity(0.7) : .clear, lineWidth: 1))
             .accessibilityLabel(label(kind))
     }
 
@@ -448,30 +452,44 @@ struct LineBadge: View {
         RoundedRectangle(cornerRadius: kind == .sBahn ? 7 : (kind == .uBahn ? 1.5 : 3))
     }
 
-    /// Hamburger Linienfarben für die U-Bahn, sonst die üblichen Farben je Verkehrsmittel.
-    private func background(_ kind: LineKind) -> Color {
-        switch kind {
-        case .sBahn: return Color(hex: "#00A651")
+    private func background(_ kind: LineKind) -> Color { Color(hex: Self.colorHex(line)) }
+
+    private func foreground(_ kind: LineKind) -> Color {
+        if kind == .bus, line.farbe == nil { return .black }
+        return Self.isLight(Self.colorHex(line)) ? .black : .white
+    }
+
+    /// Offizielle Linienfarbe aus OpenStreetMap, sonst die Hamburger Farben je Verkehrsmittel.
+    static func colorHex(_ line: NearbyStop.Line) -> String {
+        if let farbe = line.farbe, farbe.count == 7 { return farbe }
+        switch LineKind(line) {
+        case .sBahn: return "#00A651"
         case .uBahn:
             switch line.ref.uppercased() {
-            case "U1": return Color(hex: "#0066B3")
-            case "U2": return Color(hex: "#E2001A")
-            case "U3": return Color(hex: "#FFDD00")
-            case "U4": return Color(hex: "#00A8A8")
-            case "U5": return Color(hex: "#7C4A9A")
-            default: return Color(hex: "#0066B3")
+            case "U1": return "#0066B3"
+            case "U2": return "#E2001A"
+            case "U3": return "#FFDD00"
+            case "U4": return "#00A8A8"
+            case "U5": return "#7C4A9A"
+            default: return "#0066B3"
             }
-        case .bahn: return Color(hex: "#6B6B6B")
-        case .tram: return Color(hex: "#C8102E")
-        case .faehre: return Color(hex: "#0095DA")
-        case .bus: return .white
+        case .bahn: return "#6B6B6B"
+        case .tram: return "#C8102E"
+        case .faehre: return "#0095DA"
+        case .bus: return "#FFFFFF"
         }
     }
 
-    private func foreground(_ kind: LineKind) -> Color {
-        if kind == .bus { return .black }
-        if kind == .uBahn, line.ref.uppercased() == "U3" { return .black }
-        return .white
+    /// Farbe für Strecke und Fahrzeug: Busse ohne eigene Farbe im HVV-Rot.
+    static func routeHex(_ line: NearbyStop.Line) -> String {
+        let hex = colorHex(line)
+        return hex == "#FFFFFF" ? "#E2001A" : hex
+    }
+
+    static func isLight(_ hex: String) -> Bool {
+        guard hex.count == 7, let value = Int(hex.dropFirst(), radix: 16) else { return false }
+        let r = Double((value >> 16) & 0xFF), g = Double((value >> 8) & 0xFF), b = Double(value & 0xFF)
+        return (0.299 * r + 0.587 * g + 0.114 * b) / 255 > 0.65
     }
 
     private func label(_ kind: LineKind) -> String {
@@ -489,28 +507,29 @@ struct LineBadge: View {
 /// Symbol einer Haltestelle: S-Bahn-Logo, U-Bahn-Logo oder das grüne H im gelben Kreis für Busse.
 struct StationSymbol: View {
     let lines: [NearbyStop.Line]
+    var size: CGFloat = 20
 
     var body: some View {
         let kinds = Set(lines.map(LineKind.init))
         HStack(spacing: 2) {
             if kinds.contains(.sBahn) {
                 Text("S")
-                    .font(.system(size: 13, weight: .heavy))
+                    .font(.system(size: size * 0.65, weight: .heavy))
                     .foregroundStyle(.white)
-                    .frame(width: 20, height: 20)
+                    .frame(width: size, height: size)
                     .background(Color(hex: "#00A651"), in: .circle)
                     .overlay(Circle().stroke(.white, lineWidth: 1.5))
             }
             if kinds.contains(.uBahn) {
                 Text("U")
-                    .font(.system(size: 13, weight: .heavy))
+                    .font(.system(size: size * 0.65, weight: .heavy))
                     .foregroundStyle(.white)
-                    .frame(width: 20, height: 20)
+                    .frame(width: size, height: size)
                     .background(Color(hex: "#0066B3"), in: .rect(cornerRadius: 2))
                     .overlay(RoundedRectangle(cornerRadius: 2).stroke(.white, lineWidth: 1.5))
             }
             if kinds.isDisjoint(with: [.sBahn, .uBahn]) {
-                StopSign(size: 20)
+                StopSign(size: size)
             }
         }
     }
@@ -675,21 +694,28 @@ struct TransitLayer: MapContent {
 
     var body: some MapContent {
         ForEach(sections) { object in
-            MapPolyline(coordinates: object.data.punkte.map(\.coordinate))
+            let path = (object.data.weg?.count ?? 0) >= 2 ? object.data.weg! : object.data.punkte
+            MapPolyline(coordinates: path.map(\.coordinate))
                 .stroke(.white, style: StrokeStyle(lineWidth: 9, lineCap: .round, lineJoin: .round))
-            MapPolyline(coordinates: object.data.punkte.map(\.coordinate))
+            MapPolyline(coordinates: path.map(\.coordinate))
                 .stroke(Color(hex: object.data.farbe), style: StrokeStyle(lineWidth: 5, lineCap: .round, lineJoin: .round))
         }
         ForEach(sections) { object in
             ForEach(Array(object.data.punkte.enumerated()), id: \.offset) { index, point in
                 let name = object.data.haltNamen?[safe: index] ?? ""
                 Annotation(name, coordinate: point.coordinate, anchor: .center) {
-                    Circle()
-                        .fill(.white)
-                        .stroke(Color(hex: object.data.farbe), lineWidth: 3)
-                        .frame(width: 11, height: 11)
+                    VStack(spacing: 2) {
+                        StationSymbol(lines: object.data.linie.map { [$0.badge] } ?? [], size: 16)
+                        if showsStopNames, !name.isEmpty {
+                            Text(name)
+                                .font(.caption2.weight(.semibold))
+                                .lineLimit(1)
+                                .padding(.horizontal, 4)
+                                .background(.thinMaterial, in: .capsule)
+                        }
+                    }
                 }
-                .annotationTitles(showsStopNames ? .visible : .hidden)
+                .annotationTitles(.hidden)
             }
         }
         ForEach(vehicles) { pin in

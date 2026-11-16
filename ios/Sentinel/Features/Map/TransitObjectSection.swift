@@ -36,7 +36,7 @@ struct TransitObjectSection: View {
 
     private var search: some View {
         Section {
-            TextField("Linie, z. B. U3, S1, 25", text: $query)
+            TextField("Liniennummer suchen, z. B. 369, U3, S1", text: $query)
                 .autocorrectionDisabled()
                 .textInputAutocapitalization(.characters)
             if isLoading { ProgressView() }
@@ -82,7 +82,8 @@ struct TransitObjectSection: View {
     }
 
     private func choose(_ hit: LineHit) async {
-        object.linie = TransitRef(id: hit.id, ref: hit.ref, typ: hit.typ, richtung: hit.richtung)
+        object.linie = TransitRef(id: hit.id, ref: hit.ref, typ: hit.typ, richtung: hit.richtung, farbe: hit.farbe)
+        object.farbe = LineBadge.routeHex(hit.badge)
         await load(hit.id, fresh: true)
     }
 
@@ -119,13 +120,20 @@ struct TransitObjectSection: View {
         let section = Array(line.halte[lower...upper])
         object.punkte = section.map(\.point)
         object.haltNamen = section.map(\.name)
+        // Fahrweg zwischen Start- und Endhalt ausschneiden.
+        let path = line.path
+        if let indices = TransitSimulation.stopIndices([section[0].point, section[section.count - 1].point], on: path), indices[0] < indices[1] {
+            object.weg = Array(path[indices[0]...indices[1]])
+        } else {
+            object.weg = nil
+        }
         updateExpiry()
     }
 
     /// Ein Fahrzeug löscht sich fünf Minuten nach der geschätzten Ankunft am letzten Halt.
     private func updateExpiry() {
         guard isVehicle, let ref = object.linie, let departure = object.since else { return }
-        let end = departure.addingTimeInterval(TransitSimulation.duration(object.punkte, typ: ref.typ) + 300)
+        let end = departure.addingTimeInterval(TransitSimulation.duration(object.punkte, typ: ref.typ, path: object.weg ?? []) + 300)
         object.ablauf = (end.timeIntervalSince1970 * 1000).rounded()
     }
 
@@ -220,7 +228,7 @@ struct TransitObjectSection: View {
                         .buttonBorderShape(.capsule)
                 }
                 if let ref = object.linie, let departure = object.since {
-                    LabeledContent("Ankunft Endhalt", value: Format.time(departure.addingTimeInterval(TransitSimulation.duration(object.punkte, typ: ref.typ))))
+                    LabeledContent("Ankunft Endhalt", value: Format.time(departure.addingTimeInterval(TransitSimulation.duration(object.punkte, typ: ref.typ, path: object.weg ?? []))))
                 }
             } footer: {
                 Text("Die Position wird nach typischem Tempo geschätzt (keine Echtzeitdaten). Das Fahrzeug löscht sich nach der Ankunft selbst.")

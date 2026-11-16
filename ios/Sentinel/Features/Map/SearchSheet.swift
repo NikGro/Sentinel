@@ -9,16 +9,20 @@ struct SearchSheet: View {
     var showOnMap: (GeoPoint, String) -> Void = { _, _ in }
     /// Markierung oder Ziel an der Adresse anlegen.
     var create: (GeoPoint, String, PlaceableKind) -> Void = { _, _, _ in }
+    /// Nur einen Ort wählen (z. B. Standort eines neuen Objekts): Treffer zurückgeben statt hinzuspringen.
+    var pick: ((GeoPoint, String) -> Void)?
 
     init(
         mode: Mode = .adresse,
         navigate: @escaping (NavigationTarget) -> Void,
         showOnMap: @escaping (GeoPoint, String) -> Void = { _, _ in },
-        create: @escaping (GeoPoint, String, PlaceableKind) -> Void = { _, _, _ in }
+        create: @escaping (GeoPoint, String, PlaceableKind) -> Void = { _, _, _ in },
+        pick: ((GeoPoint, String) -> Void)? = nil
     ) {
         self.navigate = navigate
         self.showOnMap = showOnMap
         self.create = create
+        self.pick = pick
         _mode = State(initialValue: mode)
     }
 
@@ -36,11 +40,8 @@ struct SearchSheet: View {
     @State private var mode: Mode
     @State private var query = ""
     @State private var places: [SearchService.Place] = []
-    /// Angetippter Treffer: Auswahl zwischen Navigation, Kartenansicht und Marker.
-    @State private var chosen: SearchService.Place?
-    /// Treffer, an dem etwas angelegt werden soll.
-    @State private var creating: SearchService.Place?
     @FocusState private var focused: Bool
+    @State private var speech = SpeechInput()
 
     var body: some View {
         NavigationStack {
@@ -66,11 +67,21 @@ struct SearchSheet: View {
                             .submitLabel(.search)
                             .autocorrectionDisabled()
                             .onSubmit(submit)
-                        if !query.isEmpty {
+                        if !query.isEmpty, !speech.isListening {
                             Button("Leeren", systemImage: "xmark.circle.fill") { query = "" }
                                 .labelStyle(.iconOnly)
                                 .foregroundStyle(.secondary)
                         }
+                        // Ziel sprechen, z. B. „Navigiere zur A-Position“ oder „Fahr zum Hauptbahnhof“.
+                        Button(speech.isListening ? "Spracheingabe beenden" : "Ziel sprechen", systemImage: speech.isListening ? "stop.circle.fill" : "mic.fill") {
+                            if speech.isListening { speech.stop() } else {
+                                focused = false
+                                speech.start { text in interpret(text) }
+                            }
+                        }
+                        .labelStyle(.iconOnly)
+                        .foregroundStyle(speech.isListening ? Color.red : Color.accentColor)
+                        .symbolEffect(.pulse, isActive: speech.isListening)
                     }
                     .padding(.horizontal, 12)
                     .frame(height: 42)
@@ -91,44 +102,9 @@ struct SearchSheet: View {
                 if mode == .adresse { search.update(query: value, near: region) }
             }
             .onAppear { focused = mode == .adresse }
-            .confirmationDialog(
-                chosen?.title ?? "",
-                isPresented: Binding(get: { chosen != nil }, set: { if !$0 { chosen = nil } }),
-                titleVisibility: .visible,
-                presenting: chosen
-            ) { place in
-                Button("Hierhin navigieren") {
-                    navigate(.point(place.point, title: place.title))
-                    dismiss()
-                }
-                Button("Auf der Karte zeigen") {
-                    showOnMap(place.point, place.title)
-                    dismiss()
-                }
-                Button("Hier anlegen …") {
-                    Task {
-                        try? await Task.sleep(for: .milliseconds(350))
-                        creating = place
-                    }
-                }
-                Button("Abbrechen", role: .cancel) {}
-            } message: { place in
-                if !place.subtitle.isEmpty { Text(place.subtitle) }
-            }
-            .confirmationDialog(
-                "Hier anlegen",
-                isPresented: Binding(get: { creating != nil }, set: { if !$0 { creating = nil } }),
-                titleVisibility: .visible,
-                presenting: creating
-            ) { place in
-                ForEach(PlaceableKind.all) { kind in
-                    Button(kind.title) {
-                        create(place.point, place.title, kind)
-                        dismiss()
-                    }
-                }
-                Button("Abbrechen", role: .cancel) {}
-            }
+            .onChange(of: speech.transcript) { _, text in if speech.isListening { query = text } }
+            .onDisappear { speech.stop() }
+
             .onChange(of: mode) { _, _ in
                 places = []
                 if mode == .adresse { search.update(query: query, near: region) }
@@ -155,7 +131,9 @@ struct SearchSheet: View {
             Section("Treffer") {
                 ForEach(places) { place in
                     Button {
-                        chosen = place
+                        // Wie in Apple Karten: erst hinspringen, Navigation und Anlegen bietet das Feld auf der Karte an.
+                        if let pick { pick(place.point, place.title) } else { showOnMap(place.point, place.title) }
+                        dismiss()
                     } label: {
                         row(title: place.title, subtitle: place.subtitle, symbol: "mappin.circle.fill", distance: model.myPoint?.distance(to: place.point))
                     }
@@ -182,6 +160,29 @@ struct SearchSheet: View {
         }
     }
 
+    /// Gesprochenes Ziel: zuerst Objekte der Lage (A-Position, Kräfte, Fahrzeuge, Ziele), sonst Adresse suchen.
+    private func interpret(_ text: String) {
+        let target = SpeechInput.destination(from: text)
+        let lower = target.lowercased()
+        if pick == nil {
+            if lower.contains("a-position") || lower == "a" || lower == "die a" || lower.hasPrefix("a position") {
+                if lage.aHolder != nil { navigate(.aPosition); dismiss(); return }
+            }
+            if let member = lage.activeMembers.first(where: { lower.contains($0.data.spitzname.lowercased()) }), member.id != lage.selfId {
+                navigate(.member(member.id)); dismiss(); return
+            }
+            if let vehicle = lage.activeVehicles.first(where: { lower.replacingOccurrences(of: " ", with: "").contains($0.data.funkrufname.lowercased().replacingOccurrences(of: " ", with: "")) }) {
+                navigate(.vehicle(vehicle.id)); dismiss(); return
+            }
+            if let target = lage.sortedTargets.first(where: { lower.contains($0.data.displayName.lowercased()) }) {
+                navigate(.target(target.id)); dismiss(); return
+            }
+        }
+        mode = .adresse
+        query = target
+        submit()
+    }
+
     private func submit() {
         guard mode == .adresse, !query.isEmpty else { return }
         Task { await choose(nil) }
@@ -191,8 +192,8 @@ struct SearchSheet: View {
         let result = await search.resolve(suggestion, query: query, near: model.myPoint, client: model.client)
         // Direkt losfahren nur bei genau einem Treffer, der zur Eingabe passt; sonst bewusst auswählen lassen.
         if result.filter(\.matchesQuery).count == 1, let place = result.first(where: \.matchesQuery) {
-            places = result
-            chosen = place
+            if let pick { pick(place.point, place.title) } else { showOnMap(place.point, place.title) }
+            dismiss()
         } else {
             places = result
         }

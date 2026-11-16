@@ -72,6 +72,29 @@ final class RouteFollower {
         didSet { if walking != oldValue { recalculateSoon() } }
     }
 
+    /// ÖPNV: geführt wird zu Fuß; Apple Karten liefert die Ankunft mit Bus und Bahn und die genaue Verbindung.
+    var transit = false {
+        didSet {
+            guard transit != oldValue else { return }
+            if transit { walking = true }
+            transitArrival = nil
+            if transit { Task { await loadTransitArrival() } }
+        }
+    }
+    private(set) var transitArrival: Date?
+
+    private func loadTransitArrival() async {
+        guard let destination, let origin = snappedLocation.map({ GeoPoint($0.coordinate) }) ?? origin() else { return }
+        let request = MKDirections.Request()
+        request.source = MKMapItem(location: CLLocation(latitude: origin.lat, longitude: origin.lon), address: nil)
+        request.destination = MKMapItem(location: CLLocation(latitude: destination.lat, longitude: destination.lon), address: nil)
+        request.transportType = .transit
+        request.departureDate = .now
+        if let eta = try? await MKDirections(request: request).calculateETA(), transit {
+            transitArrival = eta.expectedArrivalDate
+        }
+    }
+
     /// Sonderrechte sind bewusst nie voreingestellt und gelten nur für die laufende Führung.
     var specialRights = false {
         didSet { if specialRights != oldValue { recalculateSoon() } }
@@ -317,7 +340,8 @@ final class RouteFollower {
         guard let destination else { return }
         let item = MKMapItem(location: CLLocation(latitude: destination.lat, longitude: destination.lon), address: nil)
         item.name = title
-        item.openInMaps(launchOptions: [MKLaunchOptionsDirectionsModeKey: walking ? MKLaunchOptionsDirectionsModeWalking : MKLaunchOptionsDirectionsModeDriving])
+        let mode = transit ? MKLaunchOptionsDirectionsModeTransit : walking ? MKLaunchOptionsDirectionsModeWalking : MKLaunchOptionsDirectionsModeDriving
+        item.openInMaps(launchOptions: [MKLaunchOptionsDirectionsModeKey: mode])
     }
 }
 
