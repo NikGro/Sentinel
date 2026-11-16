@@ -128,7 +128,7 @@ function bind(map: MapBackend, disposers: (() => void)[]): void {
           shapes.push({ kind: 'polygon', points: circlePoints(data.punkte[0], data.radius ?? 100), color: data.farbe, fillOpacity: 0.15, lineWidth: 2 });
         } else if (data.typ === 'haltestellen' && data.punkte[0]) {
           shapes.push({ kind: 'polygon', points: circlePoints(data.punkte[0], data.radius ?? 500), color: '#0A84FF', fillOpacity: 0.06, lineWidth: 1.5 });
-        } else if (data.typ === 'linie' && data.punkte.length >= 2) {
+        } else if ((data.typ === 'linie' || data.typ === 'oepnvlinie') && data.punkte.length >= 2) {
           shapes.push({ kind: 'line', points: data.punkte, color: data.farbe, lineWidth: 4 });
         }
       }

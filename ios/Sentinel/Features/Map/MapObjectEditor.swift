@@ -135,6 +135,10 @@ struct MapObjectEditor: View {
                     }
                 }
 
+                if object.typ.isTransit {
+                    TransitObjectSection(object: $object, origin: context.object.punkte.first)
+                }
+
                 Section {
                     TextField(object.typ == .text ? "Text" : "Bezeichnung", text: $object.titel)
                     TextField("Notiz", text: $object.notiz, axis: .vertical)
@@ -239,6 +243,7 @@ struct MapObjectEditor: View {
                     Text("„Dauerhafte Orte“ bleiben erhalten, wenn die Lage zurückgesetzt wird.")
                 }
 
+                if object.typ != .oepnvfahrzeug {
                 Section {
                     Picker("Lebensdauer", systemImage: "timer", selection: $lifetime) {
                         if let expiry = context.object.expiry {
@@ -251,12 +256,15 @@ struct MapObjectEditor: View {
                 } footer: {
                     Text(lifetime == 0 ? "Bleibt, bis sie jemand löscht." : "Löscht sich danach von selbst, damit die Karte übersichtlich bleibt.")
                 }
+                }
 
                 if !context.isNew {
                     Section {
+                        if !object.typ.isTransit {
                         Button("Auf der Karte verschieben", systemImage: "arrow.up.and.down.and.arrow.left.and.right") {
-                            startMoving(context.id)
-                            dismiss()
+                                startMoving(context.id)
+                                dismiss()
+                            }
                         }
                         Button("Löschen", systemImage: "trash", role: .destructive) {
                             lage.deleteMapObject(id: context.id)
@@ -277,7 +285,10 @@ struct MapObjectEditor: View {
                 }
                 ToolbarItem(placement: .confirmationAction) {
                     Button("Sichern", action: save)
-                        .disabled(object.typ == .text && object.titel.trimmingCharacters(in: .whitespaces).isEmpty)
+                        .disabled(
+                            (object.typ == .text && object.titel.trimmingCharacters(in: .whitespaces).isEmpty)
+                                || (object.typ.isTransit && (object.linie == nil || object.punkte.count < 2))
+                        )
                 }
             }
     }
@@ -296,7 +307,7 @@ struct MapObjectEditor: View {
         if result.typ == .haltestellen {
             result.radius = min(max(Double(radiusText) ?? 500, 50), 5000)
         }
-        switch lifetime {
+        switch object.typ == .oepnvfahrzeug ? -1 : lifetime {
         case -1: break
         case 0: result.ablauf = nil
         default: result.ablauf = (Date.now.addingTimeInterval(TimeInterval(lifetime)).timeIntervalSince1970 * 1000).rounded()

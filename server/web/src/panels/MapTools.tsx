@@ -46,7 +46,7 @@ export function MapToolbar() {
   return (
     <div class="toolbar">
       <div class="toolbar-row">
-        {(Object.keys(SHAPE_TITEL) as Shape[]).map((shape) => (
+        {(Object.keys(SHAPE_TITEL) as Shape[]).filter((s) => s !== 'oepnvlinie' && s !== 'oepnvfahrzeug').map((shape) => (
           <button key={shape} class={drawing?.shape === shape ? 'active' : ''} onClick={() => (tool.value = drawing?.shape === shape ? { kind: 'auswahl' } : { kind: 'zeichnen', shape, punkte: [] })}>
             {SHAPE_TITEL[shape]}
           </button>

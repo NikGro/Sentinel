@@ -106,6 +106,8 @@ struct AddMenu: View {
             Section("Fahndung") {
                 Button(MapObject.Shape.fahndungsraum.title, systemImage: MapObject.Shape.fahndungsraum.symbolName) { select(.shape(.fahndungsraum)) }
                 Button(MapObject.Shape.haltestellen.title, systemImage: MapObject.Shape.haltestellen.symbolName) { select(.shape(.haltestellen)) }
+                Button(MapObject.Shape.oepnvlinie.title, systemImage: MapObject.Shape.oepnvlinie.symbolName) { select(.shape(.oepnvlinie)) }
+                Button(MapObject.Shape.oepnvfahrzeug.title, systemImage: MapObject.Shape.oepnvfahrzeug.symbolName) { select(.shape(.oepnvfahrzeug)) }
                 ForEach(ZielArt.allCases) { art in
                     Button(art.title, systemImage: art.symbolName) { select(.target(art)) }
                 }

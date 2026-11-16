@@ -86,7 +86,7 @@ final class RundgangTests: XCTestCase {
 
         app.buttons["Zu Objekten navigieren"].tap()
         XCTAssertTrue(app.staticTexts["Zur A-Position"].waitForExistence(timeout: 5), "A-Position steht oben in der Objektliste")
-        XCTAssertTrue(app.staticTexts["Überschlagend: nächste Haltestellen"].exists, "Überschlagen wird angeboten, wenn die A im ÖPNV fährt")
+        XCTAssertTrue(app.staticTexts["Zur Linie der A: nächste Haltestelle"].exists, "Überschlagen wird angeboten, wenn die A im ÖPNV fährt")
         capture("04-suche-objekte")
         // Navigation zur A starten und Navi-Ansicht fotografieren
         app.staticTexts["Zur A-Position"].tap()

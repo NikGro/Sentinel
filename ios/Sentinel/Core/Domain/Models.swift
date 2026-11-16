@@ -188,6 +188,12 @@ struct MapObject: LageEntity {
         case marker, text, linie, flaeche, kreis, fahndungsraum
         /// Umkreis, in dem alle ÖPNV-Haltestellen angezeigt werden.
         case haltestellen
+        /// Abschnitt einer ÖPNV-Linie (Halte von … bis), optional mit Fahrzeugen im Takt.
+        case oepnvlinie
+        /// Einzelnes ÖPNV-Fahrzeug auf einer Linie, Position nach Regeltempo geschätzt.
+        case oepnvfahrzeug
+
+        var isTransit: Bool { self == .oepnvlinie || self == .oepnvfahrzeug }
 
         var title: String {
             switch self {
@@ -198,6 +204,8 @@ struct MapObject: LageEntity {
             case .kreis: "Kreis"
             case .fahndungsraum: "Fahndungsraum"
             case .haltestellen: "Haltestellen im Umkreis"
+            case .oepnvlinie: "ÖPNV-Linie"
+            case .oepnvfahrzeug: "ÖPNV-Fahrzeug"
             }
         }
 
@@ -210,6 +218,8 @@ struct MapObject: LageEntity {
             case .kreis: "circle.dashed"
             case .fahndungsraum: "scope"
             case .haltestellen: "bus.fill"
+            case .oepnvlinie: "point.bottomleft.forward.to.point.topright.scurvepath"
+            case .oepnvfahrzeug: "bus.doubledecker.fill"
             }
         }
 
@@ -242,6 +252,12 @@ struct MapObject: LageEntity {
     var anhaenge: [ChatAttachment]?
     /// Lebensdauer: Zeitpunkt in Millisekunden, zu dem sich die Markierung selbst löscht; `nil` für unbegrenzt.
     var ablauf: Double?
+    /// ÖPNV-Linie und -Fahrzeug: befahrene Linie; `punkte` sind die Halte des Abschnitts.
+    var linie: TransitRef?
+    /// Namen der Halte zu `punkte`.
+    var haltNamen: [String]?
+    /// ÖPNV-Linie: Fahrzeuge im Takt (Minuten) ab der Abfahrt `zeit` am ersten Halt; `nil` aus.
+    var takt: Int?
 
     init(layerId: String, typ: Shape, titel: String = "", farbe: String = "#FF9F0A", punkte: [GeoPoint], radius: Double? = nil, zeit: Double? = nil) {
         self.layerId = layerId
@@ -635,6 +651,26 @@ struct NearbyStop: Codable, Identifiable, Hashable, Sendable {
 }
 
 /// Eine Fahrtrichtung einer ÖPNV-Linie aus der Suche.
+/// Verweis auf eine ÖPNV-Linie in einer Markierung.
+struct TransitRef: Codable, Equatable, Hashable, Sendable {
+    var id: String
+    var ref: String
+    var typ: String
+    var richtung: String
+
+    var symbolName: String { LineHit(id: id, ref: ref, typ: typ, richtung: richtung).symbolName }
+}
+
+/// Vollständige Linie mit allen Halten in Fahrtrichtung.
+struct TransitLine: Codable, Identifiable, Sendable {
+    var id: String
+    var ref: String
+    var typ: String
+    var von: String
+    var nach: String
+    var halte: [LeapfrogStop]
+}
+
 struct LineHit: Codable, Identifiable, Hashable, Sendable {
     var id: String
     var ref: String

@@ -226,3 +226,31 @@ struct Version03Tests {
         #expect(snapshot.annotations.map(\.id) == ["y"])
     }
 }
+
+struct TransitSimulationTests {
+    @Test func fahrzeugFaehrtZwischenDenHalten() throws {
+        let points = [GeoPoint(lat: 53.55, lon: 10.0), GeoPoint(lat: 53.56, lon: 10.0), GeoPoint(lat: 53.57, lon: 10.0)]
+        let departure = Date(timeIntervalSince1970: 1_000_000)
+        let times = TransitSimulation.arrivals(points, typ: "bus")
+        #expect(times.count == 3)
+        #expect(times[2] > times[1] + TransitSimulation.dwell)
+        #expect(TransitSimulation.state(points, typ: "bus", departure: departure, at: departure.addingTimeInterval(-10)) == nil)
+        let halfway = try #require(TransitSimulation.state(points, typ: "bus", departure: departure, at: departure.addingTimeInterval(times[1] / 2)))
+        #expect(halfway.nextIndex == 1)
+        #expect(abs(halfway.point.lat - 53.555) < 0.0005)
+        let waiting = try #require(TransitSimulation.state(points, typ: "bus", departure: departure, at: departure.addingTimeInterval(times[1] + 10)))
+        #expect(waiting.atStop && waiting.nextIndex == 1)
+        #expect(TransitSimulation.state(points, typ: "bus", departure: departure, at: departure.addingTimeInterval(times[2] + 1)) == nil)
+    }
+
+    @Test func taktBlendetLaufendeFahrtenEin() {
+        var object = MapObject(layerId: "lage", typ: .oepnvlinie, punkte: [GeoPoint(lat: 53.55, lon: 10.0), GeoPoint(lat: 53.60, lon: 10.0)])
+        object.linie = TransitRef(id: "1", ref: "U3", typ: "subway", richtung: "Barmbek")
+        object.takt = 5
+        let now = Date(timeIntervalSince1970: 2_000_000)
+        object.zeit = (now.addingTimeInterval(-3600).timeIntervalSince1970 * 1000)
+        // 5,5 km mit 520 m/min ≈ 10,7 min Fahrt bei 5-Minuten-Takt: zwei oder drei Fahrzeuge gleichzeitig.
+        let count = TransitSimulation.vehicles(on: object, at: now).count
+        #expect((2...3).contains(count))
+    }
+}

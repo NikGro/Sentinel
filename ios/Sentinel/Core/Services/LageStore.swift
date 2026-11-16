@@ -172,8 +172,13 @@ final class LageStore {
     }
 
     /// Standort einer Markierung: bei verbundenem Tracker dessen Position, sonst der gesetzte Punkt.
-    func position(ofObject object: MapObject) -> GeoPoint {
-        object.trackerId.flatMap { trackerPositions[$0]?.point } ?? object.anchor
+    func position(ofObject object: MapObject, at now: Date = .now) -> GeoPoint {
+        if object.typ == .oepnvfahrzeug, let line = object.linie, let departure = object.since {
+            // Vor der Abfahrt am ersten Halt, danach geschätzt unterwegs, am Ende am letzten Halt.
+            if let state = TransitSimulation.state(object.punkte, typ: line.typ, departure: departure, at: now) { return state.point }
+            return now < departure ? (object.punkte.first ?? object.anchor) : (object.punkte.last ?? object.anchor)
+        }
+        return object.trackerId.flatMap { trackerPositions[$0]?.point } ?? object.anchor
     }
 
     func name(of actorId: String) -> String {

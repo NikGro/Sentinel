@@ -205,6 +205,38 @@ struct MapObjectInfo: View {
                 }
             }
 
+            if object.typ.isTransit, let line = object.linie {
+                Section("Linie") {
+                    Label("\(line.ref) Richtung \(line.richtung)", systemImage: line.symbolName)
+                    if let names = object.haltNamen, let first = names.first, let last = names.last {
+                        LabeledContent("Abschnitt", value: "\(first) → \(last) (\(names.count) Halte)")
+                    }
+                    if object.typ == .oepnvfahrzeug, let departure = object.since {
+                        let state = TransitSimulation.state(object.punkte, typ: line.typ, departure: departure)
+                        if let state, let name = object.haltNamen?[safe: state.nextIndex] {
+                            LabeledContent(state.atStop ? "Hält in" : "Nächster Halt", value: name)
+                        } else {
+                            LabeledContent("Status", value: Date.now < departure ? "Abfahrt \(Format.time(departure))" : "Angekommen")
+                        }
+                        LabeledContent("Ankunft Endhalt", value: Format.time(departure.addingTimeInterval(TransitSimulation.duration(object.punkte, typ: line.typ))))
+                    }
+                    if object.typ == .oepnvlinie, let takt = object.takt {
+                        LabeledContent("Fahrzeuge im Takt", value: "alle \(takt) Min.")
+                    }
+                    if object.typ == .oepnvfahrzeug, editable {
+                        Button("Strecke als ÖPNV-Linie anlegen", systemImage: MapObject.Shape.oepnvlinie.symbolName) {
+                            var section = MapObject(layerId: object.layerId, typ: .oepnvlinie, titel: "\(line.ref) → \(line.richtung)", farbe: object.farbe, punkte: object.punkte)
+                            section.linie = line
+                            section.haltNamen = object.haltNamen
+                            lage.saveMapObject(section, id: LageStore.newId())
+                            dismiss()
+                        }
+                    }
+                } footer: {
+                    Text("Positionen nach typischem Tempo geschätzt, keine Echtzeitdaten.")
+                }
+            }
+
             if let wert = object.wert {
                 Section {
                     LabeledContent("Prognosefaktor", value: wert.formatted(.number.precision(.fractionLength(1)).locale(Format.locale)))

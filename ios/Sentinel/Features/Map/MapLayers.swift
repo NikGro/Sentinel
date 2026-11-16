@@ -654,3 +654,67 @@ private struct NavigationPuck: View {
         .accessibilityLabel("Eigener Standort, Navigation")
     }
 }
+
+/// Fahrzeug auf einer ÖPNV-Linie: angelegt (`objectId`) oder im Takt einer Linie eingeblendet (nur angezeigt).
+struct TransitVehiclePin: Identifiable {
+    let id: String
+    let objectId: String?
+    let lineObjectId: String?
+    let coordinate: CLLocationCoordinate2D
+    let line: TransitRef
+    let color: Color
+    let departure: Date
+}
+
+/// ÖPNV-Linienabschnitte mit ihren Halten und die Fahrzeuge darauf.
+struct TransitLayer: MapContent {
+    let sections: [Versioned<MapObject>]
+    let vehicles: [TransitVehiclePin]
+    let showsStopNames: Bool
+    let onSelect: (TransitVehiclePin) -> Void
+
+    var body: some MapContent {
+        ForEach(sections) { object in
+            MapPolyline(coordinates: object.data.punkte.map(\.coordinate))
+                .stroke(.white, style: StrokeStyle(lineWidth: 9, lineCap: .round, lineJoin: .round))
+            MapPolyline(coordinates: object.data.punkte.map(\.coordinate))
+                .stroke(Color(hex: object.data.farbe), style: StrokeStyle(lineWidth: 5, lineCap: .round, lineJoin: .round))
+        }
+        ForEach(sections) { object in
+            ForEach(Array(object.data.punkte.enumerated()), id: \.offset) { index, point in
+                let name = object.data.haltNamen?[safe: index] ?? ""
+                Annotation(name, coordinate: point.coordinate, anchor: .center) {
+                    Circle()
+                        .fill(.white)
+                        .stroke(Color(hex: object.data.farbe), lineWidth: 3)
+                        .frame(width: 11, height: 11)
+                }
+                .annotationTitles(showsStopNames ? .visible : .hidden)
+            }
+        }
+        ForEach(vehicles) { pin in
+            Annotation(pin.line.ref, coordinate: pin.coordinate, anchor: .center) {
+                HStack(spacing: 3) {
+                    Image(systemName: pin.line.symbolName)
+                        .font(.system(size: 12, weight: .bold))
+                    Text(pin.line.ref)
+                        .font(.system(size: 13, weight: .heavy))
+                }
+                .foregroundStyle(.white)
+                .padding(.horizontal, 7)
+                .frame(height: 24)
+                .background(pin.color, in: .capsule)
+                .overlay(Capsule().strokeBorder(.white, style: StrokeStyle(lineWidth: 2, dash: pin.objectId == nil ? [3, 2] : [])))
+                .shadow(color: .black.opacity(0.35), radius: 3, y: 1)
+                .onTapGesture { onSelect(pin) }
+                .accessibilityLabel("\(pin.line.ref) Richtung \(pin.line.richtung)\(pin.objectId == nil ? ", im Takt geschätzt" : "")")
+                .accessibilityAddTraits(.isButton)
+            }
+            .annotationTitles(.hidden)
+        }
+    }
+}
+
+extension Array {
+    subscript(safe index: Int) -> Element? { indices.contains(index) ? self[index] : nil }
+}

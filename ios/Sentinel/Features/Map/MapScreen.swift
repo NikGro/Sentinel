@@ -47,7 +47,7 @@ enum PlaceableKind: Hashable, Identifiable {
     case target(ZielArt)
 
     static let all: [PlaceableKind] = [
-        .shape(.marker), .shape(.text), .shape(.kreis), .shape(.fahndungsraum), .shape(.haltestellen),
+        .shape(.marker), .shape(.text), .shape(.kreis), .shape(.fahndungsraum), .shape(.haltestellen), .shape(.oepnvlinie), .shape(.oepnvfahrzeug),
         .target(.person), .target(.fahrzeug), .target(.objekt),
     ]
 
@@ -116,6 +116,10 @@ struct MapScreen: View {
     @State private var searchPin: SearchPin?
     @State private var showsSearchPinActions = false
     @State private var showsSearchPinCreate = false
+    /// Takt für die geschätzten ÖPNV-Fahrzeuge (alle 2 Sekunden, solange welche sichtbar sind).
+    @State private var transitNow = Date.now
+    /// Angetipptes, nur im Takt eingeblendetes Fahrzeug.
+    @State private var virtualVehicle: TransitVehiclePin?
 
     var body: some View {
         MapReader { proxy in
@@ -131,6 +135,9 @@ struct MapScreen: View {
                 ReachLayer(rings: reachRings)
                 MapObjectsLayer(lines: objects(.linie), areas: objects(.flaeche), circles: objects(.kreis) + objects(.haltestellen), handles: handles) { id in
                     openEditor(for: id)
+                }
+                TransitLayer(sections: objects(.oepnvlinie), vehicles: transitPins, showsStopNames: cameraState.distance < 5000) { pin in
+                    if let id = pin.objectId { openEditor(for: id) } else { virtualVehicle = pin }
                 }
                 NearbyStopsLayer(stops: nearbyStops)
                 RouteLayer(lines: routeLines)
@@ -296,6 +303,25 @@ struct MapScreen: View {
         }
         .task(id: reachInputs.map { "\($0.id)|\($0.since.timeIntervalSince1970)|\($0.point.lat)|\($0.point.lon)" }.joined() + enabledReachModes.map(\.rawValue).joined()) {
             fahndung.trackReach(reachInputs, modes: enabledReachModes)
+        }
+        .task(id: hasTransit) {
+            while hasTransit, !Task.isCancelled {
+                try? await Task.sleep(for: .seconds(2))
+                transitNow = .now
+            }
+        }
+        .confirmationDialog(
+            virtualVehicle.map { "\($0.line.ref) Richtung \($0.line.richtung)" } ?? "",
+            isPresented: Binding(get: { virtualVehicle != nil }, set: { if !$0 { virtualVehicle = nil } }),
+            titleVisibility: .visible,
+            presenting: virtualVehicle
+        ) { pin in
+            Button("Als ÖPNV-Fahrzeug anlegen") { _ = createVehicle(from: pin) }
+            Button("Hinführen") {
+                if let id = createVehicle(from: pin) { model.navigate(to: .object(id)) }
+            }
+        } message: { pin in
+            Text("Im Takt geschätzt, Abfahrt am ersten Halt \(Format.time(pin.departure)). Keine Echtzeitdaten.")
         }
         .task {
             // Takt für Altersangaben und veraltete Positionen.
@@ -590,16 +616,54 @@ struct MapScreen: View {
         editor = EditorContext(id: LageStore.newId(), object: draft(shape, points), isNew: true)
     }
 
+    private var hasTransit: Bool { visibleObjects.contains { $0.data.typ.isTransit } }
+
+    /// Angelegte ÖPNV-Fahrzeuge und die im Takt eingeblendeten auf ÖPNV-Linien.
+    private var transitPins: [TransitVehiclePin] {
+        var pins: [TransitVehiclePin] = []
+        for object in objects(.oepnvfahrzeug) {
+            guard let line = object.data.linie else { continue }
+            pins.append(TransitVehiclePin(
+                id: object.id, objectId: object.id, lineObjectId: nil,
+                coordinate: lage.position(ofObject: object.data, at: transitNow).coordinate,
+                line: line, color: Color(hex: object.data.farbe), departure: object.data.since ?? transitNow
+            ))
+        }
+        for object in objects(.oepnvlinie) {
+            guard let line = object.data.linie else { continue }
+            for vehicle in TransitSimulation.vehicles(on: object.data, at: transitNow) {
+                pins.append(TransitVehiclePin(
+                    id: "\(object.id)-\(Int(vehicle.departure.timeIntervalSince1970))", objectId: nil, lineObjectId: object.id,
+                    coordinate: vehicle.state.point.coordinate, line: line, color: Color(hex: object.data.farbe), departure: vehicle.departure
+                ))
+            }
+        }
+        return pins
+    }
+
+    /// Ein im Takt eingeblendetes Fahrzeug als eigenes Objekt anlegen; es löscht sich nach der Ankunft selbst.
+    private func createVehicle(from pin: TransitVehiclePin) -> String? {
+        guard let lineId = pin.lineObjectId, let section = lage.mapObjects[lineId]?.data else { return nil }
+        var vehicle = MapObject(layerId: Layer.lageId, typ: .oepnvfahrzeug, titel: "\(pin.line.ref) → \(pin.line.richtung)", farbe: section.farbe, punkte: section.punkte, zeit: (pin.departure.timeIntervalSince1970 * 1000).rounded())
+        vehicle.linie = pin.line
+        vehicle.haltNamen = section.haltNamen
+        let end = pin.departure.addingTimeInterval(TransitSimulation.duration(section.punkte, typ: pin.line.typ) + 300)
+        vehicle.ablauf = (end.timeIntervalSince1970 * 1000).rounded()
+        let id = LageStore.newId()
+        lage.saveMapObject(vehicle, id: id)
+        return id
+    }
+
     /// Neue Markierung mit den Vorgaben ihrer Art.
     private func draft(_ shape: MapObject.Shape, _ points: [GeoPoint]) -> MapObject {
         let isRoom = shape == .fahndungsraum
         return MapObject(
             layerId: Layer.lageId,
             typ: shape,
-            farbe: isRoom ? "#C97C7C" : shape == .haltestellen ? "#0A84FF" : "#FF9F0A",
+            farbe: isRoom ? "#C97C7C" : shape == .haltestellen || shape.isTransit ? "#0A84FF" : "#FF9F0A",
             punkte: points,
             radius: shape == .kreis ? 150 : shape == .haltestellen ? 500 : nil,
-            zeit: isRoom ? (Date.now.timeIntervalSince1970 * 1000).rounded() : nil
+            zeit: isRoom || shape.isTransit ? (Date.now.timeIntervalSince1970 * 1000).rounded() : nil
         )
     }
 
@@ -608,6 +672,7 @@ struct MapScreen: View {
         forcePins.map(\.coordinate)
             + (vehiclePins + targetPins).map(\.coordinate)
             + handles.map(\.coordinate)
+            + transitPins.map(\.coordinate)
             + nearbyStops.map(\.point.coordinate)
             + lage.operation.ueberschlagen.naechste.map(\.point.coordinate)
             + [location.current?.coordinate].compactMap { $0 }
@@ -629,7 +694,7 @@ struct MapScreen: View {
                 guard let center = data.punkte.first else { continue }
                 let radius = data.radius ?? 100
                 size = center.distance(to: point) <= radius ? Double.pi * radius * radius : nil
-            case .linie where data.punkte.count >= 2:
+            case .linie where data.punkte.count >= 2, .oepnvlinie where data.punkte.count >= 2:
                 size = Self.distance(from: point, toLine: data.punkte) <= tolerance ? 0 : nil
             default:
                 size = nil
@@ -734,7 +799,7 @@ struct MapScreen: View {
 
     /// Antippbare Griffe. Prognosezellen (mit Kennwert) bekommen keinen, sonst würde die Karte überladen.
     private var handles: [ObjectHandle] {
-        visibleObjects.filter { $0.data.wert == nil && !$0.data.punkte.isEmpty }.map { object in
+        visibleObjects.filter { $0.data.wert == nil && !$0.data.punkte.isEmpty && !$0.data.typ.isTransit }.map { object in
             ObjectHandle(
                 id: object.id,
                 object: object.data,

@@ -236,6 +236,8 @@ struct ObjectTargetList: View {
         let symbol: String
         let target: NavigationTarget
         let point: GeoPoint?
+        /// Bewegliches Ziel: die Route folgt ihm laufend.
+        var live = false
     }
 
     var body: some View {
@@ -251,8 +253,11 @@ struct ObjectTargetList: View {
                             .frame(width: 44, height: 44)
                             .background(Theme.aPosition, in: .circle)
                         VStack(alignment: .leading, spacing: 2) {
-                            Text("Zur A-Position")
-                                .font(.headline)
+                            HStack(spacing: 6) {
+                                Text("Zur A-Position")
+                                    .font(.headline)
+                                LiveBadge()
+                            }
                             Text("\(lage.label(of: holder.data)), \(lage.mobilityDescription(of: holder.data))")
                                 .font(.caption)
                                 .foregroundStyle(.secondary)
@@ -273,8 +278,11 @@ struct ObjectTargetList: View {
                     } label: {
                         Label {
                             VStack(alignment: .leading, spacing: 2) {
-                                Text("Überschlagend: nächste Haltestellen")
-                                    .font(.headline)
+                                HStack(spacing: 6) {
+                                    Text("Zur Linie der A: nächste Haltestelle")
+                                        .font(.headline)
+                                    LiveBadge()
+                                }
                                 Text(leapfrogHint)
                                     .font(.caption)
                                     .foregroundStyle(.secondary)
@@ -324,6 +332,7 @@ struct ObjectTargetList: View {
                                     .font(.caption)
                                     .foregroundStyle(.secondary)
                             }
+                            if entry.live { LiveBadge() }
                             Spacer()
                             if let distance = distance(to: entry.point) {
                                 Text(Format.distance(distance))
@@ -345,7 +354,7 @@ struct ObjectTargetList: View {
 
     private var memberEntries: [Entry] {
         lage.activeMembers.filter { $0.id != lage.selfId && lage.vehicle(of: $0.data) == nil }.map { member in
-            Entry(id: "m-\(member.id)", title: member.data.spitzname, subtitle: lage.mobilityDescription(of: member.data), symbol: member.data.fortbewegung.symbolName, target: .member(member.id), point: lage.positions[member.id]?.point)
+            Entry(id: "m-\(member.id)", title: member.data.spitzname, subtitle: lage.mobilityDescription(of: member.data), symbol: member.data.fortbewegung.symbolName, target: .member(member.id), point: lage.positions[member.id]?.point, live: true)
         }
     }
 
@@ -353,23 +362,46 @@ struct ObjectTargetList: View {
         lage.activeVehicles.compactMap { vehicle in
             guard let position = lage.position(ofVehicle: vehicle) else { return nil }
             let crew = lage.occupants(of: vehicle.id).map(\.data.spitzname)
-            return Entry(id: "v-\(vehicle.id)", title: vehicle.data.funkrufname, subtitle: crew.isEmpty ? position.source : crew.joined(separator: ", "), symbol: "car.fill", target: .vehicle(vehicle.id), point: position.point)
+            return Entry(id: "v-\(vehicle.id)", title: vehicle.data.funkrufname, subtitle: crew.isEmpty ? position.source : crew.joined(separator: ", "), symbol: "car.fill", target: .vehicle(vehicle.id), point: position.point, live: true)
         }
     }
 
     private var targetEntries: [Entry] {
         lage.sortedTargets.compactMap { target in
             guard let position = lage.position(ofTarget: target) else { return nil }
-            return Entry(id: "t-\(target.id)", title: target.data.displayName, subtitle: "\(target.data.art.title)\(position.fromTracker ? ", Tracker" : "")", symbol: target.data.art.symbolName, target: .target(target.id), point: position.point)
+            return Entry(id: "t-\(target.id)", title: target.data.displayName, subtitle: "\(target.data.art.title)\(position.fromTracker ? ", Tracker" : "")", symbol: target.data.art.symbolName, target: .target(target.id), point: position.point, live: position.fromTracker)
         }
     }
 
     private var objectEntries: [Entry] {
         lage.mapObjects.values.compactMap { object in
-            guard object.data.typ == .fahndungsraum || object.data.typ == .marker, lage.layers[object.data.layerId]?.data.isLive == true else { return nil }
+            guard [.fahndungsraum, .marker, .oepnvfahrzeug].contains(object.data.typ), !object.data.isExpired(), lage.layers[object.data.layerId]?.data.isLive == true else { return nil }
             let point = lage.position(ofObject: object.data)
             let title = object.data.titel.isEmpty ? object.data.typ.title : object.data.titel
-            return Entry(id: "o-\(object.id)", title: title, subtitle: object.data.typ.title, symbol: object.data.typ == .fahndungsraum ? "scope" : "mappin", target: .object(object.id), point: point)
+            return Entry(
+                id: "o-\(object.id)", title: title, subtitle: object.data.typ.title,
+                symbol: object.data.typ == .oepnvfahrzeug ? (object.data.linie?.symbolName ?? "bus.fill") : object.data.typ.symbolName,
+                target: .object(object.id), point: point,
+                live: object.data.typ == .oepnvfahrzeug || object.data.trackerId != nil
+            )
         }
+    }
+}
+
+/// Kleiner Hinweis „live“: Die Route folgt dem Ziel, auch wenn es sich bewegt.
+struct LiveBadge: View {
+    var body: some View {
+        HStack(spacing: 3) {
+            Circle()
+                .fill(.green)
+                .frame(width: 6, height: 6)
+            Text("live")
+                .font(.caption2.weight(.bold))
+        }
+        .padding(.horizontal, 6)
+        .padding(.vertical, 2)
+        .background(.green.opacity(0.18), in: .capsule)
+        .foregroundStyle(.green)
+        .accessibilityLabel("Live, die Route folgt dem Ziel")
     }
 }

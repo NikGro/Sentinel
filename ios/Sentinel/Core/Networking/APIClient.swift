@@ -181,6 +181,10 @@ struct APIClient: Sendable {
         return (result.linien, result.verfuegbar)
     }
 
+    func line(id: String) async throws -> TransitLine {
+        try await json(TransitLine.self, "GET", "api/v1/oepnv/linien/\(id)")
+    }
+
     private struct StopsNearby: Decodable {
         let haltestellen: [NearbyStop]
     }

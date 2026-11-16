@@ -20,6 +20,17 @@
   Sonderrechten zum Absender; roter Balken, solange der Notruf läuft; beenden durch Absender oder Zentrale
 - Kommandozentrale zeigt den Notruf als roten Balken mit „Auf der Karte zeigen“ und „Notruf beenden“
 
+**ÖPNV auf der Karte**
+- Neue Objekte im Plus-Menü: „ÖPNV-Linie“ (Abschnitt einer Linie mit allen Halten) und „ÖPNV-Fahrzeug“
+- Linie wählen: Vorschläge in der Nähe des angetippten Orts oder Suche nach Name, jede Richtung eigener Eintrag;
+  Start- und Endhalt in der Haltestellenliste antippen
+- ÖPNV-Linie: Schalter „Fahrzeuge im Takt einblenden“ (Takt und eine Abfahrtszeit); Fahrzeuge erscheinen, sobald sie
+  den Abschnitt befahren, und verschwinden am Ende; antippen legt sie als ÖPNV-Fahrzeug an oder führt hin
+- ÖPNV-Fahrzeug: Abfahrt am Starthalt, fährt bis zur Endhaltestelle, löscht sich danach selbst; Hinführen folgt ihm
+  live; „Strecke als ÖPNV-Linie anlegen“ in der Ansicht
+- Positionen nach typischem Tempo der Verkehrsart geschätzt, noch ohne Fahrplan- oder Echtzeitdaten
+- Zu Objekten navigieren: „live“-Hinweis bei beweglichen Zielen; „Zur Linie der A: nächste Haltestelle“
+
 **Fahndungsraum**
 - ÖPNV-Fluchtraum entlang der tatsächlichen Linien: zu Fuß zu nahen Halten, Bus und Bahn mit typischem Tempo,
   Umsteigen, vom letzten Halt zu Fuß weiter; als zusammenhängende Fläche statt Kreis (ohne Fahrpläne, Wartezeit pauschal)
