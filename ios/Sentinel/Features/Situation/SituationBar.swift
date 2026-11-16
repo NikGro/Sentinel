@@ -1,6 +1,6 @@
 import SwiftUI
 
-/// Lageleiste auf der Karte: zeigt Funkkanal, A-Position, eigene Fortbewegung und Verbindungszustand.
+/// Lageleiste auf der Karte: zeigt Funkkanal, A-Position samt deren Fortbewegung, Einsatzname und Verbindungszustand.
 struct SituationBar: View {
     let onTap: () -> Void
 
@@ -21,13 +21,23 @@ struct SituationBar: View {
                     Text(lage.aHolder.map { lage.label(of: $0.data) } ?? "frei")
                         .font(.caption.weight(.semibold))
                         .lineLimit(1)
+                    // Wie die A gerade unterwegs ist: zu Fuß, im Fahrzeug oder im ÖPNV.
+                    if let holder = lage.aHolder {
+                        Image(systemName: holder.data.fortbewegung.symbolName)
+                            .font(.caption.weight(.semibold))
+                            .foregroundStyle(Theme.aPosition)
+                    }
                 }
+                .layoutPriority(1)
 
-                if let me = lage.me {
+                // Einsatzname, wenn Platz ist.
+                if !lage.operation.titel.isEmpty {
                     Divider().frame(height: 16)
-                    Image(systemName: me.data.aktiv ? me.data.fortbewegung.symbolName : "moon.zzz.fill")
+                    Text(lage.operation.titel)
                         .font(.caption.weight(.semibold))
-                        .foregroundStyle(me.data.aktiv ? Color.primary : Color.orange)
+                        .foregroundStyle(.secondary)
+                        .lineLimit(1)
+                        .truncationMode(.tail)
                 }
 
                 Spacer(minLength: 4)
@@ -70,7 +80,8 @@ struct SituationBar: View {
 
     private var accessibilitySummary: String {
         var parts = ["Funkkanal \(lage.operation.funkkanal ?? "nicht gesetzt")"]
-        parts.append("A-Position \(lage.aHolder.map { lage.label(of: $0.data) } ?? "frei")")
+        parts.append("A-Position \(lage.aHolder.map { "\(lage.label(of: $0.data)), \(lage.mobilityDescription(of: $0.data))" } ?? "frei")")
+        if !lage.operation.titel.isEmpty { parts.append("Einsatz \(lage.operation.titel)") }
         parts.append(lage.connection == .verbunden ? "\(onlineCount) Kräfte verbunden" : lage.connection.title)
         return parts.joined(separator: ", ")
     }
