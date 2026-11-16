@@ -1,6 +1,9 @@
+import Combine
 import CoreLocation
 import MapKit
 import Observation
+@preconcurrency import FerrostarCore
+@preconcurrency import FerrostarCoreFFI
 
 /// Ziel einer Navigation. Die Koordinate wird laufend neu aufgelöst, damit die Route einem bewegten Ziel folgt.
 enum NavigationTarget: Equatable, Hashable, Sendable {
@@ -15,39 +18,39 @@ enum NavigationTarget: Equatable, Hashable, Sendable {
     case point(GeoPoint, title: String)
 }
 
-/// Ein Manöver der Route und die Stelle im Linienzug, an der es beginnt.
-struct RouteStep: Equatable, Sendable {
-    var instruction: String
-    var distance: CLLocationDistance
-    var startIndex: Int
-}
-
-/// Eine berechnete Route, unabhängig davon, wer sie berechnet hat (Apple Karten oder das eigene Wegenetz).
+/// Die aktuell gefahrene Route.
 struct RouteResult {
     var coordinates: [CLLocationCoordinate2D]
     var distance: CLLocationDistance
-    var travelTime: TimeInterval
-    var steps: [RouteStep]
-    /// Wurde mit Sonderrechten gerechnet (Einbahnstraßen und Abbiegeverbote ignoriert)?
+    /// Wurde gegen Einbahnstraßen oder Abbiegeverbote geführt? Nur dann, wenn es spürbar Zeit spart.
     var usesSpecialRights: Bool
+}
+
+/// Eine Fahrspur am nächsten Manöver.
+struct LaneHint: Hashable {
+    var directions: [String]
+    var active: Bool
 }
 
 /// Fortschritt auf der Route bezogen auf den eigenen Standort.
 struct RouteProgress: Equatable {
     var nextInstruction: String
+    var maneuverSymbol: String
     var distanceToManeuver: CLLocationDistance
     var followingInstruction: String?
+    var followingSymbol: String?
     var remainingDistance: CLLocationDistance
     var remainingTime: TimeInterval
+    var lanes: [LaneHint]
+    var arrived: Bool
 
     var arrival: Date { .now.addingTimeInterval(remainingTime) }
 }
 
-/// Dynamische Routenführung: Die Route wird neu berechnet, sobald sich das Ziel (z. B. die A-Position)
-/// oder der eigene Standort merklich bewegt hat.
-///
-/// Mit Sonderrechten rechnet das eigene Wegenetz auf dem Server: Einbahnstraßen und Abbiegeverbote werden ignoriert,
-/// physische Sperren wie Poller bleiben beachtet. Ohne Sonderrechte rechnet Apple Karten mit Verkehrslage.
+/// Navigation mit dem Ferrostar-Kern (quelloffen): Er legt den Standort auf die Route, erkennt Abweichungen,
+/// berechnet neu und schaltet die Hinweise im richtigen Moment weiter. Routen liefert der eigene Server (Valhalla);
+/// ohne Sonderrechte gibt Apple Karten den Weg mit aktueller Verkehrslage vor (siehe ``NaviRequestLoader``).
+/// Sprachansagen sind bewusst stumm.
 @MainActor
 @Observable
 final class RouteFollower {
@@ -58,32 +61,39 @@ final class RouteFollower {
     private(set) var destination: GeoPoint?
     private(set) var isCalculating = false
     private(set) var failure: String?
+    /// Stelle im Linienzug, an der man sich gerade befindet; davor liegt der bereits gefahrene Teil.
+    private(set) var progressIndex = 0
+    /// Eigener Standort, auf die Route gelegt (ohne GPS-Zittern neben der Straße).
+    private(set) var snappedLocation: CLLocation?
+    /// Erlaubte Höchstgeschwindigkeit auf dem aktuellen Abschnitt in km/h, soweit bekannt.
+    private(set) var speedLimit: Int?
 
     var walking = false {
-        didSet { if walking != oldValue { lastCalculation = nil } }
+        didSet { if walking != oldValue { recalculateSoon() } }
     }
 
     /// Sonderrechte sind bewusst nie voreingestellt und gelten nur für die laufende Führung.
     var specialRights = false {
-        didSet { if specialRights != oldValue { lastCalculation = nil } }
+        didSet { if specialRights != oldValue { recalculateSoon() } }
     }
 
-    /// Routenberechnung auf dem eigenen Server; `nil`, solange keine Anmeldung besteht.
-    @ObservationIgnored var serverRoute: ((GeoPoint, GeoPoint, _ specialRights: Bool, _ walking: Bool) async throws -> RouteResult)?
-
+    @ObservationIgnored private var core: FerrostarCore?
+    @ObservationIgnored private var loader: NaviRequestLoader?
+    @ObservationIgnored private let annotations = AnnotationPublisher<ValhallaExtendedOSRMAnnotation>.valhallaExtendedOSRM()
+    @ObservationIgnored private let locationProvider = CoreLocationProvider(activityType: .automotiveNavigation, allowBackgroundLocationUpdates: true)
+    @ObservationIgnored private let coreDelegate = CoreDelegate()
+    @ObservationIgnored private var cancellables = Set<AnyCancellable>()
     @ObservationIgnored private var loop: Task<Void, Never>?
-    @ObservationIgnored private var lastCalculation: (origin: GeoPoint, destination: GeoPoint, at: Date)?
     @ObservationIgnored private var resolve: (NavigationTarget) -> (point: GeoPoint, title: String)? = { _ in nil }
     @ObservationIgnored private var origin: () -> GeoPoint? = { nil }
-    /// Stelle im Linienzug, an der man sich gerade befindet; davor liegt der bereits gefahrene Teil.
-    private(set) var progressIndex = 0
+    @ObservationIgnored private var routedDestination: GeoPoint?
+    @ObservationIgnored private var lastRouteAt = Date.distantPast
+    @ObservationIgnored private var needsRoute = true
 
-    private static let tick: Duration = .seconds(1)
-    private static let destinationThreshold: CLLocationDistance = 30
-    private static let originThreshold: CLLocationDistance = 60
-    /// Weicht man weiter von der Route ab, wird sofort neu berechnet.
-    private static let offRouteThreshold: CLLocationDistance = 35
-    private static let maximumAge: TimeInterval = 45
+    /// Bewegt sich das Ziel um mehr als so viele Meter, wird neu berechnet …
+    private static let destinationThreshold: CLLocationDistance = 40
+    /// … aber höchstens so oft.
+    private static let minimumRerouteInterval: TimeInterval = 8
 
     var isActive: Bool { target != nil }
 
@@ -91,6 +101,54 @@ final class RouteFollower {
     var beeline: CLLocationDistance? {
         guard let destination, let origin = origin() else { return nil }
         return origin.distance(to: destination)
+    }
+
+    /// Mit Server und Anmeldung verbinden. Ohne diesen Aufruf ist keine Navigation möglich.
+    func configure(serverURL: URL, token: String) {
+        stop()
+        let loader = NaviRequestLoader(token: token)
+        do {
+            let core = try FerrostarCore(
+                wellKnownRouteProvider: .valhalla(endpointUrl: serverURL.appending(path: "api/v1/navi/route").absoluteString, profile: "auto"),
+                locationProvider: locationProvider,
+                navigationControllerConfig: NaviConfig.controller,
+                networkSession: loader,
+                annotation: annotations,
+                spokenInstructionObserver: .initAVSpeechSynthesizer(isMuted: true)
+            )
+            core.minimumTimeBeforeRecalculation = 3
+            core.minimumMovementBeforeRecalculation = 30
+            core.delegate = coreDelegate
+            cancellables = []
+            core.$state
+                .receive(on: DispatchQueue.main)
+                .sink { [weak self] state in MainActor.assumeIsolated { self?.apply(state) } }
+                .store(in: &cancellables)
+            core.$route
+                .receive(on: DispatchQueue.main)
+                .sink { [weak self] route in MainActor.assumeIsolated { self?.apply(route) } }
+                .store(in: &cancellables)
+            annotations.$speedLimit
+                .receive(on: DispatchQueue.main)
+                .sink { [weak self] limit in
+                    MainActor.assumeIsolated {
+                        self?.speedLimit = limit.map { Int($0.converted(to: .kilometersPerHour).value.rounded()) }
+                    }
+                }
+                .store(in: &cancellables)
+            self.core = core
+            self.loader = loader
+        } catch {
+            self.core = nil
+            self.loader = nil
+        }
+    }
+
+    func disconnect() {
+        stop()
+        core = nil
+        loader = nil
+        cancellables = []
     }
 
     func start(
@@ -102,10 +160,11 @@ final class RouteFollower {
         self.target = target
         self.origin = origin
         self.resolve = resolve
+        needsRoute = true
         loop = Task { [weak self] in
             while !Task.isCancelled {
-                await self?.update()
-                try? await Task.sleep(for: Self.tick)
+                await self?.tick()
+                try? await Task.sleep(for: .seconds(2))
             }
         }
     }
@@ -113,18 +172,29 @@ final class RouteFollower {
     func stop() {
         loop?.cancel()
         loop = nil
+        core?.stopNavigation()
         target = nil
         route = nil
         progress = nil
         destination = nil
         failure = nil
-        lastCalculation = nil
         isCalculating = false
         specialRights = false
         progressIndex = 0
+        snappedLocation = nil
+        speedLimit = nil
+        routedDestination = nil
+        needsRoute = true
     }
 
-    private func update() async {
+    private func recalculateSoon() {
+        guard isActive else { return }
+        needsRoute = true
+        Task { await tick() }
+    }
+
+    /// Ziel nachführen und bei Bedarf eine neue Route holen.
+    private func tick() async {
         guard let target else { return }
         guard let resolved = resolve(target) else {
             failure = target == .leapfrog ? "Noch keine Haltestelle zugewiesen." : "Ziel hat derzeit keine Position."
@@ -132,149 +202,117 @@ final class RouteFollower {
         }
         title = resolved.title
         destination = resolved.point
-        guard let from = origin() else {
+        let moved = routedDestination.map { $0.distance(to: resolved.point) > Self.destinationThreshold } ?? true
+        let due = Date.now.timeIntervalSince(lastRouteAt) >= Self.minimumRerouteInterval
+        guard !isCalculating, needsRoute || (moved && due) else { return }
+        await calculate(to: resolved.point)
+    }
+
+    private func calculate(to point: GeoPoint) async {
+        guard let core, let loader, let target else {
+            failure = "Navigation ist ohne Serververbindung nicht verfügbar."
+            return
+        }
+        guard let start = locationProvider.lastLocation ?? origin().map({ CLLocation(latitude: $0.lat, longitude: $0.lon).userLocation }) else {
             failure = "Eigener Standort unbekannt."
             return
         }
-        updateProgress(from)
-        let offRoute = progress == nil || distanceToRoute(from) > Self.offRouteThreshold
-        if let last = lastCalculation, !offRoute,
-           last.destination.distance(to: resolved.point) < Self.destinationThreshold,
-           last.origin.distance(to: from) < Self.originThreshold || route != nil,
-           Date.now.timeIntervalSince(last.at) < Self.maximumAge {
-            return
-        }
-        if let last = lastCalculation, Date.now.timeIntervalSince(last.at) < (offRoute ? 2 : 4) { return }
-        lastCalculation = (from, resolved.point, .now)
         isCalculating = true
         defer { isCalculating = false }
-
-        let wantsSpecialRights = specialRights && !walking
+        loader.configure(specialRights: specialRights && !walking, walking: walking)
+        needsRoute = false
+        routedDestination = point
+        lastRouteAt = .now
         do {
-            let result: RouteResult
-            if wantsSpecialRights {
-                guard let serverRoute else { throw RouteError.specialRightsUnavailable }
-                result = try await serverRoute(from, resolved.point, true, false)
-            } else {
-                result = try await Self.appleRoute(from: from, to: resolved.point, walking: walking)
-            }
-            guard self.target == target else { return }
-            route = result
-            progressIndex = 0
+            let routes = try await core.getRoutes(
+                initialLocation: start,
+                waypoints: [Waypoint(coordinate: GeographicCoordinate(lat: point.lat, lng: point.lon), kind: .break, properties: nil)]
+            )
+            guard self.target == target, let first = routes.first else { return }
+            try core.startNavigation(route: first, config: NaviConfig.controller)
             failure = nil
-            updateProgress(from)
         } catch {
             guard self.target == target else { return }
-            // Eine Route ohne Sonderrechte stillschweigend unterzuschieben wäre irreführend: lieber klar melden.
-            route = nil
-            progress = nil
-            failure = wantsSpecialRights ? "Keine Route mit Sonderrechten verfügbar." : "Route konnte nicht berechnet werden."
+            failure = specialRights ? "Keine Route mit Sonderrechten verfügbar." : "Route konnte nicht berechnet werden."
+            needsRoute = true
         }
     }
 
-    // MARK: Fortschritt
+    // MARK: Zustand aus dem Ferrostar-Kern übernehmen
 
-    /// Abstand zur Route: kürzester Abstand zu den Teilstücken rund um die aktuelle Stelle, nicht nur zu einem
-    /// Stützpunkt. So fällt ein Abbiegen in die falsche Straße oder ein Überfahren des Ziels sofort auf.
-    private func distanceToRoute(_ location: GeoPoint) -> CLLocationDistance {
-        guard let route, route.coordinates.count > 1, route.coordinates.indices.contains(progressIndex) else { return .greatestFiniteMagnitude }
-        let coordinates = route.coordinates
-        let lower = max(0, progressIndex - 3)
-        let upper = min(coordinates.count - 1, progressIndex + 60)
-        var best = CLLocationDistance.greatestFiniteMagnitude
-        let k = cos(location.lat * .pi / 180)
-        for i in lower..<upper {
-            let a = coordinates[i], b = coordinates[i + 1]
-            let ax = a.longitude * k, ay = a.latitude
-            let dx = b.longitude * k - ax, dy = b.latitude - ay
-            let px = location.lon * k, py = location.lat
-            let length = dx * dx + dy * dy
-            let t = length == 0 ? 0 : max(0, min(1, ((px - ax) * dx + (py - ay) * dy) / length))
-            let nearest = GeoPoint(lat: ay + t * dy, lon: (ax + t * dx) / k)
-            best = min(best, nearest.distance(to: location))
-        }
-        return best
-    }
-
-    /// Bestimmt den nächstgelegenen Punkt auf der Route (nur vorwärts suchend) und daraus das kommende Manöver.
-    private func updateProgress(_ location: GeoPoint) {
-        guard let route, !route.coordinates.isEmpty else {
-            progress = nil
+    private func apply(_ route: Route?) {
+        guard let route else {
+            self.route = nil
             return
         }
-        let coordinates = route.coordinates
-        let window = progressIndex..<min(coordinates.count, progressIndex + 400)
-        var best = progressIndex
+        self.route = RouteResult(
+            coordinates: route.geometry.map { CLLocationCoordinate2D(latitude: $0.lat, longitude: $0.lng) },
+            distance: route.distance,
+            usesSpecialRights: loader?.lastRouteUsedSpecialRights ?? false
+        )
+        progressIndex = 0
+    }
+
+    private func apply(_ state: NavigationState?) {
+        guard let state else {
+            progress = nil
+            snappedLocation = nil
+            return
+        }
+        if state.isCalculatingNewRoute != isCalculating, target != nil { isCalculating = state.isCalculatingNewRoute }
+        switch state.tripState {
+        case let .navigating(_, _, snapped, remainingSteps, _, tripProgress, _, _, visual, _, _):
+            let course = snapped.courseOverGround.map { CLLocationDirection($0.degrees) } ?? -1
+            let location = CLLocation(
+                coordinate: CLLocationCoordinate2D(latitude: snapped.coordinates.lat, longitude: snapped.coordinates.lng),
+                altitude: 0, horizontalAccuracy: snapped.horizontalAccuracy, verticalAccuracy: -1,
+                course: course, speed: snapped.speed?.value ?? -1, timestamp: snapped.timestamp
+            )
+            snappedLocation = location
+            updateProgressIndex(location.coordinate)
+            let primary = visual?.primaryContent
+            let next = remainingSteps.dropFirst().first
+            let ratio = loader?.trafficRatio ?? 1
+            progress = RouteProgress(
+                nextInstruction: primary?.text ?? remainingSteps.first?.instruction ?? "Dem Straßenverlauf folgen",
+                maneuverSymbol: ManeuverSymbol.name(type: primary?.maneuverType, modifier: primary?.maneuverModifier),
+                distanceToManeuver: tripProgress.distanceToNextManeuver,
+                followingInstruction: next?.visualInstructions.first?.primaryContent.text ?? next?.instruction,
+                followingSymbol: next?.visualInstructions.first.map { ManeuverSymbol.name(type: $0.primaryContent.maneuverType, modifier: $0.primaryContent.maneuverModifier) },
+                remainingDistance: tripProgress.distanceRemaining,
+                remainingTime: tripProgress.durationRemaining * ratio,
+                lanes: (primary?.laneInfo ?? []).map { LaneHint(directions: $0.directions, active: $0.active) },
+                arrived: false
+            )
+        case .complete:
+            progress = RouteProgress(
+                nextInstruction: "Ziel erreicht", maneuverSymbol: "flag.checkered", distanceToManeuver: 0,
+                followingInstruction: nil, followingSymbol: nil, remainingDistance: 0, remainingTime: 0, lanes: [], arrived: true
+            )
+            // Bewegte Ziele (A, Kräfte) weiter verfolgen: bei der nächsten Bewegung neu berechnen.
+            needsRoute = false
+        case .idle:
+            break
+        }
+    }
+
+    private func updateProgressIndex(_ coordinate: CLLocationCoordinate2D) {
+        guard let coordinates = route?.coordinates, !coordinates.isEmpty else { return }
+        let here = GeoPoint(coordinate)
+        let start = min(progressIndex, coordinates.count - 1)
+        var best = start
         var bestDistance = CLLocationDistance.greatestFiniteMagnitude
-        for i in window {
-            let d = GeoPoint(coordinates[i]).distance(to: location)
+        for i in start..<min(coordinates.count, start + 300) {
+            let d = GeoPoint(coordinates[i]).distance(to: here)
             if d < bestDistance {
                 bestDistance = d
                 best = i
             }
         }
         progressIndex = best
-
-        func along(from start: Int, to end: Int) -> CLLocationDistance {
-            guard end > start else { return 0 }
-            var sum: CLLocationDistance = 0
-            for i in start..<min(end, coordinates.count - 1) {
-                sum += GeoPoint(coordinates[i]).distance(to: GeoPoint(coordinates[i + 1]))
-            }
-            return sum
-        }
-
-        let remaining = along(from: best, to: coordinates.count - 1)
-        let steps = route.steps.filter { !$0.instruction.isEmpty }
-        let nextStep = steps.first { $0.startIndex > best } ?? steps.last
-        let followingStep = nextStep.flatMap { step in steps.first { $0.startIndex > step.startIndex } }
-        let maneuverIndex = nextStep?.startIndex ?? coordinates.count - 1
-        progress = RouteProgress(
-            nextInstruction: nextStep?.instruction ?? "Dem Straßenverlauf folgen",
-            distanceToManeuver: along(from: best, to: maneuverIndex),
-            followingInstruction: followingStep?.instruction,
-            remainingDistance: remaining,
-            remainingTime: route.distance > 0 ? route.travelTime * remaining / route.distance : 0
-        )
     }
 
-    private enum RouteError: Error {
-        case specialRightsUnavailable
-        case noRoute
-    }
-
-    private static func appleRoute(from: GeoPoint, to: GeoPoint, walking: Bool) async throws -> RouteResult {
-        let request = MKDirections.Request()
-        request.source = MKMapItem(location: CLLocation(latitude: from.lat, longitude: from.lon), address: nil)
-        request.destination = MKMapItem(location: CLLocation(latitude: to.lat, longitude: to.lon), address: nil)
-        request.transportType = walking ? .walking : .automobile
-        guard let route = try await MKDirections(request: request).calculate().routes.first else { throw RouteError.noRoute }
-        var coordinates = [CLLocationCoordinate2D](repeating: kCLLocationCoordinate2DInvalid, count: route.polyline.pointCount)
-        route.polyline.getCoordinates(&coordinates, range: NSRange(location: 0, length: route.polyline.pointCount))
-        // Jedes Manöver beginnt am ersten Punkt seines Teilstücks. Diesen Punkt im Linienzug der Route suchen
-        // (nur vorwärts), statt Punktzahlen aufzusummieren: die Teilstücke überlappen sich und würden sonst
-        // mit jedem Schritt weiter danebenliegen.
-        var steps: [RouteStep] = []
-        var searchFrom = 0
-        for step in route.steps where step.polyline.pointCount > 0 {
-            let start = step.polyline.points()[0].coordinate
-            var best = searchFrom
-            var bestDistance = CLLocationDistance.greatestFiniteMagnitude
-            for i in searchFrom..<coordinates.count {
-                let d = GeoPoint(coordinates[i]).distance(to: GeoPoint(start))
-                if d < bestDistance {
-                    bestDistance = d
-                    best = i
-                }
-                if bestDistance < 1 { break }
-            }
-            steps.append(RouteStep(instruction: step.instructions, distance: step.distance, startIndex: best))
-            searchFrom = best
-        }
-        return RouteResult(coordinates: coordinates, distance: route.distance, travelTime: route.expectedTravelTime, steps: steps, usesSpecialRights: false)
-    }
-
-    /// Übergibt das aktuelle Ziel an Apple Karten (statische Route ohne Nachführung und ohne Sonderrechte).
+    /// Übergibt das aktuelle Ziel an Apple Karten.
     func openInMaps() {
         guard let destination else { return }
         let item = MKMapItem(location: CLLocation(latitude: destination.lat, longitude: destination.lon), address: nil)
@@ -283,17 +321,60 @@ final class RouteFollower {
     }
 }
 
-/// Symbol für eine Fahranweisung, abgeleitet aus ihrem Text.
+/// Einstellungen des Navigationskerns.
+enum NaviConfig {
+    static let controller = SwiftNavigationControllerConfig(
+        waypointAdvance: .waypointWithinRange(30),
+        stepAdvanceCondition: stepAdvanceDistanceEntryAndExit(distanceToEndOfStep: 25, distanceAfterEndOfStep: 5, minimumHorizontalAccuracy: 32),
+        arrivalStepAdvanceCondition: stepAdvanceDistanceToEndOfStep(distance: 20, minimumHorizontalAccuracy: 32),
+        // Ab 30 m neben der Route gilt man als abgewichen, dann wird sofort neu berechnet.
+        routeDeviationTracking: .staticThreshold(minimumHorizontalAccuracy: 25, maxAcceptableDeviation: 30),
+        snappedLocationCourseFiltering: .snapToRoute
+    )
+}
+
+/// Reagiert auf Abweichungen: neue Route holen und sofort übernehmen.
+private final class CoreDelegate: FerrostarCoreDelegate {
+    func core(_: FerrostarCore, didStartWith _: Route) {}
+
+    func core(_: FerrostarCore, correctiveActionForDeviation _: DeviationKind, remainingWaypoints waypoints: [Waypoint]) -> CorrectiveAction {
+        .getNewRoutes(waypoints: waypoints)
+    }
+
+    func core(_ core: FerrostarCore, loadedAlternateRoutes routes: [Route]) {
+        guard core.state?.isCalculatingNewRoute ?? false, let route = routes.first else { return }
+        try? core.startNavigation(route: route, config: NaviConfig.controller)
+    }
+}
+
+/// Symbol für ein Manöver aus Art und Richtung.
 enum ManeuverSymbol {
-    static func name(for instruction: String) -> String {
-        let text = instruction.lowercased()
-        if text.contains("ziel") || text.contains("erreicht") || text.contains("destination") { return "mappin.circle.fill" }
-        if text.contains("wenden") || text.contains("u-turn") { return "arrow.uturn.down" }
-        if text.contains("kreisverkehr") || text.contains("roundabout") { return "arrow.triangle.turn.up.right.circle" }
-        if text.contains("leicht links") || text.contains("halb links") || text.contains("slight left") { return "arrow.up.left" }
-        if text.contains("leicht rechts") || text.contains("halb rechts") || text.contains("slight right") { return "arrow.up.right" }
-        if text.contains("links") || text.contains("left") { return "arrow.turn.up.left" }
-        if text.contains("rechts") || text.contains("right") { return "arrow.turn.up.right" }
-        return "arrow.up"
+    static func name(type: ManeuverType?, modifier: ManeuverModifier?) -> String {
+        switch type {
+        case .arrive: return "flag.checkered"
+        case .depart: return "location.north.line.fill"
+        case .roundabout, .rotary, .roundaboutTurn, .exitRoundabout, .exitRotary: return "arrow.triangle.turn.up.right.circle"
+        default: break
+        }
+        switch modifier {
+        case .uTurn: return "arrow.uturn.down"
+        case .sharpRight, .right: return "arrow.turn.up.right"
+        case .slightRight: return "arrow.up.right"
+        case .slightLeft: return "arrow.up.left"
+        case .left, .sharpLeft: return "arrow.turn.up.left"
+        default: return "arrow.up"
+        }
+    }
+
+    /// Pfeil für eine Fahrspur ("left", "slight right", "straight", …).
+    static func lane(_ direction: String) -> String {
+        switch direction.lowercased() {
+        case "left", "sharp left": "arrow.turn.up.left"
+        case "slight left": "arrow.up.left"
+        case "right", "sharp right": "arrow.turn.up.right"
+        case "slight right": "arrow.up.right"
+        case "uturn", "u-turn": "arrow.uturn.down"
+        default: "arrow.up"
+        }
     }
 }

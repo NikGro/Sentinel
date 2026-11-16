@@ -160,7 +160,7 @@ struct NavigationBanner: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 6) {
             HStack(alignment: .center, spacing: 14) {
-                Image(systemName: ManeuverSymbol.name(for: route.progress?.nextInstruction ?? ""))
+                Image(systemName: route.progress?.maneuverSymbol ?? "arrow.up")
                     .font(.system(size: 38, weight: .bold))
                     .frame(width: 52)
                 VStack(alignment: .leading, spacing: 2) {
@@ -182,11 +182,16 @@ struct NavigationBanner: View {
                 }
                 .foregroundStyle(.white.opacity(0.85))
                 .transition(.opacity)
-            } else if let following = route.progress?.followingInstruction {
-                Label("Dann: \(following)", systemImage: ManeuverSymbol.name(for: following))
-                    .font(.footnote.weight(.semibold))
-                    .foregroundStyle(.white.opacity(0.85))
-                    .lineLimit(1)
+            } else {
+                if let lanes = route.progress?.lanes, !lanes.isEmpty {
+                    LaneRow(lanes: lanes)
+                }
+                if let following = route.progress?.followingInstruction {
+                    Label("Dann: \(following)", systemImage: route.progress?.followingSymbol ?? "arrow.up")
+                        .font(.footnote.weight(.semibold))
+                        .foregroundStyle(.white.opacity(0.85))
+                        .lineLimit(1)
+                }
             }
         }
         .animation(.snappy, value: route.isCalculating)
@@ -235,7 +240,6 @@ struct NavigationBottomBar: View {
                 Spacer(minLength: 0)
                 Menu {
                     Toggle("Zu Fuß", systemImage: "figure.walk", isOn: $route.walking)
-                    Button("In Apple Karten öffnen", systemImage: "map") { route.openInMaps() }
                 } label: {
                     Image(systemName: "ellipsis")
                         .font(.title3.weight(.semibold))
@@ -278,4 +282,39 @@ struct NavigationBottomBar: View {
         .glassEffect(.regular, in: .rect(cornerRadius: 22))
     }
 
+}
+
+/// Fahrspuren am nächsten Manöver; die zu nutzenden hell, die übrigen gedämpft.
+struct LaneRow: View {
+    let lanes: [LaneHint]
+
+    var body: some View {
+        HStack(spacing: 4) {
+            ForEach(Array(lanes.enumerated()), id: \.offset) { _, lane in
+                Image(systemName: ManeuverSymbol.lane(lane.directions.first ?? "straight"))
+                    .font(.system(size: 15, weight: .bold))
+                    .frame(width: 26, height: 26)
+                    .foregroundStyle(lane.active ? Color.white : Color.white.opacity(0.35))
+                    .background(Color.white.opacity(lane.active ? 0.18 : 0.06), in: .rect(cornerRadius: 5))
+            }
+        }
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel("Spuren: \(lanes.filter(\.active).count) von \(lanes.count) nutzbar")
+    }
+}
+
+/// Tempolimit im Stil des Verkehrszeichens.
+struct SpeedLimitSign: View {
+    let kmh: Int
+
+    var body: some View {
+        Text("\(kmh)")
+            .font(.system(size: kmh >= 100 ? 15 : 18, weight: .heavy, design: .rounded).monospacedDigit())
+            .foregroundStyle(.black)
+            .frame(width: Theme.roundButton - 6, height: Theme.roundButton - 6)
+            .background(.white, in: .circle)
+            .overlay(Circle().strokeBorder(Color.red, lineWidth: 5))
+            .shadow(color: .black.opacity(0.25), radius: 3, y: 1)
+            .accessibilityLabel("Höchstgeschwindigkeit \(kmh) Kilometer pro Stunde")
+    }
 }

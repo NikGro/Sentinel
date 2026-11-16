@@ -4,7 +4,7 @@ Einsatzwerkzeug für Zivilfahnder: gemeinsame Lagekarte für Observation und Fah
 
 | Baustein | Ort | Technik |
 | --- | --- | --- |
-| iOS-App | [`ios/`](ios) | SwiftUI, MapKit, iOS 26+, keine Fremdbibliotheken |
+| iOS-App | [`ios/`](ios) | SwiftUI, MapKit, iOS 26+, Navigationskern Ferrostar (quelloffen) |
 | Lageserver | [`server/`](server) | Node.js 24, TypeScript, Fastify, SQLite |
 | Kommandozentrale (Web) | [`server/web/`](server/web) | Preact, Apple Maps (MapKit JS) oder OpenStreetMap (MapLibre) |
 | Bereitstellung | [`deploy/`](deploy) | Docker Compose, optional Valhalla für die Weg-Zeit-Berechnung |

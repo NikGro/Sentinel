@@ -1,5 +1,22 @@
 # Änderungen
 
+## 0.6.0
+
+**Navigation neu auf dem quelloffenen Navigationskern Ferrostar**
+- Ferrostar übernimmt die Navi-Logik: Standort auf die Route legen, Abweichung erkennen, sofort neu berechnen,
+  Hinweise im richtigen Moment weiterschalten; der Eigenbau ist entfernt
+- Routen kommen vom eigenen Server (Valhalla); ohne Sonderrechte gibt Apple Karten den Weg mit aktueller
+  Verkehrslage vor, die Ankunftszeit berücksichtigt den Verkehr
+- Sonderrechte: Der Server rechnet beide Varianten und führt nur dann gegen Einbahnstraßen oder Abbiegeverbote,
+  wenn das mindestens 45 Sekunden und 12 % der Fahrzeit spart (keine „Abkürzung“ mehr über die Gegenfahrbahn)
+- Tempolimit als Verkehrszeichen neben der eigenen Geschwindigkeit, Fahrspuren im Abbiegehinweis, soweit bekannt
+- Bewegte Ziele (A, Kräfte) werden laufend nachgeführt
+- Keine Sprachansagen
+
+**Kartenausrichtung**
+- Kompassknopf schaltet durch: Fahrtrichtung (Standard), Norden, Übersicht der ganzen Route
+- Mit zwei Fingern gedreht bleibt die Ausrichtung fest, bis man am Kompass wieder umschaltet
+
 ## 0.5.0
 
 **Navigation und Fahrmodus**

@@ -8,7 +8,7 @@ import { cellCorners, selectCells } from '../src/argus.js';
 import { distanceMeters, utmToWgs84 } from '../src/geo.js';
 import { MapKitTokens } from '../src/mapkit.js';
 import { modelRadiusMeters, ReachService } from '../src/reach/reach.js';
-import { costingFor, decodePolyline6, RouteService } from '../src/reach/route.js';
+import { costingFor, decodePolyline6, RouteService, sonderrechteLohnen } from '../src/reach/route.js';
 import { hashPassword, RateLimiter, Vault, verifyPassword } from '../src/security.js';
 import { intervalCommand, parseH02Binary, parseH02Text } from '../src/trackers/h02.js';
 import { nextStopIndex, OepnvStore, parseRoutes } from '../src/oepnv.js';
@@ -129,6 +129,41 @@ test('Route: Sonderrechte ignorieren Einbahnstraßen und Abbiegeverbote, aber ke
   assert.equal(result?.anweisungen[0]?.text, 'Links abbiegen.');
   assert.equal(result?.sonderrechte, true);
   assert.equal(await new RouteService('', ok).route({ lat: 1, lon: 1 }, { lat: 2, lon: 2 }, { sonderrechte: false, zuFuss: false }), null);
+});
+
+test('Navigation: gegen die Einbahnstraße nur, wenn es wirklich Zeit spart', async () => {
+  // Innenkurve auf einer Straße mit Mittelstreifen: 10 s Ersparnis lohnen den Gegenverkehr nicht.
+  assert.equal(sonderrechteLohnen(300, 290), false);
+  // Echte Abkürzung durch eine Einbahnstraße: zwei Minuten schneller.
+  assert.equal(sonderrechteLohnen(600, 480), true);
+  // Lange Fahrt: 45 s reichen nicht, es müssen auch 12 % sein.
+  assert.equal(sonderrechteLohnen(1800, 1750), false);
+
+  const sent: any[] = [];
+  const valhalla = (dauerNormal: number, dauerSchnell: number) =>
+    (async (_url: string, init: RequestInit) => {
+      const body = JSON.parse(init.body as string);
+      sent.push(body);
+      const schnell = body.costing_options?.auto?.ignore_oneways === true;
+      return new Response(JSON.stringify({ routes: [{ duration: schnell ? dauerSchnell : dauerNormal, legs: [{ duration: schnell ? dauerSchnell : dauerNormal, steps: [{ duration: 30 }] }] }] }));
+    }) as typeof fetch;
+  const anfrage = { costing: 'auto', locations: [{ lat: 53.55, lon: 9.99 }, { lat: 53.56, lon: 10 }], format: 'osrm' };
+
+  const knapp = await new RouteService('http://valhalla', valhalla(300, 290)).navigation(anfrage, true);
+  assert.equal(knapp?.sonderrechte, false, 'kaum schneller: regelkonforme Route');
+  assert.equal(sent.length, 2, 'beide Varianten werden gerechnet');
+  assert.equal(sent[0].directions_options.language, 'de-DE');
+  assert.equal((knapp?.antwort as any).routes[0].duration, 200, 'Tempo mit Sonderrechten gilt trotzdem');
+
+  const lohnend = await new RouteService('http://valhalla', valhalla(600, 450)).navigation(anfrage, true);
+  assert.equal(lohnend?.sonderrechte, true);
+  assert.equal((lohnend?.antwort as any).routes[0].duration, 300);
+
+  sent.length = 0;
+  const normal = await new RouteService('http://valhalla', valhalla(600, 450)).navigation(anfrage, false);
+  assert.equal(normal?.sonderrechte, false);
+  assert.equal(sent.length, 1, 'ohne Sonderrechte nur eine Anfrage');
+  assert.equal((normal?.antwort as any).routes[0].duration, 600);
 });
 
 test('ÖPNV: Routen aus OpenStreetMap werden zu Linien mit geordneten Halten', () => {

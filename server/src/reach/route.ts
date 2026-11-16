@@ -69,6 +69,35 @@ interface ValhallaTrip {
 /** Tempofaktor bei Fahrt mit Sonderrechten. */
 export const SONDERRECHTE_TEMPO = 1.5;
 
+/**
+ * Gegen Einbahnstraßen oder Abbiegeverbote wird nur geführt, wenn das echte Zeit spart: mindestens diese Sekunden
+ * und dieser Anteil der regelkonformen Fahrzeit. Sonst würde schon die Innenkurve einer Straße mit Mittelstreifen
+ * zur „Abkürzung“ durch den Gegenverkehr.
+ */
+export const SONDERRECHTE_MIN_ERSPARNIS_SEKUNDEN = 45;
+export const SONDERRECHTE_MIN_ERSPARNIS_ANTEIL = 0.12;
+
+interface OsrmRoute {
+  duration?: number;
+  legs?: { duration?: number; steps?: { duration?: number }[] }[];
+}
+
+/** Entscheidet, ob die Route mit Sonderrechten die regelkonforme ersetzt. */
+export function sonderrechteLohnen(regelkonform: number, mitSonderrechten: number): boolean {
+  const ersparnis = regelkonform - mitSonderrechten;
+  return ersparnis >= Math.max(SONDERRECHTE_MIN_ERSPARNIS_SEKUNDEN, regelkonform * SONDERRECHTE_MIN_ERSPARNIS_ANTEIL);
+}
+
+/** Fahrzeiten einer OSRM-Antwort auf das höhere Tempo mit Sonderrechten umrechnen. */
+function beschleunigen(route: OsrmRoute): void {
+  const f = 1 / SONDERRECHTE_TEMPO;
+  if (typeof route.duration === 'number') route.duration *= f;
+  for (const leg of route.legs ?? []) {
+    if (typeof leg.duration === 'number') leg.duration *= f;
+    for (const step of leg.steps ?? []) if (typeof step.duration === 'number') step.duration *= f;
+  }
+}
+
 export class RouteService {
   constructor(
     private readonly valhallaUrl: string,
@@ -77,6 +106,55 @@ export class RouteService {
 
   get available(): boolean {
     return this.valhallaUrl !== '';
+  }
+
+  /**
+   * Route für die Navigation in der App (Ferrostar). Die Anfrage kommt im Valhalla-Format vom Gerät und wird
+   * unverändert weitergereicht, ergänzt um deutsche Anweisungen. Mit Sonderrechten werden beide Varianten
+   * gerechnet und die regelwidrige nur genommen, wenn sie spürbar schneller ist.
+   */
+  async navigation(anfrage: Record<string, unknown>, sonderrechte: boolean): Promise<{ antwort: unknown; sonderrechte: boolean } | null> {
+    if (!this.available) return null;
+    const basis: Record<string, unknown> = {
+      ...anfrage,
+      language: 'de-DE',
+      directions_options: { ...((anfrage.directions_options as Record<string, unknown>) ?? {}), language: 'de-DE', units: 'kilometers' },
+    };
+    const holen = async (body: Record<string, unknown>) => {
+      try {
+        const response = await this.fetchFn(`${this.valhallaUrl}/route`, {
+          method: 'POST',
+          headers: { 'content-type': 'application/json' },
+          body: JSON.stringify(body),
+          signal: AbortSignal.timeout(15_000),
+        });
+        if (!response.ok) return null;
+        const json = (await response.json()) as { routes?: OsrmRoute[] };
+        return json.routes && json.routes.length > 0 ? json : null;
+      } catch {
+        return null;
+      }
+    };
+    if (!sonderrechte || basis.costing !== 'auto') {
+      const antwort = await holen(basis);
+      return antwort ? { antwort, sonderrechte: false } : null;
+    }
+    const optionen = (basis.costing_options as Record<string, Record<string, unknown>>) ?? {};
+    const mitSonderrechten = {
+      ...basis,
+      costing_options: { ...optionen, auto: { ...(optionen.auto ?? {}), ...(costingFor({ sonderrechte: true, zuFuss: false }).costing_options.auto as object) } },
+    };
+    const [normal, schnell] = await Promise.all([holen(basis), holen(mitSonderrechten)]);
+    const dauerNormal = normal?.routes?.[0]?.duration;
+    const dauerSchnell = schnell?.routes?.[0]?.duration;
+    if (schnell && (!normal || (typeof dauerNormal === 'number' && typeof dauerSchnell === 'number' && sonderrechteLohnen(dauerNormal, dauerSchnell)))) {
+      for (const route of schnell.routes ?? []) beschleunigen(route);
+      return { antwort: schnell, sonderrechte: true };
+    }
+    if (!normal) return null;
+    // Auch auf der regelkonformen Strecke darf schneller gefahren werden.
+    for (const route of normal.routes ?? []) beschleunigen(route);
+    return { antwort: normal, sonderrechte: false };
   }
 
   /** Liefert `null`, wenn kein Weg gefunden wurde oder der Dienst nicht antwortet. */

@@ -27,7 +27,8 @@
 ## App
 
 - Token im Schlüsselbund (`AfterFirstUnlockThisDeviceOnly`), kein Abgleich über iCloud oder Backups.
-- Keine Fremdbibliotheken, keine Analyse- oder Werbedienste.
+- Einzige Fremdbibliothek ist der quelloffene Navigationskern Ferrostar (ohne Kartenoberfläche, ohne Netzwerkzugriffe eigener Art: Routen kommen ausschließlich vom eigenen Server). Keine Analyse- oder Werbedienste.
+- Ohne Sonderrechte fragt das Gerät Apple Karten nach dem Weg mit Verkehrslage (Start und Ziel gehen an Apple, wie bei jeder Apple-Karten-Navigation).
 - Netzwerkzugriffe ohne Plattencache und ohne Cookies; Bilder liegen nur im Arbeitsspeicher.
 - Fotos werden vor dem Hochladen neu gezeichnet: Metadaten einschließlich Aufnahmeort gehen dabei verloren.
 - Optionale App-Sperre (Face ID, Touch ID, Gerätecode); im App-Umschalter sind nie Einsatzdaten zu sehen.

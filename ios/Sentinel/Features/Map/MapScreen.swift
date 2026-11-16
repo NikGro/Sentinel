@@ -69,6 +69,8 @@ struct MapScreen: View {
     /// Fahrmodus: Die Kamera folgt einem selbst gekippt und in Fahrtrichtung; der eigene Pfeil sitzt fest in der Bildmitte.
     /// Wer die Karte verschiebt, beendet ihn; der Standortknopf startet ihn wieder.
     @State private var followsMe = false
+    /// Ausrichtung der Karte: Standard ist in Fahrtrichtung.
+    @State private var orientation: MapOrientation = .course
     @State private var bottomAreaHeight: CGFloat = 120
     @State private var now = Date.now
     @State private var topAreaHeight: CGFloat = 60
@@ -108,6 +110,10 @@ struct MapScreen: View {
             .simultaneousGesture(DragGesture(minimumDistance: 12).onChanged { _ in
                 if followsMe { followsMe = false }
             })
+            // Mit zwei Fingern gedreht: diese Ausrichtung gilt, bis man am Kompass wieder umschaltet.
+            .simultaneousGesture(RotateGesture().onEnded { _ in
+                orientation = .fixed(cameraState.heading)
+            })
             .overlay {
                 if followsMe {
                     FollowPuckOverlay(
@@ -130,10 +136,17 @@ struct MapScreen: View {
                 .onGeometryChange(for: CGFloat.self) { $0.size.height } action: { bottomAreaHeight = $0 }
         }
         .overlay(alignment: .bottomLeading) {
-            if followsMe || route.isActive, let speed = location.current?.speed, speed >= 0 {
-                SpeedBadge(metersPerSecond: speed)
-                    .padding(.leading, Theme.barInset)
-                    .padding(.bottom, bottomAreaHeight + Theme.barSpacing)
+            if followsMe || route.isActive {
+                HStack(spacing: Theme.barSpacing) {
+                    if let speed = location.current?.speed, speed >= 0 {
+                        SpeedBadge(metersPerSecond: speed)
+                    }
+                    if route.isActive, let limit = route.speedLimit {
+                        SpeedLimitSign(kmh: limit)
+                    }
+                }
+                .padding(.leading, Theme.barInset)
+                .padding(.bottom, bottomAreaHeight + Theme.barSpacing)
             }
         }
         .overlay(alignment: .topTrailing) { sideButtons }
@@ -207,6 +220,10 @@ struct MapScreen: View {
         }
         .onChange(of: location.current?.timestamp) { _, _ in
             // Gleichmäßig bis zur nächsten Meldung weitergleiten: so bewegt sich die Karte flüssig statt in Sprüngen.
+            if followsMe, route.snappedLocation == nil { followMe(duration: 1.0) }
+        }
+        .onChange(of: route.snappedLocation?.timestamp) { _, _ in
+            // In der Navigation folgt die Kamera dem auf die Straße gelegten Standort.
             if followsMe { followMe(duration: 1.0) }
         }
         .sensoryFeedback(.impact, trigger: lage.operation.a?.memberId)
@@ -295,10 +312,7 @@ struct MapScreen: View {
     private var sideButtons: some View {
         GlassEffectContainer(spacing: Theme.barSpacing) {
             VStack(spacing: Theme.barSpacing) {
-                CompassButton(state: cameraState) {
-                    followsMe = false
-                    withAnimation(.easeInOut(duration: 0.5)) { camera = .camera(cameraState.camera(heading: 0)) }
-                }
+                CompassButton(state: cameraState, mode: orientation) { cycleOrientation() }
                 MapStyleButton { on in
                     if followsMe {
                         followMe(duration: 0.6)
@@ -311,6 +325,7 @@ struct MapScreen: View {
                     title: "Auf eigenen Standort zentrieren",
                     symbol: followsMe ? "location.circle.fill" : "location.circle"
                 ) {
+                    if orientation == .overview { orientation = .course }
                     followsMe = true
                     followMe(duration: 0.8)
                 }
@@ -341,12 +356,55 @@ struct MapScreen: View {
     /// Kamera auf den eigenen Standort: nah, in Fahrtrichtung, gekippt (falls 3D an), je nach Tempo etwas weiter heraus.
     /// Lineare Animation über die Zeit bis zur nächsten Meldung, damit die Bewegung durchgehend wirkt.
     private func followMe(duration: Double) {
-        guard let current = location.current else { return }
-        let speed = max(current.speed, 0)
+        guard let current = route.snappedLocation ?? location.current else { return }
+        if orientation == .overview { orientation = .course }
+        let speed = max(location.current?.speed ?? current.speed, 0)
         let distance = route.isActive ? min(max(350 + speed * 28, 350), 1400) : min(max(600 + speed * 20, 600), 1500)
-        let heading = current.course >= 0 && speed > 1 ? current.course : cameraState.heading
+        let heading: CLLocationDirection = switch orientation {
+        case .course, .overview: current.course >= 0 && speed > 1 ? current.course : cameraState.heading
+        case .north: 0
+        case .fixed(let value): value
+        }
         let next = MapCamera(centerCoordinate: current.coordinate, distance: distance, heading: heading, pitch: settings.prefers3D ? 55 : 0)
         withAnimation(.linear(duration: duration)) { camera = .camera(next) }
+    }
+
+    /// Kompass durchschalten: Fahrtrichtung → Norden → Übersicht (nur mit Route) → Fahrtrichtung.
+    private func cycleOrientation() {
+        switch orientation {
+        case .course:
+            orientation = .north
+        case .north:
+            orientation = route.route != nil ? .overview : .course
+        case .overview, .fixed:
+            orientation = .course
+        }
+        applyOrientation()
+    }
+
+    private func applyOrientation() {
+        switch orientation {
+        case .overview:
+            followsMe = false
+            guard let coordinates = route.route?.coordinates, !coordinates.isEmpty else { return }
+            var rect = MKMapRect.null
+            for coordinate in coordinates + [location.current?.coordinate].compactMap({ $0 }) {
+                let point = MKMapPoint(coordinate)
+                rect = rect.union(MKMapRect(x: point.x, y: point.y, width: 0, height: 0))
+            }
+            let padding = max(rect.width, rect.height) * 0.2 + 500
+            withAnimation(.easeInOut(duration: 0.8)) { camera = .rect(rect.insetBy(dx: -padding, dy: -padding)) }
+        case .course:
+            followsMe = true
+            followMe(duration: 0.6)
+        case .north, .fixed:
+            if followsMe {
+                followMe(duration: 0.6)
+            } else {
+                let heading: CLLocationDirection = if case .fixed(let value) = orientation { value } else { 0 }
+                withAnimation(.easeInOut(duration: 0.5)) { camera = .camera(cameraState.camera(heading: heading)) }
+            }
+        }
     }
 
     // MARK: Untere Leiste

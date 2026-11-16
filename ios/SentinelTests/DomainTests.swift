@@ -1,4 +1,5 @@
 import Foundation
+import MapKit
 import Testing
 @testable import Sentinel
 
@@ -154,10 +155,19 @@ struct NavigationTests {
     }
 
     @Test func manoeverSymbole() {
-        #expect(ManeuverSymbol.name(for: "Links abbiegen auf Steinstraße") == "arrow.turn.up.left")
-        #expect(ManeuverSymbol.name(for: "Leicht rechts halten") == "arrow.up.right")
-        #expect(ManeuverSymbol.name(for: "Sie haben Ihr Ziel erreicht") == "mappin.circle.fill")
-        #expect(ManeuverSymbol.name(for: "Geradeaus weiterfahren") == "arrow.up")
+        #expect(ManeuverSymbol.lane("slight left") == "arrow.up.left")
+        #expect(ManeuverSymbol.lane("right") == "arrow.turn.up.right")
+        #expect(ManeuverSymbol.lane("straight") == "arrow.up")
+    }
+
+    @Test func verkehrsvorgabeMitFahrtrichtung() {
+        // Gerade Strecke nach Osten, etwa 5 km: Durchfahrtspunkte mit Richtung Ost (90°).
+        var coordinates = (0...50).map { CLLocationCoordinate2D(latitude: 53.55, longitude: 9.9 + Double($0) * 0.0015) }
+        let polyline = MKPolyline(coordinates: &coordinates, count: coordinates.count)
+        let vias = TrafficGuide.vias(along: polyline)
+        #expect(!vias.isEmpty)
+        #expect(vias.allSatisfy { ($0["type"] as? String) == "through" })
+        #expect(vias.allSatisfy { abs(($0["heading"] as? Int ?? 0) - 90) <= 1 })
     }
 
     @Test func dauerAlsUhrzeit() {

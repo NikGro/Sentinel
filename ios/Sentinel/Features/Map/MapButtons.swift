@@ -211,31 +211,66 @@ struct SpeedBadge: View {
     }
 }
 
-/// Kompass in Einheitsgröße, immer sichtbar. Tippen nordet die Karte; die Nadel dreht ohne Animation mit,
-/// damit sie beim Überschreiten von Nord nicht einmal herumwirbelt.
+/// Ausrichtung der Karte.
+enum MapOrientation: Equatable {
+    /// In Fahrtrichtung (Standard).
+    case course
+    /// Genordet.
+    case north
+    /// Ganze Route im Blick (nur während einer Navigation).
+    case overview
+    /// Von Hand mit zwei Fingern gedreht; bleibt, bis man am Kompass umschaltet.
+    case fixed(Double)
+}
+
+/// Kompass in Einheitsgröße, immer sichtbar. Tippen schaltet die Ausrichtung durch: Fahrtrichtung, Norden, Übersicht.
+/// Die Nadel dreht ohne Animation mit, damit sie beim Überschreiten von Nord nicht herumwirbelt.
 struct CompassButton: View {
     let state: MapCameraState
-    let northUp: () -> Void
+    let mode: MapOrientation
+    let cycle: () -> Void
 
     var body: some View {
-        Button(action: northUp) {
-            ZStack {
-                Image(systemName: "location.north.fill")
-                    .font(.system(size: 19, weight: .bold))
-                    .foregroundStyle(.red)
-                Text("N")
-                    .font(.system(size: 8, weight: .heavy))
-                    .foregroundStyle(.secondary)
-                    .offset(y: 17)
+        Button(action: cycle) {
+            Group {
+                switch mode {
+                case .overview:
+                    Image(systemName: "point.topleft.down.to.point.bottomright.curvepath")
+                        .font(.system(size: 18, weight: .semibold))
+                        .foregroundStyle(.primary)
+                case .north:
+                    Text("N")
+                        .font(.system(size: 19, weight: .heavy, design: .rounded))
+                        .foregroundStyle(.red)
+                case .course, .fixed:
+                    VStack(spacing: 0) {
+                        Image(systemName: "location.north.fill")
+                            .font(.system(size: 17, weight: .bold))
+                            .foregroundStyle(.red)
+                            .rotationEffect(.degrees(-state.heading))
+                            .animation(nil, value: state.heading)
+                        Text(mode == .course ? "Kurs" : "fest")
+                            .font(.system(size: 8, weight: .bold))
+                            .foregroundStyle(.secondary)
+                    }
+                }
             }
-            .rotationEffect(.degrees(-state.heading))
-            .animation(nil, value: state.heading)
             .frame(width: Theme.roundButton, height: Theme.roundButton)
             .contentShape(.circle)
         }
         .buttonStyle(.plain)
         .glassEffect(.regular.interactive(), in: .circle)
-        .sensoryFeedback(.selection, trigger: state.heading < 1)
-        .accessibilityLabel("Karte norden")
+        .sensoryFeedback(.selection, trigger: mode)
+        .accessibilityLabel(label)
+        .accessibilityHint("Tippen wechselt zwischen Fahrtrichtung, Norden und Übersicht")
+    }
+
+    private var label: String {
+        switch mode {
+        case .course: "Ausrichtung: Fahrtrichtung"
+        case .north: "Ausrichtung: Norden"
+        case .overview: "Ausrichtung: Übersicht der Route"
+        case .fixed: "Ausrichtung: fest gedreht"
+        }
     }
 }

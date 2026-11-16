@@ -77,7 +77,7 @@ final class AppModel {
         fahndung.stopReach()
         fahndung.clearCoverage()
         fahndung.client = nil
-        route.serverRoute = nil
+        route.disconnect()
         photos.reset()
         lage.disconnect()
         client = nil
@@ -91,17 +91,7 @@ final class AppModel {
         self.client = client
         photos.client = client
         fahndung.client = client
-        route.serverRoute = { from, to, specialRights, walking in
-            let result = try await client.route(from: from, to: to, specialRights: specialRights, walking: walking)
-            let coordinates = result.punkte.filter { $0.count >= 2 }.map { CLLocationCoordinate2D(latitude: $0[0], longitude: $0[1]) }
-            return RouteResult(
-                coordinates: coordinates,
-                distance: result.meter,
-                travelTime: result.sekunden,
-                steps: result.anweisungen.map { RouteStep(instruction: $0.text, distance: $0.meter, startIndex: $0.index ?? 0) },
-                usesSpecialRights: result.sonderrechte
-            )
-        }
+        route.configure(serverURL: credentials.serverURL, token: credentials.token)
         lage.connect(credentials: credentials) { [weak self] in self?.signOut() }
         location.start()
     }

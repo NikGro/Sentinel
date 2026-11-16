@@ -24,6 +24,17 @@ const lineQuery = z.object({
   lon: z.coerce.number().min(-180).max(180).optional(),
 });
 
+const naviQuery = z
+  .object({
+    costing: z.enum(['auto', 'pedestrian']),
+    locations: z
+      .array(z.object({ lat: z.number().min(-90).max(90), lon: z.number().min(-180).max(180) }).passthrough())
+      .min(2)
+      .max(25),
+    sentinel: z.object({ sonderrechte: z.boolean() }).optional(),
+  })
+  .passthrough();
+
 const stopsQuery = z.object({
   lat: z.coerce.number().min(-90).max(90),
   lon: z.coerce.number().min(-180).max(180),
@@ -128,6 +139,19 @@ export function registerDeviceRoutes(app: FastifyInstance, services: Services, g
     const result = await routes.route(von, nach, { sonderrechte, zuFuss });
     if (!result) throw new HttpError(404, 'Keine Route gefunden.');
     return result;
+  });
+
+  // Navigation in der App: Anfrage im Valhalla-Format (von Ferrostar erzeugt), Antwort im OSRM-Format.
+  app.post('/api/v1/navi/route', async (request, reply) => {
+    guards.actor(request);
+    if (!routes.available) throw new HttpError(503, 'Auf diesem Server ist kein Wegenetz eingerichtet.');
+    const parsed = naviQuery.safeParse(request.body);
+    if (!parsed.success) throw new HttpError(400, 'Ungültige Routenanfrage.');
+    const { sentinel, ...anfrage } = parsed.data;
+    const result = await routes.navigation(anfrage, sentinel?.sonderrechte ?? false);
+    if (!result) throw new HttpError(404, 'Keine Route gefunden.');
+    reply.header('x-sentinel-sonderrechte', result.sonderrechte ? '1' : '0');
+    return result.antwort;
   });
 
   app.get('/api/v1/oepnv/linien', async (request) => {
