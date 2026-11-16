@@ -189,14 +189,13 @@ struct VehicleDetail: View {
             }
 
             Section("Fahrzeug") {
-                if !vehicle.data.bezeichnung.isEmpty { LabeledContent("Bezeichnung", value: vehicle.data.bezeichnung) }
+                if !vehicle.data.bezeichnung.isEmpty { Text(vehicle.data.bezeichnung) }
                 if !vehicle.data.kennzeichen.isEmpty {
                     LabeledContent("Kennzeichen") {
                         Text(vehicle.data.kennzeichen)
                             .font(.body.monospaced().weight(.semibold))
                     }
                 }
-                if !vehicle.data.beschreibung.isEmpty { Text(vehicle.data.beschreibung) }
                 LabeledContent("Besatzung") {
                     let names = lage.occupants(of: vehicle.id).map(\.data.spitzname)
                     Text(names.isEmpty ? "Unbesetzt" : names.joined(separator: ", "))
@@ -263,11 +262,10 @@ struct VehicleEditor: View {
                     TextField("Funkrufname, z. B. P 35/24", text: $vehicle.funkrufname)
                         .textInputAutocapitalization(.characters)
                         .autocorrectionDisabled()
-                    TextField("Bezeichnung, z. B. Golf grau", text: $vehicle.bezeichnung)
                     TextField("Kennzeichen", text: $vehicle.kennzeichen)
                         .textInputAutocapitalization(.characters)
                         .autocorrectionDisabled()
-                    TextField("Beschreibung", text: $vehicle.beschreibung, axis: .vertical)
+                    TextField("Beschreibung, z. B. Golf grau, Dachbox", text: $vehicle.bezeichnung, axis: .vertical)
                         .lineLimit(1...4)
                     PhotoField(title: "Fahrzeugbild", blobId: $vehicle.fotoBlob)
                 } footer: {
@@ -318,7 +316,10 @@ struct VehicleEditor: View {
     private func save() {
         var result = vehicle
         result.funkrufname = Callsign.normalize(result.funkrufname) ?? result.funkrufname.trimmingCharacters(in: .whitespaces)
-        result.bezeichnung = result.bezeichnung.trimmingCharacters(in: .whitespaces)
+        // Früher getrennte Beschreibung mit übernehmen, damit nichts verloren geht.
+        let parts = [result.bezeichnung, result.beschreibung].map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }.filter { !$0.isEmpty }
+        result.bezeichnung = String(parts.joined(separator: ", ").prefix(300))
+        result.beschreibung = ""
         if lage.put(result, id: context.id) { dismiss() }
     }
 }

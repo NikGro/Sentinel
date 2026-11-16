@@ -66,8 +66,10 @@ const vehicle = z.object({
   funkrufname: text(20)
     .min(1)
     .transform((v) => normalizeCallsign(v) ?? v),
-  bezeichnung: optionalText(60),
+  /** Beschreibung des Fahrzeugs, z. B. "Golf grau, Dachbox". */
+  bezeichnung: optionalText(300),
   kennzeichen: optionalText(16),
+  /** Veraltet: früher getrenntes Feld, wird in `bezeichnung` zusammengeführt. */
   beschreibung: optionalText(300),
   fotoBlob: optionalId,
   trackerId: optionalId,

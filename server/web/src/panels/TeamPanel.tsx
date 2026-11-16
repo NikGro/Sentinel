@@ -26,14 +26,11 @@ export function TeamPanel() {
         <Field label="Funkrufname (z. B. P 35/24)">
           <TextInput value={data.funkrufname} onInput={(funkrufname) => set({ funkrufname })} maxLength={20} />
         </Field>
-        <Field label="Bezeichnung">
-          <TextInput value={data.bezeichnung} onInput={(bezeichnung) => set({ bezeichnung })} placeholder="z. B. Golf grau" maxLength={60} />
-        </Field>
         <Field label="Kennzeichen">
           <TextInput value={data.kennzeichen} onInput={(kennzeichen) => set({ kennzeichen })} maxLength={16} />
         </Field>
         <Field label="Beschreibung">
-          <TextInput value={data.beschreibung} onInput={(beschreibung) => set({ beschreibung })} rows={2} maxLength={300} />
+          <TextInput value={data.bezeichnung} onInput={(bezeichnung) => set({ bezeichnung })} placeholder="z. B. Golf grau, Dachbox" rows={2} maxLength={300} />
         </Field>
         <ImageField label="Fahrzeugbild" blobId={data.fotoBlob} onChange={(fotoBlob) => set({ fotoBlob })} />
         <Field label="GPS-Tracker">

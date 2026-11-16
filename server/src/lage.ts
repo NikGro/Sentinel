@@ -121,6 +121,12 @@ export class Lage extends EventEmitter<{ event: [LageEvent] }> {
       }
       if (row.kind === 'vehicle') {
         if (!raw.funkrufname) raw.funkrufname = String(raw.bezeichnung || 'Fahrzeug').slice(0, 20);
+        // Bezeichnung und Beschreibung waren doppelt: zu einer Beschreibung zusammenführen.
+        if (typeof raw.beschreibung === 'string' && raw.beschreibung.trim()) {
+          const teile = [String(raw.bezeichnung ?? '').trim(), raw.beschreibung.trim()].filter(Boolean);
+          raw.bezeichnung = teile.join(', ').slice(0, 300);
+          raw.beschreibung = '';
+        }
         // Aus 0.1 übernommene Fahrzeuge trugen Marke und Modell als Namen. Hat der verbundene Tracker einen
         // gültigen Funkrufnamen, gilt dieser.
         if (normalizeCallsign(String(raw.funkrufname)) === null && typeof raw.trackerId === 'string') {
