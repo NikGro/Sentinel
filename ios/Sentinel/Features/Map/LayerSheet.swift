@@ -12,16 +12,23 @@ struct LayerSheet: View {
             List {
                 Section {
                     Toggle("Bestreifte Wege", systemImage: "road.lanes", isOn: $settings.showsCoverage)
+                } header: {
+                    Text("Bestreifung")
+                } footer: {
+                    Text("Zeigt die Wege, die die eigenen Kräfte seit dem Einschalten zurückgelegt haben. Aufgezeichnet wird immer, angezeigt nur auf diesem Gerät.")
+                }
+
+                Section {
                     ForEach(ReachMode.allCases) { mode in
                         Toggle(isOn: Binding(get: { settings.isReachEnabled(mode) }, set: { _ in settings.toggleReach(mode) })) {
-                            Label("Fahndungsraum \(mode.title)", systemImage: mode.symbolName)
+                            Label(mode.title, systemImage: mode.symbolName)
                         }
                         .tint(Theme.color(for: mode))
                     }
                 } header: {
-                    Text("Anzeige")
+                    Text("Fahndungsraum")
                 } footer: {
-                    Text("Bestreifung wird immer für alle aufgezeichnet; angezeigt wird sie nur, wenn Sie sie hier einschalten. Kartenstil und 3D: Knopf mit der Karte.")
+                    Text("Wie weit die Zielperson seit der letzten Sichtung gekommen sein kann, je Fortbewegungsart.")
                 }
 
                 Section {
