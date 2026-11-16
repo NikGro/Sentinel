@@ -36,6 +36,32 @@ struct TargetTests {
         #expect(Target().age() == nil)
     }
 
+    @Test func geburtsdatumAlsText() throws {
+        let date = try #require(Target.parseBirthDate("4.5.1990"))
+        var target = Target()
+        target.birthDate = date
+        #expect(target.geburtsdatum == "1990-05-04")
+        #expect(target.birthDateText == "04.05.1990")
+        #expect(Target.parseBirthDate("04051990") != nil)
+        #expect(Target.parseBirthDate("31.02.1990") == nil)
+        #expect(Target.parseBirthDate("") == nil)
+        #expect(Target.parseBirthDate("01.01.2999") == nil)
+    }
+
+    @Test func freitexteUndFotosWerdenZusammengefuehrt() {
+        var target = Target()
+        target.merkmale = "groß"
+        target.hinweise = "bewaffnet"
+        target.fotoBlob = "a"
+        target.fahrzeugFotoBlob = "b"
+        target.normalize()
+        #expect(target.hinweise == "Merkmale: groß\n\nHinweise: bewaffnet")
+        #expect(target.merkmale.isEmpty)
+        #expect(target.anhaenge.map(\.blobId) == ["a", "b"])
+        #expect(target.fotoBlob == "a")
+        #expect(target.fahrzeugFotoBlob == nil)
+    }
+
     @Test func anzeigenameFaelltAufPlatzhalterZurueck() {
         #expect(Target().displayName == "Unbekannte Person")
         #expect(Target(vorname: "Max", nachname: "Muster").displayName == "Max Muster")

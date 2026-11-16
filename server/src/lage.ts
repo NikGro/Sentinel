@@ -137,8 +137,10 @@ export class Lage extends EventEmitter<{ event: [LageEvent] }> {
           if (callsign) raw.funkrufname = callsign;
         }
       }
+      if (row.kind === 'target') mergeTargetTexts(raw);
       const parsed = ENTITY_SCHEMAS[row.kind as Kind].safeParse(raw);
       if (!parsed.success) continue;
+      if (row.kind === 'target') normalizeTargetPhotos(parsed.data as EntityData<'target'>);
       const next = JSON.stringify(parsed.data);
       if (next !== row.data) this.db.sql.prepare('UPDATE entities SET data = ? WHERE kind = ? AND id = ?').run(next, row.kind, row.id);
     }
@@ -227,6 +229,9 @@ export class Lage extends EventEmitter<{ event: [LageEvent] }> {
         if (!this.get('room', (data as EntityData<'message'>).roomId)) throw new LageError('ungueltig', 'Chatraum existiert nicht.');
         break;
       }
+      case 'target':
+        normalizeTargetPhotos(data as EntityData<'target'>);
+        break;
       case 'annotation':
         if (!this.get('layer', (data as EntityData<'annotation'>).layerId)) throw new LageError('ungueltig', 'Ebene existiert nicht.');
         break;
@@ -600,3 +605,38 @@ function fromRow<K extends Kind>(row: EntityRow): Entity<K> {
 }
 
 export { KINDS };
+
+/**
+ * Ziele hatten bis 0.6 mehrere Freitextfelder. Sie werden mit Überschrift in das gemeinsame Feld `hinweise` übernommen.
+ */
+export function mergeTargetTexts(raw: Record<string, unknown>): void {
+  const text = (v: unknown) => (typeof v === 'string' ? v.trim() : '');
+  const extra: [string, string][] = [
+    [raw.art === 'objekt' ? 'Beschreibung' : 'Merkmale', text(raw.merkmale)],
+    [raw.art === 'fahrzeug' ? 'Besonderheiten' : 'Fahrzeug', text(raw.fahrzeugBeschreibung)],
+    ['Sachverhalt', text(raw.sachverhalt)],
+  ];
+  const after: [string, string][] = [['Maßnahmen', text(raw.massnahmen)]];
+  if (![...extra, ...after].some(([, v]) => v)) return;
+  const hinweise = text(raw.hinweise);
+  const teile = [...extra, ['Hinweise', hinweise] as [string, string], ...after]
+    .filter(([, v]) => v)
+    .map(([label, v]) => `${label}: ${v}`);
+  raw.hinweise = teile.join('\n\n').slice(0, 12000);
+  raw.merkmale = '';
+  raw.fahrzeugBeschreibung = '';
+  raw.sachverhalt = '';
+  raw.massnahmen = '';
+}
+
+/** Einzelne Bildfelder wandern in die Fotoliste; das Titelbild ist immer deren erstes Foto. */
+export function normalizeTargetPhotos(target: EntityData<'target'>): void {
+  const bild = (blobId: string) => ({ blobId, art: 'bild' as const, name: 'Foto.jpg', mime: 'image/jpeg', groesse: 0, dauer: null, wellenform: null });
+  const anhaenge = [...target.anhaenge];
+  for (const blobId of [target.fahrzeugFotoBlob, target.fotoBlob]) {
+    if (blobId && !anhaenge.some((a) => a.blobId === blobId)) anhaenge.unshift(bild(blobId));
+  }
+  target.anhaenge = anhaenge.slice(0, 100);
+  target.fahrzeugFotoBlob = null;
+  target.fotoBlob = target.anhaenge.find((a) => a.art === 'bild')?.blobId ?? null;
+}

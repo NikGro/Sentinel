@@ -3,61 +3,105 @@ import QuickLook
 import SwiftUI
 import UniformTypeIdentifiers
 
-/// Fotos und Dateien an einer Markierung oder einem Ziel: aufnehmen, aus der Mediathek wählen, Dateien anhängen,
-/// antippen zum Ansehen. Ohne `attachments`-Bindung (nur lesen) entfallen Hinzufügen und Entfernen.
+/// Fotos und Dateien an einer Markierung oder einem Ziel, einheitlich überall in der App.
+/// Das leere Bild mit Kamera fügt hinzu (aufnehmen, aus der Mediathek, Datei); Antippen eines Fotos bietet
+/// Ansehen, Ersetzen, Titelbild und Entfernen an. Ohne `editable` nur ansehen.
 struct AttachmentsSection: View {
     var title = "Fotos und Dateien"
     @Binding var attachments: [ChatAttachment]
     var editable = true
+    /// Das erste Foto als Titelbild kennzeichnen (Ziele).
+    var marksTitlePhoto = false
+
+    static let limit = 100
 
     @Environment(AppModel.self) private var model
     @State private var pickerItems: [PhotosPickerItem] = []
+    @State private var showsSources = false
+    @State private var showsLibrary = false
     @State private var showsCamera = false
     @State private var showsFiles = false
-    @State private var isUploading = false
+    /// Angetipptes Foto bzw. angetippte Datei, für das Aktionsmenü.
+    @State private var selected: ChatAttachment?
+    /// Wird gerade ein bestimmtes Foto ersetzt?
+    @State private var replacing: String?
+    @State private var uploads = 0
     @State private var failure: String?
     @State private var previewURL: URL?
 
-    private let columns = [GridItem(.adaptive(minimum: 76), spacing: 8)]
+    private let columns = [GridItem(.adaptive(minimum: 84), spacing: 8)]
 
     var body: some View {
         Section {
-            if !attachments.isEmpty {
+            if !attachments.isEmpty || editable {
                 LazyVGrid(columns: columns, spacing: 8) {
                     ForEach(attachments, id: \.blobId) { attachment in
                         tile(attachment)
                     }
+                    if editable, attachments.count < Self.limit {
+                        Button {
+                            replacing = nil
+                            showsSources = true
+                        } label: {
+                            PhotoPlaceholder(label: uploads > 0 ? nil : "Hinzufügen")
+                                .overlay { if uploads > 0 { ProgressView() } }
+                                .frame(height: 84)
+                                .frame(maxWidth: .infinity)
+                        }
+                        .buttonStyle(.plain)
+                        .disabled(uploads > 0)
+                        .accessibilityLabel("Foto oder Datei hinzufügen")
+                    }
                 }
                 .padding(.vertical, 4)
-            }
-            if isUploading {
-                HStack {
-                    ProgressView()
-                    Text("Wird hochgeladen …")
-                        .foregroundStyle(.secondary)
-                }
             }
             if let failure {
                 Label(failure, systemImage: "exclamationmark.triangle")
                     .foregroundStyle(.orange)
             }
-            if editable {
-                Menu {
-                    if UIImagePickerController.isSourceTypeAvailable(.camera) {
-                        Button("Foto aufnehmen", systemImage: "camera") { showsCamera = true }
-                    }
-                    PhotosPicker(selection: $pickerItems, maxSelectionCount: 10, matching: .images) {
-                        Label("Aus Mediathek", systemImage: "photo.on.rectangle")
-                    }
-                    Button("Datei", systemImage: "doc") { showsFiles = true }
-                } label: {
-                    Label("Foto oder Datei anhängen", systemImage: "paperclip")
-                }
-                .disabled(isUploading || attachments.count >= 20)
-            }
         } header: {
-            Text(title)
+            Text(attachments.isEmpty ? title : "\(title) (\(attachments.count))")
+        } footer: {
+            if editable, marksTitlePhoto, attachments.contains(where: { $0.art == .bild }) {
+                Text("Das erste Foto ist das Titelbild. Foto antippen zum Ansehen, Ersetzen oder Entfernen.")
+            }
         }
+        .confirmationDialog(replacing == nil ? "Hinzufügen" : "Foto ersetzen", isPresented: $showsSources, titleVisibility: .visible) {
+            if UIImagePickerController.isSourceTypeAvailable(.camera) {
+                Button("Foto aufnehmen") { showsCamera = true }
+            }
+            Button(replacing == nil ? "Fotos aus Mediathek" : "Foto aus Mediathek") { showsLibrary = true }
+            if replacing == nil {
+                Button("Datei") { showsFiles = true }
+            }
+        }
+        .confirmationDialog(
+            selected.map { label($0) } ?? "",
+            isPresented: Binding(get: { selected != nil }, set: { if !$0 { selected = nil } }),
+            titleVisibility: .visible,
+            presenting: selected
+        ) { attachment in
+            Button("Ansehen") { Task { await open(attachment) } }
+            if attachment.art == .bild {
+                if marksTitlePhoto, attachments.first(where: { $0.art == .bild })?.blobId != attachment.blobId {
+                    Button("Als Titelbild verwenden") {
+                        attachments.removeAll { $0.blobId == attachment.blobId }
+                        attachments.insert(attachment, at: 0)
+                    }
+                }
+                Button("Ersetzen") {
+                    replacing = attachment.blobId
+                    Task {
+                        try? await Task.sleep(for: .milliseconds(350))
+                        showsSources = true
+                    }
+                }
+            }
+            Button("Entfernen", role: .destructive) {
+                attachments.removeAll { $0.blobId == attachment.blobId }
+            }
+        }
+        .photosPicker(isPresented: $showsLibrary, selection: $pickerItems, maxSelectionCount: replacing == nil ? 30 : 1, matching: .images)
         .onChange(of: pickerItems) { _, items in
             guard !items.isEmpty else { return }
             Task {
@@ -84,11 +128,16 @@ struct AttachmentsSection: View {
         .quickLookPreview($previewURL)
     }
 
+    private func label(_ attachment: ChatAttachment) -> String {
+        attachment.art == .bild ? "Foto" : (attachment.name.isEmpty ? "Datei" : attachment.name)
+    }
+
     @ViewBuilder private func tile(_ attachment: ChatAttachment) -> some View {
+        let isTitle = marksTitlePhoto && attachments.first(where: { $0.art == .bild })?.blobId == attachment.blobId
         Button {
-            Task { await open(attachment) }
+            if editable { selected = attachment } else { Task { await open(attachment) } }
         } label: {
-            ZStack {
+            ZStack(alignment: .bottomLeading) {
                 if attachment.art == .bild {
                     RemoteImage(blobId: attachment.blobId) { Color.secondary.opacity(0.15) }
                 } else {
@@ -104,20 +153,23 @@ struct AttachmentsSection: View {
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
                     .background(Color.secondary.opacity(0.15))
                 }
-            }
-            .frame(height: 76)
-            .frame(maxWidth: .infinity)
-            .clipShape(.rect(cornerRadius: 10))
-        }
-        .buttonStyle(.plain)
-        .contextMenu {
-            if editable {
-                Button("Entfernen", systemImage: "trash", role: .destructive) {
-                    attachments.removeAll { $0.blobId == attachment.blobId }
+                if isTitle {
+                    Text("Titelbild")
+                        .font(.caption2.weight(.bold))
+                        .padding(.horizontal, 6)
+                        .padding(.vertical, 2)
+                        .background(.ultraThinMaterial, in: .capsule)
+                        .padding(5)
                 }
             }
+            .frame(height: 84)
+            .frame(maxWidth: .infinity)
+            .clipShape(.rect(cornerRadius: 12))
+            .contentShape(.rect)
         }
-        .accessibilityLabel(attachment.art == .bild ? "Foto" : (attachment.name.isEmpty ? "Datei" : attachment.name))
+        .buttonStyle(.plain)
+        .accessibilityLabel(isTitle ? "Titelbild" : label(attachment))
+        .accessibilityHint(editable ? "Ansehen, ersetzen oder entfernen" : "Ansehen")
     }
 
     // MARK: Hochladen und Ansehen
@@ -146,11 +198,17 @@ struct AttachmentsSection: View {
             failure = "Die Datei ist größer als 15 MB."
             return
         }
-        isUploading = true
-        defer { isUploading = false }
+        uploads += 1
+        defer { uploads -= 1 }
         do {
             let blob = try await client.upload(data, contentType: contentType)
-            attachments.append(ChatAttachment(blobId: blob.id, art: art, name: String(name.prefix(120)), mime: blob.mime, groesse: blob.groesse))
+            let attachment = ChatAttachment(blobId: blob.id, art: art, name: String(name.prefix(120)), mime: blob.mime, groesse: blob.groesse)
+            if let replacing, let index = attachments.firstIndex(where: { $0.blobId == replacing }) {
+                attachments[index] = attachment
+                self.replacing = nil
+            } else if attachments.count < Self.limit {
+                attachments.append(attachment)
+            }
             failure = nil
         } catch {
             failure = error.localizedDescription
@@ -160,7 +218,7 @@ struct AttachmentsSection: View {
     private func open(_ attachment: ChatAttachment) async {
         guard let client = model.client, let data = try? await client.blob(id: attachment.blobId) else { return }
         let name = attachment.name.isEmpty ? attachment.blobId : attachment.name.replacingOccurrences(of: "/", with: "_")
-        let url = FileManager.default.temporaryDirectory.appending(path: name)
+        let url = FileManager.default.temporaryDirectory.appending(path: "\(attachment.blobId.prefix(8))-\(name)")
         do {
             try data.write(to: url, options: [.atomic, .completeFileProtection])
             previewURL = url

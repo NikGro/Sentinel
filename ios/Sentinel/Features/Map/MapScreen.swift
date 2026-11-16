@@ -41,6 +41,32 @@ enum MapTapMode: Equatable {
     }
 }
 
+/// Was sich an einem Ort (z. B. einem Suchtreffer) direkt anlegen lässt.
+enum PlaceableKind: Hashable, Identifiable {
+    case shape(MapObject.Shape)
+    case target(ZielArt)
+
+    static let all: [PlaceableKind] = [
+        .shape(.marker), .shape(.text), .shape(.kreis), .shape(.fahndungsraum), .shape(.haltestellen),
+        .target(.person), .target(.fahrzeug), .target(.objekt),
+    ]
+
+    var id: String {
+        switch self {
+        case .shape(let shape): "shape-\(shape.rawValue)"
+        case .target(let art): "target-\(art.rawValue)"
+        }
+    }
+
+    var title: String {
+        switch self {
+        case .shape(.haltestellen): "Haltestellen im Umkreis"
+        case .shape(let shape): shape.title
+        case .target(let art): art.title
+        }
+    }
+}
+
 struct SearchPin: Equatable {
     let point: GeoPoint
     let title: String
@@ -89,6 +115,7 @@ struct MapScreen: View {
     /// Über die Suche gezeigter Ort; Antippen bietet Navigation oder Marker an.
     @State private var searchPin: SearchPin?
     @State private var showsSearchPinActions = false
+    @State private var showsSearchPinCreate = false
 
     var body: some View {
         MapReader { proxy in
@@ -206,11 +233,23 @@ struct MapScreen: View {
                     searchPin = nil
                     model.navigate(to: .point(pin.point, title: pin.title))
                 }
-                Button("Marker hier setzen") {
-                    searchPin = nil
-                    placeMarker(at: pin.point, title: pin.title, delayed: false)
+                Button("Hier anlegen …") {
+                    Task {
+                        try? await Task.sleep(for: .milliseconds(350))
+                        showsSearchPinCreate = true
+                    }
                 }
                 Button("Suchtreffer ausblenden", role: .destructive) { searchPin = nil }
+            }
+        }
+        .confirmationDialog("Hier anlegen", isPresented: $showsSearchPinCreate, titleVisibility: .visible) {
+            if let pin = searchPin {
+                ForEach(PlaceableKind.all) { kind in
+                    Button(kind.title) {
+                        searchPin = nil
+                        create(kind, at: pin.point, title: pin.title, delayed: false)
+                    }
+                }
             }
         }
         .sheet(item: $editor) { context in
@@ -232,8 +271,8 @@ struct MapScreen: View {
                 model.navigate(to: target)
             }, showOnMap: { point, title in
                 show(SearchPin(point: point, title: title))
-            }, placeMarker: { point, title in
-                placeMarker(at: point, title: title)
+            }, create: { point, title, kind in
+                create(kind, at: point, title: title)
             })
             // Knapp unter voller Höhe bleibt das Fenster im Glas-Stil wie die Detailfenster.
             .presentationDetents([.fraction(0.94)])
@@ -548,8 +587,13 @@ struct MapScreen: View {
     private func finishDrawing(_ shape: MapObject.Shape, _ points: [GeoPoint]) {
         guard points.count >= shape.minimumPoints else { return }
         tapMode = .none
+        editor = EditorContext(id: LageStore.newId(), object: draft(shape, points), isNew: true)
+    }
+
+    /// Neue Markierung mit den Vorgaben ihrer Art.
+    private func draft(_ shape: MapObject.Shape, _ points: [GeoPoint]) -> MapObject {
         let isRoom = shape == .fahndungsraum
-        let object = MapObject(
+        return MapObject(
             layerId: Layer.lageId,
             typ: shape,
             farbe: isRoom ? "#C97C7C" : shape == .haltestellen ? "#0A84FF" : "#FF9F0A",
@@ -557,7 +601,6 @@ struct MapScreen: View {
             radius: shape == .kreis ? 150 : shape == .haltestellen ? 500 : nil,
             zeit: isRoom ? (Date.now.timeIntervalSince1970 * 1000).rounded() : nil
         )
-        editor = EditorContext(id: LageStore.newId(), object: object, isNew: true)
     }
 
     /// Alle antippbaren Symbole; Tipps in ihrer Nähe gehören ihnen und nicht der Fläche dahinter.
@@ -649,16 +692,23 @@ struct MapScreen: View {
         }
     }
 
-    /// Neuer Marker an einem Suchtreffer; der Editor öffnet sich, sobald das Suchfenster zu ist.
-    private func placeMarker(at point: GeoPoint, title: String, delayed: Bool = true) {
+    /// Markierung oder Ziel an einem Suchtreffer anlegen; der Editor öffnet sich, sobald das Suchfenster zu ist.
+    private func create(_ kind: PlaceableKind, at point: GeoPoint, title: String, delayed: Bool = true) {
         show(SearchPin(point: point, title: title))
         searchPin = nil
-        var object = MapObject(layerId: Layer.lageId, typ: .marker, titel: String(title.prefix(80)), punkte: [point])
-        object.farbe = "#FF9F0A"
-        let context = EditorContext(id: LageStore.newId(), object: object, isNew: true)
         Task {
             if delayed { try? await Task.sleep(for: .milliseconds(450)) }
-            editor = context
+            switch kind {
+            case .shape(let shape):
+                var object = draft(shape, [point])
+                if shape == .marker || shape == .text { object.titel = String(title.prefix(80)) }
+                editor = EditorContext(id: LageStore.newId(), object: object, isNew: true)
+            case .target(let art):
+                var target = Target(art: art)
+                target.standort = TimedPoint(point)
+                if art == .objekt { target.anschrift = String(title.prefix(200)) }
+                targetEditor = TargetEditorContext(id: LageStore.newId(), target: target, isNew: true)
+            }
         }
     }
 

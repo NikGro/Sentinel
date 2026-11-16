@@ -114,7 +114,7 @@ const annotation = z
     /** Marker, dessen Standort ein Tracker liefert. */
     trackerId: optionalId,
     /** Fotos und Dateien, z. B. ein Foto des verdächtigen Mülleimers. */
-    anhaenge: z.array(attachment).max(20).default([]),
+    anhaenge: z.array(attachment).max(100).default([]),
     /** Lebensdauer: Zeitpunkt, zu dem sich die Markierung selbst löscht; `null` für unbegrenzt. */
     ablauf: timestamp.nullish().transform((v) => v ?? null),
   })
@@ -142,16 +142,23 @@ const target = z.object({
   geburtsort: optionalText(80),
   staatsangehoerigkeit: optionalText(60),
   anschrift: optionalText(200),
+  /** Veraltet (0.6): in `hinweise` zusammengeführt. */
   merkmale: optionalText(2000),
+  /** Titelbild: immer das erste Foto aus `anhaenge`. */
   fotoBlob: optionalId,
   kennzeichen: optionalText(16),
+  /** Veraltet (0.6): in `hinweise` zusammengeführt. */
   fahrzeugBeschreibung: optionalText(300),
+  /** Veraltet (0.6): in `anhaenge` übernommen. */
   fahrzeugFotoBlob: optionalId,
+  /** Veraltet (0.6): in `hinweise` zusammengeführt. */
   sachverhalt: optionalText(4000),
-  hinweise: optionalText(4000),
+  /** Ein gemeinsames Freitextfeld: Merkmale, Sachverhalt, Hinweise, Maßnahmen. */
+  hinweise: optionalText(12000),
+  /** Veraltet (0.6): in `hinweise` zusammengeführt. */
   massnahmen: optionalText(4000),
-  /** Weitere Fotos und Dateien. */
-  anhaenge: z.array(attachment).max(20).default([]),
+  /** Fotos und Dateien; das erste Foto ist das Titelbild. */
+  anhaenge: z.array(attachment).max(100).default([]),
   trackerId: optionalId,
   /** Von Hand gesetzter Standort; ein verbundener Tracker hat Vorrang. */
   standort: geoPoint.extend({ ts: timestamp }).nullish().transform((v) => v ?? null),

@@ -1,57 +1,60 @@
 import PhotosUI
 import SwiftUI
 
-/// Formularzeile für ein optionales Foto: aus der Mediathek wählen, aufnehmen oder entfernen.
+/// Formularzeile für ein einzelnes Foto (z. B. Profilbild). Antippen des Bildes bietet Aufnehmen, Auswählen,
+/// Ersetzen oder Entfernen an; kein eigener Menüknopf.
 struct PhotoField: View {
     let title: String
     @Binding var blobId: String?
 
     @Environment(PhotoStore.self) private var photos
     @State private var pickerItem: PhotosPickerItem?
+    @State private var showsOptions = false
+    @State private var showsLibrary = false
     @State private var showsCamera = false
     @State private var isUploading = false
     @State private var failure: String?
 
     var body: some View {
-        HStack(spacing: 14) {
-            RemoteImage(blobId: blobId) {
-                ZStack {
-                    Color.secondary.opacity(0.15)
-                    Image(systemName: "photo")
-                        .foregroundStyle(.secondary)
+        Button { showsOptions = true } label: {
+            HStack(spacing: 14) {
+                RemoteImage(blobId: blobId) {
+                    PhotoPlaceholder()
                 }
-            }
-            .frame(width: 64, height: 64)
-            .clipShape(.rect(cornerRadius: 12))
-            .overlay { if isUploading { ProgressView() } }
+                .frame(width: 64, height: 64)
+                .clipShape(.rect(cornerRadius: 12))
+                .overlay { if isUploading { ProgressView() } }
 
-            VStack(alignment: .leading, spacing: 4) {
-                Text(title)
-                if let failure {
-                    Text(failure)
+                VStack(alignment: .leading, spacing: 4) {
+                    Text(title)
+                        .foregroundStyle(.primary)
+                    Text(blobId == nil ? "Tippen, um ein Foto hinzuzufügen" : "Tippen zum Ersetzen oder Entfernen")
                         .font(.caption)
-                        .foregroundStyle(.red)
+                        .foregroundStyle(.secondary)
+                    if let failure {
+                        Text(failure)
+                            .font(.caption)
+                            .foregroundStyle(.red)
+                    }
                 }
+                Spacer(minLength: 0)
             }
-
-            Spacer()
-
-            Menu {
-                PhotosPicker(selection: $pickerItem, matching: .images) {
-                    Label("Aus Mediathek wählen", systemImage: "photo.on.rectangle")
-                }
-                if UIImagePickerController.isSourceTypeAvailable(.camera) {
-                    Button("Foto aufnehmen", systemImage: "camera") { showsCamera = true }
-                }
-                if blobId != nil {
-                    Button("Foto entfernen", systemImage: "trash", role: .destructive) { blobId = nil }
-                }
-            } label: {
-                Image(systemName: "ellipsis.circle")
-                    .font(.title3)
-            }
-            .accessibilityLabel("\(title) ändern")
+            .contentShape(.rect)
         }
+        .buttonStyle(.plain)
+        .disabled(isUploading)
+        .accessibilityLabel(title)
+        .accessibilityHint(blobId == nil ? "Foto hinzufügen" : "Foto ersetzen oder entfernen")
+        .confirmationDialog(title, isPresented: $showsOptions, titleVisibility: .visible) {
+            if UIImagePickerController.isSourceTypeAvailable(.camera) {
+                Button(blobId == nil ? "Foto aufnehmen" : "Neues Foto aufnehmen") { showsCamera = true }
+            }
+            Button(blobId == nil ? "Aus Mediathek wählen" : "Durch Foto aus Mediathek ersetzen") { showsLibrary = true }
+            if blobId != nil {
+                Button("Foto entfernen", role: .destructive) { blobId = nil }
+            }
+        }
+        .photosPicker(isPresented: $showsLibrary, selection: $pickerItem, matching: .images)
         .onChange(of: pickerItem) { _, item in
             guard let item else { return }
             Task {
@@ -80,6 +83,29 @@ struct PhotoField: View {
             failure = nil
         } catch {
             failure = error.localizedDescription
+        }
+    }
+}
+
+/// Leeres Bild mit Plus: hier lässt sich ein Foto hinzufügen.
+struct PhotoPlaceholder: View {
+    var label: String?
+
+    var body: some View {
+        ZStack {
+            RoundedRectangle(cornerRadius: 12)
+                .fill(Color.secondary.opacity(0.12))
+            RoundedRectangle(cornerRadius: 12)
+                .strokeBorder(Color.secondary.opacity(0.45), style: StrokeStyle(lineWidth: 1.5, dash: [5, 4]))
+            VStack(spacing: 4) {
+                Image(systemName: "camera.fill")
+                    .font(.title3)
+                if let label {
+                    Text(label)
+                        .font(.caption2.weight(.semibold))
+                }
+            }
+            .foregroundStyle(.secondary)
         }
     }
 }

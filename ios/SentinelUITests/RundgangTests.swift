@@ -103,6 +103,18 @@ final class RundgangTests: XCTestCase {
         app.tabBars.buttons["Ziele"].tap()
         XCTAssertTrue(app.staticTexts["Max Mustermann"].waitForExistence(timeout: 5))
         capture("05-ziele")
+        app.staticTexts["Max Mustermann"].tap()
+        if app.buttons["Bearbeiten"].waitForExistence(timeout: 3) {
+            capture("05a-ziel-ansicht")
+            app.buttons["Bearbeiten"].tap()
+            sleep(1)
+            capture("05b-ziel-bearbeiten")
+            app.swipeUp()
+            capture("05c-ziel-bearbeiten-standort")
+            app.buttons["Abbrechen"].firstMatch.tap()
+            sleep(1)
+            if app.navigationBars.buttons["Ziele"].exists { app.navigationBars.buttons["Ziele"].tap() }
+        }
 
         app.tabBars.buttons["Kräfte"].tap()
         XCTAssertTrue(app.staticTexts["P 35/24"].waitForExistence(timeout: 5), "Fahrzeug mit Funkrufname")

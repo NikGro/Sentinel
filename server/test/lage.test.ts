@@ -203,3 +203,24 @@ test('Markierungen mit Lebensdauer löschen sich selbst', () => {
   assert.equal(lage.expireAnnotations(now + 61_000), 1);
   assert.deepEqual(lage.list('annotation').map((a) => a.id), ['immer']);
 });
+
+test('Ziele: Freitexte werden zusammengeführt, Einzelbilder wandern in die Fotoliste', () => {
+  const db = new Database(':memory:');
+  const insert = db.sql.prepare('INSERT INTO entities (kind, id, rev, data, updated_at, updated_by) VALUES (?, ?, 1, ?, 0, ?)');
+  insert.run(
+    'target',
+    't1',
+    JSON.stringify({ art: 'person', vorname: 'Max', merkmale: 'groß', sachverhalt: 'Diebstahl', hinweise: 'bewaffnet', fotoBlob: 'blobA', fahrzeugFotoBlob: 'blobB' }),
+    'system',
+  );
+  const lage = new Lage(db);
+  const t = lage.get('target', 't1')!.data;
+  assert.equal(t.hinweise, 'Merkmale: groß\n\nSachverhalt: Diebstahl\n\nHinweise: bewaffnet');
+  assert.equal(t.merkmale, '');
+  assert.deepEqual(t.anhaenge.map((a) => a.blobId), ['blobA', 'blobB']);
+  assert.equal(t.fotoBlob, 'blobA');
+  assert.equal(t.fahrzeugFotoBlob, null);
+  // Erstes Foto entfernt: das nächste wird Titelbild.
+  lage.put(fahnder('a'), 'target', 't1', { ...t, fotoBlob: 'blobB', anhaenge: t.anhaenge.slice(1) });
+  assert.equal(lage.get('target', 't1')!.data.fotoBlob, 'blobB');
+});

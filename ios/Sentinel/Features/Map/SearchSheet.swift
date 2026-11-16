@@ -7,18 +7,18 @@ struct SearchSheet: View {
     let navigate: (NavigationTarget) -> Void
     /// Adresse auf der Karte zeigen, ohne loszufahren.
     var showOnMap: (GeoPoint, String) -> Void = { _, _ in }
-    /// Marker an der Adresse setzen.
-    var placeMarker: (GeoPoint, String) -> Void = { _, _ in }
+    /// Markierung oder Ziel an der Adresse anlegen.
+    var create: (GeoPoint, String, PlaceableKind) -> Void = { _, _, _ in }
 
     init(
         mode: Mode = .adresse,
         navigate: @escaping (NavigationTarget) -> Void,
         showOnMap: @escaping (GeoPoint, String) -> Void = { _, _ in },
-        placeMarker: @escaping (GeoPoint, String) -> Void = { _, _ in }
+        create: @escaping (GeoPoint, String, PlaceableKind) -> Void = { _, _, _ in }
     ) {
         self.navigate = navigate
         self.showOnMap = showOnMap
-        self.placeMarker = placeMarker
+        self.create = create
         _mode = State(initialValue: mode)
     }
 
@@ -38,6 +38,8 @@ struct SearchSheet: View {
     @State private var places: [SearchService.Place] = []
     /// Angetippter Treffer: Auswahl zwischen Navigation, Kartenansicht und Marker.
     @State private var chosen: SearchService.Place?
+    /// Treffer, an dem etwas angelegt werden soll.
+    @State private var creating: SearchService.Place?
     @FocusState private var focused: Bool
 
     var body: some View {
@@ -103,13 +105,29 @@ struct SearchSheet: View {
                     showOnMap(place.point, place.title)
                     dismiss()
                 }
-                Button("Marker hier setzen") {
-                    placeMarker(place.point, place.title)
-                    dismiss()
+                Button("Hier anlegen …") {
+                    Task {
+                        try? await Task.sleep(for: .milliseconds(350))
+                        creating = place
+                    }
                 }
                 Button("Abbrechen", role: .cancel) {}
             } message: { place in
                 if !place.subtitle.isEmpty { Text(place.subtitle) }
+            }
+            .confirmationDialog(
+                "Hier anlegen",
+                isPresented: Binding(get: { creating != nil }, set: { if !$0 { creating = nil } }),
+                titleVisibility: .visible,
+                presenting: creating
+            ) { place in
+                ForEach(PlaceableKind.all) { kind in
+                    Button(kind.title) {
+                        create(place.point, place.title, kind)
+                        dismiss()
+                    }
+                }
+                Button("Abbrechen", role: .cancel) {}
             }
             .onChange(of: mode) { _, _ in
                 places = []

@@ -30,9 +30,17 @@
 - Antippen öffnet immer erst die Ansicht (Marker, Formen, Ziele, Kräfte): links „Schließen“, rechts „Bearbeiten“;
   Verschieben und Löschen gibt es im Bearbeiten-Fenster
 - Lebensdauer für Markierungen (Standard unbegrenzt, sonst 15 Minuten bis 7 Tage): danach löschen sie sich selbst
-- Adresssuche: Antippen eines Treffers fragt „Hierhin navigieren“, „Auf der Karte zeigen“ oder „Marker hier setzen“;
+- Adresssuche: Antippen eines Treffers fragt „Hierhin navigieren“, „Auf der Karte zeigen“ oder „Hier anlegen …“;
   der gezeigte Treffer bleibt als Stecknadel auf der Karte und bietet die Auswahl beim Antippen erneut an
 - Fotos (Kamera oder Mediathek) und Dateien an Markierungen und Zielen; beim Antippen sichtbar und zu öffnen
+- Einheitliche Fotoliste überall (bis 100): das leere Bild mit Kamera fügt hinzu (aufnehmen, Mediathek, Datei),
+  Antippen eines Fotos bietet Ansehen, Ersetzen, Titelbild und Entfernen; kein Drei-Punkte-Knopf mehr.
+  Bei Zielen ist das erste Foto das Titelbild; frühere Einzelbilder (Bild, Fahrzeugbild) sind übernommen
+- Ziele: ein gemeinsames Freitextfeld „Notizen“ statt Merkmale, Sachverhalt, Hinweise und Maßnahmen
+  (bestehende Texte mit Überschrift zusammengeführt); Geburtsdatum als Textfeld, leer heißt unbekannt
+- Ziele: Standort über ein Menü festlegen oder ändern – auf der Karte oder per Adresse wählen, Anschrift übernehmen,
+  eigener Standort, GPS-Tracker, entfernen; mit Kartenvorschau des gesetzten Standorts
+- Adresssuche: „Hier anlegen …“ legt am Treffer Marker, Text, Kreis, Fahndungsraum, Haltestellen oder ein Ziel an
 - Ziel-Editor ohne Artauswahl (die Art steht beim Anlegen fest) und mit passenden Feldern je Art:
   Zielobjekt = Gebäude (Anschrift, Beschreibung, Bild), Zielfahrzeug = Fahrzeugdaten, Zielperson = Personendaten
 

@@ -113,6 +113,13 @@ private struct TargetRow: View {
 }
 
 /// Vollständiges Profil eines Ziels.
+/// Alle Fotos eines Ziels, auch aus älteren Einzelbildfeldern.
+func allAttachments(_ target: Target) -> [ChatAttachment] {
+    var copy = target
+    copy.normalize()
+    return copy.anhaenge
+}
+
 struct TargetDetail: View {
     let targetId: String
     /// Standort auf der Karte neu setzen; nur verfügbar, wenn die Detailansicht über der Karte liegt.
@@ -202,33 +209,20 @@ struct TargetDetail: View {
                     LookAroundCard(address: target.anschrift, point: lage.position(ofTarget: entity)?.point)
                 }
             }
-            TextSection(title: target.art == .objekt ? "Beschreibung" : "Optische Merkmale", text: target.merkmale)
-
-            if !target.anhaenge.isEmpty {
-                AttachmentsSection(title: "Fotos und Dateien", attachments: .constant(target.anhaenge), editable: false)
-            }
-
-            if !target.kennzeichen.isEmpty || !target.fahrzeugBeschreibung.isEmpty || target.fahrzeugFotoBlob != nil {
-                Section("Fahrzeug") {
-                    if !target.kennzeichen.isEmpty {
-                        LabeledContent("Kennzeichen") {
-                            Text(target.kennzeichen)
-                                .font(.body.monospaced().weight(.semibold))
-                        }
-                    }
-                    if !target.fahrzeugBeschreibung.isEmpty { Text(target.fahrzeugBeschreibung) }
-                    if target.fahrzeugFotoBlob != nil {
-                        RemoteImage(blobId: target.fahrzeugFotoBlob) { Color.secondary.opacity(0.15) }
-                            .frame(maxWidth: .infinity)
-                            .frame(height: 180)
-                            .clipShape(.rect(cornerRadius: 12))
+            if !target.kennzeichen.isEmpty {
+                Section {
+                    LabeledContent(target.art == .person ? "Genutztes Fahrzeug" : "Kennzeichen") {
+                        Text(target.kennzeichen)
+                            .font(.body.monospaced().weight(.semibold))
                     }
                 }
             }
 
-            TextSection(title: "Sachverhalt", text: target.sachverhalt)
-            TextSection(title: "Hinweise", text: target.hinweise)
-            TextSection(title: "Zu treffende Maßnahmen", text: target.massnahmen)
+            TextSection(title: "Notizen", text: target.notes)
+
+            if !allAttachments(target).isEmpty {
+                AttachmentsSection(attachments: .constant(allAttachments(target)), editable: false, marksTitlePhoto: true)
+            }
 
             Section {
                 Text("Zuletzt geändert von \(lage.name(of: entity.updatedBy)), \(Format.ago(entity.updatedDate))")
@@ -266,18 +260,31 @@ private struct TextSection: View {
 struct TargetEditor: View {
     let context: TargetEditorContext
 
+    @Environment(AppModel.self) private var model
     @Environment(LageStore.self) private var lage
     @Environment(\.dismiss) private var dismiss
     @State private var target: Target
-    @State private var hasBirthDate: Bool
-    @State private var birthDate: Date
+    /// Geburtsdatum als Text; leer heißt unbekannt.
+    @State private var birthText: String
     @State private var showsDelete = false
+    @State private var showsPicker = false
+    @State private var isGeocoding = false
+    @State private var locationFailure: String?
 
     init(context: TargetEditorContext) {
         self.context = context
-        _target = State(initialValue: context.target)
-        _hasBirthDate = State(initialValue: context.target.birthDate != nil)
-        _birthDate = State(initialValue: context.target.birthDate ?? Calendar.current.date(byAdding: .year, value: -30, to: .now) ?? .now)
+        var target = context.target
+        target.normalize()
+        _target = State(initialValue: target)
+        _birthText = State(initialValue: target.birthDateText)
+    }
+
+    private var birthDate: Date? { Target.parseBirthDate(birthText) }
+    private var birthTextInvalid: Bool { !birthText.trimmingCharacters(in: .whitespaces).isEmpty && birthDate == nil }
+
+    private var isEmpty: Bool {
+        [target.vorname, target.nachname, target.bezeichnung, target.kennzeichen, target.anschrift, target.hinweise]
+            .allSatisfy { $0.trimmingCharacters(in: .whitespaces).isEmpty } && target.anhaenge.isEmpty
     }
 
     var body: some View {
@@ -289,27 +296,24 @@ struct TargetEditor: View {
                     Section("Person") {
                         TextField("Vorname", text: $target.vorname)
                         TextField("Nachname", text: $target.nachname)
-                        Toggle("Geburtsdatum bekannt", isOn: $hasBirthDate.animation())
-                        if hasBirthDate {
-                            DatePicker("Geburtsdatum", selection: $birthDate, in: ...Date.now, displayedComponents: .date)
+                        HStack {
+                            TextField("Geburtsdatum (TT.MM.JJJJ)", text: $birthText)
+                                .keyboardType(.numbersAndPunctuation)
+                            if let birthDate, let age = Target.age(of: birthDate) {
+                                Text("\(age) Jahre")
+                                    .foregroundStyle(.secondary)
+                            } else if birthTextInvalid {
+                                Text("Datum prüfen")
+                                    .foregroundStyle(.red)
+                            }
                         }
                         TextField("Geburtsort", text: $target.geburtsort)
                         TextField("Staatsangehörigkeit", text: $target.staatsangehoerigkeit)
                         TextField("Anschrift", text: $target.anschrift, axis: .vertical)
                             .lineLimit(1...3)
-                        PhotoField(title: "Bild", blobId: $target.fotoBlob)
-                    }
-                    Section("Optische Merkmale") {
-                        TextField("Größe, Statur, Haare, Kleidung …", text: $target.merkmale, axis: .vertical)
-                            .lineLimit(2...8)
-                    }
-                    Section("Genutztes Fahrzeug (optional)") {
-                        TextField("Kennzeichen", text: $target.kennzeichen)
+                        TextField("Kennzeichen eines genutzten Fahrzeugs", text: $target.kennzeichen)
                             .textInputAutocapitalization(.characters)
                             .autocorrectionDisabled()
-                        TextField("Beschreibung", text: $target.fahrzeugBeschreibung, axis: .vertical)
-                            .lineLimit(1...4)
-                        PhotoField(title: "Fahrzeugbild", blobId: $target.fahrzeugFotoBlob)
                     }
                 case .fahrzeug:
                     Section("Fahrzeug") {
@@ -317,9 +321,6 @@ struct TargetEditor: View {
                         TextField("Kennzeichen", text: $target.kennzeichen)
                             .textInputAutocapitalization(.characters)
                             .autocorrectionDisabled()
-                        TextField("Besonderheiten", text: $target.fahrzeugBeschreibung, axis: .vertical)
-                            .lineLimit(1...4)
-                        PhotoField(title: "Fahrzeugbild", blobId: $target.fahrzeugFotoBlob)
                     }
                     Section("Halter oder Fahrer (optional)") {
                         TextField("Vorname", text: $target.vorname)
@@ -332,9 +333,6 @@ struct TargetEditor: View {
                         TextField("Objekt, z. B. Mehrfamilienhaus, Firmengebäude", text: $target.bezeichnung)
                         TextField("Anschrift", text: $target.anschrift, axis: .vertical)
                             .lineLimit(1...3)
-                        TextField("Beschreibung: Zugänge, Etage, Klingelschild …", text: $target.merkmale, axis: .vertical)
-                            .lineLimit(2...8)
-                        PhotoField(title: "Bild des Objekts", blobId: $target.fotoBlob)
                     }
                     Section("Bewohner oder Verantwortliche (optional)") {
                         TextField("Vorname", text: $target.vorname)
@@ -342,42 +340,14 @@ struct TargetEditor: View {
                     }
                 }
 
-                if target.standort != nil {
-                    Section {
-                        HStack {
-                            Label("Standort von Hand gesetzt", systemImage: "mappin")
-                            Spacer()
-                            Button("Entfernen", role: .destructive) { target.standort = nil }
-                                .buttonStyle(.borderless)
-                        }
-                    }
+                AttachmentsSection(attachments: $target.anhaenge, marksTitlePhoto: true)
+
+                Section("Notizen") {
+                    TextField(notesPrompt, text: $target.hinweise, axis: .vertical)
+                        .lineLimit(4...20)
                 }
 
-                AttachmentsSection(title: "Weitere Fotos und Dateien", attachments: $target.anhaenge)
-
-                Section("Sachverhalt") {
-                    TextField("Sachverhalt", text: $target.sachverhalt, axis: .vertical)
-                        .lineLimit(3...12)
-                }
-                Section("Hinweise") {
-                    TextField("Hinweise, Eigensicherung", text: $target.hinweise, axis: .vertical)
-                        .lineLimit(2...10)
-                }
-                Section("Zu treffende Maßnahmen") {
-                    TextField("Maßnahmen", text: $target.massnahmen, axis: .vertical)
-                        .lineLimit(2...10)
-                }
-
-                Section {
-                    Picker("GPS-Tracker", selection: $target.trackerId) {
-                        Text("Keiner").tag(String?.none)
-                        ForEach(lage.trackers.values.sorted { $0.data.name < $1.data.name }) { tracker in
-                            Text("\(tracker.data.name) (\(tracker.data.providerTitle))").tag(String?.some(tracker.id))
-                        }
-                    }
-                } footer: {
-                    Text("Tracker werden unter Mehr, Tracker verwaltet. Mit Tracker erscheint das Ziel live auf der Karte; der von Hand gesetzte Standort tritt dann zurück.")
-                }
+                locationSection
 
                 if !context.isNew {
                     Section {
@@ -393,7 +363,7 @@ struct TargetEditor: View {
                 }
                 ToolbarItem(placement: .confirmationAction) {
                     Button("Sichern", action: save)
-                        .disabled(target.vorname.isEmpty && target.nachname.isEmpty && target.merkmale.isEmpty && target.bezeichnung.isEmpty && target.kennzeichen.isEmpty && target.anschrift.isEmpty)
+                        .disabled(isEmpty || birthTextInvalid)
                 }
             }
             .alert("Ziel für alle löschen?", isPresented: $showsDelete) {
@@ -403,12 +373,112 @@ struct TargetEditor: View {
                     dismiss()
                 }
             }
+            .sheet(isPresented: $showsPicker) {
+                LocationPickerSheet(title: "Standort wählen", initial: target.standort?.point ?? lage.targets[context.id].flatMap { lage.position(ofTarget: $0)?.point }) { point in
+                    target.standort = TimedPoint(point)
+                }
+            }
+        }
+    }
+
+    private var notesPrompt: String {
+        switch target.art {
+        case .person: "Merkmale, Kleidung, Sachverhalt, Hinweise, Eigensicherung, Maßnahmen …"
+        case .fahrzeug: "Besonderheiten, Sachverhalt, Hinweise, Maßnahmen …"
+        case .objekt: "Zugänge, Etage, Klingelschild, Sachverhalt, Hinweise, Maßnahmen …"
+        }
+    }
+
+    // MARK: Standort
+
+    private var trackerName: String? {
+        target.trackerId.flatMap { id in lage.trackers[id].map { "\($0.data.name) (\($0.data.providerTitle))" } }
+    }
+
+    @ViewBuilder private var locationSection: some View {
+        Section {
+            if let trackerName {
+                LabeledContent {
+                    Text("live")
+                } label: {
+                    Label("Tracker \(trackerName)", systemImage: "antenna.radiowaves.left.and.right")
+                }
+            }
+            if let standort = target.standort {
+                LabeledContent {
+                    Text(Format.ago(standort.date))
+                } label: {
+                    Label("Von Hand gesetzt", systemImage: "mappin")
+                }
+                Map(initialPosition: .camera(MapCamera(centerCoordinate: standort.point.coordinate, distance: 700)), interactionModes: []) {
+                    Marker("", systemImage: target.art.symbolName, coordinate: standort.point.coordinate)
+                        .tint(Theme.target)
+                }
+                .id("\(standort.lat),\(standort.lon)")
+                .frame(height: 130)
+                .clipShape(.rect(cornerRadius: 12))
+                .listRowInsets(EdgeInsets(top: 6, leading: 16, bottom: 6, trailing: 16))
+            }
+            if trackerName == nil, target.standort == nil {
+                Label("Kein Standort, das Ziel erscheint noch nicht auf der Karte.", systemImage: "mappin.slash")
+                    .foregroundStyle(.secondary)
+            }
+            if let locationFailure {
+                Label(locationFailure, systemImage: "exclamationmark.triangle")
+                    .foregroundStyle(.orange)
+            }
+            Menu {
+                Button("Auf der Karte oder per Adresse wählen …", systemImage: "map") { showsPicker = true }
+                if !target.anschrift.trimmingCharacters(in: .whitespaces).isEmpty {
+                    Button("Anschrift als Standort", systemImage: "house") { Task { await geocodeAddress() } }
+                }
+                if let mine = model.myPoint {
+                    Button("Mein Standort", systemImage: "location.fill") { target.standort = TimedPoint(mine) }
+                }
+                Picker(selection: $target.trackerId) {
+                    Text("Kein Tracker").tag(String?.none)
+                    ForEach(lage.trackers.values.sorted { $0.data.name < $1.data.name }) { tracker in
+                        Text("\(tracker.data.name) (\(tracker.data.providerTitle))").tag(String?.some(tracker.id))
+                    }
+                } label: {
+                    Label("GPS-Tracker", systemImage: "antenna.radiowaves.left.and.right")
+                }
+                .pickerStyle(.menu)
+                if target.standort != nil {
+                    Divider()
+                    Button("Von Hand gesetzten Standort entfernen", systemImage: "trash", role: .destructive) { target.standort = nil }
+                }
+            } label: {
+                HStack {
+                    Label(target.standort == nil && target.trackerId == nil ? "Standort festlegen" : "Standort ändern", systemImage: "mappin.and.ellipse")
+                    Spacer()
+                    if isGeocoding { ProgressView() }
+                }
+            }
+        } header: {
+            Text("Standort")
+        } footer: {
+            Text("Mit Tracker erscheint das Ziel live auf der Karte; der von Hand gesetzte Standort tritt dann zurück. Tracker werden unter Mehr, Tracker verwaltet.")
+        }
+    }
+
+    private func geocodeAddress() async {
+        isGeocoding = true
+        defer { isGeocoding = false }
+        let placemarks = try? await CLGeocoder().geocodeAddressString(target.anschrift, in: nil, preferredLocale: Locale(identifier: "de_DE"))
+        if let coordinate = placemarks?.first?.location?.coordinate {
+            target.standort = TimedPoint(GeoPoint(coordinate))
+            locationFailure = nil
+        } else {
+            locationFailure = "Die Anschrift wurde nicht gefunden."
         }
     }
 
     private func save() {
         var result = target
-        result.birthDate = hasBirthDate ? birthDate : nil
+        result.birthDate = birthDate
+        result.fahrzeugFotoBlob = nil
+        result.fotoBlob = result.anhaenge.first(where: { $0.art == .bild })?.blobId
         if lage.put(result, id: context.id) { dismiss() }
     }
 }

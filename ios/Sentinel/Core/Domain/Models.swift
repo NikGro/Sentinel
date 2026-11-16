@@ -376,6 +376,72 @@ struct Target: LageEntity {
         set { geburtsdatum = newValue.map { Self.birthFormat.string(from: $0) } }
     }
 
+    /// Geburtsdatum als deutscher Text "TT.MM.JJJJ"; leer heißt unbekannt.
+    var birthDateText: String {
+        guard let birthDate else { return "" }
+        let formatter = DateFormatter()
+        formatter.locale = Locale(identifier: "de_DE")
+        formatter.timeZone = TimeZone(identifier: "Europe/Berlin")
+        formatter.dateFormat = "dd.MM.yyyy"
+        return formatter.string(from: birthDate)
+    }
+
+    /// Liest "4.5.1990", "04.05.1990" oder "04051990"; `nil`, wenn kein gültiges Datum.
+    static func parseBirthDate(_ text: String) -> Date? {
+        let trimmed = text.trimmingCharacters(in: .whitespaces)
+        var parts = trimmed.split(whereSeparator: { $0 == "." || $0 == "/" || $0 == "-" || $0 == " " }).map(String.init)
+        if parts.count == 1, trimmed.count == 8, trimmed.allSatisfy(\.isNumber) {
+            let chars = Array(trimmed)
+            parts = [String(chars[0..<2]), String(chars[2..<4]), String(chars[4..<8])]
+        }
+        guard parts.count == 3, let day = Int(parts[0]), let month = Int(parts[1]), var year = Int(parts[2]) else { return nil }
+        if parts[2].count == 2 {
+            let current = Calendar.current.component(.year, from: .now) % 100
+            year += year > current ? 1900 : 2000
+        }
+        var calendar = Calendar(identifier: .gregorian)
+        calendar.timeZone = TimeZone(identifier: "Europe/Berlin") ?? .current
+        let components = DateComponents(year: year, month: month, day: day, hour: 12)
+        guard components.isValidDate(in: calendar), let date = calendar.date(from: components), date <= .now, year >= 1900 else { return nil }
+        return date
+    }
+
+    /// Alle Freitexte in einem Feld. Ältere Stände mit getrennten Feldern werden mit Überschriften zusammengeführt.
+    var notes: String {
+        let extra = [
+            (art == .objekt ? "Beschreibung" : "Merkmale", merkmale),
+            (art == .fahrzeug ? "Besonderheiten" : "Fahrzeug", fahrzeugBeschreibung),
+            ("Sachverhalt", sachverhalt),
+        ]
+        let after = [("Maßnahmen", massnahmen)]
+        let trimmed = { (s: String) in s.trimmingCharacters(in: .whitespacesAndNewlines) }
+        guard (extra + after).contains(where: { !trimmed($0.1).isEmpty }) else { return hinweise }
+        return (extra + [("Hinweise", hinweise)] + after)
+            .filter { !trimmed($0.1).isEmpty }
+            .map { "\($0.0): \(trimmed($0.1))" }
+            .joined(separator: "\n\n")
+    }
+
+    /// Bringt ein Ziel auf das aktuelle Modell: ein Freitextfeld, alle Fotos in einer Liste.
+    mutating func normalize() {
+        hinweise = notes
+        merkmale = ""
+        fahrzeugBeschreibung = ""
+        sachverhalt = ""
+        massnahmen = ""
+        for blob in [fahrzeugFotoBlob, fotoBlob].compactMap({ $0 }) where !anhaenge.contains(where: { $0.blobId == blob }) {
+            anhaenge.insert(ChatAttachment(blobId: blob, art: .bild, name: "Foto.jpg", mime: "image/jpeg", groesse: 0), at: 0)
+        }
+        fahrzeugFotoBlob = nil
+        fotoBlob = anhaenge.first(where: { $0.art == .bild })?.blobId
+    }
+
+    static func age(of birthDate: Date, at reference: Date = .now) -> Int? {
+        var calendar = Calendar(identifier: .gregorian)
+        calendar.timeZone = TimeZone(identifier: "Europe/Berlin") ?? .current
+        return calendar.dateComponents([.year], from: birthDate, to: reference).year
+    }
+
     /// Alter in vollen Jahren zum Stichtag.
     func age(at reference: Date = .now) -> Int? {
         guard let birthDate else { return nil }

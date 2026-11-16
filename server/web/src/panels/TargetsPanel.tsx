@@ -80,16 +80,9 @@ export function TargetsPanel() {
         </div>
         {text('staatsangehoerigkeit', 'Staatsangehörigkeit')}
         {text('anschrift', 'Anschrift', 2)}
-        {text('merkmale', 'Optische Merkmale', 3)}
-        <ImageField label="Bild" blobId={data.fotoBlob} onChange={(fotoBlob) => set({ fotoBlob })} />
-        <div class="grid2">
-          {text('kennzeichen', 'Kennzeichen')}
-          {text('fahrzeugBeschreibung', 'Fahrzeug')}
-        </div>
-        <ImageField label="Fahrzeugbild" blobId={data.fahrzeugFotoBlob} onChange={(fahrzeugFotoBlob) => set({ fahrzeugFotoBlob })} />
-        {text('sachverhalt', 'Sachverhalt', 4)}
-        {text('hinweise', 'Hinweise', 3)}
-        {text('massnahmen', 'Zu treffende Maßnahmen', 3)}
+        {text('kennzeichen', 'Kennzeichen')}
+        <ImageField label="Titelbild (weitere Fotos in der App)" blobId={data.fotoBlob} onChange={(fotoBlob) => set({ fotoBlob })} />
+        {text('hinweise', 'Notizen: Merkmale, Sachverhalt, Hinweise, Maßnahmen', 10)}
         <Field label="GPS-Tracker">
           <select value={data.trackerId ?? ''} onChange={(e) => set({ trackerId: e.currentTarget.value || null })}>
             <option value="">Keiner</option>
