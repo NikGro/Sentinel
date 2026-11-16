@@ -81,6 +81,21 @@ const vehicle = z.object({
 /** "haltestellen": Umkreis, in dem alle ÖPNV-Haltestellen angezeigt werden. */
 export const SHAPES = ['marker', 'text', 'linie', 'flaeche', 'kreis', 'fahndungsraum', 'haltestellen'] as const;
 
+export const ANHANG_ARTEN = ['bild', 'audio', 'datei'] as const;
+
+/** Datei an einer Nachricht, Markierung oder einem Ziel. */
+const attachment = z.object({
+  blobId: id,
+  art: z.enum(ANHANG_ARTEN),
+  name: optionalText(120),
+  mime: z.string().max(100),
+  groesse: z.number().int().min(0).max(50 * 1024 * 1024),
+  /** Dauer von Sprachnachrichten in Sekunden. */
+  dauer: z.number().min(0).max(3600).nullish().transform((v) => v ?? null),
+  /** Sprachnachricht: Lautstärkeverlauf für die Wellenform, Werte 0 bis 1. */
+  wellenform: z.array(z.number().min(0).max(1)).max(80).nullish().transform((v) => v ?? null),
+});
+
 const annotation = z
   .object({
     layerId: id,
@@ -98,6 +113,8 @@ const annotation = z
     zeit: timestamp.nullish().transform((v) => v ?? null),
     /** Marker, dessen Standort ein Tracker liefert. */
     trackerId: optionalId,
+    /** Fotos und Dateien, z. B. ein Foto des verdächtigen Mülleimers. */
+    anhaenge: z.array(attachment).max(20).default([]),
   })
   .superRefine((a, ctx) => {
     const min = a.typ === 'linie' ? 2 : a.typ === 'flaeche' ? 3 : 1;
@@ -131,6 +148,8 @@ const target = z.object({
   sachverhalt: optionalText(4000),
   hinweise: optionalText(4000),
   massnahmen: optionalText(4000),
+  /** Weitere Fotos und Dateien. */
+  anhaenge: z.array(attachment).max(20).default([]),
   trackerId: optionalId,
   /** Von Hand gesetzter Standort; ein verbundener Tracker hat Vorrang. */
   standort: geoPoint.extend({ ts: timestamp }).nullish().transform((v) => v ?? null),
@@ -158,18 +177,6 @@ const room = z.object({
   name: text(40).min(1),
 });
 
-export const ANHANG_ARTEN = ['bild', 'audio', 'datei'] as const;
-const attachment = z.object({
-  blobId: id,
-  art: z.enum(ANHANG_ARTEN),
-  name: optionalText(120),
-  mime: z.string().max(100),
-  groesse: z.number().int().min(0).max(50 * 1024 * 1024),
-  /** Dauer von Sprachnachrichten in Sekunden. */
-  dauer: z.number().min(0).max(3600).nullish().transform((v) => v ?? null),
-  /** Sprachnachricht: Lautstärkeverlauf für die Wellenform, Werte 0 bis 1. */
-  wellenform: z.array(z.number().min(0).max(1)).max(80).nullish().transform((v) => v ?? null),
-});
 
 const message = z
   .object({

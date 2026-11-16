@@ -171,6 +171,9 @@ struct CellInfo: View {
             if !object.notiz.isEmpty {
                 Section("Details") { Text(object.notiz) }
             }
+            if let attachments = object.anhaenge, !attachments.isEmpty {
+                AttachmentsSection(attachments: .constant(attachments), editable: false)
+            }
         }
         .navigationTitle(object.titel.isEmpty ? "Prognosezelle" : object.titel)
     }

@@ -202,7 +202,11 @@ struct TargetDetail: View {
                     LookAroundCard(address: target.anschrift, point: lage.position(ofTarget: entity)?.point)
                 }
             }
-            TextSection(title: "Optische Merkmale", text: target.merkmale)
+            TextSection(title: target.art == .objekt ? "Beschreibung" : "Optische Merkmale", text: target.merkmale)
+
+            if !target.anhaenge.isEmpty {
+                AttachmentsSection(title: "Fotos und Dateien", attachments: .constant(target.anhaenge), editable: false)
+            }
 
             if !target.kennzeichen.isEmpty || !target.fahrzeugBeschreibung.isEmpty || target.fahrzeugFotoBlob != nil {
                 Section("Fahrzeug") {
@@ -279,16 +283,67 @@ struct TargetEditor: View {
     var body: some View {
         NavigationStack {
             Form {
-                Section {
-                    Picker("Art", selection: $target.art) {
-                        ForEach(ZielArt.allCases) { art in
-                            Label(art.title, systemImage: art.symbolName).tag(art)
+                // Die Art steht fest: Sie wurde beim Anlegen gewählt (Zielperson, Zielfahrzeug oder Zielobjekt).
+                switch target.art {
+                case .person:
+                    Section("Person") {
+                        TextField("Vorname", text: $target.vorname)
+                        TextField("Nachname", text: $target.nachname)
+                        Toggle("Geburtsdatum bekannt", isOn: $hasBirthDate.animation())
+                        if hasBirthDate {
+                            DatePicker("Geburtsdatum", selection: $birthDate, in: ...Date.now, displayedComponents: .date)
                         }
+                        TextField("Geburtsort", text: $target.geburtsort)
+                        TextField("Staatsangehörigkeit", text: $target.staatsangehoerigkeit)
+                        TextField("Anschrift", text: $target.anschrift, axis: .vertical)
+                            .lineLimit(1...3)
+                        PhotoField(title: "Bild", blobId: $target.fotoBlob)
                     }
-                    if target.art != .person {
-                        TextField(target.art == .fahrzeug ? "Bezeichnung, z. B. BMW 3er dunkelblau" : "Bezeichnung, z. B. Wohnung Musterstraße", text: $target.bezeichnung)
+                    Section("Optische Merkmale") {
+                        TextField("Größe, Statur, Haare, Kleidung …", text: $target.merkmale, axis: .vertical)
+                            .lineLimit(2...8)
                     }
-                    if target.standort != nil {
+                    Section("Genutztes Fahrzeug (optional)") {
+                        TextField("Kennzeichen", text: $target.kennzeichen)
+                            .textInputAutocapitalization(.characters)
+                            .autocorrectionDisabled()
+                        TextField("Beschreibung", text: $target.fahrzeugBeschreibung, axis: .vertical)
+                            .lineLimit(1...4)
+                        PhotoField(title: "Fahrzeugbild", blobId: $target.fahrzeugFotoBlob)
+                    }
+                case .fahrzeug:
+                    Section("Fahrzeug") {
+                        TextField("Fahrzeug, z. B. BMW 3er dunkelblau", text: $target.bezeichnung)
+                        TextField("Kennzeichen", text: $target.kennzeichen)
+                            .textInputAutocapitalization(.characters)
+                            .autocorrectionDisabled()
+                        TextField("Besonderheiten", text: $target.fahrzeugBeschreibung, axis: .vertical)
+                            .lineLimit(1...4)
+                        PhotoField(title: "Fahrzeugbild", blobId: $target.fahrzeugFotoBlob)
+                    }
+                    Section("Halter oder Fahrer (optional)") {
+                        TextField("Vorname", text: $target.vorname)
+                        TextField("Nachname", text: $target.nachname)
+                        TextField("Anschrift", text: $target.anschrift, axis: .vertical)
+                            .lineLimit(1...3)
+                    }
+                case .objekt:
+                    Section("Objekt") {
+                        TextField("Objekt, z. B. Mehrfamilienhaus, Firmengebäude", text: $target.bezeichnung)
+                        TextField("Anschrift", text: $target.anschrift, axis: .vertical)
+                            .lineLimit(1...3)
+                        TextField("Beschreibung: Zugänge, Etage, Klingelschild …", text: $target.merkmale, axis: .vertical)
+                            .lineLimit(2...8)
+                        PhotoField(title: "Bild des Objekts", blobId: $target.fotoBlob)
+                    }
+                    Section("Bewohner oder Verantwortliche (optional)") {
+                        TextField("Vorname", text: $target.vorname)
+                        TextField("Nachname", text: $target.nachname)
+                    }
+                }
+
+                if target.standort != nil {
+                    Section {
                         HStack {
                             Label("Standort von Hand gesetzt", systemImage: "mappin")
                             Spacer()
@@ -298,33 +353,7 @@ struct TargetEditor: View {
                     }
                 }
 
-                Section(target.art == .person ? "Person" : "Personenbezug (optional)") {
-                    TextField("Vorname", text: $target.vorname)
-                    TextField("Nachname", text: $target.nachname)
-                    Toggle("Geburtsdatum bekannt", isOn: $hasBirthDate.animation())
-                    if hasBirthDate {
-                        DatePicker("Geburtsdatum", selection: $birthDate, in: ...Date.now, displayedComponents: .date)
-                    }
-                    TextField("Geburtsort", text: $target.geburtsort)
-                    TextField("Staatsangehörigkeit", text: $target.staatsangehoerigkeit)
-                    TextField("Anschrift", text: $target.anschrift, axis: .vertical)
-                        .lineLimit(1...3)
-                    PhotoField(title: "Bild", blobId: $target.fotoBlob)
-                }
-
-                Section("Optische Merkmale") {
-                    TextField("Größe, Statur, Haare, Kleidung …", text: $target.merkmale, axis: .vertical)
-                        .lineLimit(2...8)
-                }
-
-                Section("Fahrzeug") {
-                    TextField("Kennzeichen", text: $target.kennzeichen)
-                        .textInputAutocapitalization(.characters)
-                        .autocorrectionDisabled()
-                    TextField("Beschreibung", text: $target.fahrzeugBeschreibung, axis: .vertical)
-                        .lineLimit(1...4)
-                    PhotoField(title: "Fahrzeugbild", blobId: $target.fahrzeugFotoBlob)
-                }
+                AttachmentsSection(title: "Weitere Fotos und Dateien", attachments: $target.anhaenge)
 
                 Section("Sachverhalt") {
                     TextField("Sachverhalt", text: $target.sachverhalt, axis: .vertical)

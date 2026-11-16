@@ -59,6 +59,9 @@ struct MapObjectEditor: View {
                     .foregroundStyle(.secondary)
             }
             if !object.notiz.isEmpty { Section("Notiz") { Text(object.notiz) } }
+            if let attachments = object.anhaenge, !attachments.isEmpty {
+                AttachmentsSection(attachments: .constant(attachments), editable: false)
+            }
         }
         .navigationTitle(object.titel.isEmpty ? object.typ.title : object.titel)
         .navigationBarTitleDisplayMode(.inline)
@@ -127,6 +130,10 @@ struct MapObjectEditor: View {
                     TextField(object.typ == .text ? "Text" : "Bezeichnung", text: $object.titel)
                     TextField("Notiz", text: $object.notiz, axis: .vertical)
                         .lineLimit(1...5)
+                }
+
+                if object.typ != .text {
+                    AttachmentsSection(attachments: Binding(get: { object.anhaenge ?? [] }, set: { object.anhaenge = $0 }))
                 }
 
                 Section("Farbe") {

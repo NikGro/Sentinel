@@ -238,6 +238,8 @@ struct MapObject: LageEntity {
     var zeit: Double?
     /// Marker, dessen Standort ein Tracker liefert.
     var trackerId: String?
+    /// Fotos und Dateien, z. B. ein Foto des verdächtigen Mülleimers.
+    var anhaenge: [ChatAttachment]?
 
     init(layerId: String, typ: Shape, titel: String = "", farbe: String = "#FF9F0A", punkte: [GeoPoint], radius: Double? = nil, zeit: Double? = nil) {
         self.layerId = layerId
@@ -303,6 +305,8 @@ struct Target: LageEntity {
     var massnahmen: String = ""
     var trackerId: String?
     var standort: TimedPoint?
+    /// Weitere Fotos und Dateien.
+    var anhaenge: [ChatAttachment] = []
 
     init(art: ZielArt = .person, bezeichnung: String = "", vorname: String = "", nachname: String = "") {
         self.art = art
@@ -313,7 +317,7 @@ struct Target: LageEntity {
 
     private enum CodingKeys: String, CodingKey {
         case art, bezeichnung, vorname, nachname, geburtsdatum, geburtsort, staatsangehoerigkeit, anschrift, merkmale, fotoBlob
-        case kennzeichen, fahrzeugBeschreibung, fahrzeugFotoBlob, sachverhalt, hinweise, massnahmen, trackerId, standort
+        case kennzeichen, fahrzeugBeschreibung, fahrzeugFotoBlob, sachverhalt, hinweise, massnahmen, trackerId, standort, anhaenge
     }
 
     init(from decoder: Decoder) throws {
@@ -337,6 +341,7 @@ struct Target: LageEntity {
         massnahmen = try text(.massnahmen)
         trackerId = try c.decodeIfPresent(String.self, forKey: .trackerId)
         standort = try c.decodeIfPresent(TimedPoint.self, forKey: .standort)
+        anhaenge = (try? c.decodeIfPresent([ChatAttachment].self, forKey: .anhaenge)) ?? []
     }
 
     var displayName: String {

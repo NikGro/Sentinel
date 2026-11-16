@@ -26,6 +26,11 @@
 - Letzte Sichtung: Datum und Uhrzeit plus Knöpfe „Jetzt“ und „vor 5/10/15/30/45/60“ Minuten
 - Nach dem Verschieben fragt die App, ob die Sichtung auf jetzt gesetzt werden soll
 
+**Ziele und Markierungen**
+- Fotos (Kamera oder Mediathek) und Dateien an Markierungen und Zielen; beim Antippen sichtbar und zu öffnen
+- Ziel-Editor ohne Artauswahl (die Art steht beim Anlegen fest) und mit passenden Feldern je Art:
+  Zielobjekt = Gebäude (Anschrift, Beschreibung, Bild), Zielfahrzeug = Fahrzeugdaten, Zielperson = Personendaten
+
 **Kartenausrichtung**
 - Kompassknopf schaltet durch: Fahrtrichtung (Standard), Norden, Übersicht der ganzen Route
 - Mit zwei Fingern gedreht bleibt die Ausrichtung fest, bis man am Kompass wieder umschaltet
