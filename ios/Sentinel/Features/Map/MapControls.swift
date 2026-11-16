@@ -107,48 +107,32 @@ struct ASymbol: View {
 }
 
 /// Fortbewegung direkt auf der Karte wählen: zu Fuß sofort, Fahrzeug und ÖPNV öffnen die Auswahl.
-/// Nur Symbole, damit daneben der A-Knopf Platz hat; die Details stehen in der Lageleiste.
+/// Natives Segment-Steuerelement im Liquid-Glass-Stil (gedrückt halten und ziehen).
 struct MobilityControl: View {
     /// Öffnet die Auswahl für Fahrzeug oder ÖPNV.
     let choose: (Fortbewegung) -> Void
 
     @Environment(LageStore.self) private var lage
-    @Namespace private var selection
 
     var body: some View {
         if let me = lage.me {
-            HStack(spacing: 2) {
+            Picker("Fortbewegung", selection: Binding(
+                get: { me.data.fortbewegung },
+                set: { mode in
+                    if mode == .fuss { lage.setMobility(.fuss) } else { choose(mode) }
+                }
+            )) {
                 ForEach(Fortbewegung.allCases) { mode in
-                    let selected = me.data.fortbewegung == mode
-                    Button {
-                        if mode == .fuss { lage.setMobility(.fuss) } else { choose(mode) }
-                    } label: {
-                        Image(systemName: mode.symbolName)
-                            .font(.system(size: 17, weight: .semibold))
-                            .foregroundStyle(selected ? .white : .primary)
-                            .frame(maxWidth: .infinity, maxHeight: .infinity)
-                            .background {
-                                if selected {
-                                    Capsule()
-                                        .fill(Theme.accent)
-                                        .matchedGeometryEffect(id: "auswahl", in: selection)
-                                }
-                            }
-                            .contentShape(.capsule)
-                    }
-                    .buttonStyle(.plain)
-                    .accessibilityLabel(mode.title)
-                    .accessibilityAddTraits(selected ? .isSelected : [])
+                    Image(systemName: mode.symbolName)
+                        .accessibilityLabel(mode.title)
+                        .tag(mode)
                 }
             }
-            .padding(4)
+            .pickerStyle(.segmented)
+            .controlSize(.extraLarge)
+            .frame(maxWidth: .infinity)
             .frame(height: Theme.barHeight)
-            .glassEffect(.regular, in: .capsule)
             .disabled(!me.data.aktiv)
-            .opacity(me.data.aktiv ? 1 : 0.5)
-            .animation(.snappy, value: me.data.fortbewegung)
-            .accessibilityElement(children: .contain)
-            .accessibilityLabel("Fortbewegung")
         }
     }
 }

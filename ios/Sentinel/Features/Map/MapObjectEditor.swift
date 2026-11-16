@@ -49,18 +49,16 @@ struct MapObjectEditor: View {
 
     private var lockedView: some View {
         List {
+            NavigateHereSection {
+                model.navigate(to: .object(context.id))
+                dismiss()
+            }
             Section {
                 Label("Dauerhafte Orte sind gesperrt", systemImage: "lock.fill")
                 Text("Zum Bearbeiten unter Mehr „Dauerhafte Orte bearbeiten“ einschalten.")
                     .foregroundStyle(.secondary)
             }
             if !object.notiz.isEmpty { Section("Notiz") { Text(object.notiz) } }
-            Section {
-                Button("Hinführen", systemImage: "location.north.line.fill") {
-                    model.navigate(to: .object(context.id))
-                    dismiss()
-                }
-            }
         }
         .navigationTitle(object.titel.isEmpty ? object.typ.title : object.titel)
         .navigationBarTitleDisplayMode(.inline)
@@ -73,6 +71,12 @@ struct MapObjectEditor: View {
 
     private var form: some View {
             Form {
+                if !context.isNew {
+                    NavigateHereSection {
+                        model.navigate(to: .object(context.id))
+                        dismiss()
+                    }
+                }
                 if object.typ == .fahndungsraum {
                     Section {
                         Picker("Vor", selection: Binding(
@@ -216,10 +220,6 @@ struct MapObjectEditor: View {
 
                 if !context.isNew {
                     Section {
-                        Button("Hinführen", systemImage: "location.north.line.fill") {
-                            model.navigate(to: .object(context.id))
-                            dismiss()
-                        }
                         Button("Auf der Karte verschieben", systemImage: "arrow.up.and.down.and.arrow.left.and.right") {
                             startMoving(context.id)
                             dismiss()

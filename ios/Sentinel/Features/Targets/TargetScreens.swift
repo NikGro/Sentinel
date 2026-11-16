@@ -134,6 +134,12 @@ struct TargetDetail: View {
     private func content(_ entity: Versioned<Target>) -> some View {
         let target = entity.data
         return List {
+            if lage.position(ofTarget: entity) != nil {
+                NavigateHereSection {
+                    model.navigate(to: .target(entity.id))
+                    dismiss()
+                }
+            }
             Section {
                 HStack(alignment: .top, spacing: 16) {
                     RemoteImage(blobId: target.fotoBlob) {
@@ -175,10 +181,6 @@ struct TargetDetail: View {
             Section("Standort") {
                 if let position = lage.position(ofTarget: entity) {
                     LabeledContent(position.fromTracker ? "Tracker" : "Von Hand gesetzt", value: Format.ago(position.date))
-                    Button("Hinführen", systemImage: "location.north.line.fill") {
-                        model.navigate(to: .target(entity.id))
-                        dismiss()
-                    }
                 } else {
                     Text("Kein Standort bekannt.")
                         .foregroundStyle(.secondary)

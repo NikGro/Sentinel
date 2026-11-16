@@ -195,7 +195,8 @@ struct MapScreen: View {
             SearchSheet(mode: mode) { target in
                 model.navigate(to: target)
             }
-            .presentationDetents([.large])
+            // Knapp unter voller Höhe bleibt das Fenster im Glas-Stil wie die Detailfenster.
+            .presentationDetents([.fraction(0.94)])
         }
         .sheet(item: $mobilityChoice) { mode in
             MobilitySheet(initialMode: mode)

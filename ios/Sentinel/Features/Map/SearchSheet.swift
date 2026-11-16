@@ -40,6 +40,7 @@ struct SearchSheet: View {
                 }
             }
             .listStyle(.insetGrouped)
+            .scrollContentBackground(.hidden)
             .safeAreaInset(edge: .top, spacing: 0) {
                 VStack(spacing: 10) {
                     HStack {
@@ -62,7 +63,6 @@ struct SearchSheet: View {
                 }
                 .padding(.horizontal, 16)
                 .padding(.vertical, 10)
-                .background(.bar)
             }
             .navigationTitle(mode == .adresse ? "Adresse" : "Zu Objekten navigieren")
             .navigationBarTitleDisplayMode(.inline)

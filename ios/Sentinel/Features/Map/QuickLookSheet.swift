@@ -44,6 +44,34 @@ struct MemberQuickLook: View {
 
     var body: some View {
         List {
+            // Hinführen und Anrufen ganz oben, getrennt vom Rest.
+            if member.id != lage.selfId, position != nil || PhoneNumber.callURL(member.data.telefon) != nil {
+                Section {
+                HStack(spacing: 12) {
+                        if let url = PhoneNumber.callURL(member.data.telefon), member.id != lage.selfId {
+                            Button { openURL(url) } label: {
+                                Label("Anrufen", systemImage: "phone.fill")
+                                    .frame(maxWidth: .infinity)
+                            }
+                            .buttonStyle(.glass)
+                            .tint(.green)
+                        }
+                        if position != nil, member.id != lage.selfId {
+                            Button {
+                                model.navigate(to: .member(member.id))
+                                dismiss()
+                            } label: {
+                                Label("Hinführen", systemImage: "location.north.line.fill")
+                                    .frame(maxWidth: .infinity)
+                            }
+                            .buttonStyle(.glassProminent)
+                        }
+                    }
+                    .controlSize(.large)
+                    .listRowBackground(Color.clear)
+                    .listRowInsets(EdgeInsets(top: 4, leading: 0, bottom: 4, trailing: 0))
+                }
+            }
             Section {
                 HStack(spacing: 16) {
                     Avatar(blobId: member.data.fotoBlob, fallbackText: member.data.spitzname, size: 72, tint: lage.isOnline(member.id) && member.data.aktiv ? .green : .gray)
@@ -58,29 +86,6 @@ struct MemberQuickLook: View {
                 }
                 .listRowBackground(Color.clear)
 
-                HStack(spacing: 12) {
-                    if let url = PhoneNumber.callURL(member.data.telefon), member.id != lage.selfId {
-                        Button { openURL(url) } label: {
-                            Label("Anrufen", systemImage: "phone.fill")
-                                .frame(maxWidth: .infinity)
-                        }
-                        .buttonStyle(.glassProminent)
-                        .tint(.green)
-                    }
-                    if position != nil, member.id != lage.selfId {
-                        Button {
-                            model.navigate(to: .member(member.id))
-                            dismiss()
-                        } label: {
-                            Label("Hinführen", systemImage: "location.north.line.fill")
-                                .frame(maxWidth: .infinity)
-                        }
-                        .buttonStyle(.glass)
-                    }
-                }
-                .controlSize(.large)
-                .listRowBackground(Color.clear)
-                .listRowInsets(EdgeInsets(top: 4, leading: 0, bottom: 4, trailing: 0))
             }
 
             Section("Status") {
@@ -134,6 +139,10 @@ struct CellInfo: View {
 
     var body: some View {
         List {
+            NavigateHereSection {
+                model.navigate(to: .object(id))
+                dismiss()
+            }
             Section {
                 HStack(spacing: 14) {
                     RoundedRectangle(cornerRadius: 6)
@@ -161,12 +170,6 @@ struct CellInfo: View {
             }
             if !object.notiz.isEmpty {
                 Section("Details") { Text(object.notiz) }
-            }
-            Section {
-                Button("Hinführen", systemImage: "location.north.line.fill") {
-                    model.navigate(to: .object(id))
-                    dismiss()
-                }
             }
         }
         .navigationTitle(object.titel.isEmpty ? "Prognosezelle" : object.titel)

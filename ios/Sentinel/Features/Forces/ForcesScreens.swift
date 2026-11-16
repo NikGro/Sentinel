@@ -177,6 +177,12 @@ struct VehicleDetail: View {
     private func content(_ vehicle: Versioned<Vehicle>) -> some View {
         let position = lage.position(ofVehicle: vehicle)
         return List {
+            if position != nil {
+                NavigateHereSection {
+                    model.navigate(to: .vehicle(vehicle.id))
+                    dismiss()
+                }
+            }
             if vehicle.data.fotoBlob != nil {
                 RemoteImage(blobId: vehicle.data.fotoBlob) { Color.secondary.opacity(0.15) }
                     .frame(maxWidth: .infinity)
@@ -215,10 +221,6 @@ struct VehicleDetail: View {
                 if let position {
                     LabeledContent("Quelle", value: position.source)
                     LabeledContent("Stand", value: Format.ago(position.date))
-                    Button("Hinführen", systemImage: "location.north.line.fill") {
-                        model.navigate(to: .vehicle(vehicle.id))
-                        dismiss()
-                    }
                 } else {
                     Text("Noch kein Standort bekannt.")
                         .foregroundStyle(.secondary)
