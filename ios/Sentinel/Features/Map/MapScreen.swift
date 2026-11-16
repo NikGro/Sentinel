@@ -71,6 +71,8 @@ struct MapScreen: View {
     @State private var followsMe = false
     /// Ausrichtung der Karte: Standard ist in Fahrtrichtung.
     @State private var orientation: MapOrientation = .course
+    /// Die letzte Kamerabewegung kam vom Finger (nicht von der App): Neigung danach als 2D/3D-Einstellung übernehmen.
+    @State private var userMovedCamera = false
     @State private var bottomAreaHeight: CGFloat = 120
     @State private var now = Date.now
     @State private var topAreaHeight: CGFloat = 60
@@ -108,8 +110,17 @@ struct MapScreen: View {
             .ignoresSafeArea(.container, edges: .bottom)
             .onMapCameraChange(frequency: .continuous) { context in cameraState.update(context.camera) }
             .simultaneousGesture(DragGesture(minimumDistance: 12).onChanged { _ in
+                userMovedCamera = true
                 if followsMe { followsMe = false }
             })
+            .onMapCameraChange(frequency: .onEnd) { context in
+                // Mit zwei Fingern gekippt: Haken bei „3D-Ansicht“ im Kartenstil-Menü mitziehen.
+                guard userMovedCamera else { return }
+                userMovedCamera = false
+                guard orientation != .overview else { return }
+                let is3D = context.camera.pitch > 10
+                if settings.prefers3D != is3D { settings.prefers3D = is3D }
+            }
             // Mit zwei Fingern gedreht: diese Ausrichtung gilt, bis man am Kompass wieder umschaltet.
             .simultaneousGesture(RotateGesture().onEnded { _ in
                 orientation = .fixed(cameraState.heading)
