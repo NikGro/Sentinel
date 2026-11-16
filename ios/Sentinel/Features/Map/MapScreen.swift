@@ -6,12 +6,15 @@ enum MapSelection: Identifiable, Hashable {
     case member(String)
     case vehicle(String)
     case target(String)
+    /// Angetippte Fläche ohne eigenen Griff, z. B. eine Argus-Prognosezelle.
+    case cell(String)
 
     var id: String {
         switch self {
         case .member(let id): "member-\(id)"
         case .vehicle(let id): "vehicle-\(id)"
         case .target(let id): "target-\(id)"
+        case .cell(let id): "cell-\(id)"
         }
     }
 }
@@ -131,7 +134,12 @@ struct MapScreen: View {
                 }
             }
             .onTapGesture { point in
-                guard tapMode != .none, let coordinate = proxy.convert(point, from: .local) else { return }
+                guard let coordinate = proxy.convert(point, from: .local) else { return }
+                if tapMode == .none {
+                    // Prognosezellen haben keinen Griff: Tipp in die Fläche zeigt ihre Angaben.
+                    if let cell = cell(at: GeoPoint(coordinate)) { selection = .cell(cell) }
+                    return
+                }
                 handleTap(GeoPoint(coordinate))
             }
         }
@@ -483,6 +491,30 @@ struct MapScreen: View {
             zeit: isRoom ? (Date.now.timeIntervalSince1970 * 1000).rounded() : nil
         )
         editor = EditorContext(id: LageStore.newId(), object: object, isNew: true)
+    }
+
+    /// Prognosezelle unter dem Finger; bei Überlappung die mit dem höchsten Wert.
+    private func cell(at point: GeoPoint) -> String? {
+        visibleObjects
+            .filter { $0.data.wert != nil && $0.data.typ == .flaeche && Self.contains($0.data.punkte, point) }
+            .max { ($0.data.wert ?? 0) < ($1.data.wert ?? 0) }?
+            .id
+    }
+
+    /// Punkt-in-Fläche nach dem Strahlverfahren (für kleine Flächen in Breite/Länge ausreichend genau).
+    static func contains(_ polygon: [GeoPoint], _ point: GeoPoint) -> Bool {
+        guard polygon.count >= 3 else { return false }
+        var inside = false
+        var j = polygon.count - 1
+        for i in polygon.indices {
+            let a = polygon[i], b = polygon[j]
+            if (a.lat > point.lat) != (b.lat > point.lat),
+               point.lon < (b.lon - a.lon) * (point.lat - a.lat) / (b.lat - a.lat) + a.lon {
+                inside.toggle()
+            }
+            j = i
+        }
+        return inside
     }
 
     private func openEditor(for id: String) {

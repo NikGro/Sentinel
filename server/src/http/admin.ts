@@ -148,11 +148,12 @@ export function registerAdminRoutes(app: FastifyInstance, services: Services, gu
         status: alsEntwurf ? 'entwurf' : 'live',
         beschreibung: `Prognose aus Argus Predict, ${forecast.zellen.length} auffälligste Zellen`,
       });
-      for (const cell of forecast.zellen) {
+      for (const [rang, cell] of forecast.zellen.entries()) {
         lage.put(zentrale, 'annotation', `${layerId}-${cell.zelleId}`.slice(0, 64), {
           layerId,
           typ: 'flaeche',
           titel: `Faktor ${cell.faktor.toFixed(1)}`,
+          notiz: `Rang ${rang + 1} von ${forecast.zellen.length} · Argus-Projekt ${projekt} · ${datum.slice(8)}.${datum.slice(5, 7)}.${datum.slice(0, 4)}, ${vonStunde}–${bisStunde + 1} Uhr · Zelle ${cell.zelleId}`,
           farbe: argusColor(cell.faktor),
           punkte: cell.ecken,
           wert: Number(cell.faktor.toFixed(3)),

@@ -18,6 +18,8 @@ struct QuickLookSheet: View {
                     if lage.vehicles[id] != nil { VehicleDetail(vehicleId: id) } else { gone }
                 case .target(let id):
                     if lage.targets[id] != nil { TargetDetail(targetId: id, placeOnMap: placeTarget) } else { gone }
+                case .cell(let id):
+                    if let object = lage.mapObjects[id] { CellInfo(id: id, object: object.data) } else { gone }
                 }
             }
             .navigationBarTitleDisplayMode(.inline)
@@ -118,5 +120,55 @@ struct MemberQuickLook: View {
             }
         }
         .navigationTitle(member.data.spitzname)
+    }
+}
+
+/// Angaben zu einer Prognosezelle (Argus Predict) oder einer anderen Fläche ohne Griff.
+struct CellInfo: View {
+    let id: String
+    let object: MapObject
+
+    @Environment(AppModel.self) private var model
+    @Environment(LageStore.self) private var lage
+    @Environment(\.dismiss) private var dismiss
+
+    var body: some View {
+        List {
+            Section {
+                HStack(spacing: 14) {
+                    RoundedRectangle(cornerRadius: 6)
+                        .fill(Color(hex: object.farbe).opacity(0.6))
+                        .overlay(RoundedRectangle(cornerRadius: 6).stroke(Color(hex: object.farbe), lineWidth: 2))
+                        .frame(width: 44, height: 44)
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text(object.titel.isEmpty ? "Prognosezelle" : object.titel)
+                            .font(.title3.weight(.bold))
+                        if let layer = lage.layers[object.layerId] {
+                            Text(layer.data.name)
+                                .font(.subheadline)
+                                .foregroundStyle(.secondary)
+                        }
+                    }
+                }
+                .listRowBackground(Color.clear)
+            }
+            if let wert = object.wert {
+                Section {
+                    LabeledContent("Prognosefaktor", value: wert.formatted(.number.precision(.fractionLength(1)).locale(Format.locale)))
+                } footer: {
+                    Text("Wie viel wahrscheinlicher hier ein Ereignis ist als im Durchschnitt des Gebiets.")
+                }
+            }
+            if !object.notiz.isEmpty {
+                Section("Details") { Text(object.notiz) }
+            }
+            Section {
+                Button("Hinführen", systemImage: "location.north.line.fill") {
+                    model.navigate(to: .object(id))
+                    dismiss()
+                }
+            }
+        }
+        .navigationTitle(object.titel.isEmpty ? "Prognosezelle" : object.titel)
     }
 }
