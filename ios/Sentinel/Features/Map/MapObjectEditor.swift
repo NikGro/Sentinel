@@ -77,7 +77,8 @@ struct MapObjectEditor: View {
                                     Button(minutes == 0 ? "Jetzt" : "−\(minutes) Min.") {
                                         object.zeit = (Date.now.addingTimeInterval(TimeInterval(-minutes * 60)).timeIntervalSince1970 * 1000).rounded()
                                     }
-                                    .buttonStyle(selected ? .borderedProminent : .bordered)
+                                    .buttonStyle(.bordered)
+                                    .tint(selected ? .blue : .secondary)
                                     .controlSize(.regular)
                                     .accessibilityAddTraits(selected ? .isSelected : [])
                                 }
