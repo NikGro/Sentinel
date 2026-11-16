@@ -191,3 +191,15 @@ test('Notruf: Fahnder lösen aus, nur Absender oder Zentrale beenden', () => {
   lage.command(fahnder('a'), 'sos.beenden', {});
   assert.equal(lage.operation.sos, null);
 });
+
+test('Markierungen mit Lebensdauer löschen sich selbst', () => {
+  const lage = newLage();
+  const punkt = [{ lat: 53.5, lon: 10 }];
+  const now = Date.now();
+  lage.put(fahnder('a'), 'annotation', 'kurz', { layerId: LAYER_LAGE, typ: 'marker', punkte: punkt, ablauf: now + 60_000 });
+  lage.put(fahnder('a'), 'annotation', 'immer', { layerId: LAYER_LAGE, typ: 'marker', punkte: punkt });
+  assert.equal(lage.get('annotation', 'immer')?.data.ablauf, null);
+  assert.equal(lage.expireAnnotations(now), 0);
+  assert.equal(lage.expireAnnotations(now + 61_000), 1);
+  assert.deepEqual(lage.list('annotation').map((a) => a.id), ['immer']);
+});

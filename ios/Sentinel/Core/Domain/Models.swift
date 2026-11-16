@@ -240,6 +240,8 @@ struct MapObject: LageEntity {
     var trackerId: String?
     /// Fotos und Dateien, z. B. ein Foto des verdächtigen Mülleimers.
     var anhaenge: [ChatAttachment]?
+    /// Lebensdauer: Zeitpunkt in Millisekunden, zu dem sich die Markierung selbst löscht; `nil` für unbegrenzt.
+    var ablauf: Double?
 
     init(layerId: String, typ: Shape, titel: String = "", farbe: String = "#FF9F0A", punkte: [GeoPoint], radius: Double? = nil, zeit: Double? = nil) {
         self.layerId = layerId
@@ -260,6 +262,10 @@ struct MapObject: LageEntity {
     }
 
     var since: Date? { zeit.map { Date(timeIntervalSince1970: $0 / 1000) } }
+
+    var expiry: Date? { ablauf.map { Date(timeIntervalSince1970: $0 / 1000) } }
+
+    func isExpired(at date: Date = .now) -> Bool { expiry.map { $0 <= date } ?? false }
 }
 
 enum ZielArt: String, Codable, CaseIterable, Identifiable, Sendable {

@@ -88,6 +88,15 @@ enum Format {
         return dateTime(date)
     }
 
+    /// Ablauf einer Lebensdauer, z. B. "in 25 Min. (14:30)" oder "morgen, 09:15".
+    static func expiry(_ date: Date, now: Date = .now) -> String {
+        let seconds = date.timeIntervalSince(now)
+        if seconds <= 60 { return "gleich" }
+        if seconds < 3600 { return "in \(Int(seconds / 60)) Min. (\(time(date)))" }
+        if seconds < 86_400 { return "in \(Int(seconds / 3600)) Std. (\(time(date)))" }
+        return dateTime(date)
+    }
+
     static func dateTime(_ date: Date) -> String {
         date.formatted(Date.FormatStyle(date: .abbreviated, time: .shortened, locale: locale))
     }

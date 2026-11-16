@@ -5,9 +5,20 @@ import SwiftUI
 /// Objekte werden dynamisch angesteuert: Bewegt sich das Ziel, folgt die Route.
 struct SearchSheet: View {
     let navigate: (NavigationTarget) -> Void
+    /// Adresse auf der Karte zeigen, ohne loszufahren.
+    var showOnMap: (GeoPoint, String) -> Void = { _, _ in }
+    /// Marker an der Adresse setzen.
+    var placeMarker: (GeoPoint, String) -> Void = { _, _ in }
 
-    init(mode: Mode = .adresse, navigate: @escaping (NavigationTarget) -> Void) {
+    init(
+        mode: Mode = .adresse,
+        navigate: @escaping (NavigationTarget) -> Void,
+        showOnMap: @escaping (GeoPoint, String) -> Void = { _, _ in },
+        placeMarker: @escaping (GeoPoint, String) -> Void = { _, _ in }
+    ) {
         self.navigate = navigate
+        self.showOnMap = showOnMap
+        self.placeMarker = placeMarker
         _mode = State(initialValue: mode)
     }
 
@@ -25,6 +36,8 @@ struct SearchSheet: View {
     @State private var mode: Mode
     @State private var query = ""
     @State private var places: [SearchService.Place] = []
+    /// Angetippter Treffer: Auswahl zwischen Navigation, Kartenansicht und Marker.
+    @State private var chosen: SearchService.Place?
     @FocusState private var focused: Bool
 
     var body: some View {
@@ -76,6 +89,28 @@ struct SearchSheet: View {
                 if mode == .adresse { search.update(query: value, near: region) }
             }
             .onAppear { focused = mode == .adresse }
+            .confirmationDialog(
+                chosen?.title ?? "",
+                isPresented: Binding(get: { chosen != nil }, set: { if !$0 { chosen = nil } }),
+                titleVisibility: .visible,
+                presenting: chosen
+            ) { place in
+                Button("Hierhin navigieren") {
+                    navigate(.point(place.point, title: place.title))
+                    dismiss()
+                }
+                Button("Auf der Karte zeigen") {
+                    showOnMap(place.point, place.title)
+                    dismiss()
+                }
+                Button("Marker hier setzen") {
+                    placeMarker(place.point, place.title)
+                    dismiss()
+                }
+                Button("Abbrechen", role: .cancel) {}
+            } message: { place in
+                if !place.subtitle.isEmpty { Text(place.subtitle) }
+            }
             .onChange(of: mode) { _, _ in
                 places = []
                 if mode == .adresse { search.update(query: query, near: region) }
@@ -102,8 +137,7 @@ struct SearchSheet: View {
             Section("Treffer") {
                 ForEach(places) { place in
                     Button {
-                        navigate(.point(place.point, title: place.title))
-                        dismiss()
+                        chosen = place
                     } label: {
                         row(title: place.title, subtitle: place.subtitle, symbol: "mappin.circle.fill", distance: model.myPoint?.distance(to: place.point))
                     }
@@ -139,8 +173,8 @@ struct SearchSheet: View {
         let result = await search.resolve(suggestion, query: query, near: model.myPoint, client: model.client)
         // Direkt losfahren nur bei genau einem Treffer, der zur Eingabe passt; sonst bewusst auswählen lassen.
         if result.filter(\.matchesQuery).count == 1, let place = result.first(where: \.matchesQuery) {
-            navigate(.point(place.point, title: place.title))
-            dismiss()
+            places = result
+            chosen = place
         } else {
             places = result
         }

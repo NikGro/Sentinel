@@ -27,6 +27,11 @@
 - Nach dem Verschieben fragt die App, ob die Sichtung auf jetzt gesetzt werden soll
 
 **Ziele und Markierungen**
+- Antippen öffnet immer erst die Ansicht (Marker, Formen, Ziele, Kräfte): links „Schließen“, rechts „Bearbeiten“;
+  Verschieben und Löschen gibt es im Bearbeiten-Fenster
+- Lebensdauer für Markierungen (Standard unbegrenzt, sonst 15 Minuten bis 7 Tage): danach löschen sie sich selbst
+- Adresssuche: Antippen eines Treffers fragt „Hierhin navigieren“, „Auf der Karte zeigen“ oder „Marker hier setzen“;
+  der gezeigte Treffer bleibt als Stecknadel auf der Karte und bietet die Auswahl beim Antippen erneut an
 - Fotos (Kamera oder Mediathek) und Dateien an Markierungen und Zielen; beim Antippen sichtbar und zu öffnen
 - Ziel-Editor ohne Artauswahl (die Art steht beim Anlegen fest) und mit passenden Feldern je Art:
   Zielobjekt = Gebäude (Anschrift, Beschreibung, Bild), Zielfahrzeug = Fahrzeugdaten, Zielperson = Personendaten

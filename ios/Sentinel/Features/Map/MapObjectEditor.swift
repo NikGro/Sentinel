@@ -17,12 +17,21 @@ struct MapObjectEditor: View {
     /// Beim neuen Fahndungsraum: Haltestellen im Umkreis gleich mit anzeigen.
     @State private var addsStops = false
     @State private var stopsRadius = 500.0
+    /// Lebensdauer in Sekunden ab dem Sichern; 0 unbegrenzt, -1 den bisherigen Ablauf behalten.
+    @State private var lifetime: Int
+
+    private static let lifetimes: [(seconds: Int, title: String)] = [
+        (0, "Unbegrenzt"), (900, "15 Minuten"), (1800, "30 Minuten"), (3600, "1 Stunde"), (7200, "2 Stunden"),
+        (14_400, "4 Stunden"), (28_800, "8 Stunden"), (43_200, "12 Stunden"), (86_400, "24 Stunden"),
+        (259_200, "3 Tage"), (604_800, "7 Tage"),
+    ]
 
     init(context: EditorContext, startMoving: @escaping (String) -> Void) {
         self.context = context
         self.startMoving = startMoving
         _object = State(initialValue: context.object)
         _radiusText = State(initialValue: context.object.radius.map { String(Int($0)) } ?? "")
+        _lifetime = State(initialValue: context.object.ablauf == nil ? 0 : -1)
     }
 
     private var availableLayers: [Versioned<Layer>] {
@@ -230,6 +239,19 @@ struct MapObjectEditor: View {
                     Text("„Dauerhafte Orte“ bleiben erhalten, wenn die Lage zurückgesetzt wird.")
                 }
 
+                Section {
+                    Picker("Lebensdauer", systemImage: "timer", selection: $lifetime) {
+                        if let expiry = context.object.expiry {
+                            Text("Bis \(Format.dateTime(expiry))").tag(-1)
+                        }
+                        ForEach(Self.lifetimes.indices, id: \.self) { index in
+                            Text(Self.lifetimes[index].title).tag(Self.lifetimes[index].seconds)
+                        }
+                    }
+                } footer: {
+                    Text(lifetime == 0 ? "Bleibt, bis sie jemand löscht." : "Löscht sich danach von selbst, damit die Karte übersichtlich bleibt.")
+                }
+
                 if !context.isNew {
                     Section {
                         Button("Auf der Karte verschieben", systemImage: "arrow.up.and.down.and.arrow.left.and.right") {
@@ -274,9 +296,15 @@ struct MapObjectEditor: View {
         if result.typ == .haltestellen {
             result.radius = min(max(Double(radiusText) ?? 500, 50), 5000)
         }
+        switch lifetime {
+        case -1: break
+        case 0: result.ablauf = nil
+        default: result.ablauf = (Date.now.addingTimeInterval(TimeInterval(lifetime)).timeIntervalSince1970 * 1000).rounded()
+        }
         lage.saveMapObject(result, id: context.id)
         if context.isNew, result.typ == .fahndungsraum, addsStops, let point = result.punkte.first {
-            let stops = MapObject(layerId: result.layerId, typ: .haltestellen, titel: "Haltestellen", farbe: "#0A84FF", punkte: [point], radius: stopsRadius)
+            var stops = MapObject(layerId: result.layerId, typ: .haltestellen, titel: "Haltestellen", farbe: "#0A84FF", punkte: [point], radius: stopsRadius)
+            stops.ablauf = result.ablauf
             lage.saveMapObject(stops, id: LageStore.newId())
         }
         dismiss()

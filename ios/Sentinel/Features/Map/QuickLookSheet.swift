@@ -5,8 +5,11 @@ struct QuickLookSheet: View {
     let selection: MapSelection
     /// Standort eines Ziels auf der Karte neu setzen.
     let placeTarget: (String) -> Void
+    /// Markierung per Tipp auf die Karte verschieben.
+    let moveObject: (String) -> Void
 
     @Environment(LageStore.self) private var lage
+    @Environment(\.dismiss) private var dismiss
 
     var body: some View {
         NavigationStack {
@@ -18,11 +21,30 @@ struct QuickLookSheet: View {
                     if lage.vehicles[id] != nil { VehicleDetail(vehicleId: id) } else { gone }
                 case .target(let id):
                     if lage.targets[id] != nil { TargetDetail(targetId: id, placeOnMap: placeTarget) } else { gone }
-                case .cell(let id):
-                    if let object = lage.mapObjects[id] { CellInfo(id: id, object: object.data) } else { gone }
+                case .object(let id):
+                    if let object = lage.mapObjects[id] { MapObjectInfo(id: id, object: object.data, startMoving: moveObject) } else { gone }
                 }
             }
             .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                // Links Schließen, rechts Bearbeiten: einheitlich für alle Ansichten über der Karte.
+                ToolbarItem(placement: .cancellationAction) {
+                    Button("Schließen") { dismiss() }
+                }
+            }
+        }
+        // Gelöscht (auch von anderen): die Ansicht schließt sich.
+        .onChange(of: exists) { _, now in
+            if !now { dismiss() }
+        }
+    }
+
+    private var exists: Bool {
+        switch selection {
+        case .member(let id): lage.members[id] != nil
+        case .vehicle(let id): lage.vehicles[id] != nil
+        case .target(let id): lage.targets[id] != nil
+        case .object(let id): lage.mapObjects[id] != nil
         }
     }
 
@@ -128,14 +150,23 @@ struct MemberQuickLook: View {
     }
 }
 
-/// Angaben zu einer Prognosezelle (Argus Predict) oder einer anderen Fläche ohne Griff.
-struct CellInfo: View {
+/// Ansicht einer Markierung, Form oder Prognosezelle. Bearbeiten (mit Verschieben und Löschen) über den Knopf oben rechts.
+struct MapObjectInfo: View {
     let id: String
     let object: MapObject
+    /// Startet das Verschieben per Tipp auf die Karte.
+    let startMoving: (String) -> Void
 
     @Environment(AppModel.self) private var model
     @Environment(LageStore.self) private var lage
+    @Environment(LocalSettings.self) private var settings
     @Environment(\.dismiss) private var dismiss
+    @State private var editing: EditorContext?
+
+    private var isCell: Bool { object.wert != nil }
+    private var title: String { object.titel.isEmpty ? (isCell ? "Prognosezelle" : object.typ.title) : object.titel }
+    private var layer: Versioned<Layer>? { lage.layers[object.layerId] }
+    private var editable: Bool { !isCell && layer?.data.art != "argus" && settings.canEdit(layerId: object.layerId) }
 
     var body: some View {
         List {
@@ -145,22 +176,35 @@ struct CellInfo: View {
             }
             Section {
                 HStack(spacing: 14) {
-                    RoundedRectangle(cornerRadius: 6)
-                        .fill(Color(hex: object.farbe).opacity(0.6))
-                        .overlay(RoundedRectangle(cornerRadius: 6).stroke(Color(hex: object.farbe), lineWidth: 2))
-                        .frame(width: 44, height: 44)
+                    symbol
                     VStack(alignment: .leading, spacing: 2) {
-                        Text(object.titel.isEmpty ? "Prognosezelle" : object.titel)
+                        Text(title)
                             .font(.title3.weight(.bold))
-                        if let layer = lage.layers[object.layerId] {
-                            Text(layer.data.name)
-                                .font(.subheadline)
-                                .foregroundStyle(.secondary)
-                        }
+                        Text([object.titel.isEmpty ? nil : (isCell ? "Prognosezelle" : object.typ.title), layer?.data.name].compactMap { $0 }.joined(separator: " · "))
+                            .font(.subheadline)
+                            .foregroundStyle(.secondary)
                     }
                 }
                 .listRowBackground(Color.clear)
             }
+
+            if object.typ == .fahndungsraum || object.radius != nil || object.trackerId != nil || object.expiry != nil {
+                Section {
+                    if object.typ == .fahndungsraum, let since = object.since {
+                        LabeledContent("Letzte Sichtung", value: "\(Format.time(since)), \(Format.ago(since))")
+                    }
+                    if let radius = object.radius, object.typ == .kreis || object.typ == .haltestellen {
+                        LabeledContent("Umkreis", value: Format.distance(radius))
+                    }
+                    if let trackerId = object.trackerId {
+                        LabeledContent("Standort", value: "Tracker \(lage.trackers[trackerId]?.data.name ?? "unbekannt")")
+                    }
+                    if let expiry = object.expiry {
+                        LabeledContent("Löscht sich", value: Format.expiry(expiry))
+                    }
+                }
+            }
+
             if let wert = object.wert {
                 Section {
                     LabeledContent("Prognosefaktor", value: wert.formatted(.number.precision(.fractionLength(1)).locale(Format.locale)))
@@ -169,12 +213,55 @@ struct CellInfo: View {
                 }
             }
             if !object.notiz.isEmpty {
-                Section("Details") { Text(object.notiz) }
+                Section(isCell ? "Details" : "Notiz") {
+                    Text(object.notiz)
+                        .textSelection(.enabled)
+                }
             }
             if let attachments = object.anhaenge, !attachments.isEmpty {
                 AttachmentsSection(attachments: .constant(attachments), editable: false)
             }
+
+            Section {
+                if !editable, !isCell, layer?.data.art != "argus" {
+                    Label("Dauerhafte Orte sind gesperrt. Zum Bearbeiten unter Mehr „Dauerhafte Orte bearbeiten“ einschalten.", systemImage: "lock.fill")
+                        .font(.footnote)
+                        .foregroundStyle(.secondary)
+                }
+                if let current = lage.mapObjects[id] {
+                    Text("Zuletzt geändert von \(lage.name(of: current.updatedBy)), \(Format.ago(current.updatedDate))")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
+            }
         }
-        .navigationTitle(object.titel.isEmpty ? "Prognosezelle" : object.titel)
+        .navigationTitle(title)
+        .toolbar {
+            if editable {
+                ToolbarItem(placement: .primaryAction) {
+                    Button("Bearbeiten") { editing = EditorContext(id: id, object: object, isNew: false) }
+                }
+            }
+        }
+        .sheet(item: $editing) { context in
+            MapObjectEditor(context: context, startMoving: startMoving)
+                .presentationDetents([.medium, .large])
+        }
+    }
+
+    @ViewBuilder private var symbol: some View {
+        let color = Color(hex: object.farbe)
+        if object.typ == .marker || object.typ == .text || object.typ == .haltestellen {
+            Image(systemName: object.typ == .marker ? (object.symbol.isEmpty ? "mappin" : object.symbol) : object.typ.symbolName)
+                .font(.system(size: 20, weight: .semibold))
+                .foregroundStyle(.white)
+                .frame(width: 44, height: 44)
+                .background(color, in: .circle)
+        } else {
+            RoundedRectangle(cornerRadius: 6)
+                .fill(color.opacity(0.6))
+                .overlay(RoundedRectangle(cornerRadius: 6).stroke(color, lineWidth: 2))
+                .frame(width: 44, height: 44)
+        }
     }
 }

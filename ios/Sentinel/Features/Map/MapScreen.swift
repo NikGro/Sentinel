@@ -7,14 +7,14 @@ enum MapSelection: Identifiable, Hashable {
     case vehicle(String)
     case target(String)
     /// Angetippte Fläche ohne eigenen Griff, z. B. eine Argus-Prognosezelle.
-    case cell(String)
+    case object(String)
 
     var id: String {
         switch self {
         case .member(let id): "member-\(id)"
         case .vehicle(let id): "vehicle-\(id)"
         case .target(let id): "target-\(id)"
-        case .cell(let id): "cell-\(id)"
+        case .object(let id): "object-\(id)"
         }
     }
 }
@@ -39,6 +39,11 @@ enum MapTapMode: Equatable {
         case .placingTarget: "Neuen Standort des Ziels antippen"
         }
     }
+}
+
+struct SearchPin: Equatable {
+    let point: GeoPoint
+    let title: String
 }
 
 struct EditorContext: Identifiable {
@@ -81,12 +86,19 @@ struct MapScreen: View {
     @State private var bottomAreaHeight: CGFloat = 120
     @State private var now = Date.now
     @State private var topAreaHeight: CGFloat = 60
+    /// Über die Suche gezeigter Ort; Antippen bietet Navigation oder Marker an.
+    @State private var searchPin: SearchPin?
+    @State private var showsSearchPinActions = false
 
     var body: some View {
         MapReader { proxy in
             Map(position: $camera, scope: mapScope) {
                 if !followsMe {
                     MyLocationLayer(lage: lage, route: route, locationService: location, cameraState: cameraState)
+                }
+                if let searchPin {
+                    Marker(searchPin.title, systemImage: "magnifyingglass", coordinate: searchPin.point.coordinate)
+                        .tint(.red)
                 }
                 CoverageLayer(segments: coverageSegments)
                 ReachLayer(rings: reachRings)
@@ -144,8 +156,13 @@ struct MapScreen: View {
                         guard let screen = proxy.convert(symbol, to: .local) else { return false }
                         return hypot(screen.x - point.x, screen.y - point.y) < 26
                     }
-                    if !nearSymbol, let id = shape(at: GeoPoint(coordinate)), let object = lage.mapObjects[id] {
-                        if object.data.wert != nil { selection = .cell(id) } else { openEditor(for: id) }
+                    if !nearSymbol, let searchPin, let screen = proxy.convert(searchPin.point.coordinate, to: .local),
+                       hypot(screen.x - point.x, screen.y - point.y) < 34 {
+                        showsSearchPinActions = true
+                        return
+                    }
+                    if !nearSymbol, let id = shape(at: GeoPoint(coordinate)) {
+                        if lage.mapObjects[id] != nil { openEditor(for: id) }
                     }
                     return
                 }
@@ -174,11 +191,27 @@ struct MapScreen: View {
         .overlay(alignment: .topTrailing) { sideButtons }
         .mapScope(mapScope)
         .sheet(item: $selection) { selection in
-            QuickLookSheet(selection: selection) { targetId in
+            QuickLookSheet(selection: selection, placeTarget: { targetId in
                 tapMode = .placingTarget(targetId)
-            }
+            }, moveObject: { objectId in
+                self.selection = nil
+                tapMode = .moving(objectId: objectId)
+            })
             .presentationDetents([.medium, .large])
             .presentationBackgroundInteraction(.enabled(upThrough: .medium))
+        }
+        .confirmationDialog(searchPin?.title ?? "", isPresented: $showsSearchPinActions, titleVisibility: .visible) {
+            if let pin = searchPin {
+                Button("Hierhin navigieren") {
+                    searchPin = nil
+                    model.navigate(to: .point(pin.point, title: pin.title))
+                }
+                Button("Marker hier setzen") {
+                    searchPin = nil
+                    placeMarker(at: pin.point, title: pin.title, delayed: false)
+                }
+                Button("Suchtreffer ausblenden", role: .destructive) { searchPin = nil }
+            }
         }
         .sheet(item: $editor) { context in
             MapObjectEditor(context: context) { objectId in
@@ -194,9 +227,14 @@ struct MapScreen: View {
                 .presentationDetents([.medium, .large])
         }
         .sheet(item: $searchMode) { mode in
-            SearchSheet(mode: mode) { target in
+            SearchSheet(mode: mode, navigate: { target in
+                searchPin = nil
                 model.navigate(to: target)
-            }
+            }, showOnMap: { point, title in
+                show(SearchPin(point: point, title: title))
+            }, placeMarker: { point, title in
+                placeMarker(at: point, title: title)
+            })
             // Knapp unter voller Höhe bleibt das Fenster im Glas-Stil wie die Detailfenster.
             .presentationDetents([.fraction(0.94)])
         }
@@ -602,9 +640,32 @@ struct MapScreen: View {
         return inside
     }
 
+    /// Suchtreffer auf der Karte zeigen, ohne loszufahren.
+    private func show(_ pin: SearchPin) {
+        followsMe = false
+        searchPin = pin
+        withAnimation(.easeInOut(duration: 0.8)) {
+            camera = .camera(MapCamera(centerCoordinate: pin.point.coordinate, distance: 900, heading: 0, pitch: settings.prefers3D ? 55 : 0))
+        }
+    }
+
+    /// Neuer Marker an einem Suchtreffer; der Editor öffnet sich, sobald das Suchfenster zu ist.
+    private func placeMarker(at point: GeoPoint, title: String, delayed: Bool = true) {
+        show(SearchPin(point: point, title: title))
+        searchPin = nil
+        var object = MapObject(layerId: Layer.lageId, typ: .marker, titel: String(title.prefix(80)), punkte: [point])
+        object.farbe = "#FF9F0A"
+        let context = EditorContext(id: LageStore.newId(), object: object, isNew: true)
+        Task {
+            if delayed { try? await Task.sleep(for: .milliseconds(450)) }
+            editor = context
+        }
+    }
+
+    /// Bestehende Markierungen öffnen erst die Ansicht; bearbeitet wird über deren Bearbeiten-Knopf.
     private func openEditor(for id: String) {
-        guard tapMode == .none, let object = lage.mapObjects[id] else { return }
-        editor = EditorContext(id: id, object: object.data, isNew: false)
+        guard tapMode == .none, lage.mapObjects[id] != nil else { return }
+        selection = .object(id)
     }
 
     // MARK: Aufbereitung für die Karte
@@ -612,7 +673,7 @@ struct MapScreen: View {
     /// Nur geladene Ebenen erscheinen auf der Karte; Entwürfe bleiben in der Ebenenliste.
     private var visibleObjects: [Versioned<MapObject>] {
         lage.mapObjects.values.filter { object in
-            guard let layer = lage.layers[object.data.layerId] else { return false }
+            guard let layer = lage.layers[object.data.layerId], !object.data.isExpired() else { return false }
             return layer.data.isLive && !settings.hiddenLayers.contains(object.data.layerId)
         }
     }

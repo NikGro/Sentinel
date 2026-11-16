@@ -102,6 +102,7 @@ export class Lage extends EventEmitter<{ event: [LageEvent] }> {
     this.ensure('layer', LAYER_DAUERHAFT, { name: 'Dauerhafte Orte', art: 'dauerhaft', status: 'live', beschreibung: 'Bleibt beim Zurücksetzen erhalten' });
     this.ensure('room', ROOM_ALLGEMEIN, { name: 'Allgemein' });
     this.pruneTrack();
+    this.expireAnnotations();
   }
 
   /**
@@ -508,6 +509,18 @@ export class Lage extends EventEmitter<{ event: [LageEvent] }> {
     this.db.sql.exec('DELETE FROM track');
     this.lastTrackPoint.clear();
     this.emit('event', { type: 'bestreifungReset' });
+  }
+
+  /** Löscht Markierungen, deren Lebensdauer abgelaufen ist. Liefert die Anzahl. */
+  expireAnnotations(now = Date.now()): number {
+    let count = 0;
+    for (const a of this.list('annotation')) {
+      if (a.data.ablauf !== null && a.data.ablauf !== undefined && a.data.ablauf <= now) {
+        this.remove('annotation', a.id);
+        count++;
+      }
+    }
+    return count;
   }
 
   private pruneTrack(now = Date.now()): void {

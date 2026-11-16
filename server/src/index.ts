@@ -85,6 +85,8 @@ async function main(): Promise<void> {
   const trackerListener = startTrackerListener(services);
   services.oepnv.refreshIfStale();
   setInterval(() => services.oepnv.refreshIfStale(), 6 * 3600_000).unref();
+  // Markierungen mit Lebensdauer verschwinden von selbst.
+  setInterval(() => services.lage.expireAnnotations(), 30_000).unref();
   await app.listen({ host: config.host, port: config.port });
   console.log(`SENTINEL Server ${SERVER_VERSION} läuft auf ${config.host}:${config.port}`);
 

@@ -67,6 +67,8 @@ export interface MapObject {
   zeit: number | null;
   /** Marker, dessen Standort ein Tracker liefert. */
   trackerId: string | null;
+  /** Lebensdauer: Zeitpunkt, zu dem sich die Markierung selbst löscht. */
+  ablauf?: number | null;
 }
 
 export type ZielArt = 'person' | 'fahrzeug' | 'objekt';

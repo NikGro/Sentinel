@@ -115,6 +115,8 @@ const annotation = z
     trackerId: optionalId,
     /** Fotos und Dateien, z. B. ein Foto des verdächtigen Mülleimers. */
     anhaenge: z.array(attachment).max(20).default([]),
+    /** Lebensdauer: Zeitpunkt, zu dem sich die Markierung selbst löscht; `null` für unbegrenzt. */
+    ablauf: timestamp.nullish().transform((v) => v ?? null),
   })
   .superRefine((a, ctx) => {
     const min = a.typ === 'linie' ? 2 : a.typ === 'flaeche' ? 3 : 1;
