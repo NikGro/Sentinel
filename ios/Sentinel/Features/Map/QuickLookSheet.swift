@@ -206,7 +206,7 @@ struct MapObjectInfo: View {
             }
 
             if object.typ.isTransit, let line = object.linie {
-                Section("Linie") {
+                Section {
                     Label("\(line.ref) Richtung \(line.richtung)", systemImage: line.symbolName)
                     if let names = object.haltNamen, let first = names.first, let last = names.last {
                         LabeledContent("Abschnitt", value: "\(first) → \(last) (\(names.count) Halte)")
@@ -232,6 +232,8 @@ struct MapObjectInfo: View {
                             dismiss()
                         }
                     }
+                } header: {
+                    Text("Linie")
                 } footer: {
                     Text("Positionen nach typischem Tempo geschätzt, keine Echtzeitdaten.")
                 }
