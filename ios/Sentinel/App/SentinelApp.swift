@@ -42,7 +42,8 @@ enum Appearance {
     @MainActor static func apply() {
         for scene in UIApplication.shared.connectedScenes {
             guard let windowScene = scene as? UIWindowScene else { continue }
-            for window in windowScene.windows where window.traitOverrides.userInterfaceLevel != .elevated {
+            // Nur setzen, nie lesen: Ein noch nicht gesetzter Wert lässt UIKit beim Lesen abbrechen.
+            for window in windowScene.windows {
                 window.traitOverrides.userInterfaceLevel = .elevated
             }
         }
