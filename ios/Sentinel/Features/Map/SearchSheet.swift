@@ -42,10 +42,6 @@ struct SearchSheet: View {
             .listStyle(.insetGrouped)
             .safeAreaInset(edge: .top, spacing: 0) {
                 VStack(spacing: 10) {
-                    Picker("Suchart", selection: $mode) {
-                        ForEach(Mode.allCases) { Text($0.title).tag($0) }
-                    }
-                    .pickerStyle(.segmented)
                     HStack {
                         Image(systemName: "magnifyingglass")
                             .foregroundStyle(.secondary)
@@ -68,7 +64,7 @@ struct SearchSheet: View {
                 .padding(.vertical, 10)
                 .background(.bar)
             }
-            .navigationTitle("Navigieren")
+            .navigationTitle(mode == .adresse ? "Adresse" : "Zu Objekten navigieren")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {

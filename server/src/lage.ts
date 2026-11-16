@@ -255,11 +255,15 @@ export class Lage extends EventEmitter<{ event: [LageEvent] }> {
         this.positions.delete(id);
         this.leaveLeapfrog(id);
         break;
-      case 'message':
-        throw new LageError('verboten', 'Nachrichten können nicht einzeln gelöscht werden.');
+      case 'message': {
+        const message = this.get('message', id)!;
+        if (actor.role !== 'zentrale' && message.updatedBy !== actor.id) throw new LageError('verboten', 'Nur eigene Nachrichten können gelöscht werden.');
+        break;
+      }
       case 'room':
-        if (id === ROOM_ALLGEMEIN) throw new LageError('verboten', 'Der allgemeine Chatraum kann nicht gelöscht werden.');
         for (const m of this.list('message')) if (m.data.roomId === id) this.remove('message', m.id);
+        // Der allgemeine Chatraum bleibt bestehen und wird nur geleert.
+        if (id === ROOM_ALLGEMEIN) return;
         break;
       case 'layer':
         if (PROTECTED_LAYERS.has(id)) throw new LageError('verboten', 'Diese Ebene kann nicht gelöscht werden.');

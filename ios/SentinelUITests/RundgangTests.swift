@@ -41,7 +41,7 @@ final class RundgangTests: XCTestCase {
         settle(app)
         // Wie auf dem Gerät: echter Standort, Karte folgt dem eigenen Punkt. Friert die Karte dabei ein, scheitern alle weiteren Schritte.
         XCUIDevice.shared.location = XCUILocation(location: CLLocation(latitude: 53.5503, longitude: 9.9930))
-        if app.buttons["Eigener Standort"].waitForExistence(timeout: 3) { app.buttons["Eigener Standort"].tap() }
+        if app.buttons["Auf eigenen Standort zentrieren"].waitForExistence(timeout: 3) { app.buttons["Auf eigenen Standort zentrieren"].tap() }
         sleep(2)
         XCUIDevice.shared.location = XCUILocation(location: CLLocation(latitude: 53.5512, longitude: 9.9951))
         sleep(2)
@@ -56,9 +56,9 @@ final class RundgangTests: XCTestCase {
         XCTAssertTrue(app.buttons["A wirklich übernehmen?"].waitForExistence(timeout: 2), "Zweiter Druck wird verlangt")
         capture("01b-a-bestaetigen")
 
-        // Kartenstil, 2D/3D und Verkehrslage in einem Knopf
-        app.buttons["Kartenstil und 3D"].tap()
-        XCTAssertTrue(app.buttons["3D-Ansicht"].waitForExistence(timeout: 3) || app.buttons["2D-Ansicht"].exists, "2D/3D im Kartenstil-Menü")
+        // Kartenstil und Verkehrslage in einem Knopf
+        app.buttons["Kartenstil"].tap()
+        XCTAssertTrue(app.buttons["Hybrid"].waitForExistence(timeout: 3), "Kartenstil-Menü")
         capture("01c-kartenstil")
         app.buttons["Hybrid"].firstMatch.tap()
         sleep(1)

@@ -64,6 +64,7 @@ struct MapScreen: View {
     @State private var searchMode: SearchSheet.Mode?
     @State private var showsSituation = false
     @State private var cameraState = MapCameraState()
+    @Namespace private var mapScope
     /// In der Navi-Ansicht folgt die Kamera nah und in Fahrtrichtung, bis man die Karte selbst verschiebt.
     @State private var navigationFollows = true
     @State private var now = Date.now
@@ -71,8 +72,14 @@ struct MapScreen: View {
 
     var body: some View {
         MapReader { proxy in
-            Map(position: $camera) {
-                UserAnnotation()
+            Map(position: $camera, scope: mapScope) {
+                MyLocationLayer(
+                    location: location.current,
+                    style: myLocationStyle,
+                    holdsA: lage.holdsA,
+                    label: isFollowing || route.isActive ? locationContext.summary : nil,
+                    cameraState: cameraState
+                )
                 CoverageLayer(segments: coverageSegments)
                 ReachLayer(rings: reachRings)
                 MapObjectsLayer(lines: objects(.linie), areas: objects(.flaeche), circles: objects(.kreis) + objects(.haltestellen), handles: handles) { id in
@@ -84,12 +91,14 @@ struct MapScreen: View {
                 SymbolLayer(pins: vehiclePins + targetPins) { selection = $0 }
                 ForcesLayer(pins: forcePins) { selection = $0 }
                 DraftLayer(points: draftPoints, outline: draftOutline)
-                streetLabel
             }
             .mapStyle(mapStyle)
             .mapControls {
                 MapScaleView()
             }
+            // Karte bis an den unteren Rand: Apples Rechtshinweis sitzt dann klein unter der Tableiste
+            // statt über den Bedienelementen.
+            .ignoresSafeArea(.container, edges: .bottom)
             .onMapCameraChange(frequency: .continuous) { context in cameraState.update(context.camera) }
             .simultaneousGesture(DragGesture(minimumDistance: 12).onChanged { _ in
                 if route.isActive { navigationFollows = false }
@@ -102,6 +111,7 @@ struct MapScreen: View {
         .safeAreaInset(edge: .top, spacing: 0) { topArea }
         .safeAreaInset(edge: .bottom, spacing: 0) { bottomArea }
         .overlay(alignment: .topTrailing) { sideButtons }
+        .mapScope(mapScope)
         .sheet(item: $selection) { selection in
             QuickLookSheet(selection: selection) { targetId in
                 tapMode = .placingTarget(targetId)
@@ -135,13 +145,13 @@ struct MapScreen: View {
         .sheet(isPresented: $showsSituation) {
             SituationSheet()
         }
-        .task(id: CoverageKey(enabled: settings.showsCoverage, generation: lage.coverageGeneration)) {
+        .task(id: CoverageKey(enabled: settings.showsCoverage, since: settings.coverageSince, generation: lage.coverageGeneration)) {
             guard settings.showsCoverage else {
                 fahndung.clearCoverage()
                 return
             }
             while !Task.isCancelled {
-                await fahndung.reloadCoverage()
+                await fahndung.reloadCoverage(since: settings.coverageSince)
                 try? await Task.sleep(for: .seconds(60))
             }
         }
@@ -160,7 +170,12 @@ struct MapScreen: View {
         }
         .onChange(of: route.isActive) { _, active in
             navigationFollows = true
-            if active { followForNavigation(animated: true) } else { camera = .userLocation(followsHeading: false, fallback: .automatic) }
+            if active { followForNavigation(animated: true) } else { followUserIn3D() }
+        }
+        .task {
+            // Beim Öffnen wie in einer Navi-App: dreidimensional auf den eigenen Standort.
+            for _ in 0..<40 where location.current == nil { try? await Task.sleep(for: .milliseconds(250)) }
+            if !route.isActive { followUserIn3D() }
         }
         .onChange(of: location.current?.timestamp) { _, _ in
             if route.isActive, navigationFollows { followForNavigation(animated: true) }
@@ -170,6 +185,7 @@ struct MapScreen: View {
 
     private struct CoverageKey: Equatable {
         let enabled: Bool
+        let since: Double
         let generation: Int
     }
 
@@ -185,24 +201,11 @@ struct MapScreen: View {
 
     // MARK: Statuszeile unter dem eigenen Standort
 
-    /// Straße und Fahrtrichtung direkt unter dem eigenen Punkt. Als Kartenannotation bewegt sie sich mit der Karte,
-    /// ohne dass die Ansicht bei jeder Kamerabewegung neu berechnet werden muss.
-    @MapContentBuilder private var streetLabel: some MapContent {
-        if isFollowing || route.isActive, let summary = locationContext.summary, let current = location.current {
-            Annotation("Eigener Standort", coordinate: current.coordinate, anchor: .top) {
-                Text(summary)
-                    .font(.footnote.weight(.semibold))
-                    .lineLimit(1)
-                    .padding(.horizontal, 10)
-                    .padding(.vertical, 5)
-                    .glassEffect(.regular, in: .capsule)
-                    .fixedSize()
-                    .padding(.top, 22)
-                    .allowsHitTesting(false)
-                    .accessibilityLabel("Eigener Standort: \(summary)")
-            }
-            .annotationTitles(.hidden)
-        }
+    /// Wie der eigene Standort erscheint: Navi-Pfeil in der Navigation, Fahrzeug, wenn man drinsitzt, sonst Punkt.
+    private var myLocationStyle: MyLocationLayer.Style {
+        if route.isActive { return .navigation }
+        if let me = lage.me, let vehicle = lage.vehicle(of: me.data) { return .vehicle(callsign: vehicle.data.funkrufname) }
+        return .dot
     }
 
     // MARK: Obere Leiste
@@ -263,29 +266,27 @@ struct MapScreen: View {
     private var sideButtons: some View {
         GlassEffectContainer(spacing: Theme.barSpacing) {
             VStack(spacing: Theme.barSpacing) {
-                AddMenu { action in
-                    switch action {
-                    case .shape(let shape): tapMode = .drawing(shape, points: [])
-                    case .target(let art): tapMode = .newTarget(art)
-                    }
-                }
-                MapStyleButton(state: cameraState) { pitch in
-                    withAnimation { camera = .camera(cameraState.camera(pitch: pitch)) }
-                }
+                MapCompass(scope: mapScope)
+                    .mapControlVisibility(.visible)
+                    .frame(width: Theme.roundButton, height: Theme.roundButton)
+                MapStyleButton()
                 MapRoundButton(title: "Ebenen", symbol: "square.3.layers.3d") { showsLayers = true }
-                MapRoundButton(title: isFollowing ? "Standort folgt" : "Eigener Standort", symbol: isFollowing || (route.isActive && navigationFollows) ? "location.fill" : "location") {
+                MapRoundButton(
+                    title: "Auf eigenen Standort zentrieren",
+                    symbol: isFollowing || (route.isActive && navigationFollows) ? "location.circle.fill" : "location.circle"
+                ) {
                     if route.isActive {
                         navigationFollows = true
                         followForNavigation(animated: true)
                     } else {
-                        withAnimation { camera = .userLocation(followsHeading: isFollowing, fallback: .automatic) }
+                        followUserIn3D()
                     }
                 }
                 if let a = lage.aPosition, !lage.holdsA {
                     Button {
-                        withAnimation { camera = .region(MKCoordinateRegion(center: a.point.coordinate, latitudinalMeters: 800, longitudinalMeters: 800)) }
+                        withAnimation { camera = .camera(MapCamera(centerCoordinate: a.point.coordinate, distance: 900, heading: 0, pitch: 55)) }
                     } label: {
-                        ASymbol(size: 28)
+                        ASymbol(size: 26)
                             .frame(width: Theme.roundButton, height: Theme.roundButton)
                             .contentShape(.circle)
                     }
@@ -293,13 +294,31 @@ struct MapScreen: View {
                     .glassEffect(.regular.interactive(), in: .circle)
                     .accessibilityLabel("A-Position zeigen")
                 }
-                CompassButton(state: cameraState) {
-                    withAnimation { camera = .camera(cameraState.camera(heading: 0)) }
+                AddMenu { action in
+                    switch action {
+                    case .shape(let shape): tapMode = .drawing(shape, points: [])
+                    case .target(let art): tapMode = .newTarget(art)
+                    }
                 }
             }
         }
         .padding(.trailing, Theme.barInset)
         .padding(.top, topAreaHeight + Theme.barSpacing)
+    }
+
+    /// Folgt dem eigenen Standort in 3D: erst gekippt dorthin, dann in die Standortverfolgung, die die Neigung behält.
+    private func followUserIn3D() {
+        guard let current = location.current else {
+            camera = .userLocation(fallback: .automatic)
+            return
+        }
+        withAnimation(.easeInOut(duration: 0.6)) {
+            camera = .camera(MapCamera(centerCoordinate: current.coordinate, distance: 1100, heading: cameraState.heading, pitch: 55))
+        }
+        Task {
+            try? await Task.sleep(for: .milliseconds(700))
+            if !route.isActive { camera = .userLocation(followsHeading: false, fallback: .automatic) }
+        }
     }
 
     /// Navi-Kamera: nah am eigenen Standort, in Fahrtrichtung gedreht, je nach Tempo etwas weiter heraus.
@@ -326,8 +345,11 @@ struct MapScreen: View {
             if route.isActive {
                 NavigationBottomBar()
             } else {
-                APositionControl()
-                MobilityControl { mobilityChoice = $0 }
+                HStack(spacing: Theme.barSpacing) {
+                    MobilityControl { mobilityChoice = $0 }
+                    APositionControl()
+                    ToAButton()
+                }
             }
             SituationBar { showsSituation = true }
         }
@@ -428,6 +450,8 @@ struct MapScreen: View {
             let isA = lage.operation.a?.memberId == member.id
             let stale = !lage.isOnline(member.id) || now.timeIntervalSince(position.date) > 120
             if let vehicle = lage.vehicle(of: member.data) {
+                // Das eigene Fahrzeug zeigt der eigene Standort, kein zweites Symbol darüber.
+                if let me = lage.me, lage.vehicle(of: me.data)?.id == vehicle.id { continue }
                 var crew = crews[vehicle.id] ?? (names: [], position: position, isA: false, stale: true)
                 crew.names.append(member.data.spitzname)
                 if position.ts > crew.position.ts { crew.position = position }
@@ -436,8 +460,8 @@ struct MapScreen: View {
                 crews[vehicle.id] = crew
                 continue
             }
-            // Der eigene Standort erscheint als blauer Punkt; ein eigener Marker nur, wenn man selbst die A hält.
-            if member.id == lage.selfId, !isA { continue }
+            // Der eigene Standort hat sein eigenes Symbol (mit A, falls man sie hält).
+            if member.id == lage.selfId { continue }
             pins.append(ForcePin(
                 id: member.id,
                 label: lage.label(of: member.data),

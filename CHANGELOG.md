@@ -1,5 +1,30 @@
 # Änderungen
 
+## 0.4.0
+
+**Eigener Standort**
+- Sitzt man im Fahrzeug, wird der eigene Punkt zum Fahrzeug (kein zweites Symbol mehr darüber)
+- In der Navigation ein Navi-Pfeil in Fahrtrichtung statt des Standardpunkts
+- Straßenschild mit Abstand unter dem eigenen Symbol und immer mit Fahrtrichtung (im Stand per Kompass)
+
+**Karte**
+- Runde Knöpfe wieder 44 pt, nativer Kompass immer sichtbar, Plus-Knopf unten in der Spalte
+- Karte immer in 3D, Kartenstil-Knopf ohne 2D/3D; eigenes Symbol für „auf mich zentrieren“
+- Fortbewegung (nur Symbole, halbe Breite) und A-Knopf in einer Zeile; A wieder als echtes Symbol
+- Apples Rechtshinweis klein unter der Tableiste
+- Suche: Suchleiste für Adressen, Objekte-Knopf für die Objektliste, kein Umschalter mehr
+- Bestreifte Wege erst ab dem Einschalten
+
+**Navigation**
+- Abweichen und Überfahren des Ziels wird schneller erkannt und neu berechnet
+- „Route wird neu berechnet …“ mit Ladeanzeige im Abbiegehinweis
+- Sonderrechte in Rot, ohne zusätzlichen Hinweistext
+
+**Listen und Chat**
+- Ganz durchwischen löscht Ziele, Fahrzeuge und Chaträume direkt
+- Eigene Nachrichten lassen sich löschen (gedrückt halten), der allgemeine Chatraum lässt sich leeren
+- Schalter einheitlich grün
+
 ## 0.3.0
 
 **Aussehen und Bedienung**

@@ -52,7 +52,6 @@ struct SettingsScreen: View {
                     Toggle(isOn: $settings.permanentLayerUnlocked) {
                         Label("Dauerhafte Orte bearbeiten", systemImage: "lock.open")
                     }
-                    .tint(.orange)
                 } footer: {
                     Text("Aus: Die Ebene mit dauerhaft wichtigen Orten ist vor versehentlichem Ändern geschützt. Nach jedem Neustart der App ist sie wieder geschützt.")
                 }

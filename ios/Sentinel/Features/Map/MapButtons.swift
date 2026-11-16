@@ -38,7 +38,7 @@ struct MapRoundButton: View {
     var body: some View {
         Button(action: action) {
             Image(systemName: symbol)
-                .font(.system(size: 18, weight: .semibold))
+                .font(.system(size: 17, weight: .semibold))
                 .foregroundStyle(prominent ? .white : tint)
                 .frame(width: Theme.roundButton, height: Theme.roundButton)
                 .contentShape(.circle)
@@ -49,48 +49,8 @@ struct MapRoundButton: View {
     }
 }
 
-/// Kompass in derselben Größe wie die übrigen Knöpfe; erscheint nur, wenn die Karte nicht genordet ist.
-struct CompassButton: View {
-    let state: MapCameraState
-    let northUp: () -> Void
-
-    var body: some View {
-        ZStack { compass }
-            .animation(.snappy, value: isNorth)
-    }
-
-    private var isNorth: Bool { abs(state.heading) <= 2 || abs(state.heading - 360) <= 2 }
-
-    @ViewBuilder private var compass: some View {
-        if !isNorth {
-            Button(action: northUp) {
-                ZStack {
-                    Image(systemName: "location.north.fill")
-                        .font(.system(size: 18, weight: .bold))
-                        .foregroundStyle(.red)
-                        .rotationEffect(.degrees(-state.heading))
-                    Text("N")
-                        .font(.system(size: 8, weight: .heavy))
-                        .foregroundStyle(.secondary)
-                        .offset(y: 17)
-                        .rotationEffect(.degrees(-state.heading))
-                }
-                .frame(width: Theme.roundButton, height: Theme.roundButton)
-                .contentShape(.circle)
-            }
-            .buttonStyle(.plain)
-            .glassEffect(.regular.interactive(), in: .circle)
-            .accessibilityLabel("Karte norden")
-            .transition(.scale.combined(with: .opacity))
-        }
-    }
-}
-
-/// Kartenstil, 2D/3D und Verkehrslage in einem Knopf.
+/// Kartenstil und Verkehrslage in einem Knopf. Die Karte ist immer dreidimensional.
 struct MapStyleButton: View {
-    let state: MapCameraState
-    let setPitch: (Double) -> Void
-
     @Environment(LocalSettings.self) private var settings
 
     var body: some View {
@@ -102,30 +62,18 @@ struct MapStyleButton: View {
                 }
             }
             .pickerStyle(.inline)
-            Section {
-                Button(state.is3D ? "2D-Ansicht" : "3D-Ansicht", systemImage: state.is3D ? "map" : "view.3d") {
-                    setPitch(state.is3D ? 0 : 60)
-                }
-                Toggle("Verkehrslage", systemImage: "car.rear.road.lane", isOn: $settings.showsTraffic)
-                    .disabled(settings.mapStyle == .satellit)
-            }
+            Toggle("Verkehrslage", systemImage: "car.rear.road.lane", isOn: $settings.showsTraffic)
+                .disabled(settings.mapStyle == .satellit)
         } label: {
-            ZStack(alignment: .bottomTrailing) {
-                Image(systemName: settings.mapStyle.symbolName)
-                    .font(.system(size: 18, weight: .semibold))
-                    .foregroundStyle(.primary)
-                    .frame(width: Theme.roundButton, height: Theme.roundButton)
-                Text(state.is3D ? "3D" : "2D")
-                    .font(.system(size: 9, weight: .heavy))
-                    .foregroundStyle(.secondary)
-                    .padding(.trailing, 9)
-                    .padding(.bottom, 8)
-            }
-            .contentShape(.circle)
+            Image(systemName: settings.mapStyle.symbolName)
+                .font(.system(size: 17, weight: .semibold))
+                .foregroundStyle(.primary)
+                .frame(width: Theme.roundButton, height: Theme.roundButton)
+                .contentShape(.circle)
         }
         .menuOrder(.fixed)
         .glassEffect(.regular.interactive(), in: .circle)
-        .accessibilityLabel("Kartenstil und 3D")
+        .accessibilityLabel("Kartenstil")
     }
 }
 
@@ -154,7 +102,7 @@ struct AddMenu: View {
             }
         } label: {
             Image(systemName: "plus")
-                .font(.system(size: 20, weight: .bold))
+                .font(.system(size: 19, weight: .bold))
                 .foregroundStyle(.white)
                 .frame(width: Theme.roundButton, height: Theme.roundButton)
                 .contentShape(.circle)

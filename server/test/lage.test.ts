@@ -93,7 +93,7 @@ test('Ziele: Art und von Hand gesetzter Standort', () => {
   assert.equal(lage.get('target', 't2')?.data.art, 'person');
 });
 
-test('Chaträume: anlegen, schreiben, löschen; der allgemeine Raum bleibt', () => {
+test('Chaträume: anlegen, schreiben, löschen; der allgemeine Raum wird nur geleert', () => {
   const lage = newLage();
   lage.put(fahnder('a'), 'room', 'r1', { name: 'Team Nord' });
   lage.put(fahnder('a'), 'message', 'n1', { roomId: 'r1', text: 'Hallo' });
@@ -102,7 +102,15 @@ test('Chaträume: anlegen, schreiben, löschen; der allgemeine Raum bleibt', () 
   assert.throws(() => lage.put(fahnder('a'), 'message', 'n4', { roomId: 'r1' }), /leer/);
   lage.del(fahnder('b'), 'room', 'r1');
   assert.deepEqual(lage.list('message').map((m) => m.id), ['n2']);
-  assert.throws(() => lage.del(fahnder('a'), 'room', ROOM_ALLGEMEIN), LageError);
+  // Nur eigene Nachrichten lassen sich löschen
+  lage.put(fahnder('a'), 'message', 'n5', { roomId: ROOM_ALLGEMEIN, text: 'Tippfehler' });
+  assert.throws(() => lage.del(fahnder('b'), 'message', 'n5'), LageError);
+  lage.del(fahnder('a'), 'message', 'n5');
+  assert.equal(lage.get('message', 'n5'), null);
+  // Der allgemeine Raum wird beim Löschen nur geleert
+  lage.del(fahnder('b'), 'room', ROOM_ALLGEMEIN);
+  assert.ok(lage.get('room', ROOM_ALLGEMEIN));
+  assert.equal(lage.list('message').length, 0);
 });
 
 test('Überschlagendes Anfahren: Teilnehmer erhalten die kommenden Halte und rücken nach', () => {

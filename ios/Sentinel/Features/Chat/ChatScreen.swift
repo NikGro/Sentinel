@@ -19,9 +19,13 @@ struct ChatScreen: View {
                     NavigationLink(value: room.id) {
                         RoomRow(room: room)
                     }
-                    .swipeActions {
-                        if room.id != ChatRoom.generalId {
-                            Button("Löschen", systemImage: "trash", role: .destructive) { roomToDelete = room }
+                    .swipeActions(edge: .trailing, allowsFullSwipe: room.id != ChatRoom.generalId) {
+                        if room.id == ChatRoom.generalId {
+                            Button("Leeren", systemImage: "eraser", role: .destructive) { roomToDelete = room }
+                        } else {
+                            Button("Löschen", systemImage: "trash", role: .destructive) {
+                                lage.delete(ChatRoom.self, id: room.id)
+                            }
                         }
                     }
                 }
@@ -51,13 +55,15 @@ struct ChatScreen: View {
                 Text("Jeder im Einsatz kann den Raum betreten und löschen.")
             }
             .alert(
-                "Chatraum „\(roomToDelete?.data.name ?? "")“ samt Nachrichten für alle löschen?",
+                "Alle Nachrichten in „\(roomToDelete?.data.name ?? "")“ für alle löschen?",
                 isPresented: Binding(get: { roomToDelete != nil }, set: { if !$0 { roomToDelete = nil } })
             ) {
                 Button("Abbrechen", role: .cancel) {}
-                Button("Löschen", role: .destructive) {
+                Button("Leeren", role: .destructive) {
                     if let room = roomToDelete { lage.delete(ChatRoom.self, id: room.id) }
                 }
+            } message: {
+                Text("Der allgemeine Raum bleibt bestehen, nur sein Verlauf wird geleert.")
             }
         }
     }
@@ -134,6 +140,16 @@ struct ChatRoomView: View {
                     ForEach(messages) { message in
                         MessageBubble(message: message, isMine: message.updatedBy == lage.selfId, sender: lage.name(of: message.updatedBy))
                             .id(message.id)
+                            .contextMenu {
+                                if !message.data.text.isEmpty {
+                                    Button("Kopieren", systemImage: "doc.on.doc") { UIPasteboard.general.string = message.data.text }
+                                }
+                                if message.updatedBy == lage.selfId {
+                                    Button("Löschen", systemImage: "trash", role: .destructive) {
+                                        lage.delete(ChatMessage.self, id: message.id)
+                                    }
+                                }
+                            }
                     }
                 }
                 .padding(.horizontal, 12)

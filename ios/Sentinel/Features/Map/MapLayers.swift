@@ -273,7 +273,7 @@ struct RouteLayer: MapContent {
     var body: some MapContent {
         ForEach(lines) { line in
             MapPolyline(line.polyline)
-                .stroke(line.specialRights ? Color.purple : Color.blue, style: StrokeStyle(lineWidth: 7, lineCap: .round, lineJoin: .round))
+                .stroke(line.specialRights ? Color.red : Color.blue, style: StrokeStyle(lineWidth: 7, lineCap: .round, lineJoin: .round))
         }
     }
 }
@@ -376,5 +376,134 @@ struct NearbyStopsLayer: MapContent {
             }
             .annotationTitles(.hidden)
         }
+    }
+}
+
+/// Eigener Standort. Frei auf der Karte der gewohnte blaue Punkt; im Fahrzeug wird der Punkt zum Fahrzeug,
+/// in der Navigation zum Navi-Pfeil. Straße und Fahrtrichtung stehen mit Abstand darunter.
+struct MyLocationLayer: MapContent {
+    enum Style: Equatable {
+        case dot
+        case vehicle(callsign: String)
+        case navigation
+    }
+
+    let location: CLLocation?
+    let style: Style
+    let holdsA: Bool
+    let label: String?
+    let cameraState: MapCameraState
+
+    /// Nur frei, ohne A: dann genügt der Systempunkt mit Genauigkeitskreis.
+    private var usesSystemDot: Bool { style == .dot && !holdsA }
+
+    var body: some MapContent {
+        if usesSystemDot {
+            UserAnnotation()
+            if let label, let location {
+                Annotation("Eigener Standort", coordinate: location.coordinate, anchor: .top) {
+                    StreetLabel(text: label)
+                        .padding(.top, 20)
+                }
+                .annotationTitles(.hidden)
+            }
+        } else if let location {
+            Annotation("Eigener Standort", coordinate: location.coordinate, anchor: .center) {
+                MyLocationMarker(style: style, holdsA: holdsA, course: location.course, cameraState: cameraState)
+                    .overlay(alignment: .bottom) {
+                        if let label {
+                            StreetLabel(text: label)
+                                .alignmentGuide(.bottom) { $0[.top] - 8 }
+                        }
+                    }
+            }
+            .annotationTitles(.hidden)
+        }
+    }
+}
+
+private struct StreetLabel: View {
+    let text: String
+
+    var body: some View {
+        Text(text)
+            .font(.footnote.weight(.semibold))
+            .lineLimit(1)
+            .padding(.horizontal, 10)
+            .padding(.vertical, 5)
+            .glassEffect(.regular, in: .capsule)
+            .fixedSize()
+            .allowsHitTesting(false)
+            .accessibilityLabel("Eigener Standort: \(text)")
+    }
+}
+
+/// Darstellung des eigenen Standorts als Fahrzeug, Navi-Pfeil oder Punkt mit A.
+private struct MyLocationMarker: View {
+    let style: MyLocationLayer.Style
+    let holdsA: Bool
+    let course: CLLocationDirection
+    let cameraState: MapCameraState
+
+    var body: some View {
+        marker
+            .overlay(alignment: .topTrailing) {
+                if holdsA {
+                    ASymbol(size: 18)
+                        .overlay(Circle().stroke(.white, lineWidth: 1.5))
+                        .offset(x: 6, y: -6)
+                }
+            }
+    }
+
+    @ViewBuilder private var marker: some View {
+        switch style {
+        case .navigation:
+            NavigationPuck(course: course, cameraState: cameraState)
+        case .vehicle(let callsign):
+            VStack(spacing: 2) {
+                Image(systemName: "car.fill")
+                    .font(.system(size: 17, weight: .bold))
+                    .foregroundStyle(.white)
+                    .frame(width: 38, height: 38)
+                    .background(Theme.accent, in: .rect(cornerRadius: 11))
+                    .overlay(RoundedRectangle(cornerRadius: 11).stroke(.white, lineWidth: 3))
+                    .shadow(color: .black.opacity(0.3), radius: 3, y: 1)
+                Text(callsign)
+                    .font(.caption2.weight(.bold))
+                    .padding(.horizontal, 5)
+                    .background(.thinMaterial, in: .capsule)
+                    .fixedSize()
+            }
+        case .dot:
+            Circle()
+                .fill(Theme.accent)
+                .frame(width: 20, height: 20)
+                .overlay(Circle().stroke(.white, lineWidth: 3))
+                .shadow(color: .black.opacity(0.3), radius: 3, y: 1)
+        }
+    }
+}
+
+/// Navi-Pfeil wie in einer Navi-App: zeigt in Fahrtrichtung, relativ zur gedrehten Karte.
+private struct NavigationPuck: View {
+    let course: CLLocationDirection
+    let cameraState: MapCameraState
+
+    var body: some View {
+        ZStack {
+            Circle()
+                .fill(.white)
+                .frame(width: 46, height: 46)
+                .shadow(color: .black.opacity(0.3), radius: 4, y: 2)
+            Circle()
+                .fill(Theme.accent)
+                .frame(width: 38, height: 38)
+            Image(systemName: "location.north.fill")
+                .font(.system(size: 20, weight: .bold))
+                .foregroundStyle(.white)
+                .rotationEffect(.degrees(course >= 0 ? course - cameraState.heading : 0))
+        }
+        .accessibilityLabel("Eigener Standort, Navigation")
     }
 }

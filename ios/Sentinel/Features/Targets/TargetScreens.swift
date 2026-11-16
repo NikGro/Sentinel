@@ -14,8 +14,10 @@ struct TargetListScreen: View {
                     NavigationLink(value: target.id) {
                         TargetRow(target: target)
                     }
-                    .swipeActions(edge: .trailing, allowsFullSwipe: false) {
-                        Button("Löschen", systemImage: "trash", role: .destructive) { targetToDelete = target }
+                    .swipeActions(edge: .trailing, allowsFullSwipe: true) {
+                        Button("Löschen", systemImage: "trash", role: .destructive) {
+                            lage.delete(Target.self, id: target.id)
+                        }
                     }
                 }
             }

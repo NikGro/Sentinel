@@ -2,23 +2,33 @@ import CoreLocation
 import Observation
 
 /// Aktuelle Straße und Fahrtrichtung als Himmelsrichtung, damit man den eigenen Standort mündlich durchgeben kann.
+/// In Bewegung zählt der Kurs, im Stand die Kompassrichtung des Geräts.
 @MainActor
 @Observable
-final class LocationContext {
+final class LocationContext: NSObject, CLLocationManagerDelegate {
     private(set) var street: String?
     private(set) var heading: String?
 
     @ObservationIgnored private let geocoder = CLGeocoder()
+    @ObservationIgnored private let compass = CLLocationManager()
     @ObservationIgnored private var lastLookup: CLLocation?
     @ObservationIgnored private var lastLookupAt = Date.distantPast
+    @ObservationIgnored private var isMoving = false
 
     private static let minimumDistance: CLLocationDistance = 40
     private static let minimumInterval: TimeInterval = 8
 
+    override init() {
+        super.init()
+        compass.delegate = self
+        compass.headingFilter = 10
+        if CLLocationManager.headingAvailable() { compass.startUpdatingHeading() }
+    }
+
     /// Wird mit jeder neuen eigenen Position aufgerufen; fragt die Straße nur in sinnvollen Abständen nach.
     func update(with location: CLLocation) {
-        heading = location.course >= 0 && location.speed > 1.5 ? Self.cardinal(location.course) : heading
-        if location.speed >= 0, location.speed <= 1.5 { heading = nil }
+        isMoving = location.course >= 0 && location.speed > 1.5
+        if isMoving { setHeading(Self.cardinal(location.course)) }
         let moved = lastLookup.map { location.distance(from: $0) } ?? .greatestFiniteMagnitude
         guard moved >= Self.minimumDistance, Date.now.timeIntervalSince(lastLookupAt) >= Self.minimumInterval, !geocoder.isGeocoding else { return }
         lastLookup = location
@@ -27,6 +37,18 @@ final class LocationContext {
             let place = placemarks?.first
             let name = place?.thoroughfare ?? place?.name
             Task { @MainActor in self?.street = name }
+        }
+    }
+
+    private func setHeading(_ value: String) {
+        if heading != value { heading = value }
+    }
+
+    nonisolated func locationManager(_ manager: CLLocationManager, didUpdateHeading newHeading: CLHeading) {
+        let degrees = newHeading.trueHeading >= 0 ? newHeading.trueHeading : newHeading.magneticHeading
+        Task { @MainActor in
+            guard !self.isMoving, degrees >= 0 else { return }
+            self.setHeading(Self.cardinal(degrees))
         }
     }
 

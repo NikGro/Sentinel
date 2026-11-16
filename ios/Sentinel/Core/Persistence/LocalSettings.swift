@@ -14,7 +14,15 @@ final class LocalSettings {
     /// Ausgeblendete Ebenen, um die Karte übersichtlich zu halten.
     var hiddenLayers: Set<String> { didSet { defaults.set(Array(hiddenLayers), forKey: "ebenen.ausgeblendet") } }
     var disabledReachModes: Set<String> { didSet { defaults.set(Array(disabledReachModes), forKey: "wegzeit.aus") } }
-    var showsCoverage: Bool { didSet { defaults.set(showsCoverage, forKey: "bestreifung.anzeigen") } }
+    /// Bestreifte Wege zeigen; angezeigt wird nur, was seit dem Einschalten zurückgelegt wurde.
+    var showsCoverage: Bool {
+        didSet {
+            defaults.set(showsCoverage, forKey: "bestreifung.anzeigen")
+            if showsCoverage, !oldValue { coverageSince = (Date.now.timeIntervalSince1970 * 1000).rounded() }
+        }
+    }
+    /// Zeitpunkt (ms), ab dem bestreifte Wege angezeigt werden.
+    var coverageSince: Double { didSet { defaults.set(coverageSince, forKey: "bestreifung.seit") } }
     var mapStyle: MapStyleChoice { didSet { defaults.set(mapStyle.rawValue, forKey: "karte.stil") } }
     var showsTraffic: Bool { didSet { defaults.set(showsTraffic, forKey: "karte.verkehr") } }
     /// Die Ebene "Dauerhafte Orte" ist gesperrt, bis sie bewusst entsperrt wird. Gilt nur bis zum Neustart der App.
@@ -29,6 +37,7 @@ final class LocalSettings {
         hiddenLayers = Set(defaults.stringArray(forKey: "ebenen.ausgeblendet") ?? [])
         disabledReachModes = Set(defaults.stringArray(forKey: "wegzeit.aus") ?? [])
         showsCoverage = defaults.bool(forKey: "bestreifung.anzeigen")
+        coverageSince = defaults.double(forKey: "bestreifung.seit")
         mapStyle = MapStyleChoice(rawValue: defaults.string(forKey: "karte.stil") ?? "") ?? .standard
         showsTraffic = defaults.bool(forKey: "karte.verkehr")
         lastReadMessageAt = defaults.double(forKey: "chat.gelesen")

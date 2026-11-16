@@ -31,8 +31,10 @@ struct ForcesScreen: View {
                         } label: {
                             VehicleRow(vehicle: vehicle)
                         }
-                        .swipeActions(edge: .trailing, allowsFullSwipe: false) {
-                            Button("Löschen", systemImage: "trash", role: .destructive) { vehicleToDelete = vehicle }
+                        .swipeActions(edge: .trailing, allowsFullSwipe: true) {
+                            Button("Löschen", systemImage: "trash", role: .destructive) {
+                                lage.delete(Vehicle.self, id: vehicle.id)
+                            }
                         }
                         .swipeActions(edge: .leading) {
                             Button(vehicle.data.aktiv ? "Abschalten" : "Einschalten") {

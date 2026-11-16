@@ -23,7 +23,8 @@ final class FahndungStore {
 
     // MARK: Bestreifung
 
-    func reloadCoverage() async {
+    /// Lädt die bestreiften Wege; nur Punkte ab `since` (ms) werden gezeigt.
+    func reloadCoverage(since: Double = 0) async {
         guard let client else { return }
         guard let tracks = try? await client.coverage() else { return }
         var result: [CoverageSegment] = []
@@ -31,7 +32,7 @@ final class FahndungStore {
         for track in tracks {
             var current: [GeoPoint] = []
             var previous: (point: GeoPoint, ts: Double)?
-            for raw in track.punkte where raw.count >= 3 {
+            for raw in track.punkte where raw.count >= 3 && raw[2] >= since {
                 let point = GeoPoint(lat: raw[0], lon: raw[1])
                 if let previous, (raw[2] - previous.ts) / 1000 > Self.gapSeconds || previous.point.distance(to: point) > Self.gapMeters {
                     if current.count > 1 { result.append(CoverageSegment(memberId: track.memberId, points: current)) }

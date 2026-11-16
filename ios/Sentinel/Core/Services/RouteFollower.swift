@@ -77,11 +77,11 @@ final class RouteFollower {
     @ObservationIgnored private var origin: () -> GeoPoint? = { nil }
     @ObservationIgnored private var progressIndex = 0
 
-    private static let tick: Duration = .seconds(2)
+    private static let tick: Duration = .seconds(1)
     private static let destinationThreshold: CLLocationDistance = 30
     private static let originThreshold: CLLocationDistance = 60
     /// Weicht man weiter von der Route ab, wird sofort neu berechnet.
-    private static let offRouteThreshold: CLLocationDistance = 50
+    private static let offRouteThreshold: CLLocationDistance = 35
     private static let maximumAge: TimeInterval = 45
 
     var isActive: Bool { target != nil }
@@ -143,7 +143,7 @@ final class RouteFollower {
            Date.now.timeIntervalSince(last.at) < Self.maximumAge {
             return
         }
-        if let last = lastCalculation, Date.now.timeIntervalSince(last.at) < 4 { return }
+        if let last = lastCalculation, Date.now.timeIntervalSince(last.at) < (offRoute ? 2 : 4) { return }
         lastCalculation = (from, resolved.point, .now)
         isCalculating = true
         defer { isCalculating = false }
@@ -173,9 +173,26 @@ final class RouteFollower {
 
     // MARK: Fortschritt
 
+    /// Abstand zur Route: kürzester Abstand zu den Teilstücken rund um die aktuelle Stelle, nicht nur zu einem
+    /// Stützpunkt. So fällt ein Abbiegen in die falsche Straße oder ein Überfahren des Ziels sofort auf.
     private func distanceToRoute(_ location: GeoPoint) -> CLLocationDistance {
-        guard let route, route.coordinates.indices.contains(progressIndex) else { return .greatestFiniteMagnitude }
-        return GeoPoint(route.coordinates[progressIndex]).distance(to: location)
+        guard let route, route.coordinates.count > 1, route.coordinates.indices.contains(progressIndex) else { return .greatestFiniteMagnitude }
+        let coordinates = route.coordinates
+        let lower = max(0, progressIndex - 3)
+        let upper = min(coordinates.count - 1, progressIndex + 60)
+        var best = CLLocationDistance.greatestFiniteMagnitude
+        let k = cos(location.lat * .pi / 180)
+        for i in lower..<upper {
+            let a = coordinates[i], b = coordinates[i + 1]
+            let ax = a.longitude * k, ay = a.latitude
+            let dx = b.longitude * k - ax, dy = b.latitude - ay
+            let px = location.lon * k, py = location.lat
+            let length = dx * dx + dy * dy
+            let t = length == 0 ? 0 : max(0, min(1, ((px - ax) * dx + (py - ay) * dy) / length))
+            let nearest = GeoPoint(lat: ay + t * dy, lon: (ax + t * dx) / k)
+            best = min(best, nearest.distance(to: location))
+        }
+        return best
     }
 
     /// Bestimmt den nächstgelegenen Punkt auf der Route (nur vorwärts suchend) und daraus das kommende Manöver.
