@@ -5,6 +5,7 @@ struct ForcesScreen: View {
     @Environment(LageStore.self) private var lage
     @State private var vehicleEditor: VehicleEditorContext?
     @State private var vehicleToDelete: Versioned<Vehicle>?
+    @State private var openVehicle: String?
 
     var body: some View {
         NavigationStack {
@@ -26,23 +27,34 @@ struct ForcesScreen: View {
 
                 Section {
                     ForEach(lage.sortedVehicles) { vehicle in
-                        NavigationLink {
-                            VehicleDetail(vehicleId: vehicle.id)
-                        } label: {
-                            VehicleRow(vehicle: vehicle)
+                        HStack(spacing: 12) {
+                            Button {
+                                openVehicle = vehicle.id
+                            } label: {
+                                HStack {
+                                    VehicleRow(vehicle: vehicle)
+                                    Spacer(minLength: 0)
+                                }
+                                .contentShape(.rect)
+                            }
+                            .buttonStyle(.borderless)
+                            .tint(.primary)
+                            // Im heutigen Einsatz dabei: direkt in der Liste schaltbar.
+                            Toggle("Im Einsatz", isOn: Binding(
+                                get: { vehicle.data.aktiv },
+                                set: { value in
+                                    var next = vehicle.data
+                                    next.aktiv = value
+                                    lage.put(next, id: vehicle.id)
+                                }
+                            ))
+                            .labelsHidden()
+                            .accessibilityLabel("\(vehicle.data.funkrufname) im Einsatz")
                         }
                         .swipeActions(edge: .trailing, allowsFullSwipe: true) {
                             Button("Löschen", systemImage: "trash", role: .destructive) {
                                 lage.delete(Vehicle.self, id: vehicle.id)
                             }
-                        }
-                        .swipeActions(edge: .leading) {
-                            Button(vehicle.data.aktiv ? "Abschalten" : "Einschalten") {
-                                var next = vehicle.data
-                                next.aktiv.toggle()
-                                lage.put(next, id: vehicle.id)
-                            }
-                            .tint(vehicle.data.aktiv ? .gray : .green)
                         }
                     }
                     Button("Fahrzeug anlegen", systemImage: "plus") {
@@ -51,10 +63,13 @@ struct ForcesScreen: View {
                 } header: {
                     Text("Fahrzeuge")
                 } footer: {
-                    Text("Fahrzeuge bleiben dauerhaft angelegt und werden für den heutigen Einsatz eingeschaltet. Steigt der letzte Insasse aus, bleibt das Fahrzeug an Ort und Stelle.")
+                    Text("Fahrzeuge bleiben dauerhaft angelegt; mit dem Schalter kommen sie in den heutigen Einsatz. Steigt der letzte Insasse aus, bleibt das Fahrzeug an Ort und Stelle.")
                 }
             }
             .navigationTitle("Kräfte")
+            .navigationDestination(item: $openVehicle) { id in
+                VehicleDetail(vehicleId: id)
+            }
             .alert(
                 "Fahrzeug „\(vehicleToDelete?.data.funkrufname ?? "")“ für alle löschen?",
                 isPresented: Binding(get: { vehicleToDelete != nil }, set: { if !$0 { vehicleToDelete = nil } })
