@@ -136,8 +136,15 @@ struct MapScreen: View {
             .onTapGesture { point in
                 guard let coordinate = proxy.convert(point, from: .local) else { return }
                 if tapMode == .none {
-                    // Prognosezellen haben keinen Griff: Tipp in die Fläche zeigt ihre Angaben.
-                    if let cell = cell(at: GeoPoint(coordinate)) { selection = .cell(cell) }
+                    // Tipp auf eine freie Stelle einer Form. Symbole darüber (Kräfte, Fahrzeuge, Ziele, Marker)
+                    // fangen ihren Tipp selbst ab und kommen hier gar nicht erst an.
+                    let nearSymbol = symbolCoordinates.contains { symbol in
+                        guard let screen = proxy.convert(symbol, to: .local) else { return false }
+                        return hypot(screen.x - point.x, screen.y - point.y) < 26
+                    }
+                    if !nearSymbol, let id = shape(at: GeoPoint(coordinate)), let object = lage.mapObjects[id] {
+                        if object.data.wert != nil { selection = .cell(id) } else { openEditor(for: id) }
+                    }
                     return
                 }
                 handleTap(GeoPoint(coordinate))
@@ -493,12 +500,68 @@ struct MapScreen: View {
         editor = EditorContext(id: LageStore.newId(), object: object, isNew: true)
     }
 
-    /// Prognosezelle unter dem Finger; bei Überlappung die mit dem höchsten Wert.
-    private func cell(at point: GeoPoint) -> String? {
-        visibleObjects
-            .filter { $0.data.wert != nil && $0.data.typ == .flaeche && Self.contains($0.data.punkte, point) }
-            .max { ($0.data.wert ?? 0) < ($1.data.wert ?? 0) }?
-            .id
+    /// Alle antippbaren Symbole; Tipps in ihrer Nähe gehören ihnen und nicht der Fläche dahinter.
+    private var symbolCoordinates: [CLLocationCoordinate2D] {
+        forcePins.map(\.coordinate)
+            + (vehiclePins + targetPins).map(\.coordinate)
+            + handles.map(\.coordinate)
+            + nearbyStops.map(\.point.coordinate)
+            + lage.operation.ueberschlagen.naechste.map(\.point.coordinate)
+            + [location.current?.coordinate].compactMap { $0 }
+    }
+
+    /// Gezeichnete Form unter dem Finger: Linien (mit etwas Spielraum), Flächen, Kreise, Prognosezellen.
+    /// Bei Überlappung gewinnt die kleinste, denn sie ist die gezielt gemeinte.
+    private func shape(at point: GeoPoint) -> String? {
+        // Spielraum für Linien: etwa 22 Bildpunkte, abhängig von der Zoomstufe.
+        let tolerance = max(8, cameraState.distance / 45)
+        var best: (id: String, size: Double)?
+        for object in visibleObjects {
+            let data = object.data
+            let size: Double?
+            switch data.typ {
+            case .flaeche where data.punkte.count >= 3:
+                size = Self.contains(data.punkte, point) ? Self.area(data.punkte) : nil
+            case .kreis, .haltestellen:
+                guard let center = data.punkte.first else { continue }
+                let radius = data.radius ?? 100
+                size = center.distance(to: point) <= radius ? Double.pi * radius * radius : nil
+            case .linie where data.punkte.count >= 2:
+                size = Self.distance(from: point, toLine: data.punkte) <= tolerance ? 0 : nil
+            default:
+                size = nil
+            }
+            if let size, size < (best?.size ?? .greatestFiniteMagnitude) { best = (object.id, size) }
+        }
+        return best?.id
+    }
+
+    /// Fläche eines Vielecks in Quadratmetern (für kleine Flächen genügend genau).
+    static func area(_ polygon: [GeoPoint]) -> Double {
+        guard let origin = polygon.first else { return 0 }
+        let k = cos(origin.lat * .pi / 180) * 111_320
+        var sum = 0.0
+        for i in polygon.indices {
+            let a = polygon[i], b = polygon[(i + 1) % polygon.count]
+            sum += (a.lon * k) * (b.lat * 110_540) - (b.lon * k) * (a.lat * 110_540)
+        }
+        return abs(sum) / 2
+    }
+
+    /// Kürzester Abstand eines Punkts zu einem Linienzug in Metern.
+    static func distance(from point: GeoPoint, toLine line: [GeoPoint]) -> Double {
+        let k = cos(point.lat * .pi / 180)
+        var best = Double.greatestFiniteMagnitude
+        for i in 0..<(line.count - 1) {
+            let a = line[i], b = line[i + 1]
+            let ax = a.lon * k, ay = a.lat, bx = b.lon * k, by = b.lat
+            let px = point.lon * k, py = point.lat
+            let dx = bx - ax, dy = by - ay
+            let length = dx * dx + dy * dy
+            let t = length == 0 ? 0 : max(0, min(1, ((px - ax) * dx + (py - ay) * dy) / length))
+            best = min(best, GeoPoint(lat: ay + t * dy, lon: (ax + t * dx) / k).distance(to: point))
+        }
+        return best
     }
 
     /// Punkt-in-Fläche nach dem Strahlverfahren (für kleine Flächen in Breite/Länge ausreichend genau).
