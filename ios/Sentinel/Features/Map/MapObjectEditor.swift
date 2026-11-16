@@ -67,15 +67,23 @@ struct MapObjectEditor: View {
             Form {
                 if object.typ == .fahndungsraum {
                     Section {
-                        DatePicker("Seit", selection: sinceBinding, in: ...Date.now, displayedComponents: [.date, .hourAndMinute])
-                        HStack {
-                            ForEach([0, 5, 10, 15, 30], id: \.self) { minutes in
-                                Button(minutes == 0 ? "Jetzt" : "-\(minutes) Min") {
-                                    object.zeit = (Date.now.addingTimeInterval(TimeInterval(-minutes * 60)).timeIntervalSince1970 * 1000).rounded()
+                        DatePicker("Datum/Uhrzeit festlegen", selection: sinceBinding, in: ...Date.now, displayedComponents: [.date, .hourAndMinute])
+                            .datePickerStyle(.compact)
+
+                        ScrollView(.horizontal, showsIndicators: false) {
+                            HStack(spacing: 8) {
+                                ForEach([0, 5, 10, 15, 30, 45, 60], id: \.self) { minutes in
+                                    let selected = isSelectedSightingPreset(minutes)
+                                    Button(minutes == 0 ? "Jetzt" : "−\(minutes) Min.") {
+                                        object.zeit = (Date.now.addingTimeInterval(TimeInterval(-minutes * 60)).timeIntervalSince1970 * 1000).rounded()
+                                    }
+                                    .buttonStyle(.bordered)
+                                    .tint(selected ? .blue : .secondary)
+                                    .controlSize(.regular)
+                                    .accessibilityAddTraits(selected ? .isSelected : [])
                                 }
-                                .buttonStyle(.bordered)
-                                .controlSize(.small)
                             }
+                            .padding(.vertical, 2)
                         }
                     } header: {
                         Text("Letzte Sichtung")
@@ -196,6 +204,12 @@ struct MapObjectEditor: View {
                         .disabled(object.typ == .text && object.titel.trimmingCharacters(in: .whitespaces).isEmpty)
                 }
             }
+    }
+
+    private func isSelectedSightingPreset(_ minutes: Int) -> Bool {
+        guard let since = object.since else { return false }
+        let expected = Date.now.addingTimeInterval(TimeInterval(-minutes * 60))
+        return abs(since.timeIntervalSince(expected)) < 30
     }
 
     private func isSelected(_ symbol: String) -> Bool {

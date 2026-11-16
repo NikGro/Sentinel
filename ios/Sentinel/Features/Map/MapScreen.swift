@@ -64,6 +64,12 @@ struct MapScreen: View {
     @State private var showsMobility = false
     @State private var cameraTick = 0
     @State private var now = Date.now
+    @State private var pendingRoomMove: PendingRoomMove?
+
+    private struct PendingRoomMove {
+        let objectId: String
+        let point: GeoPoint
+    }
 
     var body: some View {
         MapReader { proxy in
@@ -151,6 +157,20 @@ struct MapScreen: View {
             if active { camera = .userLocation(followsHeading: true, fallback: .automatic) }
         }
         .sensoryFeedback(.impact, trigger: lage.operation.a?.memberId)
+        .confirmationDialog(
+            "Letzten Sichtungszeitpunkt auf jetzt setzen?",
+            isPresented: Binding(
+                get: { pendingRoomMove != nil },
+                set: { if !$0 { pendingRoomMove = nil } }
+            ),
+            titleVisibility: .visible
+        ) {
+            Button("Ja, auf jetzt setzen") { completeRoomMove(resetSightingTime: true) }
+            Button("Nein, Zeitpunkt beibehalten") { completeRoomMove(resetSightingTime: false) }
+            Button("Verschieben abbrechen", role: .cancel) { pendingRoomMove = nil }
+        } message: {
+            Text("Der Fahndungsraum wird an den neuen Ort verschoben. Du kannst entscheiden, ob die letzte Sichtung ebenfalls auf jetzt gesetzt werden soll.")
+        }
     }
 
     private struct CoverageKey: Equatable {
@@ -300,16 +320,16 @@ struct MapScreen: View {
             tapMode = .none
             targetEditor = TargetEditorContext(id: LageStore.newId(), target: target, isNew: true)
         case .moving(let objectId):
-            guard var object = lage.mapObjects[objectId]?.data, settings.canEdit(layerId: object.layerId) else {
+            guard let object = lage.mapObjects[objectId]?.data, settings.canEdit(layerId: object.layerId) else {
                 tapMode = .none
                 return
             }
-            let anchor = object.anchor
-            let dLat = point.lat - anchor.lat
-            let dLon = point.lon - anchor.lon
-            object.punkte = object.punkte.map { GeoPoint(lat: $0.lat + dLat, lon: $0.lon + dLon) }
-            lage.saveMapObject(object, id: objectId)
             tapMode = .none
+            if object.typ == .fahndungsraum {
+                pendingRoomMove = PendingRoomMove(objectId: objectId, point: point)
+            } else {
+                moveObject(objectId, to: point, resetSightingTime: false)
+            }
         case .drawing(let shape, var points):
             points.append(point)
             if shape.isMultiPoint {
@@ -318,6 +338,24 @@ struct MapScreen: View {
                 finishDrawing(shape, points)
             }
         }
+    }
+
+    private func completeRoomMove(resetSightingTime: Bool) {
+        guard let pending = pendingRoomMove else { return }
+        pendingRoomMove = nil
+        moveObject(pending.objectId, to: pending.point, resetSightingTime: resetSightingTime)
+    }
+
+    private func moveObject(_ objectId: String, to point: GeoPoint, resetSightingTime: Bool) {
+        guard var object = lage.mapObjects[objectId]?.data, settings.canEdit(layerId: object.layerId) else { return }
+        let anchor = object.anchor
+        let dLat = point.lat - anchor.lat
+        let dLon = point.lon - anchor.lon
+        object.punkte = object.punkte.map { GeoPoint(lat: $0.lat + dLat, lon: $0.lon + dLon) }
+        if resetSightingTime, object.typ == .fahndungsraum {
+            object.zeit = (Date.now.timeIntervalSince1970 * 1000).rounded()
+        }
+        lage.saveMapObject(object, id: objectId)
     }
 
     private func finishDrawing(_ shape: MapObject.Shape, _ points: [GeoPoint]) {
