@@ -70,13 +70,19 @@ final class RundgangTests: XCTestCase {
         sleep(1)
         capture("03-fahndungsraum-setzen")
         // Ort antippen öffnet den Editor mit Zeitwahl und Haltestellen-Option
-        app.coordinate(withNormalizedOffset: CGVector(dx: 0.4, dy: 0.5)).tap()
+        app.coordinate(withNormalizedOffset: CGVector(dx: 0.25, dy: 0.42)).tap()
         if app.navigationBars["Neu: Fahndungsraum"].waitForExistence(timeout: 3) {
             capture("03b-fahndungsraum-editor")
             app.buttons["Abbrechen"].firstMatch.tap()
         } else {
-            app.buttons["Abbrechen"].firstMatch.tap()
+            // Unter dem Finger lag ein Kartenobjekt: dessen Kurzinfo schließen und den Zeichenmodus beenden.
+            if app.buttons["Hinführen"].exists || app.buttons["Anrufen"].exists {
+                app.swipeDown(velocity: .fast)
+                sleep(1)
+            }
+            if app.buttons["Abbrechen"].firstMatch.exists { app.buttons["Abbrechen"].firstMatch.tap() }
         }
+        sleep(1)
 
         app.buttons["Zu Objekten navigieren"].tap()
         XCTAssertTrue(app.staticTexts["Zur A-Position"].waitForExistence(timeout: 5), "A-Position steht oben in der Objektliste")
