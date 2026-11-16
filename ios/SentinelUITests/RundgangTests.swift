@@ -130,7 +130,7 @@ final class RundgangTests: XCTestCase {
         XCTAssertTrue(vehicle.waitForExistence(timeout: 5), "Fortbewegung als Dreier-Auswahl auf der Karte")
         capture("09a-fortbewegung-karte")
         vehicle.tap()
-        XCTAssertTrue(app.navigationBars["Fortbewegung"].waitForExistence(timeout: 3))
+        XCTAssertTrue(app.navigationBars["Fahrzeug wählen"].waitForExistence(timeout: 3))
         capture("09-fortbewegung")
     }
 }

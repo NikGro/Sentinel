@@ -18,6 +18,8 @@ struct MobilitySheet: View {
     var body: some View {
         NavigationStack {
             List {
+                // Auf der Karte wurde die Art schon gewählt: hier nur noch Fahrzeug bzw. Linie aussuchen.
+                if initialMode == nil {
                 Section {
                     Picker("Fortbewegung", selection: $mode) {
                         ForEach(Fortbewegung.allCases) { art in
@@ -26,6 +28,7 @@ struct MobilitySheet: View {
                     }
                     .pickerStyle(.segmented)
                     .listRowBackground(Color.clear)
+                }
                 }
 
                 switch mode {
@@ -46,7 +49,7 @@ struct MobilitySheet: View {
                     transitSection
                 }
             }
-            .navigationTitle("Fortbewegung")
+            .navigationTitle(title)
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
@@ -137,6 +140,14 @@ struct MobilitySheet: View {
                 }
                 .tint(.primary)
             }
+        }
+    }
+
+    private var title: String {
+        switch initialMode {
+        case .fahrzeug: "Fahrzeug wählen"
+        case .oepnv: "Linie wählen"
+        default: "Fortbewegung"
         }
     }
 
