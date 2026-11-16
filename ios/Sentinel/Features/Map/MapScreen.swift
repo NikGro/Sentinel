@@ -81,13 +81,7 @@ struct MapScreen: View {
         MapReader { proxy in
             Map(position: $camera, scope: mapScope) {
                 if !followsMe {
-                    MyLocationLayer(
-                        location: location.current,
-                        style: myLocationStyle,
-                        holdsA: lage.holdsA,
-                        label: nil,
-                        cameraState: cameraState
-                    )
+                    MyLocationLayer(lage: lage, route: route, locationService: location, cameraState: cameraState)
                 }
                 CoverageLayer(segments: coverageSegments)
                 ReachLayer(rings: reachRings)

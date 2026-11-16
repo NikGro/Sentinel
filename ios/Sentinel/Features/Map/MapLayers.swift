@@ -525,38 +525,42 @@ struct MyLocationLayer: MapContent {
         case navigation
     }
 
-    let location: CLLocation?
-    let style: Style
-    let holdsA: Bool
-    let label: String?
+    let lage: LageStore
+    let route: RouteFollower
+    let locationService: LocationService
     let cameraState: MapCameraState
 
-    /// Nur frei, ohne A: dann genügt der Systempunkt mit Genauigkeitskreis.
-    private var usesSystemDot: Bool { style == .dot && !holdsA }
-
     var body: some MapContent {
-        if usesSystemDot {
-            UserAnnotation()
-            if let label, let location {
-                Annotation("Eigener Standort", coordinate: location.coordinate, anchor: .top) {
-                    StreetLabel(text: label)
-                        .padding(.top, 20)
-                }
-                .annotationTitles(.hidden)
-            }
-        } else if let location {
-            // Vom System geführte Standortanzeige mit eigenem Aussehen: bewegt sich flüssig wie der blaue Punkt.
-            UserAnnotation(anchor: .center) { _ in
-                MyLocationMarker(style: style, holdsA: holdsA, course: location.course, cameraState: cameraState)
-                    .overlay(alignment: .bottom) {
-                        if let label {
-                            StreetLabel(text: label)
-                                .alignmentGuide(.bottom) { $0[.top] - 8 }
-                        }
-                    }
-            }
-            .annotationTitles(.hidden)
+        // Eine einzige, vom System geführte Standortanzeige (bewegt sich flüssig). Ihr Inhalt liest den Zustand
+        // selbst: Apple Karten baut den Inhalt nicht neu, wenn sich nur die übergebenen Werte ändern; so wechselt
+        // das Symbol beim Aussteigen zuverlässig vom Fahrzeug zurück zum Punkt.
+        UserAnnotation(anchor: .center) { _ in
+            LiveMyLocationMarker(lage: lage, route: route, locationService: locationService, cameraState: cameraState)
         }
+        .annotationTitles(.hidden)
+    }
+}
+
+/// Eigenes Symbol, abgeleitet aus dem aktuellen Zustand: Navi-Pfeil, Fahrzeug oder Punkt, mit A, falls man sie hält.
+private struct LiveMyLocationMarker: View {
+    let lage: LageStore
+    let route: RouteFollower
+    let locationService: LocationService
+    let cameraState: MapCameraState
+
+    var body: some View {
+        MyLocationMarker(
+            style: style,
+            holdsA: lage.holdsA,
+            course: locationService.current?.course ?? -1,
+            cameraState: cameraState
+        )
+    }
+
+    private var style: MyLocationLayer.Style {
+        if route.isActive { return .navigation }
+        if let me = lage.me, let vehicle = lage.vehicle(of: me.data) { return .vehicle(callsign: vehicle.data.funkrufname) }
+        return .dot
     }
 }
 
@@ -614,11 +618,16 @@ private struct MyLocationMarker: View {
                     .fixedSize()
             }
         case .dot:
-            Circle()
-                .fill(Theme.accent)
-                .frame(width: 20, height: 20)
-                .overlay(Circle().stroke(.white, lineWidth: 3))
-                .shadow(color: .black.opacity(0.3), radius: 3, y: 1)
+            ZStack {
+                Circle()
+                    .fill(Theme.accent.opacity(0.18))
+                    .frame(width: 44, height: 44)
+                Circle()
+                    .fill(Theme.accent)
+                    .frame(width: 20, height: 20)
+                    .overlay(Circle().stroke(.white, lineWidth: 3))
+                    .shadow(color: .black.opacity(0.3), radius: 3, y: 1)
+            }
         }
     }
 }
