@@ -76,8 +76,8 @@ final class RundgangTests: XCTestCase {
             app.buttons["Abbrechen"].firstMatch.tap()
         } else {
             // Unter dem Finger lag ein Kartenobjekt: dessen Kurzinfo schließen und den Zeichenmodus beenden.
-            if app.buttons["Hinführen"].exists || app.buttons["Anrufen"].exists {
-                app.swipeDown(velocity: .fast)
+            for _ in 0..<2 where app.buttons["Hinführen"].exists {
+                app.buttons["Hinführen"].firstMatch.swipeDown(velocity: .fast)
                 sleep(1)
             }
             if app.buttons["Abbrechen"].firstMatch.exists { app.buttons["Abbrechen"].firstMatch.tap() }
