@@ -13,6 +13,11 @@ statt jede Änderung sofort einzubauen. Erledigtes wandert mit Version ins CHANG
 - **Persistenter Objekt-Layer global über alle Instanzen:** Der persistente Objekt-Layer ist instanzübergreifend und seine Inhalte stehen in allen normalen Instanzen zur Verfügung.
 - **Persistenter Objekt-Layer als eigener Bereich im Instanzenmenü:** Die bisherige Freischaltung bzw. Bearbeitung über den Tab „Mehr“ entfällt. Stattdessen erscheint der persistente Objekt-Layer im Instanzenmenü als eigener, optisch klar von den normalen Instanzen getrennter Eintrag.
 - **Reduzierter Werkzeugmodus für den persistenten Objekt-Layer:** Beim Öffnen dieses Bereichs werden sämtliche normalen instanzbezogenen Werkzeuge und Elemente ausgeblendet. Sichtbar bleiben ausschließlich die Funktionen, die zum Erstellen und Bearbeiten von Markern und Kartenelementen des persistenten Objekt-Layers benötigt werden.
+- **„Paket vorbereiten“ als zweiter Sonderbereich im Instanzenmenü:** Neben „Persistenten Layer bearbeiten“ einen eigenen Menüpunkt „Paket vorbereiten“ anbieten. Dieser öffnet ebenfalls einen isolierten Bearbeitungsbereich, der wie eine eigene Instanz funktioniert, aber ausschließlich der Vorbereitung von Layer-Paketen dient.
+- **Objekt-Pakete verwalten:** In diesem Bereich können Nutzer Objekt-Pakete anlegen, bearbeiten und löschen. Die Pakete werden dauerhaft in einer serverweiten Bibliothek gespeichert und stehen damit instanzübergreifend zum Import bereit.
+- **Pakete in bestehende Instanzen importieren:** Ein gespeichertes Objekt-Paket kann in eine bereits bestehende Instanz geladen werden.
+- **Import wandelt Paketobjekte in Instanz-Member um:** Nach dem Import werden die enthaltenen Objekte zu regulären, in der Zielinstanz bearbeitbaren Membern. Sie sind danach eigenständige Instanzobjekte und nicht mehr an das ursprüngliche Paket gebunden.
+- **Import ist nicht rückgängig zu machen:** Der Import ist eine irreversible Übernahme. Es darf keine Funktion geben, mit der sich der Import zurücknehmen oder die importierten Instanzobjekte automatisch wieder aus der Instanz entfernen lassen.
 - **Lage-Layer pro Instanz geschützt:** Jede normale Instanz besitzt ihren eigenen Lage-Layer. Dieser kann nicht gelöscht oder entfernt werden, darf aber vollständig geleert (gecleared) werden.
 
 ### Karte, Kompass und Navigation
