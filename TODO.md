@@ -46,6 +46,7 @@ statt jede Änderung sofort einzubauen. Erledigtes wandert mit Version ins CHANG
 
 ### Lage, Karten-Layer und Bestreifung
 
+- **Fahndungsraum-Optionen nur bei aktivem Fahndungsmarker anzeigen:** Die Optionen für fußläufige Fahndung, ÖPNV und Pkw in den Einstellungen zur Sichtbarkeit der Layer nur einblenden, wenn aktuell ein Fahndungsmarker aktiv ist. Ohne aktiven Fahndungsmarker sollen diese Toggles ausgeblendet sein.
 - **Kein globaler „Lage zurücksetzen“-Button:** Die Funktion zum vollständigen Zurücksetzen der Lage soll aus der Oberfläche entfernt werden.
 - **Lage-Karten-Layer leeren:** Stattdessen eine Funktion zum Leeren des Lage-Karten-Layers ergänzen. Der Button gehört in das Untermenü der Karten-Layer.
 - **Lage bearbeiten vereinfachen:** Im Untermenü zum Bearbeiten der Lage bleiben nur die Textfelder zum Bearbeiten. Dort gibt es weder einen Button zum Zurücksetzen der gesamten Lage noch einen Button zum Zurücksetzen der Bestreifung.
