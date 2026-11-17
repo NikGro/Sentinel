@@ -29,6 +29,7 @@ statt jede Änderung sofort einzubauen. Erledigtes wandert mit Version ins CHANG
 
 ### Bedienoberfläche und Liquid Glass
 
+- **Ziele-Tab aufräumen:** Im Tab „Ziele“ den Plus-Button oben auf dieselbe Höhe wie den Seitentitel setzen. Den zusätzlichen blauen, mittig platzierten Button zum Hinzufügen von Zielen entfernen, da er dieselbe Funktion wie der Plus-Button erfüllt.
 - **SOS-Button:** Der weiße Ring, der beim Gedrückthalten erscheint, muss korrekt um den Button liegen. Mögliche Ursache ist die Button-Animation während des Drückens; Animation und Ringpositionierung prüfen.
 - **Verkehrsmittel-Toggle:** Der dreiteilige Toggle soll wieder denselben Liquid-Glass-Gedrückthalten-Effekt wie die Navigationsleiste besitzen. Seine Höhe muss mit dem Button „A übernehmen“ übereinstimmen.
 - **Fahrzeugauswahl:** In der Liste zur Auswahl des Fahrzeugs beim Einsteigen eine Option für ein generisches Fahrzeug ergänzen.
