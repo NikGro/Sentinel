@@ -58,7 +58,7 @@ struct SettingsScreen: View {
 
                 Section("Einsatz") {
                     NavigationLink { SituationAdminScreen() } label: {
-                        Label("Funkkanal, Einsatzinfos, Lage zurücksetzen", systemImage: "antenna.radiowaves.left.and.right")
+                        Label("Funkkanal und Einsatzinformationen", systemImage: "antenna.radiowaves.left.and.right")
                     }
                     NavigationLink { LayersAdminScreen() } label: {
                         Label("Ebenen, Pakete und Argus", systemImage: "square.3.layers.3d")

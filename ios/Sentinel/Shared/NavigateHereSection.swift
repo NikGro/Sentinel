@@ -8,7 +8,7 @@ struct NavigateHereSection: View {
     var body: some View {
         Section {
             Button(action: action) {
-                Label(title, systemImage: "location.north.line.fill")
+                Label(title, systemImage: "arrow.triangle.turn.up.right.diamond.fill")
                     .font(.headline)
                     .frame(maxWidth: .infinity)
                     .frame(height: Theme.barHeight - 6)

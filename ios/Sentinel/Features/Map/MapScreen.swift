@@ -206,7 +206,8 @@ struct MapScreen: View {
     private var mainBody: some View {
         MapReader { proxy in
             Map(position: $camera, scope: mapScope) {
-                if !followsMe {
+                // Im Fahrmodus ohne Navigation bleibt der normale Standortpunkt; nur in der Navigation ersetzt ihn der Navi-Pfeil.
+                if !(followsMe && route.isActive) {
                     MyLocationLayer(lage: lage, route: route, locationService: location, cameraState: cameraState)
                 }
                 if let searchPin {
@@ -255,6 +256,7 @@ struct MapScreen: View {
             .overlay {
                 if followsMe {
                     FollowPuckOverlay(
+                        showsArrow: route.isActive,
                         proxy: proxy,
                         state: cameraState,
                         inVehicle: { if case .vehicle = myLocationStyle { true } else { false } }(),
@@ -283,7 +285,8 @@ struct MapScreen: View {
         }
         .safeAreaInset(edge: .top, spacing: 0) { topArea }
         .safeAreaInset(edge: .bottom, spacing: 0) {
-            bottomArea
+            // Beim Setzen eines Orts nur Karte und Suchleiste: alles Übrige ausgeblendet.
+            Group { if tapMode == .none { bottomArea } }
                 .onGeometryChange(for: CGFloat.self) { $0.size.height } action: { bottomAreaHeight = $0 }
         }
         .overlay(alignment: .bottomLeading) {
@@ -300,7 +303,7 @@ struct MapScreen: View {
                 .padding(.bottom, bottomAreaHeight + Theme.barSpacing)
             }
         }
-        .overlay(alignment: .topTrailing) { sideButtons }
+        .overlay(alignment: .topTrailing) { if tapMode == .none { sideButtons } }
         .mapScope(mapScope)
         .task(id: CoverageKey(enabled: settings.showsCoverage, since: settings.coverageSince, generation: lage.coverageGeneration)) {
             guard settings.showsCoverage else {
@@ -326,8 +329,9 @@ struct MapScreen: View {
             await fahndung.loadStops(for: stopCircles)
         }
         .onChange(of: route.isActive) { _, active in
-            followsMe = true
-            followMe(duration: 0.8)
+            // Nach dem Beenden nicht im Fahrmodus hängen bleiben.
+            followsMe = active
+            if active { followMe(duration: 0.8) }
         }
         .task {
             // Beim Öffnen: auf den eigenen Standort, gekippt wie in einer Navi-App.
@@ -381,11 +385,7 @@ struct MapScreen: View {
     // MARK: Statuszeile unter dem eigenen Standort
 
     /// Wie der eigene Standort erscheint: Navi-Pfeil in der Navigation, Fahrzeug, wenn man drinsitzt, sonst Punkt.
-    private var myLocationStyle: MyLocationLayer.Style {
-        if route.isActive { return .navigation }
-        if let me = lage.me, let vehicle = lage.vehicle(of: me.data) { return .vehicle(callsign: vehicle.data.funkrufname) }
-        return .dot
-    }
+    private var myLocationStyle: MyLocationLayer.Style { .of(lage, navigating: route.isActive) }
 
     // MARK: Obere Leiste
 
@@ -395,10 +395,11 @@ struct MapScreen: View {
                 NavigationBanner()
             } else {
                 HStack(spacing: Theme.barSpacing) {
-                Button { searchMode = .adresse } label: {
+                // Beim Setzen eines Orts sucht die Leiste den Ort für das Werkzeug.
+                Button { if tapMode == .none { searchMode = .adresse } else { pickingBySearch = true } } label: {
                     HStack(spacing: 10) {
                         Image(systemName: "magnifyingglass")
-                        Text("Suchen oder navigieren")
+                        Text(tapMode == .none ? "Suchen oder navigieren" : "Ort oder Adresse suchen")
                             .foregroundStyle(.secondary)
                         Spacer()
                     }
@@ -409,9 +410,20 @@ struct MapScreen: View {
                 }
                 .buttonStyle(.plain)
                 .glassEffect(.regular.interactive(), in: .capsule)
-                .accessibilityLabel("Suchen oder navigieren")
-                    MapRoundButton(title: "Zu Objekten navigieren", symbol: "location.viewfinder", prominent: true) { searchMode = .objekte }
+                .accessibilityLabel(tapMode == .none ? "Suchen oder navigieren" : "Ort oder Adresse suchen")
+                    if tapMode == .none {
+                        MapRoundButton(title: "Zu Objekten navigieren", symbol: "location.viewfinder", prominent: true) { searchMode = .objekte }
+                    }
                 }
+            }
+
+            if let mismatch = lage.versionMismatch {
+                Label(mismatch, systemImage: "exclamationmark.arrow.triangle.2.circlepath")
+                    .font(.footnote.weight(.semibold))
+                    .padding(.horizontal, 14)
+                    .padding(.vertical, 10)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .glassEffect(.regular.tint(.yellow.opacity(0.3)), in: .rect(cornerRadius: 16))
             }
 
             SOSBanner { memberId in
@@ -424,10 +436,6 @@ struct MapScreen: View {
                     Label(hint, systemImage: "hand.tap.fill")
                         .font(.footnote.weight(.semibold))
                     Spacer(minLength: 0)
-                    // Statt antippen: Adresse suchen; der Treffer gilt wie ein Tipp auf die Karte.
-                    Button("Suchen", systemImage: "magnifyingglass") { pickingBySearch = true }
-                        .labelStyle(.iconOnly)
-                        .fontWeight(.semibold)
                     if case .drawing(let shape, let points) = tapMode, shape.isMultiPoint {
                         Button("Fertig") { finishDrawing(shape, points) }
                             .disabled(points.count < shape.minimumPoints)
@@ -523,13 +531,11 @@ struct MapScreen: View {
 
     /// Kompass durchschalten: Fahrtrichtung → Norden → Übersicht (nur mit Route) → Fahrtrichtung.
     private func cycleOrientation() {
+        // Wie in Apple Karten: Norden oben ↔ Gerätekompass. Von Hand gedreht: Antippen richtet nach Norden aus.
         switch orientation {
-        case .course:
-            orientation = .north
-        case .north:
-            orientation = route.route != nil ? .overview : .course
-        case .overview, .fixed:
-            orientation = .course
+        case .course: orientation = .north
+        case .north: orientation = .course
+        case .overview, .fixed: orientation = .north
         }
         applyOrientation()
     }

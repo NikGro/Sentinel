@@ -376,7 +376,7 @@ enum ManeuverSymbol {
     static func name(type: ManeuverType?, modifier: ManeuverModifier?) -> String {
         switch type {
         case .arrive: return "flag.checkered"
-        case .depart: return "location.north.line.fill"
+        case .depart: return "arrow.triangle.turn.up.right.diamond.fill"
         case .roundabout, .rotary, .roundaboutTurn, .exitRoundabout, .exitRotary: return "arrow.triangle.turn.up.right.circle"
         default: break
         }

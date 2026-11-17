@@ -83,7 +83,7 @@ struct MemberQuickLook: View {
                                 model.navigate(to: .member(member.id))
                                 dismiss()
                             } label: {
-                                Label("Hinführen", systemImage: "location.north.line.fill")
+                                Label("Hinführen", systemImage: "arrow.triangle.turn.up.right.diamond.fill")
                                     .frame(maxWidth: .infinity)
                             }
                             .buttonStyle(.glassProminent)
@@ -170,9 +170,12 @@ struct MapObjectInfo: View {
 
     var body: some View {
         List {
-            NavigateHereSection {
-                model.navigate(to: .object(id))
-                dismiss()
+            // Eine ÖPNV-Linie ist kein einzelner Zielort.
+            if object.typ != .oepnvlinie {
+                NavigateHereSection {
+                    model.navigate(to: .object(id))
+                    dismiss()
+                }
             }
             Section {
                 HStack(spacing: 14) {

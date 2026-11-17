@@ -101,37 +101,110 @@ struct AddMenu: View {
 
     let select: (Action) -> Void
 
+    @State private var showsChooser = false
+
     var body: some View {
-        Menu {
-            Section("Fahndung") {
-                Button(MapObject.Shape.fahndungsraum.title, systemImage: MapObject.Shape.fahndungsraum.symbolName) { select(.shape(.fahndungsraum)) }
-                Button(MapObject.Shape.haltestellen.title, systemImage: MapObject.Shape.haltestellen.symbolName) { select(.shape(.haltestellen)) }
-                Button(MapObject.Shape.oepnvlinie.title, systemImage: MapObject.Shape.oepnvlinie.symbolName) { select(.shape(.oepnvlinie)) }
-                Button(MapObject.Shape.oepnvfahrzeug.title, systemImage: MapObject.Shape.oepnvfahrzeug.symbolName) { select(.shape(.oepnvfahrzeug)) }
-                ForEach(ZielArt.allCases) { art in
-                    Button(art.title, systemImage: art.symbolName) { select(.target(art)) }
-                }
-            }
-            Section("Markierung") {
-                ForEach([MapObject.Shape.marker, .text, .linie, .flaeche, .kreis], id: \.self) { shape in
-                    Button(shape.title, systemImage: shape.symbolName) { select(.shape(shape)) }
-                }
-            }
-        } label: {
+        Button { showsChooser = true } label: {
             Image(systemName: "plus")
                 .font(.system(size: 19, weight: .bold))
                 .foregroundStyle(.white)
                 .frame(width: Theme.roundButton, height: Theme.roundButton)
                 .contentShape(.circle)
         }
+        .buttonStyle(.plain)
         .glassEffect(.regular.tint(Theme.accent).interactive(), in: .circle)
         .accessibilityLabel("Hinzufügen")
+        .sheet(isPresented: $showsChooser) {
+            AddChooser { action in
+                showsChooser = false
+                Task {
+                    try? await Task.sleep(for: .milliseconds(350))
+                    select(action)
+                }
+            }
+            .presentationDetents([.medium, .large])
+        }
+    }
+}
+
+/// Großes Auswahlmenü zum Anlegen: Kacheln nach Gruppen, statt einer kleinen Aufklappliste.
+struct AddChooser: View {
+    let select: (AddMenu.Action) -> Void
+    @Environment(\.dismiss) private var dismiss
+
+    private let columns = [GridItem(.adaptive(minimum: 100), spacing: 10)]
+
+    var body: some View {
+        NavigationStack {
+            ScrollView {
+                VStack(alignment: .leading, spacing: 18) {
+                    group("Fahndung", [.shape(.fahndungsraum), .shape(.haltestellen)])
+                    group("ÖPNV", [.shape(.oepnvlinie), .shape(.oepnvfahrzeug)])
+                    group("Ziele", ZielArt.allCases.map { .target($0) })
+                    group("Markierung", [.shape(.marker), .shape(.text), .shape(.linie), .shape(.flaeche), .shape(.kreis)])
+                }
+                .padding(16)
+            }
+            .navigationTitle("Hinzufügen")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .cancellationAction) {
+                    Button("Schließen") { dismiss() }
+                }
+            }
+        }
+    }
+
+    private func group(_ title: String, _ actions: [AddMenu.Action]) -> some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Text(title)
+                .font(.subheadline.weight(.semibold))
+                .foregroundStyle(.secondary)
+            LazyVGrid(columns: columns, spacing: 10) {
+                ForEach(actions.indices, id: \.self) { index in
+                    let action = actions[index]
+                    Button { select(action) } label: {
+                        VStack(spacing: 8) {
+                            Image(systemName: action.symbol)
+                                .font(.system(size: 24, weight: .semibold))
+                                .frame(height: 30)
+                            Text(action.title)
+                                .font(.caption.weight(.semibold))
+                                .multilineTextAlignment(.center)
+                                .lineLimit(2)
+                        }
+                        .frame(maxWidth: .infinity, minHeight: 86)
+                        .contentShape(.rect(cornerRadius: 18))
+                    }
+                    .buttonStyle(.plain)
+                    .glassEffect(.regular.interactive(), in: .rect(cornerRadius: 18))
+                }
+            }
+        }
+    }
+}
+
+extension AddMenu.Action {
+    var title: String {
+        switch self {
+        case .shape(let shape): shape.title
+        case .target(let art): art.title
+        }
+    }
+
+    var symbol: String {
+        switch self {
+        case .shape(let shape): shape.symbolName
+        case .target(let art): art.symbolName
+        }
     }
 }
 
 /// Eigener Standort im Fahrmodus: Navi-Pfeil fest an der Kameramitte, darunter Straße und Fahrtrichtung.
 /// Weil die Kamera gleichmäßig gleitet, bewegt sich der Pfeil ohne Sprünge.
 struct FollowPuckOverlay: View {
+    /// Navi-Pfeil nur in der Navigation; sonst nur das Straßenbanner (der Standortpunkt kommt von der Karte).
+    var showsArrow = true
     let proxy: MapProxy
     let state: MapCameraState
     let inVehicle: Bool
@@ -144,6 +217,7 @@ struct FollowPuckOverlay: View {
             // Fällt die Umrechnung kurz aus (z. B. während MapKit die Kamera setzt), bleibt der Pfeil in der Mitte statt zu verschwinden.
             let point = proxy.convert(state.center, to: .local) ?? CGPoint(x: geometry.size.width / 2, y: geometry.size.height / 2)
             ZStack {
+                if showsArrow {
                 NavigationArrow()
                     // Flach auf der Karte: in Fahrtrichtung gedreht und mit der Kartenneigung gekippt.
                     .rotationEffect(.degrees((course ?? state.heading) - state.heading))
@@ -164,6 +238,7 @@ struct FollowPuckOverlay: View {
                         }
                     }
                     .position(point)
+                }
                 if let label {
                     Text(label)
                         .font(.footnote.weight(.semibold))
@@ -338,21 +413,24 @@ struct SOSButton: View {
     private static let holdSeconds = 1.5
 
     var body: some View {
-        ZStack {
-            Circle()
-                .trim(from: 0, to: progress)
-                .stroke(.white, style: StrokeStyle(lineWidth: 4, lineCap: .round))
-                .rotationEffect(.degrees(-90))
-                .padding(3)
-            Text("SOS")
-                .font(.system(size: 13, weight: .heavy, design: .rounded))
-                .foregroundStyle(.white)
-        }
-        .frame(width: Theme.roundButton, height: Theme.roundButton)
-        // Liquid Glass in Rot wie die übrigen runden Knöpfe; der weiße Ring füllt sich beim Halten.
-        .glassEffect(.regular.tint(lage.ownSOS ? .red : .red.opacity(0.75)).interactive(), in: .circle)
-        .scaleEffect(holding ? 1.12 : 1)
-        .contentShape(.circle)
+        Text("SOS")
+            .font(.system(size: 13, weight: .heavy, design: .rounded))
+            .foregroundStyle(.white)
+            .frame(width: Theme.roundButton, height: Theme.roundButton)
+            // Liquid Glass in Rot wie die übrigen runden Knöpfe.
+            .glassEffect(.regular.tint(lage.ownSOS ? .red : .red.opacity(0.75)).interactive(), in: .circle)
+            // Der Ring liegt außen um den Knopf und wächst mit ihm, statt im Glas zu verrutschen.
+            .overlay {
+                Circle()
+                    .trim(from: 0, to: progress)
+                    .stroke(.white, style: StrokeStyle(lineWidth: 4, lineCap: .round))
+                    .rotationEffect(.degrees(-90))
+                    .padding(-3)
+                    .allowsHitTesting(false)
+            }
+            .scaleEffect(holding ? 1.08 : 1)
+            .animation(.snappy, value: holding)
+            .contentShape(.circle)
         .onLongPressGesture(minimumDuration: Self.holdSeconds, maximumDistance: 30) {
             timer?.cancel()
             holding = false

@@ -10,6 +10,19 @@ final class LageStore {
     private(set) var hasSnapshot = false
     private(set) var selfId: String?
     private(set) var routingAvailable = false
+    /// Version des verbundenen Servers, für den Abgleich mit der App.
+    private(set) var serverVersion: String?
+
+    /// App und Server passen zusammen, wenn Haupt- und Nebenversion übereinstimmen (z. B. 0.7.x).
+    var versionMismatch: String? {
+        guard let serverVersion, let app = Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String else { return nil }
+        let key = { (v: String) in v.split(separator: ".").prefix(2).compactMap { Int($0) } }
+        let s = key(serverVersion), a = key(app)
+        guard s.count == 2, a.count == 2, s != a else { return nil }
+        return s.lexicographicallyPrecedes(a)
+            ? "Server \(serverVersion) ist älter als die App \(app). Bitte den Server aktualisieren, sonst können Funktionen fehlen oder fehlschlagen."
+            : "Die App \(app) ist älter als der Server \(serverVersion). Bitte die App über SideStore aktualisieren."
+    }
 
     private(set) var members: [String: Versioned<Member>] = [:]
     private(set) var vehicles: [String: Versioned<Vehicle>] = [:]
@@ -317,6 +330,7 @@ final class LageStore {
             }
             selfId = snapshot.me.id
             routingAvailable = snapshot.server.routing
+            serverVersion = snapshot.server.version
             members = index(snapshot.members)
             vehicles = index(snapshot.vehicles)
             mapObjects = index(snapshot.annotations)

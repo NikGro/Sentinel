@@ -73,15 +73,6 @@ struct SituationAdminScreen: View {
                 }
                 .disabled(title == lage.operation.titel && notes == lage.operation.hinweise)
             }
-            Section {
-                Button("Bestreifung zurücksetzen", role: .destructive) { lage.resetCoverage() }
-                Toggle("Ziele ebenfalls löschen", isOn: $resetTargets)
-                Button("Lage zurücksetzen", role: .destructive) { showsReset = true }
-            } header: {
-                Text("Lage abschließen")
-            } footer: {
-                Text("Entfernt Markierungen der laufenden Lage, geladene Pakete, Chatnachrichten und Bestreifung. Dauerhafte Orte, Profile, Fahrzeuge, Tracker und Chaträume bleiben.")
-            }
         }
         .navigationTitle("Einsatz")
         .navigationBarTitleDisplayMode(.inline)
@@ -92,12 +83,6 @@ struct SituationAdminScreen: View {
         .sheet(isPresented: $showsChannel) {
             ChannelEditor(current: lage.operation.funkkanal)
                 .presentationDetents([.height(260)])
-        }
-        .alert("Lage für alle zurücksetzen?", isPresented: $showsReset) {
-            Button("Abbrechen", role: .cancel) {}
-            Button("Zurücksetzen", role: .destructive) { lage.resetSituation(includingTargets: resetTargets) }
-        } message: {
-            Text("Das kann nicht rückgängig gemacht werden.")
         }
     }
 }

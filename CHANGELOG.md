@@ -1,5 +1,31 @@
 # Änderungen
 
+## 0.8.0
+
+**Karte und Navigation**
+- Fahrmodus ohne Navigation mit normalem Standortpunkt und Straßenbanner; Navi-Pfeil nur in der Navigation;
+  nach dem Beenden der Navigation endet auch der Fahrmodus
+- Eigener Standort im Fahrzeug bzw. ÖPNV als Standortpunkt mit Auto- bzw. Bahn-/Bus-Symbol
+- Kompass: Antippen wechselt zwischen Norden oben und Gerätekompass; von Hand gedreht bleibt die Drehung
+- Einheitliches Symbol für alle „Hinführen“/„Hierhin navigieren“-Knöpfe
+- Hinweis, wenn App und Server nicht dieselbe Version (Haupt-/Nebenversion) haben
+
+**Anlegen und Suche**
+- Plus öffnet ein großes Auswahlmenü mit Kacheln; „Hier anlegen“ am Suchtreffer nutzt dasselbe Menü
+- Beim Setzen eines Orts nur Karte und Suchleiste; die Suchleiste sucht dann den Ort
+- Suchtreffer-Feld mit zwei gleichen Knöpfen und zuverlässigem Schließen
+
+**Bedienung**
+- Dreier-Auswahl Fortbewegung aus Glas-Teilen mit Druckeffekt; SOS-Ring sitzt außen um den Knopf
+- „Anderes Fahrzeug“ beim Einsteigen (nicht in der Liste)
+- Ziele: Titel und Plus in einer Zeile, doppelter Anlegen-Knopf entfernt
+
+**Lage und Ebenen**
+- „Lage zurücksetzen“ entfernt; stattdessen „Lage-Ebene leeren“ in den Kartenebenen
+- Bestreifung wird beim Ausschalten von „Bestreifte Wege“ zurückgesetzt
+- Fahndungsraum-Schalter nur, wenn ein Fahndungsraum besteht; ÖPNV-Linien ohne Navigieren-Knopf
+
+
 ## 0.7.0
 
 **ÖPNV**

@@ -541,7 +541,19 @@ struct MyLocationLayer: MapContent {
     enum Style: Equatable {
         case dot
         case vehicle(callsign: String)
+        case transit(line: String)
         case navigation
+
+        /// Eigener Zustand: im Fahrzeug (auch ohne Listenfahrzeug), im ÖPNV oder zu Fuß.
+        @MainActor static func of(_ lage: LageStore, navigating: Bool) -> Style {
+            if navigating { return .navigation }
+            guard let me = lage.me?.data else { return .dot }
+            switch me.fortbewegung {
+            case .fahrzeug: return .vehicle(callsign: lage.vehicle(of: me)?.data.funkrufname ?? "")
+            case .oepnv: return .transit(line: me.oepnv?.linie ?? "")
+            case .fuss: return .dot
+            }
+        }
     }
 
     let lage: LageStore
@@ -576,11 +588,7 @@ private struct LiveMyLocationMarker: View {
         )
     }
 
-    private var style: MyLocationLayer.Style {
-        if route.isActive { return .navigation }
-        if let me = lage.me, let vehicle = lage.vehicle(of: me.data) { return .vehicle(callsign: vehicle.data.funkrufname) }
-        return .dot
-    }
+    private var style: MyLocationLayer.Style { .of(lage, navigating: route.isActive) }
 }
 
 private struct StreetLabel: View {
@@ -622,20 +630,9 @@ private struct MyLocationMarker: View {
         case .navigation:
             NavigationPuck(course: course, cameraState: cameraState)
         case .vehicle(let callsign):
-            VStack(spacing: 2) {
-                Image(systemName: "car.fill")
-                    .font(.system(size: 17, weight: .bold))
-                    .foregroundStyle(.white)
-                    .frame(width: 38, height: 38)
-                    .background(Theme.accent, in: .rect(cornerRadius: 11))
-                    .overlay(RoundedRectangle(cornerRadius: 11).stroke(.white, lineWidth: 3))
-                    .shadow(color: .black.opacity(0.3), radius: 3, y: 1)
-                Text(callsign)
-                    .font(.caption2.weight(.bold))
-                    .padding(.horizontal, 5)
-                    .background(.thinMaterial, in: .capsule)
-                    .fixedSize()
-            }
+            LocationDot(symbol: "car.fill", caption: callsign)
+        case .transit(let line):
+            LocationDot(symbol: line.uppercased().hasPrefix("U") || line.uppercased().hasPrefix("S") ? "tram.fill" : "bus.fill", caption: line)
         case .dot:
             ZStack {
                 Circle()
@@ -743,4 +740,36 @@ struct TransitLayer: MapContent {
 
 extension Array {
     subscript(safe index: Int) -> Element? { indices.contains(index) ? self[index] : nil }
+}
+
+/// Standortpunkt wie in Apple Karten, im Fahrzeug oder ÖPNV mit kleinem Symbol im Punkt.
+struct LocationDot: View {
+    let symbol: String
+    var caption = ""
+    var color: Color = Theme.accent
+
+    var body: some View {
+        VStack(spacing: 2) {
+            ZStack {
+                Circle()
+                    .fill(color.opacity(0.18))
+                    .frame(width: 48, height: 48)
+                Image(systemName: symbol)
+                    .font(.system(size: 13, weight: .bold))
+                    .foregroundStyle(.white)
+                    .frame(width: 28, height: 28)
+                    .background(color, in: .circle)
+                    .overlay(Circle().stroke(.white, lineWidth: 3))
+                    .shadow(color: .black.opacity(0.3), radius: 3, y: 1)
+            }
+            if !caption.isEmpty {
+                Text(caption)
+                    .font(.caption2.weight(.bold))
+                    .padding(.horizontal, 5)
+                    .background(.thinMaterial, in: .capsule)
+                    .fixedSize()
+                    .offset(y: -8)
+            }
+        }
+    }
 }

@@ -5,19 +5,31 @@ struct LayerSheet: View {
     @Environment(LageStore.self) private var lage
     @Environment(LocalSettings.self) private var settings
     @Environment(\.dismiss) private var dismiss
+    @State private var showsClear = false
+
+    private var hasSearchArea: Bool { lage.mapObjects.values.contains { $0.data.typ == .fahndungsraum && !$0.data.isExpired() } }
+    private var lageObjects: [String] { lage.mapObjects.values.filter { $0.data.layerId == Layer.lageId }.map(\.id) }
 
     var body: some View {
         @Bindable var settings = settings
         NavigationStack {
             List {
                 Section {
-                    Toggle("Bestreifte Wege", systemImage: "road.lanes", isOn: $settings.showsCoverage)
+                    Toggle("Bestreifte Wege", systemImage: "road.lanes", isOn: Binding(
+                        get: { settings.showsCoverage },
+                        set: { on in
+                            settings.showsCoverage = on
+                            // Ausschalten setzt die Bestreifung zurück; eingeschaltet zählt sie ab jetzt neu.
+                            if !on { lage.resetCoverage() }
+                        }
+                    ))
                 } header: {
                     Text("Bestreifung")
                 } footer: {
-                    Text("Zeigt die Wege, die die eigenen Kräfte seit dem Einschalten zurückgelegt haben. Aufgezeichnet wird immer, angezeigt nur auf diesem Gerät.")
+                    Text("Zeigt die gefahrenen Wege der eigenen Kräfte ab dem Einschalten. Ausschalten setzt die Bestreifung für alle zurück.")
                 }
 
+                if hasSearchArea {
                 Section {
                     ForEach(ReachMode.allCases) { mode in
                         Toggle(isOn: Binding(get: { settings.isReachEnabled(mode) }, set: { _ in settings.toggleReach(mode) })) {
@@ -29,6 +41,7 @@ struct LayerSheet: View {
                     Text("Fahndungsraum")
                 } footer: {
                     Text("Wie weit die Zielperson seit der letzten Sichtung gekommen sein kann, je Fortbewegungsart.")
+                }
                 }
 
                 Section {
@@ -51,6 +64,21 @@ struct LayerSheet: View {
                 } footer: {
                     Text("Hier bestimmen Sie nur, was Ihre Karte anzeigt. Pakete laden und Argus-Prognosen importieren: Mehr, Ebenen und Pakete.")
                 }
+
+                Section {
+                    Button("Lage-Ebene leeren", systemImage: "trash", role: .destructive) { showsClear = true }
+                        .disabled(lageObjects.isEmpty)
+                } footer: {
+                    Text("Entfernt alle Markierungen der Ebene „Lage“ für alle. Dauerhafte Orte, Pakete und Ziele bleiben.")
+                }
+            }
+            .alert("Lage-Ebene für alle leeren?", isPresented: $showsClear) {
+                Button("Abbrechen", role: .cancel) {}
+                Button("Leeren", role: .destructive) {
+                    for id in lageObjects { lage.deleteMapObject(id: id) }
+                }
+            } message: {
+                Text("\(lageObjects.count) Markierungen werden gelöscht. Das lässt sich nicht rückgängig machen.")
             }
             .navigationTitle("Kartenebenen")
             .navigationBarTitleDisplayMode(.inline)

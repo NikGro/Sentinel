@@ -423,9 +423,10 @@ export class Lage extends EventEmitter<{ event: [LageEvent] }> {
   private setMobility(actor: Actor, art: Fortbewegung, fahrzeugId: string | null, oepnv: OepnvFahrt | null, now: number): void {
     const member = this.get('member', actor.id);
     if (!member) throw new LageError('unbekannt', 'Profil fehlt.');
-    if (art === 'fahrzeug') {
-      const vehicle = fahrzeugId ? this.get('vehicle', fahrzeugId) : null;
-      if (!vehicle) throw new LageError('unbekannt', 'Bitte ein Fahrzeug auswählen.');
+    // Ohne Fahrzeug-ID: generisches Fahrzeug (nicht in der Liste, z. B. Privatwagen oder Mietwagen).
+    if (art === 'fahrzeug' && fahrzeugId) {
+      const vehicle = this.get('vehicle', fahrzeugId);
+      if (!vehicle) throw new LageError('unbekannt', 'Fahrzeug nicht gefunden.');
       if (!vehicle.data.aktiv) throw new LageError('konflikt', 'Dieses Fahrzeug ist für den Einsatz nicht aktiv geschaltet.');
     }
     if (art === 'oepnv' && !oepnv) throw new LageError('ungueltig', 'Bitte Linie und Richtung auswählen.');

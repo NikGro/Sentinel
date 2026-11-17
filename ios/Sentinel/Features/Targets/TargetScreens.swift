@@ -37,14 +37,13 @@ struct TargetListScreen: View {
                     ContentUnavailableView {
                         Label("Keine Ziele", systemImage: "person.crop.rectangle.stack")
                     } description: {
-                        Text("Zielpersonen, Zielfahrzeuge und Zielobjekte lassen sich hier oder über das Plus auf der Karte anlegen. Alle im Einsatz sehen und bearbeiten dieselben Angaben.")
-                    } actions: {
-                        Button("Zielperson anlegen") { editing = TargetEditorContext(id: LageStore.newId(), target: Target(art: .person), isNew: true) }
-                            .buttonStyle(.glassProminent)
+                        Text("Zielpersonen, Zielfahrzeuge und Zielobjekte lassen sich über das Plus oben oder auf der Karte anlegen. Alle im Einsatz sehen und bearbeiten dieselben Angaben.")
                     }
                 }
             }
             .navigationTitle("Ziele")
+            // Großer Titel in einer Zeile mit dem Plus.
+            .toolbarTitleDisplayMode(.inlineLarge)
             .navigationDestination(for: String.self) { id in
                 TargetDetail(targetId: id)
             }

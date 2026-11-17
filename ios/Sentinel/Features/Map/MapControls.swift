@@ -78,7 +78,7 @@ struct ToAButton: View {
             Button {
                 model.navigate(to: .aPosition)
             } label: {
-                Image(systemName: "location.north.line.fill")
+                Image(systemName: "arrow.triangle.turn.up.right.diamond.fill")
                     .font(.system(size: 18, weight: .semibold))
                     .frame(width: Theme.barHeight, height: Theme.barHeight)
                     .contentShape(.circle)
@@ -136,34 +136,30 @@ struct GlassSegmentedControl<Value: Hashable>: View {
     @Namespace private var namespace
 
     var body: some View {
-        HStack(spacing: 0) {
-            ForEach(items, id: \.value) { item in
-                let selected = item.value == selection
-                Button {
-                    select(item.value)
-                } label: {
-                    Image(systemName: item.symbol)
-                        .font(.system(size: 18, weight: .semibold))
-                        .foregroundStyle(selected ? Color.accentColor : .primary)
-                        .frame(maxWidth: .infinity, maxHeight: .infinity)
-                        .background {
-                            if selected {
-                                Capsule()
-                                    .fill(.primary.opacity(0.12))
-                                    .matchedGeometryEffect(id: "auswahl", in: namespace)
-                                    .padding(4)
-                            }
-                        }
-                        .contentShape(.capsule)
+        // Ein Glaskörper aus drei Teilen wie die Tab-Leiste: jeder Teil reagiert beim Drücken, der gewählte ist getönt.
+        GlassEffectContainer(spacing: 0) {
+            HStack(spacing: 0) {
+                ForEach(items, id: \.value) { item in
+                    let selected = item.value == selection
+                    Button {
+                        select(item.value)
+                    } label: {
+                        Image(systemName: item.symbol)
+                            .font(.system(size: 18, weight: .semibold))
+                            .foregroundStyle(selected ? Color.accentColor : .primary)
+                            .frame(maxWidth: .infinity)
+                            .frame(height: Theme.barHeight)
+                            .contentShape(.capsule)
+                    }
+                    .buttonStyle(.plain)
+                    .glassEffect(selected ? .regular.tint(.accentColor.opacity(0.22)).interactive() : .regular.interactive(), in: .capsule)
+                    .accessibilityLabel(item.title)
+                    .accessibilityAddTraits(selected ? .isSelected : [])
                 }
-                .buttonStyle(.plain)
-                .accessibilityLabel(item.title)
-                .accessibilityAddTraits(selected ? .isSelected : [])
             }
         }
         .frame(maxWidth: .infinity)
         .frame(height: Theme.barHeight)
-        .glassEffect(.regular.interactive(), in: .capsule)
         .animation(.snappy, value: selection)
         .sensoryFeedback(.selection, trigger: selection)
     }
@@ -354,6 +350,8 @@ struct SearchPinCard: View {
     let create: (PlaceableKind) -> Void
     let close: () -> Void
 
+    @State private var showsChooser = false
+
     var body: some View {
         VStack(alignment: .leading, spacing: 10) {
             HStack {
@@ -361,31 +359,49 @@ struct SearchPinCard: View {
                     .font(.headline)
                     .lineLimit(2)
                 Spacer(minLength: 0)
-                Button("Schließen", systemImage: "xmark", action: close)
-                    .labelStyle(.iconOnly)
-                    .font(.subheadline.weight(.bold))
-                    .frame(width: 32, height: 32)
-                    .glassEffect(.regular.interactive(), in: .circle)
+                Button(action: close) {
+                    Image(systemName: "xmark")
+                        .font(.subheadline.weight(.bold))
+                        .frame(width: 36, height: 36)
+                        .contentShape(.circle)
+                }
+                .buttonStyle(.plain)
+                .glassEffect(.regular.interactive(), in: .circle)
+                .accessibilityLabel("Schließen")
             }
+            // Zwei gleich gestaltete Knöpfe; „Hier anlegen“ öffnet dasselbe große Auswahlmenü wie das Plus.
             HStack(spacing: Theme.barSpacing) {
                 Button(action: navigate) {
-                    Label("Hierhin navigieren", systemImage: "location.north.line.fill")
+                    Label("Hierhin navigieren", systemImage: "arrow.triangle.turn.up.right.diamond.fill")
+                        .font(.subheadline.weight(.semibold))
                         .frame(maxWidth: .infinity)
                 }
                 .buttonStyle(.glassProminent)
-                Menu {
-                    ForEach(PlaceableKind.all) { kind in
-                        Button(kind.title) { create(kind) }
-                    }
-                } label: {
+                Button { showsChooser = true } label: {
                     Label("Hier anlegen", systemImage: "plus")
+                        .font(.subheadline.weight(.semibold))
                         .frame(maxWidth: .infinity)
                 }
-                .buttonStyle(.glass)
+                .buttonStyle(.glassProminent)
+                .tint(.secondary)
             }
             .controlSize(.large)
         }
         .padding(14)
         .glassEffect(.regular, in: .rect(cornerRadius: 22))
+        .sheet(isPresented: $showsChooser) {
+            AddChooser { action in
+                showsChooser = false
+                let kind: PlaceableKind = switch action {
+                case .shape(let shape): .shape(shape)
+                case .target(let art): .target(art)
+                }
+                Task {
+                    try? await Task.sleep(for: .milliseconds(350))
+                    create(kind)
+                }
+            }
+            .presentationDetents([.medium, .large])
+        }
     }
 }
