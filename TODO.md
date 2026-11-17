@@ -22,6 +22,13 @@ statt jede Änderung sofort einzubauen. Erledigtes wandert mit Version ins CHANG
 
 ### Karte, Kompass und Navigation
 
+- **Kompassrose nativ wie iOS gestalten:** Die aktuelle Kompassrose entspricht trotz mehrfacher Überarbeitung weiterhin nicht der nativen iOS-/Apple-Karten-Optik. Gestaltung, Proportionen, Typografie, Symbole und Zustände nochmals anhand des nativen Vorbilds umsetzen statt die bisherige Eigeninterpretation fortzuführen.
+- **Kompassorientierung wirklich flüssig machen:** Die Kompassausrichtung ist weiterhin hakelig. Sensorwerte und Kartenrotation müssen geglättet und ohne sichtbare Sprünge bzw. Verzögerungen ineinander überführt werden.
+- **Zentrierung auf eigenen Standort als abschaltbarer Toggle:** Die Funktion zum Zentrieren auf die eigene Position muss sich auch wieder ausschalten lassen. Nach dem Ausschalten bleibt die Kamera an der zuletzt erreichten Kartenposition stehen und folgt dem Standort nicht weiter.
+- **Vorschau beim Setzen neuer Objektpositionen:** Wird der Ort eines neuen Objekts über die Suchleiste gewählt oder durch Tippen auf die Karte gesetzt, erscheint zunächst nur ein verschiebbarer/änderbarer Vorschau-Pin. Erst nach Betätigung eines Bestätigungsbuttons wird die Position endgültig übernommen.
+- **Suchtreffer-Popup in reduzierte Ansicht überführen:** Der „Hierhin navigieren“-Button nach einer Ortssuche ist weiterhin zweiteilig und soll zu einer einheitlichen Aktion werden. Solange das Popup mit der Entscheidung „Navigieren“ oder „Neuen Punkt anlegen“ geöffnet ist, soll die übrige UI in eine reduzierte Ansicht wechseln. Diese bleibt bestehen, bis eine Entscheidung getroffen oder das Popup geschlossen wird.
+- **Überlappende Kartenobjekte entzerren:** Liegen zwei oder mehr Punkte exakt oder nahezu übereinander, eine entzerrte Auswahl-/Darstellung anbieten. Alle Punkte und ihre Bezeichnungstexte müssen einzeln erkennbar und auswählbar sein, ohne sich gegenseitig zu verdecken.
+
 - **Kompassrose wie in Apple Karten (0.8: zwei Modi Norden/Kompass, Rose zeigt Richtung; noch prüfen):** Die Kompassrose soll sich wie das native Apple-Maps-Verhalten verhalten und beim manuellen Drehen anzeigen, welche Himmelsrichtung aktuell oben liegt. Antippen wechselt zwischen „Norden oben“ und Ausrichtung gemäß Gerätekompass. Im Modus „Norden oben“ bleibt die Karte nach Norden fixiert; bei manueller Drehung bleibt sie auf der eingestellten Rotation fixiert.
 - **Sanfte Kartenrotation und Positionsverfolgung:** Kompassdrehung und Nachführen der eigenen Position müssen flüssig animiert werden. Die aktuelle Umsetzung ruckelt bzw. springt in kleinen Schritten.
 - **„Am Fahren“-Ansicht als Live-Positionsmodus:** Der Button soll die Karte auf den aktuellen eigenen Standort zurücksetzen und die Ansicht anschließend an die Live-Position koppeln. Solange diese Kopplung aktiv ist, werden das Banner mit aktueller Straße und Ausrichtung eingeblendet. Die Ansicht muss sich jederzeit wieder verlassen lassen.
@@ -35,8 +42,26 @@ statt jede Änderung sofort einzubauen. Erledigtes wandert mit Version ins CHANG
 
 ### Bedienoberfläche und Liquid Glass
 
+- **SOS-Button: weißen Haltering sichtbar halten:** Der weiße Fortschritts-/Halte-Ring beim gedrückten SOS-Button ist auch nach der letzten Revision nicht sichtbar, weil sich der Button während des Haltens vergrößert. Ring und Button-Geometrie so korrigieren, dass der Ring während des gesamten Haltevorgangs sichtbar bleibt und nicht abgeschnitten oder überdeckt wird.
+- **SOS-Banner ohne Farbverlauf:** Den Gradient-Hintergrund des Notruf-/SOS-Banners entfernen; stattdessen eine einheitliche, zum übrigen UI passende Fläche verwenden.
+- **Drei-Wege-Auswahl wieder als natives iOS-Schieberelement:** Die Auswahl für Fußweg, ÖPNV und Pkw darf nicht aus drei separaten Buttons bestehen. Als natives wirkendes, zusammenhängendes Segment-/Schieberelement mit beweglichem Auswahlindikator umsetzen – ausdrücklich kein Satz einzelner Buttons.
+- **„Sonstiges / anderes Fahrzeug“ optisch von der Fahrzeugflotte trennen:** In der Verkehrsmittel-/Fahrzeugauswahlliste soll dieser Eintrag als eigener, klar abgesetzter Bereich erscheinen und nicht wie ein reguläres Flottenfahrzeug wirken.
+- **Icon-Kontrast im „Hinführen“-Button:** In Objekt-Popups ist das Icon im blauen „Hinführen“-Button kaum sichtbar, weil es nahezu dieselbe blaue Farbe wie der Button hat. Icon-Farbe und Kontrast korrigieren.
+- **Fotos bei bestimmten Pins deaktivieren:** Bei „Haltestellen im Umkreis“-Pins und beim Fahndungsraum keine Funktion zum Hinzufügen von Fotos anbieten.
+- **Warnbanner-Darstellung reparieren:** Die fehlerhafte Warntext-/Banner-Darstellung aus dem angehängten Screenshot (ÖPNV-Linien-Editor: „Server nicht erreichbar: Abgebrochen“) korrigieren. Text, Icon, Farben, Abstände und Darstellung müssen stabil und sauber sein; keine fehlerhafte bzw. störende Darstellung.
+- **Zielperson-Icon-Auswahl darf Karte nicht einfrieren:** Beim Anlegen einer Zielperson friert die Karte ein, sobald das Icon angetippt wird. Ursache für den UI-/Map-Freeze beheben und die Icon-Auswahl ohne Blockieren der Karteninteraktion ermöglichen.
+
 
 ### ÖPNV, Linien und Fahrzeuge
+
+- **Liniennummern im HVV-Stil darstellen:** Liniennummern dürfen nicht als abgerundetes weißes Rechteck erscheinen. Die Linien-Badges sollen wie im angehängten HVV-Kartenausschnitt aussehen: kräftig roter Hintergrund mit weißer Liniennummer und der passenden typischen Form.
+- **ÖPNV-Linie vollständig erzeugen:** Beim Anlegen einer ÖPNV-Linie soll die gesamte Linie von Anfang bis Ende automatisch erzeugt werden. Keine manuelle Auswahl von Start- und Endhaltestelle mehr verlangen.
+- **Linien als einzelne Haltestellen und Streckenobjekte modellieren:** Eine erzeugte Linie soll aus regulären Haltestellen-Pins und den verbindenden Linien-/Streckenobjekten bestehen, statt als unteilbares Gesamtobjekt verwaltet zu werden. Einzelne Haltestellen oder Streckenabschnitte müssen separat löschbar sein.
+- **Haltestellen-Pin manuell anlegen und zuordnen:** „Haltestelle“ als eigenständige Pin-Art zur manuellen Erstellung anbieten. Nach dem Setzen/Bestätigen sollen passende reale bzw. benachbarte Haltestellen ermittelt und dem bestätigten Haltestellen-Pin zugeordnet bzw. als solche übernommen werden können.
+- **ÖPNV-Linie als Gruppe erzeugen:** Beim automatischen Erzeugen einer Linie alle zugehörigen Haltestellen und Streckenobjekte direkt als gemeinsame Gruppe anlegen.
+- **Gruppierungsfunktion für Kartenobjekte:** Mehrere ausgewählte Punkte und Formen zu einer Gruppe zusammenfassen. Gruppen lassen sich gruppieren (erstellen), auflösen oder als Ganzes löschen. Keine verschachtelten Gruppen zulassen.
+- **Gruppen-Toolbar bei Einzelobjekten:** Wird ein Objekt innerhalb einer Gruppe angetippt, bleibt dessen normales Detailfenster verfügbar. Zusätzlich darüber eine schmale Toolbar mit den Gruppenaktionen anzeigen.
+- **Mehrfachauswahl per Gedrückthalten:** Objekte durch längeres Drücken auswählen können. Sobald mehrere Objekte ausgewählt sind, die Gruppen-Toolbar mit den passenden Gruppenaktionen einblenden.
 
 - **HVV-konforme Linien- und Haltestellensymbole:** Die derzeit falschen ÖPNV-Icons durch die offiziellen bzw. auf HVV-Fahrplänen verwendeten Symbole ersetzen. Geeignete SVG-Quellen prüfen (unter anderem Wikipedia, sofern Lizenz und Gestaltung passen). Für Bus, Regionalbahn, S-Bahn und U-Bahn die passenden Symbole verwenden.
 - **Symbole in sämtlichen ÖPNV-Listen:** Überall, wo ÖPNV-Verbindungen oder Linien aufgelistet werden, muss das jeweils passende HVV-Verkehrsmittelsymbol erscheinen.
@@ -47,6 +72,9 @@ statt jede Änderung sofort einzubauen. Erledigtes wandert mit Version ins CHANG
 
 ### Lage, Karten-Layer und Bestreifung
 
+- **Fahndungsraum-Optionen nur bei aktivem Fahndungsmarker anzeigen:** Die Optionen für fußläufige Fahndung, ÖPNV und Pkw in den Einstellungen zur Sichtbarkeit der Layer nur einblenden, wenn aktuell ein Fahndungsmarker aktiv ist. Ohne aktiven Fahndungsmarker sollen diese Toggles ausgeblendet sein.
+- **Fahndungsraum direkt aus der Übersicht aktualisieren:** In der Fahndungsraum-Übersicht einen Aktualisieren-Button bereitstellen, der Standort und Uhrzeit erneut abfragt und die Daten aktualisiert. Dafür darf nicht erst in den Bearbeitungsmodus gewechselt werden müssen.
+- **Zeit-Voreinstellungen als einmalige Aktionen:** Schnellaktionen wie „Jetzt“, „Vor 5 Minuten“ usw. sollen keine dauerhaft ausgewählten Zustände wie bei einem Auswahl-Selector haben. Jeder Button löst lediglich einmalig das Setzen der entsprechenden Uhrzeit aus und bleibt danach nicht ausgewählt.
 
 ### Tracker
 
@@ -55,6 +83,7 @@ statt jede Änderung sofort einzubauen. Erledigtes wandert mit Version ins CHANG
 
 ### App-/Server-Kompatibilität
 
+- **Bei Versions-Mismatch App vollständig sperren:** Wenn App- und Serverversion nicht kompatibel sind, darf nicht lediglich ein Warnbanner angezeigt werden. Die App muss den normalen Zugriff bzw. die Bedienung vollständig sperren und klar erklären, dass zunächst eine kompatible Version installiert/ausgerollt werden muss.
 
 ### Codebase-Qualität und Architektur
 
