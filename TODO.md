@@ -5,6 +5,16 @@ statt jede Änderung sofort einzubauen. Erledigtes wandert mit Version ins CHANG
 
 ## Geplant
 
+### Instanzen und mandantengetrennte Arbeitsbereiche
+
+- **Instanzenverwaltung im Hauptmenü:** Im Hauptmenü eine Instanzenübersicht einführen, in der Nutzer neue Instanzen erstellen, bestehende Instanzen löschen, anderen Instanzen beitreten und Instanzen wieder verlassen können.
+- **Mehrere Mitgliedschaften, genau eine aktive Instanz:** Nutzer können gleichzeitig Mitglied in mehreren Instanzen sein, aber immer nur eine Instanz aktiv geöffnet bzw. ausgewählt haben. Der Wechsel zwischen den Instanzen muss einfach möglich sein.
+- **Ereignisbenachrichtigungen aus anderen Instanzen:** Bei wichtigen Ereignissen in einer anderen Instanz – insbesondere beim Anlegen einer A-Position und beim Auslösen eines SOS – eine actionable Benachrichtigung anzeigen. Ist die App geöffnet, als Banner in der App; läuft sie im Hintergrund oder ist geschlossen, als iOS-Push-Mitteilung. Die Aktion der Mitteilung öffnet direkt die betreffende Instanz.
+- **Persistenter Objekt-Layer global über alle Instanzen:** Der persistente Objekt-Layer ist instanzübergreifend und seine Inhalte stehen in allen normalen Instanzen zur Verfügung.
+- **Persistenter Objekt-Layer als eigener Bereich im Instanzenmenü:** Die bisherige Freischaltung bzw. Bearbeitung über den Tab „Mehr“ entfällt. Stattdessen erscheint der persistente Objekt-Layer im Instanzenmenü als eigener, optisch klar von den normalen Instanzen getrennter Eintrag.
+- **Reduzierter Werkzeugmodus für den persistenten Objekt-Layer:** Beim Öffnen dieses Bereichs werden sämtliche normalen instanzbezogenen Werkzeuge und Elemente ausgeblendet. Sichtbar bleiben ausschließlich die Funktionen, die zum Erstellen und Bearbeiten von Markern und Kartenelementen des persistenten Objekt-Layers benötigt werden.
+- **Lage-Layer pro Instanz geschützt:** Jede normale Instanz besitzt ihren eigenen Lage-Layer. Dieser kann nicht gelöscht oder entfernt werden, darf aber vollständig geleert (gecleared) werden.
+
 ### Karte, Kompass und Navigation
 
 - **Kompassrose wie in Apple Karten:** Die Kompassrose soll sich wie das native Apple-Maps-Verhalten verhalten und beim manuellen Drehen anzeigen, welche Himmelsrichtung aktuell oben liegt. Antippen wechselt zwischen „Norden oben“ und Ausrichtung gemäß Gerätekompass. Im Modus „Norden oben“ bleibt die Karte nach Norden fixiert; bei manueller Drehung bleibt sie auf der eingestellten Rotation fixiert.
