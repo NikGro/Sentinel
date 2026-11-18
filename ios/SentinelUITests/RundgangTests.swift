@@ -20,6 +20,8 @@ final class RundgangTests: XCTestCase {
             }
             return false
         }
+        // Diagnose: Startet die App statt im Demo-Modus mit der Anmeldung, steht hier warum.
+        if app.staticTexts["diagnose"].waitForExistence(timeout: 8) { XCTFail(app.staticTexts["diagnose"].label) }
         return app
     }
 
@@ -38,7 +40,6 @@ final class RundgangTests: XCTestCase {
     func testKarteUndAlleBereiche() {
         let app = launch()
         XCTAssertTrue(app.tabBars.buttons["Lage"].waitForExistence(timeout: 20), "Hauptansicht erscheint")
-        if app.staticTexts["diagnose"].exists { XCTFail(app.staticTexts["diagnose"].label) }
         settle(app)
         // Wie auf dem Gerät: echter Standort, Karte folgt dem eigenen Punkt. Friert die Karte dabei ein, scheitern alle weiteren Schritte.
         XCUIDevice.shared.location = XCUILocation(location: CLLocation(latitude: 53.5503, longitude: 9.9930))
