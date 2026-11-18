@@ -294,109 +294,8 @@ struct SpeedBadge: View {
     }
 }
 
-/// Ausrichtung der Karte.
-enum MapOrientation: Equatable {
-    /// In Fahrtrichtung (Standard).
-    case course
-    /// Genordet.
-    case north
-    /// Ganze Route im Blick (nur während einer Navigation).
-    case overview
-    /// Von Hand mit zwei Fingern gedreht; bleibt, bis man am Kompass umschaltet.
-    case fixed(Double)
-}
 
-/// Kompass in Einheitsgröße, immer sichtbar. Tippen schaltet die Ausrichtung durch: Fahrtrichtung, Norden, Übersicht.
-/// Die Nadel dreht ohne Animation mit, damit sie beim Überschreiten von Nord nicht herumwirbelt.
-struct CompassButton: View {
-    let state: MapCameraState
-    let mode: MapOrientation
-    let cycle: () -> Void
 
-    var body: some View {
-        Button(action: cycle) {
-            Group {
-                switch mode {
-                case .overview:
-                    Image(systemName: "point.topleft.down.to.point.bottomright.curvepath")
-                        .font(.system(size: 18, weight: .semibold))
-                        .foregroundStyle(.primary)
-                case .north:
-                    // Norden fest oben: rotes N über dem Pfeil.
-                    VStack(spacing: -1) {
-                        Text("N")
-                            .font(.system(size: 11, weight: .heavy, design: .rounded))
-                            .foregroundStyle(.red)
-                        Image(systemName: "location.north.fill")
-                            .font(.system(size: 17, weight: .bold))
-                            .foregroundStyle(.primary)
-                    }
-                case .course, .fixed:
-                    // Kompassrose wie in Apple Karten: Striche, rotes N; dreht sich mit der Karte.
-                    CompassDial(locked: mode != .course)
-                        .frame(width: 36, height: 36)
-                        .rotationEffect(.degrees(-state.heading))
-                        .animation(nil, value: state.heading)
-                }
-            }
-            .frame(width: Theme.roundButton, height: Theme.roundButton)
-            .contentShape(.circle)
-        }
-        .buttonStyle(.plain)
-        .glassEffect(.regular.interactive(), in: .circle)
-        .sensoryFeedback(.selection, trigger: mode)
-        .accessibilityLabel(label)
-        .accessibilityHint("Tippen wechselt zwischen Fahrtrichtung, Norden und Übersicht")
-    }
-
-    private var label: String {
-        switch mode {
-        case .course: "Ausrichtung: Fahrtrichtung"
-        case .north: "Ausrichtung: Norden"
-        case .overview: "Ausrichtung: Übersicht der Route"
-        case .fixed: "Ausrichtung: fest gedreht"
-        }
-    }
-}
-
-/// Kompassrose: Teilstriche rundum, rote Nadel und rotes N oben. `locked`: von Hand gedreht und festgehalten.
-struct CompassDial: View {
-    var locked = false
-
-    var body: some View {
-        ZStack {
-            Canvas { context, size in
-                let center = CGPoint(x: size.width / 2, y: size.height / 2)
-                let radius = min(size.width, size.height) / 2
-                for i in 0..<36 {
-                    let angle = Double(i) * .pi / 18
-                    let major = i % 9 == 0
-                    let inner = radius - (major ? 6 : 3.5)
-                    var tick = Path()
-                    tick.move(to: CGPoint(x: center.x + sin(angle) * inner, y: center.y - cos(angle) * inner))
-                    tick.addLine(to: CGPoint(x: center.x + sin(angle) * radius, y: center.y - cos(angle) * radius))
-                    context.stroke(tick, with: .color(i == 0 ? .red : .primary.opacity(major ? 0.9 : 0.45)), lineWidth: major ? 1.6 : 1)
-                }
-                var needle = Path()
-                needle.move(to: CGPoint(x: center.x, y: center.y - radius + 7))
-                needle.addLine(to: CGPoint(x: center.x - 3.5, y: center.y))
-                needle.addLine(to: CGPoint(x: center.x + 3.5, y: center.y))
-                needle.closeSubpath()
-                context.fill(needle, with: .color(.red))
-                var tail = Path()
-                tail.move(to: CGPoint(x: center.x, y: center.y + radius - 7))
-                tail.addLine(to: CGPoint(x: center.x - 3.5, y: center.y))
-                tail.addLine(to: CGPoint(x: center.x + 3.5, y: center.y))
-                tail.closeSubpath()
-                context.fill(tail, with: .color(.primary.opacity(locked ? 0.35 : 0.7)))
-            }
-            Text("N")
-                .font(.system(size: 8, weight: .heavy))
-                .foregroundStyle(.red)
-                .offset(y: -9)
-        }
-    }
-}
 
 /// Notrufknopf: 1,5 Sekunden gedrückt halten (Ring füllt sich), damit er nicht versehentlich auslöst.
 /// Läuft der eigene Notruf, beendet ein Tipp ihn nach Rückfrage.
@@ -425,7 +324,8 @@ struct SOSButton: View {
                     .trim(from: 0, to: progress)
                     .stroke(.white, style: StrokeStyle(lineWidth: 4, lineCap: .round))
                     .rotationEffect(.degrees(-90))
-                    .padding(-3)
+                    // Innen im Knopf, damit er beim Vergrößern weder abgeschnitten noch vom Glas verdeckt wird.
+                    .padding(4)
                     .allowsHitTesting(false)
             }
             .scaleEffect(holding ? 1.08 : 1)
@@ -517,7 +417,7 @@ struct SOSBanner: View {
             .foregroundStyle(.white)
             .padding(.horizontal, 14)
             .frame(minHeight: Theme.barHeight)
-            .background(Color.red.gradient, in: .rect(cornerRadius: Theme.barHeight / 2))
+            .background(Color.red, in: .rect(cornerRadius: Theme.barHeight / 2))
             .accessibilityElement(children: .combine)
         }
     }

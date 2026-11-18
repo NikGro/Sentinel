@@ -10,6 +10,8 @@ struct NavigateHereSection: View {
             Button(action: action) {
                 Label(title, systemImage: "arrow.triangle.turn.up.right.diamond.fill")
                     .font(.headline)
+                    // Weiß auf Blau, sonst verschwindet das Symbol im Knopf.
+                    .foregroundStyle(.white)
                     .frame(maxWidth: .infinity)
                     .frame(height: Theme.barHeight - 6)
             }

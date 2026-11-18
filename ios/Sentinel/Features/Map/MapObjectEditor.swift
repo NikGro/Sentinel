@@ -94,7 +94,7 @@ struct MapObjectEditor: View {
                         DatePicker("Datum und Uhrzeit", selection: sinceBinding, in: ...Date.now, displayedComponents: [.date, .hourAndMinute])
                         LazyVGrid(columns: Array(repeating: GridItem(.flexible(), spacing: 8), count: 4), spacing: 8) {
                             ForEach([0, 5, 10, 15, 30, 45, 60], id: \.self) { minutes in
-                                let selected = minutesAgo == minutes
+                                // Einmalige Aktion: setzt die Zeit, bleibt aber nicht ausgewählt.
                                 Button {
                                     minutesAgo = minutes
                                     object.zeit = (Date.now.addingTimeInterval(TimeInterval(-minutes * 60)).timeIntervalSince1970 * 1000).rounded()
@@ -107,9 +107,8 @@ struct MapObjectEditor: View {
                                 }
                                 .buttonStyle(.bordered)
                                 .buttonBorderShape(.capsule)
-                                .tint(selected ? .accentColor : .secondary)
+                                .tint(.accentColor)
                                 .accessibilityLabel(minutes == 0 ? "Jetzt" : "vor \(minutes) Minuten")
-                                .accessibilityAddTraits(selected ? .isSelected : [])
                             }
                         }
                         .padding(.vertical, 4)
@@ -145,7 +144,7 @@ struct MapObjectEditor: View {
                         .lineLimit(1...5)
                 }
 
-                if object.typ != .text {
+                if ![.text, .haltestellen, .fahndungsraum].contains(object.typ) {
                     AttachmentsSection(attachments: Binding(get: { object.anhaenge ?? [] }, set: { object.anhaenge = $0 }))
                 }
 

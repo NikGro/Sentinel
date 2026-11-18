@@ -24,7 +24,13 @@ struct TransitObjectSection: View {
             search
         } else {
             chosenLine
-            if let line { stops(line) }
+            if let line, isVehicle { stops(line) }
+            if !isVehicle, let names = object.haltNamen, let first = names.first, let last = names.last {
+                Section("Strecke") {
+                    LabeledContent("Ganze Linie", value: "\(first) → \(last)")
+                    LabeledContent("Halte", value: "\(names.count)")
+                }
+            }
             timing
         }
         if let failure {
@@ -77,7 +83,9 @@ struct TransitObjectSection: View {
             hits = try await client.lines(query: query, near: origin).lines
             failure = hits.isEmpty && !query.isEmpty ? "Keine passende Linie gefunden." : nil
         } catch {
-            failure = error.localizedDescription
+            // Abgebrochen heißt nur: Eingabe geändert, neue Suche läuft. Kein Fehler.
+            if Task.isCancelled || (error as? URLError)?.code == .cancelled || error is CancellationError { return }
+            failure = "Linien konnten nicht geladen werden."
         }
     }
 
@@ -97,7 +105,9 @@ struct TransitObjectSection: View {
             if fresh {
                 let anchor = origin ?? object.punkte.first
                 start = anchor.flatMap { a in loaded.halte.indices.min { loaded.halte[$0].point.distance(to: a) < loaded.halte[$1].point.distance(to: a) } } ?? 0
-                end = isVehicle ? loaded.halte.count - 1 : min(start + 5, loaded.halte.count - 1)
+                // ÖPNV-Linie: immer die ganze Linie von Anfang bis Ende.
+                if !isVehicle { start = 0 }
+                end = loaded.halte.count - 1
                 if start >= loaded.halte.count - 1 { start = max(0, loaded.halte.count - 2) }
                 if object.titel.isEmpty { object.titel = "\(loaded.ref) → \(loaded.nach)" }
             } else if let first = object.punkte.first, let last = object.punkte.last {

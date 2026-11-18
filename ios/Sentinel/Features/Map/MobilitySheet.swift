@@ -71,26 +71,6 @@ struct MobilitySheet: View {
                 Text("Kein Fahrzeug aus der Liste aktiv. Fahrzeuge werden unter Kräfte angelegt und für den Einsatz eingeschaltet.")
                     .foregroundStyle(.secondary)
             }
-            Button {
-                lage.setMobility(.fahrzeug)
-                dismiss()
-            } label: {
-                HStack {
-                    VStack(alignment: .leading, spacing: 2) {
-                        Text("Anderes Fahrzeug")
-                            .font(.headline)
-                        Text("Nicht in der Liste, z. B. Privat- oder Mietwagen")
-                            .font(.caption)
-                            .foregroundStyle(.secondary)
-                    }
-                    Spacer()
-                    if lage.me?.data.fahrzeugId == nil, lage.me?.data.fortbewegung == .fahrzeug {
-                        Image(systemName: "checkmark")
-                            .foregroundStyle(.tint)
-                    }
-                }
-            }
-            .tint(.primary)
             ForEach(lage.activeVehicles) { vehicle in
                 Button {
                     lage.setMobility(.fahrzeug, vehicleId: vehicle.id)
@@ -115,7 +95,31 @@ struct MobilitySheet: View {
                 .tint(.primary)
             }
         } header: {
-            Text("In welchem Fahrzeug?")
+            Text("Fahrzeuge im Einsatz")
+        }
+        Section {
+            Button {
+                lage.setMobility(.fahrzeug)
+                dismiss()
+            } label: {
+                HStack {
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text("Anderes Fahrzeug")
+                            .font(.headline)
+                        Text("Nicht in der Liste, z. B. Privat- oder Mietwagen")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                    }
+                    Spacer()
+                    if lage.me?.data.fahrzeugId == nil, lage.me?.data.fortbewegung == .fahrzeug {
+                        Image(systemName: "checkmark")
+                            .foregroundStyle(.tint)
+                    }
+                }
+            }
+            .tint(.primary)
+        } header: {
+            Text("Sonstiges")
         }
     }
 

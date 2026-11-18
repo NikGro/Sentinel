@@ -133,34 +133,19 @@ struct GlassSegmentedControl<Value: Hashable>: View {
     let selection: Value
     let select: (Value) -> Void
 
-    @Namespace private var namespace
-
     var body: some View {
-        // Ein Glaskörper aus drei Teilen wie die Tab-Leiste: jeder Teil reagiert beim Drücken, der gewählte ist getönt.
-        GlassEffectContainer(spacing: 0) {
-            HStack(spacing: 0) {
-                ForEach(items, id: \.value) { item in
-                    let selected = item.value == selection
-                    Button {
-                        select(item.value)
-                    } label: {
-                        Image(systemName: item.symbol)
-                            .font(.system(size: 18, weight: .semibold))
-                            .foregroundStyle(selected ? Color.accentColor : .primary)
-                            .frame(maxWidth: .infinity)
-                            .frame(height: Theme.barHeight)
-                            .contentShape(.capsule)
-                    }
-                    .buttonStyle(.plain)
-                    .glassEffect(selected ? .regular.tint(.accentColor.opacity(0.22)).interactive() : .regular.interactive(), in: .capsule)
+        // Natives Segment mit gleitendem Auswahlindikator, Höhe wie „A übernehmen“.
+        Picker("Fortbewegung", selection: Binding(get: { selection }, set: { select($0) })) {
+            ForEach(items, id: \.value) { item in
+                Image(systemName: item.symbol)
                     .accessibilityLabel(item.title)
-                    .accessibilityAddTraits(selected ? .isSelected : [])
-                }
+                    .tag(item.value)
             }
         }
+        .pickerStyle(.segmented)
+        .controlSize(.extraLarge)
         .frame(maxWidth: .infinity)
         .frame(height: Theme.barHeight)
-        .animation(.snappy, value: selection)
         .sensoryFeedback(.selection, trigger: selection)
     }
 }

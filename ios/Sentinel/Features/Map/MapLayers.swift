@@ -449,13 +449,13 @@ struct LineBadge: View {
     }
 
     private func shape(_ kind: LineKind) -> RoundedRectangle {
-        RoundedRectangle(cornerRadius: kind == .sBahn ? 7 : (kind == .uBahn ? 1.5 : 3))
+        // S-Bahn rund, U-Bahn und Bus eckig wie auf den HVV-Plänen.
+        RoundedRectangle(cornerRadius: kind == .sBahn ? 7 : 1.5)
     }
 
     private func background(_ kind: LineKind) -> Color { Color(hex: Self.colorHex(line)) }
 
     private func foreground(_ kind: LineKind) -> Color {
-        if kind == .bus, line.farbe == nil { return .black }
         return Self.isLight(Self.colorHex(line)) ? .black : .white
     }
 
@@ -476,7 +476,8 @@ struct LineBadge: View {
         case .bahn: return "#6B6B6B"
         case .tram: return "#C8102E"
         case .faehre: return "#0095DA"
-        case .bus: return "#FFFFFF"
+        // HVV: Busliniennummern weiß auf kräftigem Rot.
+        case .bus: return "#E2001A"
         }
     }
 

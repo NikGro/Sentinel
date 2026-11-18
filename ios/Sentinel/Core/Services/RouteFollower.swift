@@ -366,8 +366,11 @@ private final class CoreDelegate: FerrostarCoreDelegate {
     }
 
     func core(_ core: FerrostarCore, loadedAlternateRoutes routes: [Route]) {
-        guard core.state?.isCalculatingNewRoute ?? false, let route = routes.first else { return }
-        try? core.startNavigation(route: route, config: NaviConfig.controller)
+        // Kann aus einem Hintergrund-Task kommen: Zustand des Kerns nur auf dem Hauptthread ändern.
+        DispatchQueue.main.async {
+            guard core.state?.isCalculatingNewRoute ?? false, let route = routes.first else { return }
+            try? core.startNavigation(route: route, config: NaviConfig.controller)
+        }
     }
 }
 

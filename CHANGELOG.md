@@ -1,5 +1,29 @@
 # Änderungen
 
+## 0.9.0
+
+**Karte**
+- Standort-Nachführung und Kompass nativ von Apple Karten: flüssig ohne Sprünge, Kompassrose im Original-Look
+- Standortknopf schaltet wie in Apple Karten: aus → folgen → folgen mit Blickrichtung → aus
+- Neuer Ort (Marker, Ziel, Verschieben): erst orangefarbene Vorschau, „Übernehmen“ setzt ihn; erneutes Tippen verschiebt
+- Suchtreffer: nur Karte und Treffer-Feld sichtbar, bis navigiert, angelegt oder geschlossen wird
+
+**Bedienung**
+- Fortbewegung wieder als natives Segment mit gleitender Auswahl; „Anderes Fahrzeug“ als eigener Bereich „Sonstiges“
+- SOS-Ring bleibt beim Halten sichtbar; SOS-Balken ohne Farbverlauf; „Hinführen“-Symbol weiß und gut lesbar
+- App gesperrt mit Erklärung, wenn App und Server nicht dieselbe Version haben
+
+**ÖPNV und Fahndung**
+- ÖPNV-Linie wird immer komplett von Anfang bis Ende angelegt
+- Busnummern weiß auf HVV-Rot, U-Bahn und Bus eckig, S-Bahn rund
+- Kein „Abgebrochen“-Fehler mehr beim Tippen im Linien-Editor
+- Fahndungsraum: „Jetzt“ bzw. „Hier und jetzt“ direkt in der Ansicht; Zeitknöpfe als einmalige Aktion; keine Fotos
+  bei Fahndungsraum und Haltestellen im Umkreis
+
+**Stabilität**
+- Neuberechnete Routen werden auf dem Hauptthread übernommen (mögliche Absturzursache in der Navigation)
+
+
 ## 0.8.0
 
 **Karte und Navigation**

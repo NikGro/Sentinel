@@ -195,6 +195,17 @@ struct MapObjectInfo: View {
                 Section {
                     if object.typ == .fahndungsraum, let since = object.since {
                         LabeledContent("Letzte Sichtung", value: "\(Format.time(since)), \(Format.ago(since))")
+                        // Neue Sichtung direkt aus der Ansicht, ohne Bearbeiten.
+                        if editable {
+                            HStack {
+                                Button("Jetzt", systemImage: "clock.arrow.circlepath") { updateSighting(here: false) }
+                                if model.myPoint != nil {
+                                    Button("Hier und jetzt", systemImage: "location.fill") { updateSighting(here: true) }
+                                }
+                            }
+                            .buttonStyle(.bordered)
+                            .buttonBorderShape(.capsule)
+                        }
                     }
                     if let radius = object.radius, object.typ == .kreis || object.typ == .haltestellen {
                         LabeledContent("Umkreis", value: Format.distance(radius))
@@ -285,6 +296,13 @@ struct MapObjectInfo: View {
             MapObjectEditor(context: context, startMoving: startMoving)
                 .presentationDetents([.medium, .large])
         }
+    }
+
+    private func updateSighting(here: Bool) {
+        guard var room = lage.mapObjects[id]?.data else { return }
+        room.zeit = (Date.now.timeIntervalSince1970 * 1000).rounded()
+        if here, let point = model.myPoint { room.punkte = [point] }
+        lage.saveMapObject(room, id: id)
     }
 
     @ViewBuilder private var symbol: some View {

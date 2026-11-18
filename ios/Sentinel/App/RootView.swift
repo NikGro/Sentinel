@@ -29,7 +29,28 @@ struct RootView: View {
                 ProfileEditor(mode: .create)
             }
         case .main:
-            MainView()
+            // Passen App und Server nicht zusammen, ist die App gesperrt, bis eine passende Version läuft.
+            if let mismatch = model.lage.versionMismatch {
+                VersionLockView(message: mismatch)
+            } else {
+                MainView()
+            }
+        }
+    }
+}
+
+struct VersionLockView: View {
+    let message: String
+    @Environment(AppModel.self) private var model
+
+    var body: some View {
+        ContentUnavailableView {
+            Label("Version passt nicht", systemImage: "exclamationmark.arrow.triangle.2.circlepath")
+        } description: {
+            Text(message + "\n\nBis dahin ist die App gesperrt, damit keine Fehler durch unterschiedliche Stände entstehen.")
+        } actions: {
+            Button("Abmelden", role: .destructive) { model.signOut() }
+                .buttonStyle(.bordered)
         }
     }
 }

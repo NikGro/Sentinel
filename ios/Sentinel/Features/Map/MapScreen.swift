@@ -29,6 +29,15 @@ enum MapTapMode: Equatable {
     /// Standort eines bestehenden Ziels neu setzen.
     case placingTarget(String)
 
+    /// Einzelner Ort: erst als Vorschau zeigen, dann bestätigen.
+    var needsConfirmation: Bool {
+        switch self {
+        case .none: false
+        case .drawing(let shape, _): !shape.isMultiPoint
+        case .moving, .newTarget, .placingTarget: true
+        }
+    }
+
     var hint: String? {
         switch self {
         case .none: nil
@@ -102,9 +111,8 @@ struct MapScreen: View {
     /// In der Navi-Ansicht folgt die Kamera nah und in Fahrtrichtung, bis man die Karte selbst verschiebt.
     /// Fahrmodus: Die Kamera folgt einem selbst gekippt und in Fahrtrichtung; der eigene Pfeil sitzt fest in der Bildmitte.
     /// Wer die Karte verschiebt, beendet ihn; der Standortknopf startet ihn wieder.
-    @State private var followsMe = false
-    /// Ausrichtung der Karte: Standard ist in Fahrtrichtung.
-    @State private var orientation: MapOrientation = .course
+    /// Folgt die Karte dem eigenen Standort (nativ von Apple Karten, flüssig)? Verschieben beendet es von selbst.
+    private var followsMe: Bool { camera.followsUserLocation }
     /// Die letzte Kamerabewegung kam vom Finger (nicht von der App): Neigung danach als 2D/3D-Einstellung übernehmen.
     @State private var userMovedCamera = false
     /// Gerade verschobener Fahndungsraum, für die Rückfrage zum Sichtungszeitpunkt.
@@ -116,6 +124,8 @@ struct MapScreen: View {
     @State private var searchPin: SearchPin?
     /// Ort für das gerade gewählte Werkzeug über die Adresssuche statt per Tipp bestimmen.
     @State private var pickingBySearch = false
+    /// Vorschau des neuen Orts: erst „Übernehmen“ setzt ihn endgültig; erneutes Tippen verschiebt die Vorschau.
+    @State private var pendingPoint: GeoPoint?
     /// Takt für die geschätzten ÖPNV-Fahrzeuge (alle 2 Sekunden, solange welche sichtbar sind).
     @State private var transitNow = Date.now
     /// Angetipptes, nur im Takt eingeblendetes Fahrzeug.
@@ -136,7 +146,7 @@ struct MapScreen: View {
                 // Erst wenn das Suchfenster zu ist, sonst kollidiert es mit dem Editor-Fenster.
                 Task {
                     try? await Task.sleep(for: .milliseconds(450))
-                    handleTap(point)
+                    if tapMode.needsConfirmation { pendingPoint = point } else { handleTap(point) }
                 }
             })
             .presentationDetents([.fraction(0.94)])
@@ -207,8 +217,12 @@ struct MapScreen: View {
         MapReader { proxy in
             Map(position: $camera, scope: mapScope) {
                 // Im Fahrmodus ohne Navigation bleibt der normale Standortpunkt; nur in der Navigation ersetzt ihn der Navi-Pfeil.
-                if !(followsMe && route.isActive) {
+                if true {
                     MyLocationLayer(lage: lage, route: route, locationService: location, cameraState: cameraState)
+                }
+                if let pendingPoint {
+                    Marker("Neuer Ort", systemImage: "mappin", coordinate: pendingPoint.coordinate)
+                        .tint(.orange)
                 }
                 if let searchPin {
                     Marker(searchPin.title, systemImage: "magnifyingglass", coordinate: searchPin.point.coordinate)
@@ -239,24 +253,18 @@ struct MapScreen: View {
             .onMapCameraChange(frequency: .continuous) { context in cameraState.update(context.camera) }
             .simultaneousGesture(DragGesture(minimumDistance: 12).onChanged { _ in
                 userMovedCamera = true
-                if followsMe { followsMe = false }
             })
             .onMapCameraChange(frequency: .onEnd) { context in
                 // Gekippt (auch mit zwei Fingern, das meldet keine Wischgeste): Haken bei „3D-Ansicht“ mitziehen.
                 // Die App selbst setzt nur 0° oder 55°; MapKit begrenzt die Neigung beim Herauszoomen, bleibt aber über 10°.
                 userMovedCamera = false
-                guard orientation != .overview else { return }
                 let is3D = context.camera.pitch > 10
                 if settings.prefers3D != is3D { settings.prefers3D = is3D }
             }
-            // Mit zwei Fingern gedreht: diese Ausrichtung gilt, bis man am Kompass wieder umschaltet.
-            .simultaneousGesture(RotateGesture().onEnded { _ in
-                orientation = .fixed(cameraState.heading)
-            })
             .overlay {
                 if followsMe {
                     FollowPuckOverlay(
-                        showsArrow: route.isActive,
+                        showsArrow: false,
                         proxy: proxy,
                         state: cameraState,
                         inVehicle: { if case .vehicle = myLocationStyle { true } else { false } }(),
@@ -280,7 +288,11 @@ struct MapScreen: View {
                     }
                     return
                 }
-                handleTap(GeoPoint(coordinate))
+                if tapMode.needsConfirmation {
+                    withAnimation(.snappy) { pendingPoint = GeoPoint(coordinate) }
+                } else {
+                    handleTap(GeoPoint(coordinate))
+                }
             }
         }
         .safeAreaInset(edge: .top, spacing: 0) { topArea }
@@ -303,7 +315,7 @@ struct MapScreen: View {
                 .padding(.bottom, bottomAreaHeight + Theme.barSpacing)
             }
         }
-        .overlay(alignment: .topTrailing) { if tapMode == .none { sideButtons } }
+        .overlay(alignment: .topTrailing) { if tapMode == .none, searchPin == nil { sideButtons } }
         .mapScope(mapScope)
         .task(id: CoverageKey(enabled: settings.showsCoverage, since: settings.coverageSince, generation: lage.coverageGeneration)) {
             guard settings.showsCoverage else {
@@ -329,9 +341,8 @@ struct MapScreen: View {
             await fahndung.loadStops(for: stopCircles)
         }
         .onChange(of: route.isActive) { _, active in
-            // Nach dem Beenden nicht im Fahrmodus hängen bleiben.
-            followsMe = active
-            if active { followMe(duration: 0.8) }
+            // Navigation: nah, gekippt, in Blickrichtung folgen. Danach nicht im Fahrmodus hängen bleiben.
+            if active { startFollowing(heading: true) } else if followsMe { camera = .camera(cameraState.camera()) }
         }
         .task {
             // Beim Öffnen: auf den eigenen Standort, gekippt wie in einer Navi-App.
@@ -339,18 +350,6 @@ struct MapScreen: View {
             if let current = location.current {
                 camera = .camera(MapCamera(centerCoordinate: current.coordinate, distance: 1200, heading: 0, pitch: settings.prefers3D ? 55 : 0))
             }
-        }
-        .onChange(of: locationContext.compassDegrees) { _, _ in
-            // Im Stand dreht „Kurs“ die Karte mit dem Gerätekompass.
-            if followsMe, orientation == .course, (location.current?.speed ?? 0) <= 1 { followMe(duration: 0.3) }
-        }
-        .onChange(of: location.current?.timestamp) { _, _ in
-            // Gleichmäßig bis zur nächsten Meldung weitergleiten: so bewegt sich die Karte flüssig statt in Sprüngen.
-            if followsMe, route.snappedLocation == nil { followMe(duration: 1.0) }
-        }
-        .onChange(of: route.snappedLocation?.timestamp) { _, _ in
-            // In der Navigation folgt die Kamera dem auf die Straße gelegten Standort.
-            if followsMe { followMe(duration: 1.0) }
         }
         .sensoryFeedback(.impact, trigger: lage.operation.a?.memberId)
         .alert("Sichtung jetzt?", isPresented: Binding(get: { movedRoom != nil }, set: { if !$0 { movedRoom = nil } })) {
@@ -417,15 +416,6 @@ struct MapScreen: View {
                 }
             }
 
-            if let mismatch = lage.versionMismatch {
-                Label(mismatch, systemImage: "exclamationmark.arrow.triangle.2.circlepath")
-                    .font(.footnote.weight(.semibold))
-                    .padding(.horizontal, 14)
-                    .padding(.vertical, 10)
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                    .glassEffect(.regular.tint(.yellow.opacity(0.3)), in: .rect(cornerRadius: 16))
-            }
-
             SOSBanner { memberId in
                 model.navigate(to: .member(memberId))
                 route.specialRights = true
@@ -436,12 +426,23 @@ struct MapScreen: View {
                     Label(hint, systemImage: "hand.tap.fill")
                         .font(.footnote.weight(.semibold))
                     Spacer(minLength: 0)
+                    if let point = pendingPoint {
+                        Button("Übernehmen") {
+                            pendingPoint = nil
+                            handleTap(point)
+                        }
+                        .buttonStyle(.glassProminent)
+                        .fontWeight(.semibold)
+                    }
                     if case .drawing(let shape, let points) = tapMode, shape.isMultiPoint {
                         Button("Fertig") { finishDrawing(shape, points) }
                             .disabled(points.count < shape.minimumPoints)
                             .fontWeight(.semibold)
                     }
-                    Button("Abbrechen", systemImage: "xmark.circle.fill") { tapMode = .none }
+                    Button("Abbrechen", systemImage: "xmark.circle.fill") {
+                        pendingPoint = nil
+                        tapMode = .none
+                    }
                         .labelStyle(.iconOnly)
                         .foregroundStyle(.secondary)
                 }
@@ -463,22 +464,34 @@ struct MapScreen: View {
         GlassEffectContainer(spacing: Theme.barSpacing) {
             VStack(spacing: Theme.barSpacing) {
                 SOSButton()
-                CompassButton(state: cameraState, mode: orientation) { cycleOrientation() }
+                // Nativer Kompass von Apple Karten: zeigt die Richtung oben, Antippen richtet nach Norden aus.
+                MapCompass(scope: mapScope)
+                    .mapControlVisibility(.visible)
+                    .frame(width: Theme.roundButton, height: Theme.roundButton)
                 MapStyleButton { on in
-                    if followsMe {
-                        followMe(duration: 0.6)
-                    } else {
-                        withAnimation(.easeInOut(duration: 0.6)) { camera = .camera(cameraState.camera(pitch: on ? 55 : 0)) }
+                    let heading = camera.followsUserHeading
+                    let following = followsMe
+                    withAnimation(.easeInOut(duration: 0.6)) { camera = .camera(cameraState.camera(pitch: on ? 55 : 0)) }
+                    if following {
+                        Task {
+                            try? await Task.sleep(for: .milliseconds(650))
+                            camera = .userLocation(followsHeading: heading, fallback: .automatic)
+                        }
                     }
                 }
                 MapRoundButton(title: "Ebenen", symbol: "square.3.layers.3d") { showsLayers = true }
+                // Wie in Apple Karten: aus → folgen → folgen mit Blickrichtung → aus.
                 MapRoundButton(
                     title: "Auf eigenen Standort zentrieren",
-                    symbol: followsMe ? "location.circle.fill" : "location.circle"
+                    symbol: camera.followsUserHeading ? "location.north.line.fill" : (followsMe ? "location.fill" : "location")
                 ) {
-                    if orientation == .overview { orientation = .course }
-                    followsMe = true
-                    followMe(duration: 0.8)
+                    if camera.followsUserHeading {
+                        camera = .camera(cameraState.camera())
+                    } else if followsMe {
+                        camera = .userLocation(followsHeading: true, fallback: .automatic)
+                    } else {
+                        startFollowing(heading: false)
+                    }
                 }
                 if let a = lage.aPosition, !lage.holdsA {
                     Button {
@@ -515,53 +528,21 @@ struct MapScreen: View {
         return locationContext.compassDegrees
     }
 
-    private func followMe(duration: Double) {
-        guard let current = route.snappedLocation ?? location.current else { return }
-        if orientation == .overview { orientation = .course }
-        let speed = max(location.current?.speed ?? current.speed, 0)
-        let distance = route.isActive ? min(max(350 + speed * 28, 350), 1400) : min(max(600 + speed * 20, 600), 1500)
-        let heading: CLLocationDirection = switch orientation {
-        case .course, .overview: current.course >= 0 && speed > 1 ? current.course : (locationContext.compassDegrees ?? cameraState.heading)
-        case .north: 0
-        case .fixed(let value): value
-        }
-        let next = MapCamera(centerCoordinate: current.coordinate, distance: distance, heading: heading, pitch: settings.prefers3D ? 55 : 0)
-        withAnimation(.linear(duration: duration)) { camera = .camera(next) }
-    }
-
-    /// Kompass durchschalten: Fahrtrichtung → Norden → Übersicht (nur mit Route) → Fahrtrichtung.
-    private func cycleOrientation() {
-        // Wie in Apple Karten: Norden oben ↔ Gerätekompass. Von Hand gedreht: Antippen richtet nach Norden aus.
-        switch orientation {
-        case .course: orientation = .north
-        case .north: orientation = .course
-        case .overview, .fixed: orientation = .north
-        }
-        applyOrientation()
-    }
-
-    private func applyOrientation() {
-        switch orientation {
-        case .overview:
-            followsMe = false
-            guard let coordinates = route.route?.coordinates, !coordinates.isEmpty else { return }
-            var rect = MKMapRect.null
-            for coordinate in coordinates + [location.current?.coordinate].compactMap({ $0 }) {
-                let point = MKMapPoint(coordinate)
-                rect = rect.union(MKMapRect(x: point.x, y: point.y, width: 0, height: 0))
+    /// Fahrmodus: erst nah und gekippt auf den Standort, dann der nativen, flüssigen Nachführung übergeben.
+    private func startFollowing(heading: Bool) {
+        if let current = location.current {
+            withAnimation(.easeInOut(duration: 0.6)) {
+                camera = .camera(MapCamera(
+                    centerCoordinate: current.coordinate,
+                    distance: route.isActive ? 700 : 1000,
+                    heading: cameraState.heading,
+                    pitch: settings.prefers3D ? 55 : 0
+                ))
             }
-            let padding = max(rect.width, rect.height) * 0.2 + 500
-            withAnimation(.easeInOut(duration: 0.8)) { camera = .rect(rect.insetBy(dx: -padding, dy: -padding)) }
-        case .course:
-            followsMe = true
-            followMe(duration: 0.6)
-        case .north, .fixed:
-            if followsMe {
-                followMe(duration: 0.6)
-            } else {
-                let heading: CLLocationDirection = if case .fixed(let value) = orientation { value } else { 0 }
-                withAnimation(.easeInOut(duration: 0.5)) { camera = .camera(cameraState.camera(heading: heading)) }
-            }
+        }
+        Task {
+            try? await Task.sleep(for: .milliseconds(650))
+            camera = .userLocation(followsHeading: heading, fallback: .automatic)
         }
     }
 
@@ -579,14 +560,16 @@ struct MapScreen: View {
             }
             if route.isActive {
                 NavigationBottomBar()
-            } else {
+            } else if searchPin == nil {
                 HStack(spacing: Theme.barSpacing) {
                     MobilityControl { mobilityChoice = $0 }
                     APositionControl()
                     ToAButton()
                 }
             }
-            SituationBar { showsSituation = true }
+            if searchPin == nil {
+                SituationBar { showsSituation = true }
+            }
         }
         .padding(.horizontal, Theme.barInset)
         .padding(.bottom, Theme.barSpacing)
@@ -774,7 +757,6 @@ struct MapScreen: View {
 
     /// Suchtreffer auf der Karte zeigen, ohne loszufahren.
     private func show(_ pin: SearchPin) {
-        followsMe = false
         searchPin = pin
         withAnimation(.easeInOut(duration: 0.8)) {
             camera = .camera(MapCamera(centerCoordinate: pin.point.coordinate, distance: 900, heading: 0, pitch: settings.prefers3D ? 55 : 0))

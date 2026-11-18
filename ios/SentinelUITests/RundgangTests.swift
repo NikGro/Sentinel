@@ -71,6 +71,11 @@ final class RundgangTests: XCTestCase {
         capture("03-fahndungsraum-setzen")
         // Ort antippen öffnet den Editor mit Zeitwahl und Haltestellen-Option
         app.coordinate(withNormalizedOffset: CGVector(dx: 0.25, dy: 0.42)).tap()
+        // Erst Vorschau-Pin, dann bestätigen.
+        if app.buttons["Übernehmen"].waitForExistence(timeout: 2) {
+            capture("03a-vorschau-pin")
+            app.buttons["Übernehmen"].tap()
+        }
         if app.navigationBars["Neu: Fahndungsraum"].waitForExistence(timeout: 3) {
             capture("03b-fahndungsraum-editor")
             app.buttons["Abbrechen"].firstMatch.tap()
