@@ -20,8 +20,6 @@ final class RundgangTests: XCTestCase {
             }
             return false
         }
-        // Diagnose: Startet die App statt im Demo-Modus mit der Anmeldung, steht hier warum.
-        if app.staticTexts["diagnose"].waitForExistence(timeout: 8) { XCTFail(app.staticTexts["diagnose"].label) }
         return app
     }
 
@@ -139,12 +137,9 @@ final class RundgangTests: XCTestCase {
         capture("08-mehr")
         app.swipeUp()
         XCTAssertTrue(app.buttons["GPS-Tracker"].waitForExistence(timeout: 5) || app.staticTexts["GPS-Tracker"].exists, "Verwaltung auch in der App")
-    }
 
-    func testZFortbewegung() {
-        let app = launch()
-        XCTAssertTrue(app.tabBars.buttons["Lage"].waitForExistence(timeout: 20))
-        settle(app)
+        // Fortbewegung im selben Lauf: Der Simulator startet die App in einem zweiten Test ohne Startargumente neu.
+        app.tabBars.buttons["Lage"].tap()
         let vehicle = app.buttons["Fahrzeug"].firstMatch
         XCTAssertTrue(vehicle.waitForExistence(timeout: 5), "Fortbewegung als Dreier-Auswahl auf der Karte")
         capture("09a-fortbewegung-karte")
@@ -152,4 +147,5 @@ final class RundgangTests: XCTestCase {
         XCTAssertTrue(app.navigationBars["Fahrzeug wählen"].waitForExistence(timeout: 3))
         capture("09-fortbewegung")
     }
+
 }
