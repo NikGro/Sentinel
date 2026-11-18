@@ -16,6 +16,14 @@ struct OnboardingView: View {
     var body: some View {
         NavigationStack {
             Form {
+                #if DEBUG
+                // Diagnose für die Oberflächentests: Kam der Demo-Start an?
+                if ProcessInfo.processInfo.arguments.count > 1 {
+                    Text("Diagnose: demo=\(DemoData.isRequested) args=\(ProcessInfo.processInfo.arguments.dropFirst().joined(separator: " "))")
+                        .font(.caption2)
+                        .accessibilityIdentifier("diagnose")
+                }
+                #endif
                 Section {
                     VStack(spacing: 12) {
                         Image(systemName: "shield.lefthalf.filled")

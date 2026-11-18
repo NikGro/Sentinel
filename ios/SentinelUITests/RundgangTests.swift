@@ -38,6 +38,7 @@ final class RundgangTests: XCTestCase {
     func testKarteUndAlleBereiche() {
         let app = launch()
         XCTAssertTrue(app.tabBars.buttons["Lage"].waitForExistence(timeout: 20), "Hauptansicht erscheint")
+        if app.staticTexts["diagnose"].exists { XCTFail(app.staticTexts["diagnose"].label) }
         settle(app)
         // Wie auf dem Gerät: echter Standort, Karte folgt dem eigenen Punkt. Friert die Karte dabei ein, scheitern alle weiteren Schritte.
         XCUIDevice.shared.location = XCUILocation(location: CLLocation(latitude: 53.5503, longitude: 9.9930))
@@ -139,7 +140,7 @@ final class RundgangTests: XCTestCase {
         XCTAssertTrue(app.buttons["GPS-Tracker"].waitForExistence(timeout: 5) || app.staticTexts["GPS-Tracker"].exists, "Verwaltung auch in der App")
     }
 
-    func testFortbewegung() {
+    func testZFortbewegung() {
         let app = launch()
         XCTAssertTrue(app.tabBars.buttons["Lage"].waitForExistence(timeout: 20))
         settle(app)
