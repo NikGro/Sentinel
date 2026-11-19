@@ -28,6 +28,9 @@ export const funkrufname = z
   .refine((v) => normalizeCallsign(v) !== null, 'Funkrufname im Format "P 35/24" erwartet')
   .transform((v) => normalizeCallsign(v)!);
 
+/** Die Hauptinstanz besteht immer; jeder Fahnder ist Mitglied. */
+export const INSTANZ_HAUPT = 'haupt';
+
 export const FORTBEWEGUNG = ['fuss', 'fahrzeug', 'oepnv'] as const;
 export type Fortbewegung = (typeof FORTBEWEGUNG)[number];
 
@@ -58,6 +61,8 @@ const member = z.object({
   fortbewegung: z.enum(FORTBEWEGUNG).default('fuss'),
   fahrzeugId: optionalId,
   oepnv: oepnvFahrt.nullish().transform((v) => v ?? null),
+  /** Aktive Instanz: genau eine je Fahnder, ändert sich nur über das Kommando `instanz.wechseln`. */
+  instanz: id.default(INSTANZ_HAUPT),
 });
 
 /** Fahrzeug der eigenen Kräfte. Bleibt dauerhaft angelegt und wird je Einsatz aktiv geschaltet. */
@@ -207,6 +212,8 @@ const tracker = z.object({
   kennung: z.string().trim().regex(/^[0-9A-Za-z-]{4,32}$/),
   /** Gewünschtes Sendeintervall in Sekunden (nur SinoTrack, wird an das Gerät geschickt). */
   intervall: z.number().int().min(10).max(3600).nullish().transform((v) => v ?? null),
+  /** PAJ: E-Mail des eigenen PAJ-Kontos, wenn für diesen Tracker eines hinterlegt ist (Passwort nur verschlüsselt auf dem Server). */
+  kontoEmail: optionalText(120),
 });
 
 const layer = z.object({
@@ -216,6 +223,18 @@ const layer = z.object({
   /** Entwürfe werden noch nicht auf den Karten angezeigt, bis sie in die Lage geladen werden. */
   status: z.enum(['live', 'entwurf']),
   beschreibung: optionalText(500),
+});
+
+/**
+ * Instanz: eigener Einsatz mit eigener Lage, eigenen Zielen, Chats und Einsatzzustand.
+ * `paket` ist ein Vorbereitungsbereich: seine Objekte lassen sich in eine Einsatz-Instanz übernehmen.
+ */
+const instance = z.object({
+  name: text(60).min(1),
+  art: z.enum(['einsatz', 'paket']).default('einsatz'),
+  beschreibung: optionalText(500),
+  mitglieder: z.array(id).max(1000).default([]),
+  erstelltVon: z.string().max(64).default(''),
 });
 
 const room = z.object({
@@ -231,7 +250,10 @@ const message = z
   })
   .refine((m) => m.text.length > 0 || m.anhang !== null, 'Nachricht ist leer');
 
-export const ENTITY_SCHEMAS = { member, vehicle, annotation, target, tracker, layer, room, message } as const;
+export const ENTITY_SCHEMAS = { member, vehicle, annotation, target, tracker, layer, room, message, instance } as const;
+
+/** Objektarten, die zu einer Instanz gehören. Alle anderen gelten instanzübergreifend. */
+export const SCOPED_KINDS: ReadonlySet<string> = new Set(['annotation', 'target', 'layer', 'room', 'message']);
 export type Kind = keyof typeof ENTITY_SCHEMAS;
 export const KINDS = Object.keys(ENTITY_SCHEMAS) as Kind[];
 export const isKind = (value: unknown): value is Kind => typeof value === 'string' && value in ENTITY_SCHEMAS;
@@ -308,6 +330,14 @@ export const commandArgs = {
   'tracker.intervall': z.object({ trackerId: id, sekunden: z.number().int().min(10).max(3600) }),
   'bestreifung.zuruecksetzen': z.object({}).optional(),
   'lage.zuruecksetzen': z.object({ ziele: z.boolean().default(false) }),
+  'instanz.erstellen': z.object({ id, name: text(60).min(1), beschreibung: text(500).optional().default(''), art: z.enum(['einsatz', 'paket']).default('einsatz') }),
+  'instanz.bearbeiten': z.object({ id, name: text(60).min(1), beschreibung: text(500).optional().default('') }),
+  'instanz.loeschen': z.object({ id }),
+  'instanz.beitreten': z.object({ id }),
+  'instanz.verlassen': z.object({ id }),
+  'instanz.wechseln': z.object({ id }),
+  'paket.importieren': z.object({ paketId: id }),
+  'lage.leeren': z.object({}).optional(),
 } as const;
 export type CommandName = keyof typeof commandArgs;
 export const isCommand = (value: string): value is CommandName => value in commandArgs;

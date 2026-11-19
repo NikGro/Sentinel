@@ -9,6 +9,9 @@ import type { Position } from '../schemas.js';
 const BASE_URL = 'https://connect.paj-gps.de/api/v1';
 const POLL_INTERVAL_MS = 20_000;
 
+/** Ablage der verschlüsselten Zugangsdaten eines Trackers mit eigenem PAJ-Konto. */
+export const pajKey = (trackerId: string) => `paj:${trackerId}`;
+
 export interface PajCredentials {
   email: string;
   password: string;
@@ -85,30 +88,47 @@ export class PajClient {
   }
 }
 
-/** Fragt in festem Takt die Positionen aller in Sentinel angelegten PAJ-Tracker ab. */
+/** Ein in Sentinel angelegter PAJ-Tracker und, falls hinterlegt, die Zugangsdaten seines eigenen PAJ-Kontos. */
+export interface PajTracker {
+  kennung: string;
+  konto: PajCredentials | null;
+}
+
+/**
+ * Fragt in festem Takt die Positionen aller in Sentinel angelegten PAJ-Tracker ab. Jeder Tracker kann zu einem
+ * eigenen PAJ-Konto gehören (jeder Fahnder hat seins); ohne eigenes Konto gilt das zentral hinterlegte.
+ */
 export class PajPoller {
   private timer: NodeJS.Timeout | null = null;
   private client: PajClient | null = null;
+  /** Ein Client je Konto, damit die Anmeldung erhalten bleibt. */
+  private readonly accountClients = new Map<string, PajClient>();
   lastError: string | null = null;
 
   constructor(
-    private readonly kennungen: () => string[],
+    private readonly trackers: () => PajTracker[],
     private readonly onFix: (kennung: string, position: Position) => void,
+    private readonly makeClient: (credentials: PajCredentials) => PajClient = (c) => new PajClient(c),
   ) {}
 
   configure(credentials: PajCredentials | null): void {
-    this.client = credentials ? new PajClient(credentials) : null;
+    this.client = credentials ? this.makeClient(credentials) : null;
     this.lastError = null;
+    this.restart();
+  }
+
+  /** Nach dem Anlegen oder Löschen eines Trackers mit eigenem Konto. */
+  restart(): void {
     if (this.timer) clearInterval(this.timer);
     this.timer = null;
-    if (!this.client) return;
+    if (!this.active) return;
     this.timer = setInterval(() => void this.poll(), POLL_INTERVAL_MS);
     this.timer.unref();
     void this.poll();
   }
 
   get active(): boolean {
-    return this.client !== null;
+    return this.client !== null || this.trackers().some((t) => t.konto !== null);
   }
 
   async listDevices(): Promise<PajDevice[]> {
@@ -116,14 +136,39 @@ export class PajPoller {
     return this.client.devices();
   }
 
-  private async poll(): Promise<void> {
-    if (!this.client) return;
-    try {
-      for (const fix of await this.client.lastPositions(this.kennungen())) this.onFix(fix.kennung, fix.position);
-      this.lastError = null;
-    } catch (error) {
-      this.lastError = error instanceof Error ? error.message : 'Unbekannter Fehler';
+  /** Prüft, ob ein Gerät zu einem Konto gehört. Wirft bei falschen Zugangsdaten. */
+  async verify(credentials: PajCredentials, kennung: string): Promise<boolean> {
+    const devices = await this.makeClient(credentials).devices();
+    return devices.some((d) => d.kennung === kennung);
+  }
+
+  async poll(): Promise<void> {
+    const groups = new Map<string, { client: PajClient; kennungen: string[] }>();
+    const used = new Set<string>();
+    for (const tracker of this.trackers()) {
+      let key = '';
+      let client = this.client;
+      if (tracker.konto) {
+        key = `${tracker.konto.email}\n${tracker.konto.password}`;
+        client = this.accountClients.get(key) ?? this.makeClient(tracker.konto);
+        this.accountClients.set(key, client);
+        used.add(key);
+      }
+      if (!client) continue;
+      let group = groups.get(key);
+      if (!group) groups.set(key, (group = { client, kennungen: [] }));
+      group.kennungen.push(tracker.kennung);
     }
+    for (const key of this.accountClients.keys()) if (!used.has(key)) this.accountClients.delete(key);
+    const errors: string[] = [];
+    for (const group of groups.values()) {
+      try {
+        for (const fix of await group.client.lastPositions(group.kennungen)) this.onFix(fix.kennung, fix.position);
+      } catch (error) {
+        errors.push(error instanceof Error ? error.message : 'Unbekannter Fehler');
+      }
+    }
+    this.lastError = errors[0] ?? null;
   }
 
   stop(): void {

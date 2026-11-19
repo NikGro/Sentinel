@@ -419,7 +419,10 @@ struct TargetEditor: View {
         }
         let reference = personPoint
         return list
-            .map { (id: $0.id, title: $0.title, subtitle: $0.subtitle, symbol: $0.symbol, distance: reference.flatMap { r in $0.point.map { r.distance(to: $0) } }) }
+            .map { item in
+                let distance: Double? = if let r = reference, let p = item.point { r.distance(to: p) } else { nil }
+                return (id: item.id, title: item.title, subtitle: item.subtitle, symbol: item.symbol, distance: distance)
+            }
             .sorted { ($0.distance ?? .greatestFiniteMagnitude) < ($1.distance ?? .greatestFiniteMagnitude) }
             .prefix(10)
             .map { $0 }

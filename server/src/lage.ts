@@ -1,10 +1,13 @@
+import { randomBytes } from 'node:crypto';
 import { EventEmitter } from 'node:events';
 import type { Database } from './db.js';
 import { distanceMeters } from './geo.js';
 import {
   commandArgs,
   ENTITY_SCHEMAS,
+  INSTANZ_HAUPT,
   KINDS,
+  SCOPED_KINDS,
   type CommandName,
   type Entity,
   type EntityData,
@@ -23,13 +26,18 @@ export interface Actor {
   role: Role;
 }
 
+/** `inst` ist die Instanz des Ereignisses; `''` heißt instanzübergreifend (an alle). */
 export type LageEvent =
-  | { type: 'put'; kind: Kind; entity: Entity }
-  | { type: 'del'; kind: Kind; id: string }
-  | { type: 'operation'; operation: Operation }
-  | { type: 'pos'; id: string; p: Position }
+  | { type: 'put'; kind: Kind; entity: Entity; inst: string }
+  | { type: 'del'; kind: Kind; id: string; inst: string }
+  | { type: 'operation'; operation: Operation; inst: string }
+  | { type: 'pos'; id: string; p: Position; inst: string }
   | { type: 'tpos'; id: string; p: Position }
-  | { type: 'bestreifungReset' }
+  | { type: 'bestreifungReset'; inst: string }
+  /** Fahnder hat die Instanz gewechselt: seine Verbindungen erhalten den Zustand der neuen Instanz. */
+  | { type: 'wechsel'; memberId: string; inst: string }
+  /** Wichtiges Ereignis in einer Instanz (A-Position, Notruf) für Mitglieder, die gerade woanders sind. */
+  | { type: 'hinweis'; inst: string; art: 'a' | 'sos'; memberId: string }
   /** Neues Sendeintervall für einen Tracker, das an das Gerät übertragen werden soll. */
   | { type: 'trackerIntervall'; anbieter: 'sinotrack' | 'paj'; kennung: string; sekunden: number };
 
@@ -54,6 +62,7 @@ const TRACK_MAX_ACCURACY_M = 60;
 /** Ältere Bestreifung wird verworfen, damit die Datenbank nicht unbegrenzt wächst. */
 const TRACK_RETENTION_MS = 72 * 3600_000;
 const LEAPFROG_STOPS = 8;
+const MAX_INSTANCES = 200;
 
 const DEFAULT_OPERATION: Operation = {
   funkkanal: null,
@@ -69,12 +78,13 @@ const DEFAULT_OPERATION: Operation = {
 export type UpcomingStops = (linienId: string, position: { lat: number; lon: number }, count: number) => LeapfrogStop[];
 
 /**
- * Die laufende Lage: alle gemeinsam bearbeiteten Objekte, der Einsatzzustand und die Live-Positionen.
- * Es gibt bewusst genau eine Lage je Server, damit niemand versehentlich in einem anderen Arbeitsraum landet.
- * Vorbereitete Inhalte entstehen als Entwurfs-Ebenen und werden bei Bedarf in die Lage geladen.
+ * Die Lagen aller Instanzen: gemeinsam bearbeitete Objekte, Einsatzzustand und Live-Positionen.
+ * Lagebezogene Objekte (Markierungen, Ziele, Ebenen, Chats) und der Einsatzzustand gehören zu einer Instanz;
+ * Profile, Fahrzeuge, Tracker, Instanzen und die dauerhaften Orte gelten instanzübergreifend.
+ * Jeder Fahnder hat genau eine aktive Instanz; er sieht nur deren Lage und die Kräfte darin.
  */
 export class Lage extends EventEmitter<{ event: [LageEvent] }> {
-  private operationState: Operation;
+  private readonly operations = new Map<string, Operation>();
   private readonly positions = new Map<string, Position>();
   private readonly trackerPositions = new Map<string, Position>();
   private readonly lastTrackPoint = new Map<string, Position>();
@@ -84,23 +94,12 @@ export class Lage extends EventEmitter<{ event: [LageEvent] }> {
     private readonly upcomingStops: UpcomingStops = () => [],
   ) {
     super();
-    const stored = db.getKv('operation');
-    const parsed = stored ? (JSON.parse(stored) as Partial<Operation>) : {};
-    this.operationState = {
-      funkkanal: parsed.funkkanal ?? null,
-      titel: parsed.titel ?? '',
-      hinweise: parsed.hinweise ?? '',
-      a: parsed.a ?? null,
-      ueberschlagen: parsed.ueberschlagen ?? DEFAULT_OPERATION.ueberschlagen,
-      sos: parsed.sos ?? null,
-      rev: parsed.rev ?? 0,
-    };
     const trackerPos = db.getKv('trackerPositions');
     if (trackerPos) for (const [id, p] of Object.entries(JSON.parse(trackerPos) as Record<string, Position>)) this.trackerPositions.set(id, p);
     this.migrate();
-    this.ensure('layer', LAYER_LAGE, { name: 'Lage', art: 'lage', status: 'live', beschreibung: 'Laufender Einsatz' });
-    this.ensure('layer', LAYER_DAUERHAFT, { name: 'Dauerhafte Orte', art: 'dauerhaft', status: 'live', beschreibung: 'Bleibt beim Zurücksetzen erhalten' });
-    this.ensure('room', ROOM_ALLGEMEIN, { name: 'Allgemein' });
+    this.ensure('instance', '', INSTANZ_HAUPT, { name: 'Hauptlage', art: 'einsatz', beschreibung: '', mitglieder: [], erstelltVon: 'system' });
+    this.ensure('layer', '', LAYER_DAUERHAFT, { name: 'Dauerhafte Orte', art: 'dauerhaft', status: 'live', beschreibung: 'In allen Instanzen sichtbar' });
+    for (const instance of this.list('instance')) this.ensureInstance(instance.id);
     this.pruneTrack();
     this.expireAnnotations();
   }
@@ -110,7 +109,7 @@ export class Lage extends EventEmitter<{ event: [LageEvent] }> {
    * Fehlende Felder erhalten ihre Vorgabewerte; umbenannte Felder werden übertragen.
    */
   private migrate(): void {
-    const rows = this.db.sql.prepare('SELECT kind, id, data FROM entities').all() as unknown as { kind: string; id: string; data: string }[];
+    const rows = this.db.sql.prepare('SELECT kind, inst, id, data FROM entities').all() as unknown as { kind: string; inst: string; id: string; data: string }[];
     const trackerNames = new Map(
       rows.filter((r) => r.kind === 'tracker').map((r) => [r.id, String((JSON.parse(r.data) as { name?: unknown }).name ?? '')]),
     );
@@ -142,25 +141,59 @@ export class Lage extends EventEmitter<{ event: [LageEvent] }> {
       if (!parsed.success) continue;
       if (row.kind === 'target') normalizeTargetPhotos(parsed.data as EntityData<'target'>);
       const next = JSON.stringify(parsed.data);
-      if (next !== row.data) this.db.sql.prepare('UPDATE entities SET data = ? WHERE kind = ? AND id = ?').run(next, row.kind, row.id);
+      if (next !== row.data) this.db.sql.prepare('UPDATE entities SET data = ? WHERE kind = ? AND inst = ? AND id = ?').run(next, row.kind, row.inst, row.id);
     }
   }
 
   // ───────────────────────────── Lesen ─────────────────────────────
 
-  get operation(): Operation {
-    return this.operationState;
+  /** Einsatzzustand einer Instanz. */
+  operationOf(inst: string = INSTANZ_HAUPT): Operation {
+    let op = this.operations.get(inst);
+    if (!op) {
+      const stored = this.db.getKv(operationKey(inst));
+      const parsed = stored ? (JSON.parse(stored) as Partial<Operation>) : {};
+      op = {
+        funkkanal: parsed.funkkanal ?? null,
+        titel: parsed.titel ?? '',
+        hinweise: parsed.hinweise ?? '',
+        a: parsed.a ?? null,
+        ueberschlagen: parsed.ueberschlagen ?? DEFAULT_OPERATION.ueberschlagen,
+        sos: parsed.sos ?? null,
+        rev: parsed.rev ?? 0,
+      };
+      this.operations.set(inst, op);
+    }
+    return op;
   }
 
-  list<K extends Kind>(kind: K): Entity<K>[] {
-    const rows = this.db.sql.prepare('SELECT id, rev, data, updated_at, updated_by FROM entities WHERE kind = ?').all(kind) as unknown as EntityRow[];
+  /** Einsatzzustand der Hauptinstanz. */
+  get operation(): Operation {
+    return this.operationOf(INSTANZ_HAUPT);
+  }
+
+  /** Objekte einer Art: instanzbezogene aus `inst` und die übergreifenden, sonst alle. */
+  list<K extends Kind>(kind: K, inst: string = INSTANZ_HAUPT): Entity<K>[] {
+    const rows = SCOPED_KINDS.has(kind)
+      ? (this.db.sql.prepare("SELECT id, rev, data, updated_at, updated_by FROM entities WHERE kind = ? AND inst IN (?, '')").all(kind, inst) as unknown as EntityRow[])
+      : (this.db.sql.prepare('SELECT id, rev, data, updated_at, updated_by FROM entities WHERE kind = ?').all(kind) as unknown as EntityRow[]);
     return rows.map((row) => fromRow<K>(row));
   }
 
-  get<K extends Kind>(kind: K, id: string): Entity<K> | null {
-    const row = this.db.sql.prepare('SELECT id, rev, data, updated_at, updated_by FROM entities WHERE kind = ? AND id = ?').get(kind, id) as
-      | EntityRow
-      | undefined;
+  /** Alle Objekte einer Art über alle Instanzen, mit ihrer Instanz. */
+  private listAll<K extends Kind>(kind: K): { inst: string; entity: Entity<K> }[] {
+    const rows = this.db.sql.prepare('SELECT inst, id, rev, data, updated_at, updated_by FROM entities WHERE kind = ?').all(kind) as unknown as (EntityRow & {
+      inst: string;
+    })[];
+    return rows.map((row) => ({ inst: row.inst, entity: fromRow<K>(row) }));
+  }
+
+  get<K extends Kind>(kind: K, id: string, inst: string = INSTANZ_HAUPT): Entity<K> | null {
+    const row = (
+      SCOPED_KINDS.has(kind)
+        ? this.db.sql.prepare("SELECT id, rev, data, updated_at, updated_by FROM entities WHERE kind = ? AND id = ? AND inst IN (?, '') ORDER BY inst DESC").get(kind, id, inst)
+        : this.db.sql.prepare('SELECT id, rev, data, updated_at, updated_by FROM entities WHERE kind = ? AND id = ?').get(kind, id)
+    ) as EntityRow | undefined;
     return row ? fromRow<K>(row) : null;
   }
 
@@ -168,25 +201,42 @@ export class Lage extends EventEmitter<{ event: [LageEvent] }> {
     return this.positions.get(memberId);
   }
 
-  /** Vollständiger Zustand für einen neu verbundenen Client. */
-  snapshot() {
+  /** Aktive Instanz eines Fahnders. */
+  activeInstance(memberId: string): string {
+    const inst = this.get('member', memberId)?.data.instanz ?? INSTANZ_HAUPT;
+    return this.get('instance', inst) ? inst : INSTANZ_HAUPT;
+  }
+
+  /** Ob ein Fahnder Mitglied einer Instanz ist; in der Hauptinstanz ist es jeder. */
+  isMember(inst: string, memberId: string): boolean {
+    if (inst === INSTANZ_HAUPT) return true;
+    const instance = this.get('instance', inst);
+    return !!instance && (instance.data.art === 'paket' || instance.data.mitglieder.includes(memberId));
+  }
+
+  /** Vollständiger Zustand einer Instanz für einen neu verbundenen oder wechselnden Client. */
+  snapshot(inst: string = INSTANZ_HAUPT) {
+    const members = this.list('member');
+    const here = new Set(members.filter((m) => this.activeInstance(m.id) === inst).map((m) => m.id));
     return {
-      members: this.list('member'),
+      instanz: inst,
+      instances: this.list('instance'),
+      members,
       vehicles: this.list('vehicle'),
-      annotations: this.list('annotation'),
-      targets: this.list('target'),
+      annotations: this.list('annotation', inst),
+      targets: this.list('target', inst),
       trackers: this.list('tracker'),
-      layers: this.list('layer'),
-      rooms: this.list('room'),
-      messages: this.list('message').sort((a, b) => a.updatedAt - b.updatedAt),
-      operation: this.operationState,
-      positions: [...this.positions].map(([id, p]) => ({ id, p })),
+      layers: this.list('layer', inst),
+      rooms: this.list('room', inst),
+      messages: this.list('message', inst).sort((a, b) => a.updatedAt - b.updatedAt),
+      operation: this.operationOf(inst),
+      positions: [...this.positions].filter(([id]) => here.has(id)).map(([id, p]) => ({ id, p })),
       trackerPositions: [...this.trackerPositions].map(([id, p]) => ({ id, p })),
     };
   }
 
-  coverage(): { memberId: string; punkte: [number, number, number][] }[] {
-    const rows = this.db.sql.prepare('SELECT member_id, ts, lat, lon FROM track ORDER BY member_id, ts').all() as unknown as {
+  coverage(inst: string = INSTANZ_HAUPT): { memberId: string; punkte: [number, number, number][] }[] {
+    const rows = this.db.sql.prepare('SELECT member_id, ts, lat, lon FROM track WHERE inst = ? ORDER BY member_id, ts').all(inst) as unknown as {
       member_id: string;
       ts: number;
       lat: number;
@@ -203,16 +253,18 @@ export class Lage extends EventEmitter<{ event: [LageEvent] }> {
 
   // ───────────────────────────── Objekte schreiben ─────────────────────────────
 
-  put(actor: Actor, kind: Kind, id: string, raw: unknown): Entity {
+  put(actor: Actor, kind: Kind, id: string, raw: unknown, inst: string = INSTANZ_HAUPT): Entity {
+    if (kind === 'instance') throw new LageError('verboten', 'Instanzen werden über das Instanzenmenü verwaltet.');
     const parsed = ENTITY_SCHEMAS[kind].safeParse(raw);
     if (!parsed.success) throw new LageError('ungueltig', parsed.error.issues[0]?.message ?? 'Ungültige Eingabe');
     let data = parsed.data as EntityData<Kind>;
-    const existing = this.get(kind, id);
+    let scope = this.scopeOf(kind, id, data, inst);
+    const existing = this.get(kind, id, inst);
 
     switch (kind) {
       case 'member': {
         if (actor.role !== 'zentrale' && actor.id !== id) throw new LageError('verboten', 'Nur das eigene Profil ist änderbar.');
-        // Aktivität, Fortbewegung und Fahrzeug ändern sich ausschließlich über Kommandos.
+        // Aktivität, Fortbewegung, Fahrzeug und Instanz ändern sich ausschließlich über Kommandos.
         const previous = (existing as Entity<'member'> | null)?.data;
         const next = data as EntityData<'member'>;
         data = {
@@ -221,20 +273,25 @@ export class Lage extends EventEmitter<{ event: [LageEvent] }> {
           fortbewegung: previous?.fortbewegung ?? 'fuss',
           fahrzeugId: previous?.fahrzeugId ?? null,
           oepnv: previous?.oepnv ?? null,
+          instanz: previous?.instanz ?? INSTANZ_HAUPT,
         };
         break;
       }
       case 'message': {
         if (existing) throw new LageError('verboten', 'Nachrichten können nicht geändert werden.');
-        if (!this.get('room', (data as EntityData<'message'>).roomId)) throw new LageError('ungueltig', 'Chatraum existiert nicht.');
+        if (!this.get('room', (data as EntityData<'message'>).roomId, inst)) throw new LageError('ungueltig', 'Chatraum existiert nicht.');
         break;
       }
       case 'target':
         normalizeTargetPhotos(data as EntityData<'target'>);
         break;
-      case 'annotation':
-        if (!this.get('layer', (data as EntityData<'annotation'>).layerId)) throw new LageError('ungueltig', 'Ebene existiert nicht.');
+      case 'annotation': {
+        if (!this.get('layer', (data as EntityData<'annotation'>).layerId, inst)) throw new LageError('ungueltig', 'Ebene existiert nicht.');
+        // Wechselt die Markierung zwischen dauerhaften Orten und Lage, zieht sie in den anderen Bereich um.
+        const other = scope === '' ? inst : '';
+        if (this.rowExists('annotation', other, id)) this.remove('annotation', other, id);
         break;
+      }
       case 'layer': {
         const next = data as EntityData<'layer'>;
         if (PROTECTED_LAYERS.has(id)) {
@@ -243,60 +300,69 @@ export class Lage extends EventEmitter<{ event: [LageEvent] }> {
         } else if (next.art === 'lage' || next.art === 'dauerhaft') {
           throw new LageError('ungueltig', 'Diese Ebenenart ist fest vergeben.');
         }
+        scope = this.scopeOf(kind, id, data, inst);
         break;
       }
       case 'vehicle': {
         const next = data as EntityData<'vehicle'>;
         // Wer in einem abgeschalteten Fahrzeug saß, ist danach zu Fuß unterwegs.
-        if (!next.aktiv) for (const m of this.occupants(id)) this.write('member', m.id, { ...m.data, fortbewegung: 'fuss', fahrzeugId: null }, actor.id);
+        if (!next.aktiv) for (const m of this.occupants(id)) this.write('member', '', m.id, { ...m.data, fortbewegung: 'fuss', fahrzeugId: null }, actor.id);
         break;
       }
       default:
         break;
     }
 
-    const entity = this.write(kind, id, data, actor.id);
-    if (kind === 'message') this.trimMessages((data as EntityData<'message'>).roomId);
+    const entity = this.write(kind, scope, id, data, actor.id);
+    if (kind === 'message') this.trimMessages(inst, (data as EntityData<'message'>).roomId);
     return entity;
   }
 
-  del(actor: Actor, kind: Kind, id: string): void {
-    if (!this.get(kind, id)) return;
+  del(actor: Actor, kind: Kind, id: string, inst: string = INSTANZ_HAUPT): void {
+    if (kind === 'instance') throw new LageError('verboten', 'Instanzen werden über das Instanzenmenü verwaltet.');
+    const existing = this.get(kind, id, inst);
+    if (!existing) return;
+    const scope = this.scopeOf(kind, id, existing.data, inst);
     switch (kind) {
       case 'member':
         if (actor.role !== 'zentrale') throw new LageError('verboten', 'Profile entfernt nur die Kommandozentrale.');
-        if (this.operationState.a?.memberId === id) this.updateOperation({ a: null });
+        for (const instance of this.list('instance')) {
+          if (this.operationOf(instance.id).a?.memberId === id) this.updateOperation(instance.id, { a: null });
+          this.leaveLeapfrog(instance.id, id);
+          if (instance.data.mitglieder.includes(id)) {
+            this.write('instance', '', instance.id, { ...instance.data, mitglieder: instance.data.mitglieder.filter((m) => m !== id) }, actor.id);
+          }
+        }
         this.positions.delete(id);
-        this.leaveLeapfrog(id);
         break;
       case 'message': {
-        const message = this.get('message', id)!;
+        const message = existing as Entity<'message'>;
         if (actor.role !== 'zentrale' && message.updatedBy !== actor.id) throw new LageError('verboten', 'Nur eigene Nachrichten können gelöscht werden.');
         break;
       }
       case 'room':
-        for (const m of this.list('message')) if (m.data.roomId === id) this.remove('message', m.id);
+        for (const m of this.list('message', inst)) if (m.data.roomId === id) this.remove('message', inst, m.id);
         // Der allgemeine Chatraum bleibt bestehen und wird nur geleert.
         if (id === ROOM_ALLGEMEIN) return;
         break;
       case 'layer':
         if (PROTECTED_LAYERS.has(id)) throw new LageError('verboten', 'Diese Ebene kann nicht gelöscht werden.');
-        for (const a of this.list('annotation')) if (a.data.layerId === id) this.remove('annotation', a.id);
+        for (const a of this.list('annotation', inst)) if (a.data.layerId === id) this.remove('annotation', inst, a.id);
         break;
       case 'vehicle':
-        for (const m of this.occupants(id)) this.write('member', m.id, { ...m.data, fortbewegung: 'fuss', fahrzeugId: null }, actor.id);
+        for (const m of this.occupants(id)) this.write('member', '', m.id, { ...m.data, fortbewegung: 'fuss', fahrzeugId: null }, actor.id);
         break;
       case 'tracker':
-        for (const t of this.list('target')) if (t.data.trackerId === id) this.write('target', t.id, { ...t.data, trackerId: null }, actor.id);
-        for (const v of this.list('vehicle')) if (v.data.trackerId === id) this.write('vehicle', v.id, { ...v.data, trackerId: null }, actor.id);
-        for (const a of this.list('annotation')) if (a.data.trackerId === id) this.write('annotation', a.id, { ...a.data, trackerId: null }, actor.id);
+        for (const { inst: i, entity: t } of this.listAll('target')) if (t.data.trackerId === id) this.write('target', i, t.id, { ...t.data, trackerId: null }, actor.id);
+        for (const v of this.list('vehicle')) if (v.data.trackerId === id) this.write('vehicle', '', v.id, { ...v.data, trackerId: null }, actor.id);
+        for (const { inst: i, entity: a } of this.listAll('annotation')) if (a.data.trackerId === id) this.write('annotation', i, a.id, { ...a.data, trackerId: null }, actor.id);
         this.trackerPositions.delete(id);
         this.persistTrackerPositions();
         break;
       default:
         break;
     }
-    this.remove(kind, id);
+    this.remove(kind, scope, id);
   }
 
   // ───────────────────────────── Positionen ─────────────────────────────
@@ -305,19 +371,20 @@ export class Lage extends EventEmitter<{ event: [LageEvent] }> {
     const member = this.get('member', memberId);
     // Im Ruhemodus wird kein Standort geteilt.
     if (member && !member.data.aktiv) return;
+    const inst = this.activeInstance(memberId);
     this.positions.set(memberId, p);
-    this.emit('event', { type: 'pos', id: memberId, p });
-    this.recordTrack(memberId, p);
-    if (this.operationState.a?.memberId === memberId) this.updateLeapfrog();
+    this.emit('event', { type: 'pos', id: memberId, p, inst });
+    this.recordTrack(inst, memberId, p);
+    if (this.operationOf(inst).a?.memberId === memberId) this.updateLeapfrog(inst);
   }
 
   /** Bestreifung: Jeder Weg wird aufgezeichnet; wer sie sehen möchte, schaltet die Anzeige in seiner App ein. */
-  private recordTrack(memberId: string, p: Position): void {
+  private recordTrack(inst: string, memberId: string, p: Position): void {
     if ((p.acc ?? 0) > TRACK_MAX_ACCURACY_M) return;
     const last = this.lastTrackPoint.get(memberId);
     if (last && (p.ts <= last.ts || distanceMeters(last, p) < TRACK_MIN_DISTANCE_M)) return;
     this.lastTrackPoint.set(memberId, p);
-    this.db.sql.prepare('INSERT OR IGNORE INTO track (member_id, ts, lat, lon) VALUES (?, ?, ?, ?)').run(memberId, p.ts, p.lat, p.lon);
+    this.db.sql.prepare('INSERT OR IGNORE INTO track (member_id, ts, lat, lon, inst) VALUES (?, ?, ?, ?, ?)').run(memberId, p.ts, p.lat, p.lon, inst);
   }
 
   /** Position eines Trackers, gemeldet von einem Tracker-Anbieter. `kennung` ist die Gerätekennung. */
@@ -338,12 +405,17 @@ export class Lage extends EventEmitter<{ event: [LageEvent] }> {
 
   // ───────────────────────────── Kommandos ─────────────────────────────
 
-  command(actor: Actor, name: CommandName, rawArgs: unknown): void {
+  /**
+   * Führt ein Kommando aus. Fahnder handeln in ihrer aktiven Instanz; für die Kommandozentrale
+   * gibt `inst` die gerade geöffnete Instanz an.
+   */
+  command(actor: Actor, name: CommandName, rawArgs: unknown, inst?: string): void {
     const parsed = commandArgs[name].safeParse(rawArgs ?? {});
     if (!parsed.success) throw new LageError('ungueltig', parsed.error.issues[0]?.message ?? 'Ungültige Eingabe');
     const args = (parsed.data ?? {}) as Record<string, unknown>;
     const now = Date.now();
-    const op = this.operationState;
+    const here = actor.role === 'fahnder' ? this.activeInstance(actor.id) : (inst ?? INSTANZ_HAUPT);
+    const op = this.operationOf(here);
 
     switch (name) {
       case 'a.uebernehmen': {
@@ -351,33 +423,33 @@ export class Lage extends EventEmitter<{ event: [LageEvent] }> {
         const me = this.get('member', actor.id);
         if (!me) throw new LageError('unbekannt', 'Profil fehlt.');
         if (!me.data.aktiv) throw new LageError('konflikt', 'Im Ruhemodus kann die A-Position nicht übernommen werden.');
-        this.leaveLeapfrog(actor.id);
-        this.updateOperation({ a: { memberId: actor.id, seit: now } });
-        this.updateLeapfrog();
+        this.leaveLeapfrog(here, actor.id);
+        this.updateOperation(here, { a: { memberId: actor.id, seit: now } });
+        this.updateLeapfrog(here);
         break;
       }
       case 'sos.ausloesen': {
         if (actor.role !== 'fahnder') throw new LageError('verboten', 'Einen Notruf kann nur ein Fahnder auslösen.');
         if (!this.get('member', actor.id)) throw new LageError('unbekannt', 'Profil fehlt.');
         if (op.sos && op.sos.memberId !== actor.id) throw new LageError('konflikt', 'Es läuft bereits ein Notruf.');
-        this.updateOperation({ sos: { memberId: actor.id, seit: now } });
+        this.updateOperation(here, { sos: { memberId: actor.id, seit: now } });
         break;
       }
       case 'sos.beenden':
         // Beenden darf, wer ihn ausgelöst hat, oder die Kommandozentrale; jeder andere nimmt ihn nur für sich zur Kenntnis.
-        if (op.sos && (op.sos.memberId === actor.id || actor.role === 'zentrale')) this.updateOperation({ sos: null });
+        if (op.sos && (op.sos.memberId === actor.id || actor.role === 'zentrale')) this.updateOperation(here, { sos: null });
         break;
       case 'a.freigeben':
         if (op.a && (op.a.memberId === actor.id || actor.role === 'zentrale')) {
-          this.updateOperation({ a: null });
-          this.updateLeapfrog();
+          this.updateOperation(here, { a: null });
+          this.updateLeapfrog(here);
         }
         break;
       case 'funkkanal.setzen':
-        this.updateOperation({ funkkanal: args.kanal as string | null });
+        this.updateOperation(here, { funkkanal: args.kanal as string | null });
         break;
       case 'lage.setzen':
-        this.updateOperation({ titel: args.titel as string, hinweise: args.hinweise as string });
+        this.updateOperation(here, { titel: args.titel as string, hinweise: args.hinweise as string });
         break;
       case 'fortbewegung.setzen':
         this.setMobility(actor, args.art as Fortbewegung, (args.fahrzeugId as string | null | undefined) ?? null, (args.oepnv as OepnvFahrt | null | undefined) ?? null, now);
@@ -389,31 +461,180 @@ export class Lage extends EventEmitter<{ event: [LageEvent] }> {
         if (actor.role !== 'fahnder') throw new LageError('verboten', 'Nur Fahnder können überschlagend anfahren.');
         if (op.a?.memberId === actor.id) throw new LageError('konflikt', 'Wer die A hält, fährt nicht überschlagend.');
         if (!op.ueberschlagen.teilnehmer.includes(actor.id)) {
-          this.updateOperation({ ueberschlagen: { ...op.ueberschlagen, teilnehmer: [...op.ueberschlagen.teilnehmer, actor.id] } });
-          this.updateLeapfrog();
+          this.updateOperation(here, { ueberschlagen: { ...op.ueberschlagen, teilnehmer: [...op.ueberschlagen.teilnehmer, actor.id] } });
+          this.updateLeapfrog(here);
         }
         break;
       }
       case 'ueberschlagen.verlassen':
-        this.leaveLeapfrog(actor.id);
+        this.leaveLeapfrog(here, actor.id);
         break;
       case 'tracker.intervall': {
         const tracker = this.get('tracker', args.trackerId as string);
         if (!tracker) throw new LageError('unbekannt', 'Tracker existiert nicht.');
         if (tracker.data.anbieter !== 'sinotrack') throw new LageError('konflikt', 'Das Sendeintervall von PAJ-Trackern wird im PAJ-Portal eingestellt.');
         const sekunden = args.sekunden as number;
-        this.write('tracker', tracker.id, { ...tracker.data, intervall: sekunden }, actor.id);
+        this.write('tracker', '', tracker.id, { ...tracker.data, intervall: sekunden }, actor.id);
         this.emit('event', { type: 'trackerIntervall', anbieter: tracker.data.anbieter, kennung: tracker.data.kennung, sekunden });
         break;
       }
       case 'bestreifung.zuruecksetzen':
-        this.resetCoverage();
+        this.resetCoverage(here);
         break;
       case 'lage.zuruecksetzen':
-        this.reset(actor, args.ziele as boolean);
+        this.reset(actor, here, args.ziele as boolean);
+        break;
+      case 'lage.leeren':
+        // Der Lage-Layer bleibt bestehen und wird nur geleert.
+        for (const a of this.list('annotation', here)) if (a.data.layerId === LAYER_LAGE) this.remove('annotation', here, a.id);
+        break;
+      case 'instanz.erstellen':
+        this.createInstance(actor, args.id as string, args.name as string, args.beschreibung as string, args.art as 'einsatz' | 'paket');
+        break;
+      case 'instanz.bearbeiten': {
+        const instance = this.requireInstance(args.id as string);
+        this.requireMembership(actor, instance);
+        if (instance.id === INSTANZ_HAUPT && actor.role !== 'zentrale') throw new LageError('verboten', 'Die Hauptlage benennt nur die Kommandozentrale um.');
+        this.write('instance', '', instance.id, { ...instance.data, name: args.name as string, beschreibung: args.beschreibung as string }, actor.id);
+        break;
+      }
+      case 'instanz.loeschen':
+        this.deleteInstance(actor, args.id as string);
+        break;
+      case 'instanz.beitreten': {
+        const instance = this.requireInstance(args.id as string);
+        if (actor.role !== 'fahnder') break;
+        if (instance.data.art === 'einsatz' && !instance.data.mitglieder.includes(actor.id) && instance.id !== INSTANZ_HAUPT) {
+          this.write('instance', '', instance.id, { ...instance.data, mitglieder: [...instance.data.mitglieder, actor.id] }, actor.id);
+        }
+        break;
+      }
+      case 'instanz.verlassen': {
+        const instance = this.requireInstance(args.id as string);
+        if (instance.id === INSTANZ_HAUPT) throw new LageError('verboten', 'Die Hauptlage kann nicht verlassen werden.');
+        if (actor.role !== 'fahnder') break;
+        this.write('instance', '', instance.id, { ...instance.data, mitglieder: instance.data.mitglieder.filter((m) => m !== actor.id) }, actor.id);
+        if (this.activeInstance(actor.id) === instance.id) this.switchInstance(actor.id, INSTANZ_HAUPT);
+        break;
+      }
+      case 'instanz.wechseln': {
+        const instance = this.requireInstance(args.id as string);
+        if (actor.role !== 'fahnder') break;
+        // Wechseln heißt beitreten, wenn man noch nicht Mitglied ist.
+        if (instance.data.art === 'einsatz' && instance.id !== INSTANZ_HAUPT && !instance.data.mitglieder.includes(actor.id)) {
+          this.write('instance', '', instance.id, { ...instance.data, mitglieder: [...instance.data.mitglieder, actor.id] }, actor.id);
+        }
+        this.switchInstance(actor.id, instance.id);
+        break;
+      }
+      case 'paket.importieren':
+        this.importPackage(actor, args.paketId as string, here);
         break;
     }
-    this.db.audit(actor.id, `cmd:${name}`);
+    this.db.audit(actor.id, `cmd:${name}`, here === INSTANZ_HAUPT ? '' : here);
+  }
+
+  // ───────────────────────────── Instanzen ─────────────────────────────
+
+  private requireInstance(id: string): Entity<'instance'> {
+    const instance = this.get('instance', id);
+    if (!instance) throw new LageError('unbekannt', 'Instanz existiert nicht.');
+    return instance;
+  }
+
+  private requireMembership(actor: Actor, instance: Entity<'instance'>): void {
+    if (actor.role === 'zentrale') return;
+    if (!this.isMember(instance.id, actor.id)) throw new LageError('verboten', 'Nur Mitglieder dürfen das.');
+  }
+
+  private createInstance(actor: Actor, id: string, name: string, beschreibung: string, art: 'einsatz' | 'paket'): void {
+    if (this.get('instance', id)) throw new LageError('konflikt', 'Diese Instanz gibt es schon.');
+    if (this.list('instance').length >= MAX_INSTANCES) throw new LageError('konflikt', 'Es gibt bereits zu viele Instanzen.');
+    const mitglieder = actor.role === 'fahnder' && art === 'einsatz' ? [actor.id] : [];
+    this.write('instance', '', id, { name, art, beschreibung, mitglieder, erstelltVon: actor.id }, actor.id);
+    this.ensureInstance(id);
+    if (actor.role === 'fahnder') this.switchInstance(actor.id, id);
+  }
+
+  /** Jede Instanz hat ihren Lage-Layer und den allgemeinen Chatraum. */
+  private ensureInstance(inst: string): void {
+    const instance = this.get('instance', inst);
+    const paket = instance?.data.art === 'paket';
+    this.ensure('layer', inst, LAYER_LAGE, paket
+      ? { name: 'Paket', art: 'lage', status: 'live', beschreibung: 'Inhalt des Pakets' }
+      : { name: 'Lage', art: 'lage', status: 'live', beschreibung: 'Laufender Einsatz' });
+    this.ensure('room', inst, ROOM_ALLGEMEIN, { name: 'Allgemein' });
+  }
+
+  private deleteInstance(actor: Actor, id: string): void {
+    const instance = this.requireInstance(id);
+    if (id === INSTANZ_HAUPT) throw new LageError('verboten', 'Die Hauptlage kann nicht gelöscht werden.');
+    this.requireMembership(actor, instance);
+    for (const m of this.list('member')) if (m.data.instanz === id) this.switchInstance(m.id, INSTANZ_HAUPT);
+    for (const kind of SCOPED_KINDS) {
+      const rows = this.db.sql.prepare('SELECT id FROM entities WHERE kind = ? AND inst = ?').all(kind, id) as { id: string }[];
+      for (const row of rows) this.remove(kind as Kind, id, row.id);
+    }
+    this.db.sql.prepare('DELETE FROM track WHERE inst = ?').run(id);
+    this.db.deleteKv(operationKey(id));
+    this.operations.delete(id);
+    this.remove('instance', '', id);
+    this.db.audit(actor.id, 'instanz.geloescht', instance.data.name);
+  }
+
+  /** Aktive Instanz wechseln. Wer die A hält oder überschlagend fährt, gibt das in der bisherigen Instanz ab. */
+  private switchInstance(memberId: string, inst: string): void {
+    const member = this.get('member', memberId);
+    if (!member) throw new LageError('unbekannt', 'Profil fehlt.');
+    const previous = this.activeInstance(memberId);
+    if (previous !== inst) {
+      if (this.operationOf(previous).a?.memberId === memberId) this.updateOperation(previous, { a: null });
+      this.leaveLeapfrog(previous, memberId);
+      this.updateLeapfrog(previous);
+      this.lastTrackPoint.delete(memberId);
+    }
+    this.write('member', '', memberId, { ...member.data, instanz: inst }, memberId);
+    this.emit('event', { type: 'wechsel', memberId, inst });
+  }
+
+  /**
+   * Übernimmt den Inhalt eines Pakets in eine Einsatz-Instanz. Die Objekte werden dabei kopiert und sind danach
+   * eigenständige Objekte der Instanz; es gibt bewusst keine Verbindung zum Paket und kein Rückgängig.
+   */
+  private importPackage(actor: Actor, paketId: string, inst: string): void {
+    const paket = this.requireInstance(paketId);
+    if (paket.data.art !== 'paket') throw new LageError('ungueltig', 'Das ist kein Paket.');
+    const target = this.requireInstance(inst);
+    if (target.data.art !== 'einsatz') throw new LageError('ungueltig', 'Pakete werden in eine Einsatz-Instanz übernommen.');
+    const newId = (() => {
+      const map = new Map<string, string>();
+      return (old: string) => {
+        let next = map.get(old);
+        if (!next) map.set(old, (next = randomId()));
+        return next;
+      };
+    })();
+    const groups = new Map<string, string>();
+    const group = (g: string | null) => {
+      if (!g) return null;
+      let next = groups.get(g);
+      if (!next) groups.set(g, (next = randomId(16)));
+      return next;
+    };
+    this.db.transaction(() => {
+      const targets = this.db.sql.prepare("SELECT id, data FROM entities WHERE kind = 'target' AND inst = ?").all(paketId) as { id: string; data: string }[];
+      for (const row of targets) {
+        const data = JSON.parse(row.data) as EntityData<'target'>;
+        const bindung = data.bindung?.zielId ? { ...data.bindung, zielId: newId(data.bindung.zielId) } : data.bindung;
+        this.write('target', inst, newId(row.id), { ...data, bindung }, actor.id);
+      }
+      const annotations = this.db.sql.prepare("SELECT id, data FROM entities WHERE kind = 'annotation' AND inst = ?").all(paketId) as { id: string; data: string }[];
+      for (const row of annotations) {
+        const data = JSON.parse(row.data) as EntityData<'annotation'>;
+        this.write('annotation', inst, newId(row.id), { ...data, layerId: LAYER_LAGE, gruppe: group(data.gruppe) }, actor.id);
+      }
+    });
+    this.db.audit(actor.id, 'paket.uebernommen', `${paket.data.name} → ${target.data.name}`);
   }
 
   /**
@@ -435,6 +656,7 @@ export class Lage extends EventEmitter<{ event: [LageEvent] }> {
     const nextVehicle = art === 'fahrzeug' ? fahrzeugId : null;
     this.write(
       'member',
+      '',
       member.id,
       { ...member.data, fortbewegung: art, fahrzeugId: nextVehicle, oepnv: art === 'oepnv' ? oepnv : null },
       actor.id,
@@ -444,34 +666,36 @@ export class Lage extends EventEmitter<{ event: [LageEvent] }> {
       const vehicle = this.get('vehicle', previousVehicle);
       const position = this.positions.get(actor.id);
       if (vehicle && position && this.occupants(previousVehicle).length === 0) {
-        this.write('vehicle', vehicle.id, { ...vehicle.data, abgestellt: { lat: position.lat, lon: position.lon, ts: now } }, actor.id);
+        this.write('vehicle', '', vehicle.id, { ...vehicle.data, abgestellt: { lat: position.lat, lon: position.lon, ts: now } }, actor.id);
       }
     }
     if (nextVehicle && nextVehicle !== previousVehicle) {
       const vehicle = this.get('vehicle', nextVehicle);
-      if (vehicle?.data.abgestellt) this.write('vehicle', vehicle.id, { ...vehicle.data, abgestellt: null }, actor.id);
+      if (vehicle?.data.abgestellt) this.write('vehicle', '', vehicle.id, { ...vehicle.data, abgestellt: null }, actor.id);
     }
-    if (this.operationState.a?.memberId === actor.id) this.updateLeapfrog();
+    const inst = this.activeInstance(actor.id);
+    if (this.operationOf(inst).a?.memberId === actor.id) this.updateLeapfrog(inst);
   }
 
   /** Ruhemodus: Wer sich abmeldet, gibt die A-Position ab und fährt nicht mehr überschlagend. */
   private setActive(actor: Actor, aktiv: boolean): void {
     const member = this.get('member', actor.id);
     if (!member) throw new LageError('unbekannt', 'Profil fehlt.');
-    this.write('member', member.id, { ...member.data, aktiv }, actor.id);
+    this.write('member', '', member.id, { ...member.data, aktiv }, actor.id);
     if (aktiv) return;
-    if (this.operationState.a?.memberId === actor.id) this.updateOperation({ a: null });
-    this.leaveLeapfrog(actor.id);
+    const inst = this.activeInstance(actor.id);
+    if (this.operationOf(inst).a?.memberId === actor.id) this.updateOperation(inst, { a: null });
+    this.leaveLeapfrog(inst, actor.id);
     this.positions.delete(actor.id);
-    this.updateLeapfrog();
+    this.updateLeapfrog(inst);
   }
 
-  private leaveLeapfrog(memberId: string): void {
-    const current = this.operationState.ueberschlagen;
+  private leaveLeapfrog(inst: string, memberId: string): void {
+    const current = this.operationOf(inst).ueberschlagen;
     if (!current.teilnehmer.includes(memberId)) return;
     const zuweisungen = { ...current.zuweisungen };
     delete zuweisungen[memberId];
-    this.updateOperation({ ueberschlagen: { ...current, teilnehmer: current.teilnehmer.filter((id) => id !== memberId), zuweisungen } });
+    this.updateOperation(inst, { ueberschlagen: { ...current, teilnehmer: current.teilnehmer.filter((id) => id !== memberId), zuweisungen } });
   }
 
   /**
@@ -479,8 +703,8 @@ export class Lage extends EventEmitter<{ event: [LageEvent] }> {
    * zugewiesen. Bestehende Zuweisungen bleiben, solange die Haltestelle noch vor der A liegt; ist die A vorbei,
    * erhält der Teilnehmer die nächste noch unbesetzte Haltestelle dahinter.
    */
-  private updateLeapfrog(): void {
-    const op = this.operationState;
+  private updateLeapfrog(inst: string): void {
+    const op = this.operationOf(inst);
     const holder = op.a ? this.get('member', op.a.memberId) : null;
     const position = op.a ? this.positions.get(op.a.memberId) : undefined;
     const linienId = holder?.data.fortbewegung === 'oepnv' ? holder.data.oepnv?.linienId : undefined;
@@ -508,20 +732,20 @@ export class Lage extends EventEmitter<{ event: [LageEvent] }> {
       taken.add(key(free));
     }
     const next = { teilnehmer, zuweisungen, naechste };
-    if (JSON.stringify(next) !== JSON.stringify(op.ueberschlagen)) this.updateOperation({ ueberschlagen: next });
+    if (JSON.stringify(next) !== JSON.stringify(op.ueberschlagen)) this.updateOperation(inst, { ueberschlagen: next });
   }
 
-  private resetCoverage(): void {
-    this.db.sql.exec('DELETE FROM track');
-    this.lastTrackPoint.clear();
-    this.emit('event', { type: 'bestreifungReset' });
+  private resetCoverage(inst: string): void {
+    this.db.sql.prepare('DELETE FROM track WHERE inst = ?').run(inst);
+    for (const m of this.list('member')) if (this.activeInstance(m.id) === inst) this.lastTrackPoint.delete(m.id);
+    this.emit('event', { type: 'bestreifungReset', inst });
   }
 
   /** Übernommene echte Fahrten: Zeiten an den Halten aus der Echtzeit nachführen. */
   async refreshTrips(load: (tripId: string) => Promise<{ stops: { lat: number; lon: number; arr: number | null; dep: number | null }[] }>): Promise<number> {
     let updated = 0;
     const now = Date.now();
-    for (const a of this.list('annotation')) {
+    for (const { inst, entity: a } of this.listAll('annotation')) {
       const fahrt = a.data.fahrt;
       if (!fahrt || a.data.typ !== 'oepnvfahrzeug') continue;
       const last = fahrt.zeiten.at(-1);
@@ -533,8 +757,8 @@ export class Lage extends EventEmitter<{ event: [LageEvent] }> {
           return match ? (match.dep ?? match.arr) : null;
         });
         if (JSON.stringify(zeiten) !== JSON.stringify(fahrt.zeiten) && zeiten.some((z) => z !== null)) {
-          const current = this.get('annotation', a.id);
-          if (current) this.write('annotation', a.id, { ...current.data, fahrt: { id: fahrt.id, zeiten } }, 'system');
+          const current = this.get('annotation', a.id, inst || INSTANZ_HAUPT);
+          if (current) this.write('annotation', inst, a.id, { ...current.data, fahrt: { id: fahrt.id, zeiten } }, 'system');
           updated++;
         }
       } catch {
@@ -547,9 +771,9 @@ export class Lage extends EventEmitter<{ event: [LageEvent] }> {
   /** Löscht Markierungen, deren Lebensdauer abgelaufen ist. Liefert die Anzahl. */
   expireAnnotations(now = Date.now()): number {
     let count = 0;
-    for (const a of this.list('annotation')) {
+    for (const { inst, entity: a } of this.listAll('annotation')) {
       if (a.data.ablauf !== null && a.data.ablauf !== undefined && a.data.ablauf <= now) {
-        this.remove('annotation', a.id);
+        this.remove('annotation', inst, a.id);
         count++;
       }
     }
@@ -560,64 +784,89 @@ export class Lage extends EventEmitter<{ event: [LageEvent] }> {
     this.db.sql.prepare('DELETE FROM track WHERE ts < ?').run(now - TRACK_RETENTION_MS);
   }
 
-  /** Setzt die laufende Lage zurück. Dauerhafte Orte, Profile, Fahrzeuge, Tracker und Chaträume bleiben erhalten. */
-  private reset(actor: Actor, includeTargets: boolean): void {
-    const layers = this.list('layer');
+  /** Setzt die Lage einer Instanz zurück. Dauerhafte Orte, Profile, Fahrzeuge, Tracker und Chaträume bleiben erhalten. */
+  private reset(actor: Actor, inst: string, includeTargets: boolean): void {
+    const layers = this.list('layer', inst);
     const doomed = new Set(layers.filter((l) => l.data.status === 'live' && l.data.art !== 'dauerhaft').map((l) => l.id));
-    for (const a of this.list('annotation')) if (doomed.has(a.data.layerId)) this.remove('annotation', a.id);
-    for (const l of layers) if (doomed.has(l.id) && !PROTECTED_LAYERS.has(l.id)) this.remove('layer', l.id);
-    for (const m of this.list('message')) this.remove('message', m.id);
-    if (includeTargets) for (const t of this.list('target')) this.remove('target', t.id);
-    this.updateOperation({ a: null, titel: '', hinweise: '', ueberschlagen: DEFAULT_OPERATION.ueberschlagen, sos: null });
-    this.resetCoverage();
+    for (const a of this.list('annotation', inst)) if (doomed.has(a.data.layerId)) this.remove('annotation', inst, a.id);
+    for (const l of layers) if (doomed.has(l.id) && !PROTECTED_LAYERS.has(l.id)) this.remove('layer', inst, l.id);
+    for (const m of this.list('message', inst)) this.remove('message', inst, m.id);
+    if (includeTargets) for (const t of this.list('target', inst)) this.remove('target', inst, t.id);
+    this.updateOperation(inst, { a: null, titel: '', hinweise: '', ueberschlagen: DEFAULT_OPERATION.ueberschlagen, sos: null });
+    this.resetCoverage(inst);
     this.db.audit(actor.id, 'lage.zurueckgesetzt', includeTargets ? 'inklusive Zielpersonen' : '');
   }
 
   // ───────────────────────────── intern ─────────────────────────────
 
+  /** Wohin ein Objekt gehört: instanzübergreifend (`''`) oder in die Instanz. */
+  private scopeOf(kind: Kind, id: string, data: unknown, inst: string): string {
+    if (!SCOPED_KINDS.has(kind)) return '';
+    if (kind === 'layer' && id === LAYER_DAUERHAFT) return '';
+    if (kind === 'annotation' && (data as { layerId?: string }).layerId === LAYER_DAUERHAFT) return '';
+    return inst;
+  }
+
+  private rowExists(kind: Kind, inst: string, id: string): boolean {
+    return !!this.db.sql.prepare('SELECT 1 FROM entities WHERE kind = ? AND inst = ? AND id = ?').get(kind, inst, id);
+  }
+
   private occupants(vehicleId: string): Entity<'member'>[] {
     return this.list('member').filter((m) => m.data.fortbewegung === 'fahrzeug' && m.data.fahrzeugId === vehicleId);
   }
 
-  private updateOperation(patch: Partial<Operation>): void {
-    this.operationState = { ...this.operationState, ...patch, rev: this.operationState.rev + 1 };
-    this.db.setKv('operation', JSON.stringify(this.operationState));
-    this.emit('event', { type: 'operation', operation: this.operationState });
+  private updateOperation(inst: string, patch: Partial<Operation>): void {
+    const previous = this.operationOf(inst);
+    const next = { ...previous, ...patch, rev: previous.rev + 1 };
+    this.operations.set(inst, next);
+    this.db.setKv(operationKey(inst), JSON.stringify(next));
+    this.emit('event', { type: 'operation', operation: next, inst });
+    if (next.a && next.a.memberId !== previous.a?.memberId) this.emit('event', { type: 'hinweis', inst, art: 'a', memberId: next.a.memberId });
+    if (next.sos && next.sos.memberId !== previous.sos?.memberId) this.emit('event', { type: 'hinweis', inst, art: 'sos', memberId: next.sos.memberId });
   }
 
-  private write<K extends Kind>(kind: K, id: string, data: EntityData<K>, actorId: string): Entity<K> {
+  private write<K extends Kind>(kind: K, inst: string, id: string, data: EntityData<K>, actorId: string): Entity<K> {
     const now = Date.now();
     const row = this.db.sql
       .prepare(
-        `INSERT INTO entities (kind, id, rev, data, updated_at, updated_by) VALUES (?, ?, 1, ?, ?, ?)
-         ON CONFLICT (kind, id) DO UPDATE SET rev = rev + 1, data = excluded.data, updated_at = excluded.updated_at, updated_by = excluded.updated_by
+        `INSERT INTO entities (kind, inst, id, rev, data, updated_at, updated_by) VALUES (?, ?, ?, 1, ?, ?, ?)
+         ON CONFLICT (kind, inst, id) DO UPDATE SET rev = rev + 1, data = excluded.data, updated_at = excluded.updated_at, updated_by = excluded.updated_by
          RETURNING rev`,
       )
-      .get(kind, id, JSON.stringify(data), now, actorId) as { rev: number };
+      .get(kind, inst, id, JSON.stringify(data), now, actorId) as { rev: number };
     const entity: Entity<K> = { id, rev: row.rev, updatedAt: now, updatedBy: actorId, data };
-    this.emit('event', { type: 'put', kind, entity: entity as Entity });
+    this.emit('event', { type: 'put', kind, entity: entity as Entity, inst });
     return entity;
   }
 
-  private remove(kind: Kind, id: string): void {
-    this.db.sql.prepare('DELETE FROM entities WHERE kind = ? AND id = ?').run(kind, id);
-    this.emit('event', { type: 'del', kind, id });
+  private remove(kind: Kind, inst: string, id: string): void {
+    this.db.sql.prepare('DELETE FROM entities WHERE kind = ? AND inst = ? AND id = ?').run(kind, inst, id);
+    this.emit('event', { type: 'del', kind, id, inst });
   }
 
-  private ensure<K extends Kind>(kind: K, id: string, data: EntityData<K>): void {
-    if (!this.get(kind, id)) this.write(kind, id, data, 'system');
+  private ensure<K extends Kind>(kind: K, inst: string, id: string, data: EntityData<K>): void {
+    if (!this.rowExists(kind, inst, id)) this.write(kind, inst, id, data, 'system');
   }
 
-  private trimMessages(roomId: string): void {
-    const messages = this.list('message').filter((m) => m.data.roomId === roomId);
+  private trimMessages(inst: string, roomId: string): void {
+    const messages = this.list('message', inst).filter((m) => m.data.roomId === roomId);
     if (messages.length <= MAX_MESSAGES_PER_ROOM) return;
     messages.sort((a, b) => a.updatedAt - b.updatedAt);
-    for (const old of messages.slice(0, messages.length - MAX_MESSAGES_PER_ROOM)) this.remove('message', old.id);
+    for (const old of messages.slice(0, messages.length - MAX_MESSAGES_PER_ROOM)) this.remove('message', inst, old.id);
   }
 
   private persistTrackerPositions(): void {
     this.db.setKv('trackerPositions', JSON.stringify(Object.fromEntries(this.trackerPositions)));
   }
+}
+
+/** Die Hauptinstanz speichert ihren Einsatzzustand wie bisher unter `operation`. */
+function operationKey(inst: string): string {
+  return inst === INSTANZ_HAUPT ? 'operation' : `operation@${inst}`;
+}
+
+function randomId(length = 20): string {
+  return randomBytes(Math.ceil(length * 0.75)).toString('base64url').slice(0, length);
 }
 
 interface EntityRow {

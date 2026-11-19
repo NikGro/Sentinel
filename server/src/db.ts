@@ -54,6 +54,33 @@ const MIGRATIONS: readonly string[] = [
   );
   CREATE INDEX audit_ts ON audit (ts);
   `,
+  // 0.13: Instanzen. Lagebezogene Objekte gehören zu einer Instanz (`inst`), übergreifende haben `inst = ''`.
+  // Bestehende Lageobjekte wandern in die Hauptinstanz, die dauerhaften Orte werden instanzübergreifend.
+  `
+  CREATE TABLE entities_neu (
+    kind TEXT NOT NULL,
+    inst TEXT NOT NULL DEFAULT '',
+    id TEXT NOT NULL,
+    rev INTEGER NOT NULL,
+    data TEXT NOT NULL,
+    updated_at INTEGER NOT NULL,
+    updated_by TEXT NOT NULL,
+    PRIMARY KEY (kind, inst, id)
+  ) WITHOUT ROWID;
+  INSERT INTO entities_neu (kind, inst, id, rev, data, updated_at, updated_by)
+    SELECT kind,
+      CASE
+        WHEN kind = 'layer' AND id = 'dauerhaft' THEN ''
+        WHEN kind = 'annotation' AND json_extract(data, '$.layerId') = 'dauerhaft' THEN ''
+        WHEN kind IN ('annotation', 'target', 'layer', 'room', 'message') THEN 'haupt'
+        ELSE ''
+      END,
+      id, rev, data, updated_at, updated_by
+    FROM entities;
+  DROP TABLE entities;
+  ALTER TABLE entities_neu RENAME TO entities;
+  ALTER TABLE track ADD COLUMN inst TEXT NOT NULL DEFAULT 'haupt';
+  `,
 ];
 
 export class Database {

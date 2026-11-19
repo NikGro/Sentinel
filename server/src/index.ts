@@ -13,7 +13,7 @@ import { RouteService } from './reach/route.js';
 import { ReleaseStore } from './release.js';
 import { Vault } from './security.js';
 import { intervalCommand, startH02Listener, type H02Listener } from './trackers/h02.js';
-import { PajPoller, type PajCredentials } from './trackers/paj.js';
+import { pajKey, PajPoller, type PajCredentials } from './trackers/paj.js';
 
 export const SERVER_VERSION = '0.11.0';
 const MAX_UNKNOWN_TRACKERS = 50;
@@ -30,13 +30,25 @@ export async function createServices(config: Config, database?: Database): Promi
   reach.useTransit((origin, minutes) => oepnv.reach(origin, minutes));
   const hub = new Hub(lage, () => ({ version: SERVER_VERSION, routing: reach.routingConfigured }));
   const vault = new Vault(config.dataKey);
+  const pajAccount = (trackerId: string): PajCredentials | null => {
+    const sealed = db.getKv(pajKey(trackerId));
+    const plain = sealed ? vault.open(sealed) : null;
+    return plain ? (JSON.parse(plain) as PajCredentials) : null;
+  };
   const paj = new PajPoller(
-    () => lage.list('tracker').filter((t) => t.data.anbieter === 'paj').map((t) => t.data.kennung),
+    () => lage.list('tracker').filter((t) => t.data.anbieter === 'paj').map((t) => ({ kennung: t.data.kennung, konto: pajAccount(t.id) })),
     (kennung, position) => lage.reportTrackerPosition('paj', kennung, position),
   );
+  // Zugangsdaten eines Trackers verschwinden mit ihm.
+  lage.on('event', (event) => {
+    if (event.type === 'del' && event.kind === 'tracker' && db.getKv(pajKey(event.id))) {
+      db.deleteKv(pajKey(event.id));
+      paj.restart();
+    }
+  });
   const storedPaj = db.getKv('paj');
   const pajCredentials = storedPaj ? vault.open(storedPaj) : null;
-  if (pajCredentials) paj.configure(JSON.parse(pajCredentials) as PajCredentials);
+  paj.configure(pajCredentials ? (JSON.parse(pajCredentials) as PajCredentials) : null);
 
   return {
     config,

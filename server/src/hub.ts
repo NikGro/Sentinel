@@ -1,6 +1,6 @@
 import type { WebSocket } from 'ws';
 import { LageError, type Actor, type Lage, type LageEvent } from './lage.js';
-import { clientMessage, isCommand, isKind } from './schemas.js';
+import { clientMessage, INSTANZ_HAUPT, isCommand, isKind } from './schemas.js';
 
 const MAX_MESSAGES_PER_10S = 200;
 const HEARTBEAT_MS = 30_000;
@@ -8,6 +8,8 @@ const HEARTBEAT_MS = 30_000;
 interface Connection {
   socket: WebSocket;
   actor: Actor;
+  /** Geöffnete Instanz der Kommandozentrale; Fahnder sind immer in ihrer aktiven Instanz. */
+  zentraleInst: string;
   alive: boolean;
   windowStart: number;
   windowCount: number;
@@ -31,9 +33,9 @@ export class Hub {
   }
 
   attach(socket: WebSocket, actor: Actor): void {
-    const connection: Connection = { socket, actor, alive: true, windowStart: Date.now(), windowCount: 0 };
+    const connection: Connection = { socket, actor, zentraleInst: INSTANZ_HAUPT, alive: true, windowStart: Date.now(), windowCount: 0 };
     this.connections.add(connection);
-    this.send(connection, { t: 'snapshot', self: actor, server: this.serverInfo(), online: this.onlineIds(), ...this.lage.snapshot() });
+    this.sendSnapshot(connection);
     this.broadcastOnline();
 
     socket.on('pong', () => (connection.alive = true));
@@ -80,18 +82,30 @@ export class Hub {
           return;
         case 'put':
           if (!isKind(message.kind)) throw new LageError('ungueltig', 'Unbekannte Objektart');
-          this.lage.put(actor, message.kind, message.id, message.data);
+          this.lage.put(actor, message.kind, message.id, message.data, this.instOf(connection));
           break;
         case 'del':
           if (!isKind(message.kind)) throw new LageError('ungueltig', 'Unbekannte Objektart');
-          this.lage.del(actor, message.kind, message.id);
+          this.lage.del(actor, message.kind, message.id, this.instOf(connection));
           break;
         case 'cmd':
           if (!isCommand(message.name)) throw new LageError('ungueltig', 'Unbekanntes Kommando');
           if (message.name === 'lage.zuruecksetzen' && actor.role !== 'zentrale') {
             throw new LageError('verboten', 'Die Lage setzt nur die Kommandozentrale zurück.');
           }
-          this.lage.command(actor, message.name, message.args);
+          if (message.name === 'instanz.wechseln' && actor.role === 'zentrale') {
+            // Die Kommandozentrale schaut je Fenster in eine Instanz, ohne Mitgliedschaft.
+            const id = (message.args as { id?: unknown } | undefined)?.id;
+            if (typeof id !== 'string' || !this.lage.get('instance', id)) throw new LageError('unbekannt', 'Instanz existiert nicht.');
+            connection.zentraleInst = id;
+            this.sendSnapshot(connection);
+            break;
+          }
+          this.lage.command(actor, message.name, message.args, this.instOf(connection));
+          if (actor.role === 'zentrale' && !this.lage.get('instance', connection.zentraleInst)) {
+            connection.zentraleInst = INSTANZ_HAUPT;
+            this.sendSnapshot(connection);
+          }
           break;
       }
       if (ref) this.send(connection, { t: 'ack', ref });
@@ -104,22 +118,28 @@ export class Hub {
   private distribute(event: LageEvent): void {
     switch (event.type) {
       case 'put':
-        this.broadcast({ t: 'put', kind: event.kind, entity: event.entity });
+        this.broadcast({ t: 'put', kind: event.kind, entity: event.entity }, event.inst);
         break;
       case 'del':
-        this.broadcast({ t: 'del', kind: event.kind, id: event.id });
+        this.broadcast({ t: 'del', kind: event.kind, id: event.id }, event.inst);
         break;
       case 'operation':
-        this.broadcast({ t: 'operation', operation: event.operation });
+        this.broadcast({ t: 'operation', operation: event.operation }, event.inst);
         break;
       case 'pos':
-        this.broadcast({ t: 'pos', id: event.id, p: event.p });
+        this.broadcast({ t: 'pos', id: event.id, p: event.p }, event.inst);
         break;
       case 'tpos':
-        this.broadcast({ t: 'tpos', id: event.id, p: event.p });
+        this.broadcast({ t: 'tpos', id: event.id, p: event.p }, '');
         break;
       case 'bestreifungReset':
-        this.broadcast({ t: 'bestreifungReset' });
+        this.broadcast({ t: 'bestreifungReset' }, event.inst);
+        break;
+      case 'wechsel':
+        for (const c of this.connections) if (c.actor.id === event.memberId) this.sendSnapshot(c);
+        break;
+      case 'hinweis':
+        this.notifyElsewhere(event.inst, event.art, event.memberId);
         break;
       case 'trackerIntervall':
         // Wird vom Tracker-Empfang an das Gerät weitergegeben, nicht an die Clients.
@@ -127,10 +147,33 @@ export class Hub {
     }
   }
 
-  private broadcast(payload: unknown, onlyRole?: Actor['role']): void {
+  /** Instanz, deren Lage diese Verbindung gerade sieht. */
+  private instOf(connection: Connection): string {
+    return connection.actor.role === 'fahnder' ? this.lage.activeInstance(connection.actor.id) : connection.zentraleInst;
+  }
+
+  private sendSnapshot(connection: Connection): void {
+    this.send(connection, { t: 'snapshot', self: connection.actor, server: this.serverInfo(), online: this.onlineIds(), ...this.lage.snapshot(this.instOf(connection)) });
+  }
+
+  /** A-Position und Notruf: Mitglieder der Instanz, die gerade in einer anderen arbeiten, erhalten einen Hinweis. */
+  private notifyElsewhere(inst: string, art: 'a' | 'sos', memberId: string): void {
+    const instance = this.lage.get('instance', inst);
+    if (!instance || instance.data.art !== 'einsatz') return;
+    const who = this.lage.get('member', memberId)?.data.spitzname ?? '';
+    const text = JSON.stringify({ t: 'hinweis', instanz: inst, name: instance.data.name, art, memberId, spitzname: who });
+    for (const c of this.connections) {
+      if (c.actor.role !== 'fahnder' || c.actor.id === memberId) continue;
+      if (!this.lage.isMember(inst, c.actor.id) || this.instOf(c) === inst) continue;
+      if (c.socket.readyState === c.socket.OPEN) c.socket.send(text);
+    }
+  }
+
+  /** Verteilt an alle Verbindungen der Instanz `inst`; `''` heißt an alle. */
+  private broadcast(payload: unknown, inst: string): void {
     const text = JSON.stringify(payload);
     for (const c of this.connections) {
-      if (onlyRole && c.actor.role !== onlyRole) continue;
+      if (inst !== '' && this.instOf(c) !== inst) continue;
       if (c.socket.readyState === c.socket.OPEN && c.socket.bufferedAmount < 4_000_000) c.socket.send(text);
     }
   }
@@ -149,7 +192,7 @@ export class Hub {
   }
 
   private broadcastOnline(): void {
-    this.broadcast({ t: 'online', ids: this.onlineIds() });
+    this.broadcast({ t: 'online', ids: this.onlineIds() }, '');
   }
 
   private checkAlive(): void {

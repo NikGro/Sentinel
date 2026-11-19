@@ -1,7 +1,10 @@
 import type { FastifyInstance } from 'fastify';
 import { z } from 'zod';
 import { findIntersections } from '../oepnv.js';
+import { findCrossStreets } from '../reach/crossings.js';
 import { REACH_MODES } from '../reach/reach.js';
+import { pajKey } from '../trackers/paj.js';
+import { LageError } from '../lage.js';
 import { RateLimiter, randomToken } from '../security.js';
 import { geoPoint } from '../schemas.js';
 import { HttpError, type Guards, type Services } from './app.js';
@@ -48,6 +51,16 @@ const crossingQuery = z.object({
   lon: z.coerce.number().min(-180).max(180),
 });
 
+const crossStreetsBody = z.object({ punkte: z.array(geoPoint).min(2).max(600) });
+
+const pajTrackerBody = z.object({
+  id: z.string().regex(/^[A-Za-z0-9_-]{1,64}$/),
+  name: z.string().trim().min(1).max(60),
+  kennung: z.string().trim().regex(/^[0-9]{1,15}$/, 'Geräte-ID aus Ziffern erwartet'),
+  email: z.string().trim().email().max(120),
+  passwort: z.string().min(1).max(200),
+});
+
 /** Anhänge im Chat und Fotos: großzügig für Sprachnachrichten und Dokumente, aber begrenzt. */
 const MAX_UPLOAD_BYTES = 15 * 1024 * 1024;
 
@@ -79,7 +92,8 @@ const safeFilename = (name: string) => name.replace(/[^\p{L}\p{N} ._-]/gu, '_').
 
 /** Routen für angemeldete Geräte und die Kommandozentrale: Dateien, Bestreifung, Weg-Zeit, Routen, ÖPNV, Kreuzungen. */
 export function registerDeviceRoutes(app: FastifyInstance, services: Services, guards: Guards): void {
-  const { db, lage, reach, routes, oepnv, overpass, transit } = services;
+  const { db, lage, reach, routes, oepnv, overpass, transit, paj, vault } = services;
+  const pajLimiter = new RateLimiter(10, 10 * 60_000);
   const uploadLimiter = new RateLimiter(60, 10 * 60_000);
   const reachLimiter = new RateLimiter(120, 60_000);
   const crossingLimiter = new RateLimiter(90, 60_000);
@@ -115,9 +129,43 @@ export function registerDeviceRoutes(app: FastifyInstance, services: Services, g
       .send(Buffer.from(row.bytes));
   });
 
+  /**
+   * PAJ-Tracker mit eigenem Konto anlegen: Die Zugangsdaten gelten nur für diesen Tracker und werden verschlüsselt
+   * gespeichert. Vorher wird geprüft, dass das Gerät wirklich zu diesem Konto gehört.
+   */
+  app.post('/api/v1/trackers/paj', async (request) => {
+    const actor = guards.actor(request);
+    guards.limit(pajLimiter, request);
+    const body = pajTrackerBody.safeParse(request.body);
+    if (!body.success) throw new HttpError(400, body.error.issues[0]?.message ?? 'Name, Geräte-ID, E-Mail und Passwort angeben.');
+    const { id, name, kennung, email, passwort } = body.data;
+    const existing = lage.get('tracker', id);
+    if (existing && (existing.data.anbieter !== 'paj' || existing.data.kennung !== kennung)) throw new HttpError(409, 'Diese Kennung ist schon vergeben.');
+    if (lage.list('tracker').some((t) => t.id !== id && t.data.anbieter === 'paj' && t.data.kennung === kennung)) throw new HttpError(409, 'Dieser Tracker ist schon angelegt.');
+    let belongs: boolean;
+    try {
+      belongs = await paj.verify({ email, password: passwort }, kennung);
+    } catch {
+      throw new HttpError(400, 'Anmeldung beim PAJ-Konto fehlgeschlagen. E-Mail und Passwort prüfen.');
+    }
+    if (!belongs) throw new HttpError(400, 'Gerät nicht in diesem Konto.');
+    db.setKv(pajKey(id), vault.seal(JSON.stringify({ email, password: passwort })));
+    try {
+      const entity = lage.put(actor, 'tracker', id, { name, anbieter: 'paj', kennung, kontoEmail: email });
+      paj.restart();
+      db.audit(actor.id, 'paj.tracker', kennung);
+      return { tracker: entity };
+    } catch (error) {
+      db.deleteKv(pajKey(id));
+      throw new HttpError(400, error instanceof LageError ? error.message : 'Tracker konnte nicht angelegt werden.');
+    }
+  });
+
   app.get('/api/v1/coverage', async (request) => {
-    guards.actor(request);
-    return { tracks: lage.coverage() };
+    const actor = guards.actor(request);
+    const { instanz } = request.query as { instanz?: string };
+    const inst = actor.role === 'fahnder' ? lage.activeInstance(actor.id) : typeof instanz === 'string' && lage.get('instance', instanz) ? instanz : 'haupt';
+    return { tracks: lage.coverage(inst) };
   });
 
   app.post('/api/v1/reach', async (request) => {
@@ -277,6 +325,20 @@ export function registerDeviceRoutes(app: FastifyInstance, services: Services, g
       return { punkte: await findIntersections(overpass, a, b, { lat, lon }) };
     } catch {
       throw new HttpError(502, 'Kreuzungssuche zurzeit nicht erreichbar.');
+    }
+  });
+
+  /** Querstraßen entlang einer Navigationsroute (OpenStreetMap). */
+  app.post('/api/v1/route/querstrassen', async (request) => {
+    guards.actor(request);
+    guards.limit(crossingLimiter, request);
+    const body = crossStreetsBody.safeParse(request.body);
+    if (!body.success) throw new HttpError(400, 'Routenpunkte fehlen.');
+    if (!overpass) throw new HttpError(503, 'Querstraßen sind auf diesem Server abgeschaltet.');
+    try {
+      return { strassen: await findCrossStreets(overpass, body.data.punkte) };
+    } catch {
+      throw new HttpError(502, 'Querstraßen zurzeit nicht abrufbar.');
     }
   });
 }
