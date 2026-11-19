@@ -41,7 +41,8 @@ enum Theme {
     /// Einheitliche Höhe aller Leisten und Eingabefelder über der Tableiste (Suche, A-Position, Fortbewegung, Lageleiste, Chat).
     static let barHeight: CGFloat = 50
     /// Einheitlicher Durchmesser runder Glasknöpfe: so hoch wie Suchleiste und übrige Leisten.
-    static let roundButton: CGFloat = 50
+    /// Runde Kartenknöpfe und Suchleiste: so groß wie Apples Kompassrose.
+    static let roundButton: CGFloat = 44
     /// Seitlicher Abstand, bündig mit der schwebenden Tableiste.
     static let barInset: CGFloat = 22
     /// Abstand zwischen gestapelten Leisten.

@@ -40,7 +40,7 @@ function placeTarget(art: ZielArt): void {
 export function MapToolbar() {
   const current = tool.value;
   const drawing = current.kind === 'zeichnen' ? current : null;
-  const multi = drawing && (drawing.shape === 'linie' || drawing.shape === 'flaeche');
+  const multi = drawing && (drawing.shape === 'linie' || drawing.shape === 'pfeil' || drawing.shape === 'flaeche');
   const hint = drawing ? (multi ? `${SHAPE_TITEL[drawing.shape]}: Punkte anklicken, Doppelklick beendet (${drawing.punkte.length} gesetzt)` : `${SHAPE_TITEL[drawing.shape]}: Ort anklicken`) : HINWEIS[current.kind];
 
   return (

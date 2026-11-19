@@ -194,6 +194,11 @@ test('ÖPNV: nächster Halt ab Standort, Suche nach Linie und in der Nähe', () 
   assert.deepEqual(store.search('u 3', null).map((r) => r.richtung), ['Barmbek', 'Wandsbek']);
   assert.deepEqual(store.search('', { lat: 53.5, lon: 10 }).map((r) => r.id).sort(), ['1', '2']);
   assert.deepEqual(store.upcoming('1', { lat: 53.515, lon: 10 }, 5).map((h) => h.name), ['H2', 'H3']);
+  // Haltestellen nach Namen: gleichnamige Steige zusammengefasst, mit den dort haltenden Linien.
+  const stops = store.searchStops('h1', { lat: 53.5, lon: 10 });
+  assert.ok(stops.length >= 1);
+  assert.ok(stops[0]!.linien.some((l) => l.ref === 'U3'));
+  assert.deepEqual(store.searchStops('a', null), []);
 });
 
 test('Dateityp wird am Inhalt erkannt', () => {

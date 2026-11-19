@@ -128,7 +128,7 @@ function bind(map: MapBackend, disposers: (() => void)[]): void {
           shapes.push({ kind: 'polygon', points: circlePoints(data.punkte[0], data.radius ?? 100), color: data.farbe, fillOpacity: 0.15, lineWidth: 2 });
         } else if (data.typ === 'haltestellen' && data.punkte[0]) {
           shapes.push({ kind: 'polygon', points: circlePoints(data.punkte[0], data.radius ?? 500), color: '#0A84FF', fillOpacity: 0.06, lineWidth: 1.5 });
-        } else if ((data.typ === 'linie' || data.typ === 'oepnvlinie') && data.punkte.length >= 2) {
+        } else if ((data.typ === 'linie' || data.typ === 'oepnvlinie' || data.typ === 'pfeil') && data.punkte.length >= 2) {
           shapes.push({ kind: 'line', points: data.punkte, color: data.farbe, lineWidth: 4 });
         }
       }
@@ -350,7 +350,7 @@ function bind(map: MapBackend, disposers: (() => void)[]): void {
       }
       case 'zeichnen': {
         const punkte = [...current.punkte, point];
-        if (current.shape === 'linie' || current.shape === 'flaeche') tool.value = { ...current, punkte };
+        if (current.shape === 'linie' || current.shape === 'pfeil' || current.shape === 'flaeche') tool.value = { ...current, punkte };
         else finishDrawing(current.shape, punkte);
         break;
       }
@@ -364,7 +364,7 @@ function bind(map: MapBackend, disposers: (() => void)[]): void {
 
 /** Schließt eine Zeichnung ab, legt das Objekt in der gewählten Zielebene an und öffnet es zur Bearbeitung. */
 export function finishDrawing(shape: MapObject['typ'], punkte: GeoPoint[]): void {
-  const minimum = shape === 'linie' ? 2 : shape === 'flaeche' ? 3 : 1;
+  const minimum = shape === 'linie' || shape === 'pfeil' ? 2 : shape === 'flaeche' ? 3 : 1;
   if (punkte.length < minimum) return;
   const id = newId();
   const layer = tables.layer.value[targetLayer.value] && !isLocked(targetLayer.value) ? targetLayer.value : 'lage';

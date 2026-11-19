@@ -29,6 +29,19 @@ struct LayerSheet: View {
                     Text("Zeigt die gefahrenen Wege der eigenen Kräfte ab dem Einschalten. Ausschalten setzt die Bestreifung für alle zurück.")
                 }
 
+                Section("Ziele") {
+                    ForEach(ZielArt.allCases) { art in
+                        Toggle(isOn: Binding(
+                            get: { !settings.hiddenTargetKinds.contains(art.rawValue) },
+                            set: { visible in
+                                if visible { settings.hiddenTargetKinds.remove(art.rawValue) } else { settings.hiddenTargetKinds.insert(art.rawValue) }
+                            }
+                        )) {
+                            Label(art.title, systemImage: art.symbolName)
+                        }
+                    }
+                }
+
                 if hasSearchArea {
                 Section {
                     ForEach(ReachMode.allCases) { mode in

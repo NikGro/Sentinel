@@ -14,6 +14,8 @@ final class LocalSettings {
     /// Ausgeblendete Ebenen, um die Karte übersichtlich zu halten.
     var hiddenLayers: Set<String> { didSet { defaults.set(Array(hiddenLayers), forKey: "ebenen.ausgeblendet") } }
     var disabledReachModes: Set<String> { didSet { defaults.set(Array(disabledReachModes), forKey: "wegzeit.aus") } }
+    /// Ausgeblendete Zielarten (person, fahrzeug, objekt); sie bleiben angelegt.
+    var hiddenTargetKinds: Set<String> { didSet { defaults.set(Array(hiddenTargetKinds), forKey: "ziele.ausgeblendet") } }
     /// Bestreifte Wege zeigen; angezeigt wird nur, was seit dem Einschalten zurückgelegt wurde.
     var showsCoverage: Bool {
         didSet {
@@ -38,6 +40,7 @@ final class LocalSettings {
         appLockEnabled = defaults.bool(forKey: "app.sperre")
         hiddenLayers = Set(defaults.stringArray(forKey: "ebenen.ausgeblendet") ?? [])
         disabledReachModes = Set(defaults.stringArray(forKey: "wegzeit.aus") ?? [])
+        hiddenTargetKinds = Set(defaults.stringArray(forKey: "ziele.ausgeblendet") ?? [])
         showsCoverage = defaults.bool(forKey: "bestreifung.anzeigen")
         coverageSince = defaults.double(forKey: "bestreifung.seit")
         mapStyle = MapStyleChoice(rawValue: defaults.string(forKey: "karte.stil") ?? "") ?? .standard

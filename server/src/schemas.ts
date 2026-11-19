@@ -79,7 +79,7 @@ const vehicle = z.object({
 });
 
 /** "haltestellen": Umkreis, in dem alle ÖPNV-Haltestellen angezeigt werden. */
-export const SHAPES = ['marker', 'text', 'linie', 'flaeche', 'kreis', 'fahndungsraum', 'haltestellen', 'oepnvlinie', 'oepnvfahrzeug'] as const;
+export const SHAPES = ['marker', 'text', 'linie', 'flaeche', 'kreis', 'fahndungsraum', 'haltestellen', 'oepnvlinie', 'oepnvfahrzeug', 'pfeil'] as const;
 
 export const ANHANG_ARTEN = ['bild', 'audio', 'datei'] as const;
 
@@ -136,7 +136,7 @@ const annotation = z
     ablauf: timestamp.nullish().transform((v) => v ?? null),
   })
   .superRefine((a, ctx) => {
-    const min = a.typ === 'linie' ? 2 : a.typ === 'flaeche' ? 3 : 1;
+    const min = a.typ === 'linie' || a.typ === 'pfeil' ? 2 : a.typ === 'flaeche' ? 3 : 1;
     if (a.punkte.length < min) ctx.addIssue({ code: 'custom', message: `Mindestens ${min} Punkte nötig` });
     if ((a.typ === 'kreis' || a.typ === 'haltestellen') && a.radius === null) ctx.addIssue({ code: 'custom', message: 'Radius fehlt' });
     if (a.typ === 'fahndungsraum' && a.zeit === null) ctx.addIssue({ code: 'custom', message: 'Zeitpunkt fehlt' });
@@ -181,6 +181,14 @@ const target = z.object({
   /** Fotos und Dateien; das erste Foto ist das Titelbild. */
   anhaenge: z.array(attachment).max(100).default([]),
   trackerId: optionalId,
+  /**
+   * Zielperson unterwegs: zu Fuß, im ÖPNV (gebunden an ein ÖPNV-Fahrzeug), im Fahrzeug oder in einem Gebäude
+   * (gebunden an ein Zielfahrzeug bzw. Zielobjekt). Gebunden folgt der Standort dem gewählten Objekt.
+   */
+  bindung: z
+    .object({ art: z.enum(['fuss', 'oepnv', 'fahrzeug', 'objekt']), zielId: optionalId })
+    .nullish()
+    .transform((v) => v ?? null),
   /** Von Hand gesetzter Standort; ein verbundener Tracker hat Vorrang. */
   standort: geoPoint.extend({ ts: timestamp }).nullish().transform((v) => v ?? null),
 });

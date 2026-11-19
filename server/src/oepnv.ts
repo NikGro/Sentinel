@@ -320,6 +320,27 @@ export class OepnvStore {
     return result.sort((a, b) => a.meter - b.meter).slice(0, limit);
   }
 
+  /** Haltestellen nach Name (Wortanfang), nach Entfernung sortiert, gleichnamige Steige zusammengefasst. */
+  searchStops(query: string, near: GeoPoint | null, limit = 8): HaltestelleImUmkreis[] {
+    const q = query.trim().toLowerCase();
+    if (q.length < 2) return [];
+    const result: HaltestelleImUmkreis[] = [];
+    for (const line of this.lines.values()) {
+      for (const halt of line.halte) {
+        const name = halt.name.toLowerCase();
+        if (!(name.startsWith(q) || name.includes(' ' + q) || name.includes('(' + q))) continue;
+        let entry = result.find((e) => e.name === halt.name && distanceMeters(e, halt) < 300);
+        if (!entry) {
+          entry = { name: halt.name, lat: halt.lat, lon: halt.lon, meter: near ? Math.round(distanceMeters(halt, near)) : 0, linien: [] };
+          result.push(entry);
+        }
+        if (!entry.linien.some((l) => l.ref === line.ref && l.typ === line.typ)) entry.linien.push({ ref: line.ref, typ: line.typ, farbe: line.farbe ?? null });
+      }
+    }
+    for (const entry of result) entry.linien.sort((a, b) => a.ref.localeCompare(b.ref, 'de', { numeric: true }));
+    return result.sort((a, b) => a.meter - b.meter).slice(0, limit);
+  }
+
   /** Fluchtraum im ÖPNV als Umrisse; `null`, solange keine Linien geladen sind. */
   reach(origin: GeoPoint, minutes: number): [number, number][][] | null {
     if (this.lines.size === 0) return null;
@@ -335,7 +356,20 @@ export class OepnvStore {
 }
 
 /** Sucht die Kreuzung zweier Straßen: gemeinsame Knoten der beiden benannten Straßen im Umkreis. */
+const intersectionCache = new Map<string, { at: number; points: GeoPoint[] }>();
+
+/** Kreuzungen zweier Straßen; Ergebnisse werden eine Stunde zwischengespeichert (die Suche prüft viele Vorschläge). */
 export async function findIntersections(overpass: OverpassClient, a: string, b: string, near: GeoPoint): Promise<GeoPoint[]> {
+  const key = [a.trim().toLowerCase(), b.trim().toLowerCase()].sort().join('|') + `|${near.lat.toFixed(2)},${near.lon.toFixed(2)}`;
+  const hit = intersectionCache.get(key);
+  if (hit && Date.now() - hit.at < 3600_000) return hit.points;
+  const points = await findIntersectionsUncached(overpass, a, b, near);
+  if (intersectionCache.size > 2000) intersectionCache.clear();
+  intersectionCache.set(key, { at: Date.now(), points });
+  return points;
+}
+
+async function findIntersectionsUncached(overpass: OverpassClient, a: string, b: string, near: GeoPoint): Promise<GeoPoint[]> {
   // Nur unbedenkliche Zeichen zulassen; Punkte als Zeichenklasse, damit keine Escape-Folgen nötig sind.
   const pattern = (name: string) => {
     const clean = name.trim().replace(/[^\p{L}\p{N} .'-]/gu, '');

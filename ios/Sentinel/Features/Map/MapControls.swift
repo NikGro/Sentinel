@@ -357,7 +357,7 @@ struct SearchPinCard: View {
             // Zwei gleich gestaltete Knöpfe; „Hier anlegen“ öffnet dasselbe große Auswahlmenü wie das Plus.
             HStack(spacing: Theme.barSpacing) {
                 Button(action: navigate) {
-                    Label("Hierhin navigieren", systemImage: "arrow.triangle.turn.up.right.diamond.fill")
+                    Label("Navigieren", systemImage: "arrow.triangle.turn.up.right.diamond.fill")
                         .font(.subheadline.weight(.semibold))
                         .frame(maxWidth: .infinity)
                 }

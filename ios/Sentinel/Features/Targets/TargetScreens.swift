@@ -339,6 +339,10 @@ struct TargetEditor: View {
                     }
                 }
 
+                if target.art == .person {
+                    bindingSection
+                }
+
                 AttachmentsSection(attachments: $target.anhaenge, marksTitlePhoto: true)
 
                 Section("Notizen") {
@@ -377,6 +381,98 @@ struct TargetEditor: View {
                     target.standort = TimedPoint(point)
                 }
             }
+        }
+    }
+
+    // MARK: Unterwegs
+
+    private var bindingArt: Binding<TargetBinding.Art> {
+        Binding(
+            get: { target.bindung?.art ?? .fuss },
+            set: { art in
+                target.bindung = art == .fuss ? nil : TargetBinding(art: art, zielId: target.bindung?.art == art ? target.bindung?.zielId : nil)
+            }
+        )
+    }
+
+    /// Bezugspunkt für die Sortierung: Standort der Person, sonst der eigene.
+    private var personPoint: GeoPoint? { target.standort?.point ?? lage.targets[context.id].flatMap { lage.position(ofTarget: $0)?.point } ?? model.myPoint }
+
+    /// Mögliche Ziele zur gewählten Art, nächstgelegene zuerst (höchstens zehn).
+    private var candidates: [(id: String, title: String, subtitle: String, symbol: String, distance: Double?)] {
+        let art = target.bindung?.art ?? .fuss
+        var list: [(id: String, title: String, subtitle: String, symbol: String, point: GeoPoint?)] = []
+        switch art {
+        case .fuss:
+            return []
+        case .oepnv:
+            list = lage.mapObjects.values.filter { $0.data.typ == .oepnvfahrzeug && !$0.data.isExpired() }.map { object in
+                (object.id, object.data.titel.isEmpty ? (object.data.linie?.ref ?? "ÖPNV-Fahrzeug") : object.data.titel,
+                 object.data.linie.map { "\($0.ref) Richtung \($0.richtung)" } ?? "ÖPNV-Fahrzeug",
+                 object.data.linie?.symbolName ?? "bus.fill", lage.position(ofObject: object.data))
+            }
+        case .fahrzeug, .objekt:
+            let wanted: ZielArt = art == .fahrzeug ? .fahrzeug : .objekt
+            list = lage.sortedTargets.filter { $0.data.art == wanted && $0.id != context.id }.map { other in
+                (other.id, other.data.displayName, other.data.art.title, other.data.art.symbolName, lage.position(ofTarget: other)?.point)
+            }
+        }
+        let reference = personPoint
+        return list
+            .map { (id: $0.id, title: $0.title, subtitle: $0.subtitle, symbol: $0.symbol, distance: reference.flatMap { r in $0.point.map { r.distance(to: $0) } }) }
+            .sorted { ($0.distance ?? .greatestFiniteMagnitude) < ($1.distance ?? .greatestFiniteMagnitude) }
+            .prefix(10)
+            .map { $0 }
+    }
+
+    @ViewBuilder private var bindingSection: some View {
+        Section {
+            Picker("Unterwegs", selection: bindingArt) {
+                ForEach(TargetBinding.Art.allCases) { art in
+                    Image(systemName: art.symbolName)
+                        .accessibilityLabel(art.title)
+                        .tag(art)
+                }
+            }
+            .pickerStyle(.segmented)
+            if (target.bindung?.art ?? .fuss) != .fuss {
+                if candidates.isEmpty {
+                    Text(target.bindung?.art == .oepnv ? "Kein ÖPNV-Fahrzeug angelegt. Über das Plus auf der Karte anlegen." : "Kein passendes Ziel angelegt.")
+                        .foregroundStyle(.secondary)
+                }
+                ForEach(candidates, id: \.id) { candidate in
+                    Button {
+                        target.bindung = TargetBinding(art: target.bindung?.art ?? .fuss, zielId: candidate.id)
+                    } label: {
+                        HStack(spacing: 12) {
+                            Image(systemName: candidate.symbol)
+                                .foregroundStyle(.tint)
+                                .frame(width: 26)
+                            VStack(alignment: .leading, spacing: 2) {
+                                Text(candidate.title)
+                                Text(candidate.subtitle)
+                                    .font(.caption)
+                                    .foregroundStyle(.secondary)
+                            }
+                            Spacer()
+                            if let distance = candidate.distance {
+                                Text(Format.distance(distance))
+                                    .font(.caption.monospacedDigit())
+                                    .foregroundStyle(.secondary)
+                            }
+                            if target.bindung?.zielId == candidate.id {
+                                Image(systemName: "checkmark")
+                                    .foregroundStyle(.tint)
+                            }
+                        }
+                    }
+                    .tint(.primary)
+                }
+            }
+        } header: {
+            Text("Unterwegs")
+        } footer: {
+            Text("Zu Fuß, im ÖPNV, im Fahrzeug oder im Gebäude. Zugeordnet folgt die Person dessen Standort; mehrere Personen können demselben Fahrzeug oder Objekt zugeordnet sein.")
         }
     }
 

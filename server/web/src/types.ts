@@ -51,7 +51,7 @@ export interface Vehicle {
   abgestellt: (GeoPoint & { ts: number }) | null;
 }
 
-export type Shape = 'marker' | 'text' | 'linie' | 'flaeche' | 'kreis' | 'fahndungsraum' | 'haltestellen' | 'oepnvlinie' | 'oepnvfahrzeug';
+export type Shape = 'marker' | 'text' | 'linie' | 'flaeche' | 'kreis' | 'fahndungsraum' | 'haltestellen' | 'oepnvlinie' | 'oepnvfahrzeug' | 'pfeil';
 
 export interface MapObject {
   layerId: string;
@@ -172,7 +172,7 @@ export interface AdminStatus {
   karte: 'apple' | 'osm';
 }
 
-export const SHAPE_TITEL: Record<Shape, string> = { marker: 'Marker', text: 'Beschriftung', linie: 'Linie', flaeche: 'Fläche', kreis: 'Kreis', fahndungsraum: 'Fahndungsraum', haltestellen: 'Haltestellen im Umkreis', oepnvlinie: 'ÖPNV-Linie', oepnvfahrzeug: 'ÖPNV-Fahrzeug' };
+export const SHAPE_TITEL: Record<Shape, string> = { marker: 'Marker', text: 'Beschriftung', linie: 'Linie', flaeche: 'Fläche', kreis: 'Kreis', fahndungsraum: 'Fahndungsraum', haltestellen: 'Haltestellen im Umkreis', oepnvlinie: 'ÖPNV-Linie', oepnvfahrzeug: 'ÖPNV-Fahrzeug', pfeil: 'Pfeil' };
 export const ZIEL_TITEL: Record<ZielArt, string> = { person: 'Zielperson', fahrzeug: 'Zielfahrzeug', objekt: 'Zielobjekt' };
 export const FORTBEWEGUNG_TITEL: Record<Fortbewegung, string> = { fuss: 'Zu Fuß', fahrzeug: 'Fahrzeug', oepnv: 'ÖPNV' };
 export const PALETTE = ['#FF9F0A', '#FF453A', '#FFD60A', '#30D158', '#64D2FF', '#0A84FF', '#BF5AF2', '#F2F2F7'];

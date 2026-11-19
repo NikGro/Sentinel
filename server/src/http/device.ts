@@ -82,7 +82,7 @@ export function registerDeviceRoutes(app: FastifyInstance, services: Services, g
   const { db, lage, reach, routes, oepnv, overpass } = services;
   const uploadLimiter = new RateLimiter(60, 10 * 60_000);
   const reachLimiter = new RateLimiter(120, 60_000);
-  const crossingLimiter = new RateLimiter(30, 60_000);
+  const crossingLimiter = new RateLimiter(90, 60_000);
 
   app.register(async (scope) => {
     scope.addContentTypeParser('*', { parseAs: 'buffer', bodyLimit: MAX_UPLOAD_BYTES }, (_request, body, done) => done(null, body));
@@ -169,6 +169,13 @@ export function registerDeviceRoutes(app: FastifyInstance, services: Services, g
     if (!query.success) throw new HttpError(400, 'Ungültige Anfrage.');
     const { lat, lon, radius } = query.data;
     return { haltestellen: oepnv.stopsNear({ lat, lon }, radius), verfuegbar: oepnv.count > 0 };
+  });
+
+  app.get('/api/v1/oepnv/haltestellen/suche', async (request) => {
+    guards.actor(request);
+    const { q, lat, lon } = request.query as { q?: string; lat?: string; lon?: string };
+    const near = lat && lon && Number.isFinite(Number(lat)) && Number.isFinite(Number(lon)) ? { lat: Number(lat), lon: Number(lon) } : null;
+    return { haltestellen: oepnv.searchStops(String(q ?? '').slice(0, 80), near) };
   });
 
   app.get('/api/v1/oepnv/linien/:id', async (request) => {

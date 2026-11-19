@@ -141,7 +141,7 @@ struct AddChooser: View {
                     group("Fahndung", [.shape(.fahndungsraum), .shape(.haltestellen)])
                     group("ÖPNV", [.shape(.oepnvlinie), .shape(.oepnvfahrzeug)])
                     group("Ziele", ZielArt.allCases.map { .target($0) })
-                    group("Markierung", [.shape(.marker), .shape(.text), .shape(.linie), .shape(.flaeche), .shape(.kreis)])
+                    group("Markierung", [.shape(.marker), .shape(.text), .shape(.linie), .shape(.pfeil), .shape(.flaeche), .shape(.kreis)])
                 }
                 .padding(16)
             }
@@ -297,6 +297,69 @@ struct SpeedBadge: View {
 
 
 
+/// Kompass und Standort in einem Knopf, so groß wie Apples Kompassrose.
+/// Folgt die Karte nicht: Kompassnadel (zeigt, wo Norden liegt) bzw. Standortpfeil. Folgt sie: gefüllter Pfeil,
+/// mit Blickrichtung als Pfeil mit Strahl.
+struct LocationCompassButton: View {
+    let state: MapCameraState
+    let following: Bool
+    let heading: Bool
+    let action: () -> Void
+
+    var body: some View {
+        Button(action: action) {
+            ZStack {
+                if following {
+                    Image(systemName: heading ? "location.north.line.fill" : "location.fill")
+                        .font(.system(size: 17, weight: .semibold))
+                        .foregroundStyle(Color.accentColor)
+                } else if abs(state.heading) > 1 && abs(state.heading - 360) > 1 {
+                    // Gedreht: Nadel mit rotem Nordende wie in Apple Karten.
+                    VStack(spacing: 0) {
+                        Text("N")
+                            .font(.system(size: 9, weight: .heavy))
+                            .foregroundStyle(.red)
+                        Image(systemName: "location.north.fill")
+                            .font(.system(size: 15, weight: .bold))
+                            .foregroundStyle(.red, .primary)
+                    }
+                    .rotationEffect(.degrees(-state.heading))
+                } else {
+                    Image(systemName: "location")
+                        .font(.system(size: 17, weight: .semibold))
+                        .foregroundStyle(.primary)
+                }
+            }
+            .frame(width: Theme.roundButton, height: Theme.roundButton)
+            .contentShape(.circle)
+        }
+        .buttonStyle(.plain)
+        .glassEffect(.regular.interactive(), in: .circle)
+        .accessibilityLabel("Auf eigenen Standort zentrieren")
+        .accessibilityValue(following ? (heading ? "folgt mit Blickrichtung" : "folgt, Norden oben") : "frei")
+    }
+}
+
+/// Tortenstück von oben im Uhrzeigersinn, für den Haltefortschritt.
+struct PieSlice: Shape {
+    var progress: Double
+
+    var animatableData: Double {
+        get { progress }
+        set { progress = newValue }
+    }
+
+    func path(in rect: CGRect) -> Path {
+        var path = Path()
+        guard progress > 0 else { return path }
+        let center = CGPoint(x: rect.midX, y: rect.midY)
+        path.move(to: center)
+        path.addArc(center: center, radius: min(rect.width, rect.height) / 2, startAngle: .degrees(-90), endAngle: .degrees(-90 + 360 * min(progress, 1)), clockwise: false)
+        path.closeSubpath()
+        return path
+    }
+}
+
 /// Notrufknopf: 1,5 Sekunden gedrückt halten (Ring füllt sich), damit er nicht versehentlich auslöst.
 /// Läuft der eigene Notruf, beendet ein Tipp ihn nach Rückfrage.
 struct SOSButton: View {
@@ -316,18 +379,21 @@ struct SOSButton: View {
             .font(.system(size: 13, weight: .heavy, design: .rounded))
             .foregroundStyle(.white)
             .frame(width: Theme.roundButton, height: Theme.roundButton)
-            // Liquid Glass in Rot wie die übrigen runden Knöpfe.
-            .glassEffect(.regular.tint(lage.ownSOS ? .red : .red.opacity(0.75)).interactive(), in: .circle)
-            // Der Ring liegt außen um den Knopf und wächst mit ihm, statt im Glas zu verrutschen.
+            // Fortschritt beim Halten: weiße Tortenfüllung und Ring, beide im Knopf und über dem Glas.
+            .background {
+                PieSlice(progress: progress)
+                    .fill(.white.opacity(0.45))
+                    .padding(3)
+            }
             .overlay {
                 Circle()
                     .trim(from: 0, to: progress)
-                    .stroke(.white, style: StrokeStyle(lineWidth: 4, lineCap: .round))
+                    .stroke(.white, style: StrokeStyle(lineWidth: 3, lineCap: .round))
                     .rotationEffect(.degrees(-90))
-                    // Innen im Knopf, damit er beim Vergrößern weder abgeschnitten noch vom Glas verdeckt wird.
-                    .padding(4)
-                    .allowsHitTesting(false)
+                    .padding(2)
             }
+            // Rotes Glas ohne eigenes Drückverhalten, damit das Gedrückthalten bei der Geste ankommt.
+            .background(Circle().fill(.clear).glassEffect(.regular.tint(lage.ownSOS ? .red : .red.opacity(0.75)), in: .circle))
             .scaleEffect(holding ? 1.08 : 1)
             .animation(.snappy, value: holding)
             .contentShape(.circle)

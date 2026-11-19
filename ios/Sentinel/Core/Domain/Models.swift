@@ -192,6 +192,8 @@ struct MapObject: LageEntity {
         case oepnvlinie
         /// Einzelnes ÖPNV-Fahrzeug auf einer Linie, Position nach Regeltempo geschätzt.
         case oepnvfahrzeug
+        /// Linie mit Pfeilspitze am Ende, z. B. Fluchtrichtung.
+        case pfeil
 
         var isTransit: Bool { self == .oepnvlinie || self == .oepnvfahrzeug }
 
@@ -206,6 +208,7 @@ struct MapObject: LageEntity {
             case .haltestellen: "Haltestellen im Umkreis"
             case .oepnvlinie: "ÖPNV-Linie"
             case .oepnvfahrzeug: "ÖPNV-Fahrzeug"
+            case .pfeil: "Pfeil"
             }
         }
 
@@ -220,19 +223,23 @@ struct MapObject: LageEntity {
             case .haltestellen: "bus.fill"
             case .oepnvlinie: "point.bottomleft.forward.to.point.topright.scurvepath"
             case .oepnvfahrzeug: "bus.doubledecker.fill"
+            case .pfeil: "arrow.up.right"
             }
         }
 
         /// Anzahl Punkte, ab der die Form gültig ist.
         var minimumPoints: Int {
             switch self {
-            case .linie: 2
+            case .linie, .pfeil: 2
             case .flaeche: 3
             default: 1
             }
         }
 
-        var isMultiPoint: Bool { self == .linie || self == .flaeche }
+        var isMultiPoint: Bool { self == .linie || self == .flaeche || self == .pfeil }
+
+        /// Flächen und Linien sind selbst antippbar und brauchen keinen Griff in der Mitte.
+        var hasHandle: Bool { [.marker, .text, .fahndungsraum].contains(self) }
     }
 
     var layerId: String
@@ -331,6 +338,8 @@ struct Target: LageEntity {
     var standort: TimedPoint?
     /// Weitere Fotos und Dateien.
     var anhaenge: [ChatAttachment] = []
+    /// Zielperson unterwegs: zu Fuß oder gebunden an ÖPNV-Fahrzeug, Zielfahrzeug oder Zielobjekt.
+    var bindung: TargetBinding?
 
     init(art: ZielArt = .person, bezeichnung: String = "", vorname: String = "", nachname: String = "") {
         self.art = art
@@ -342,6 +351,7 @@ struct Target: LageEntity {
     private enum CodingKeys: String, CodingKey {
         case art, bezeichnung, vorname, nachname, geburtsdatum, geburtsort, staatsangehoerigkeit, anschrift, merkmale, fotoBlob
         case kennzeichen, fahrzeugBeschreibung, fahrzeugFotoBlob, sachverhalt, hinweise, massnahmen, trackerId, standort, anhaenge
+        case bindung
     }
 
     init(from decoder: Decoder) throws {
@@ -366,6 +376,7 @@ struct Target: LageEntity {
         trackerId = try c.decodeIfPresent(String.self, forKey: .trackerId)
         standort = try c.decodeIfPresent(TimedPoint.self, forKey: .standort)
         anhaenge = (try? c.decodeIfPresent([ChatAttachment].self, forKey: .anhaenge)) ?? []
+        bindung = try? c.decodeIfPresent(TargetBinding.self, forKey: .bindung)
     }
 
     var displayName: String {
@@ -467,6 +478,37 @@ struct Target: LageEntity {
         calendar.timeZone = TimeZone(identifier: "Europe/Berlin") ?? .current
         return calendar.dateComponents([.year], from: birthDate, to: reference).year
     }
+}
+
+/// Wo eine Zielperson gerade ist: zu Fuß oder mit einem anderen Objekt unterwegs bzw. darin.
+struct TargetBinding: Codable, Equatable, Hashable, Sendable {
+    enum Art: String, Codable, CaseIterable, Identifiable, Sendable {
+        case fuss, oepnv, fahrzeug, objekt
+
+        var id: String { rawValue }
+
+        var title: String {
+            switch self {
+            case .fuss: "Zu Fuß"
+            case .oepnv: "ÖPNV"
+            case .fahrzeug: "Fahrzeug"
+            case .objekt: "Gebäude"
+            }
+        }
+
+        var symbolName: String {
+            switch self {
+            case .fuss: "figure.walk"
+            case .oepnv: "tram.fill"
+            case .fahrzeug: "car.fill"
+            case .objekt: "building.2.fill"
+            }
+        }
+    }
+
+    var art: Art
+    /// Markierung (ÖPNV-Fahrzeug) bzw. Ziel (Zielfahrzeug, Zielobjekt).
+    var zielId: String?
 }
 
 struct Tracker: LageEntity {

@@ -25,6 +25,8 @@ struct SentinelApp: App {
                 .onAppear(perform: Appearance.apply)
                 .onChange(of: scenePhase) { _, phase in
                     if phase == .active { Appearance.apply() }
+                    // Im Vordergrund bleibt das Display an; im Hintergrund gilt wieder die normale automatische Sperre.
+                    UIApplication.shared.isIdleTimerDisabled = phase == .active
                     switch phase {
                     case .background: model.didEnterBackground()
                     case .active: Task { await model.didBecomeActive() }

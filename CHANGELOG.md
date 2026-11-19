@@ -1,5 +1,35 @@
 # Änderungen
 
+## 0.10.0
+
+**Karte**
+- Ein Knopf für Kompass und Standort: erst zentrieren und folgen (Norden oben), dann Gerätekompass; zeigt die
+  Nordrichtung, wenn die Karte gedreht ist; Verschieben löst die Kopplung, zwei Finger drehen frei
+- Runde Knöpfe und Suchleiste so groß wie Apples Kompassrose
+- Bestreifung als dezente orange Spur, mehrfach bestreifte Abschnitte kräftiger (begrenzt)
+- Langes Drücken auf einen Ort: „Navigieren“ oder „Hier anlegen“
+- Übereinanderliegende Symbole werden auseinandergerückt und sind einzeln antippbar
+- Andere Kräfte als eckige Marker mit Symbol der Fortbewegung (wie der eigene, runde Standortpunkt)
+- Navigation: eigener Standort wird nicht mehr von der unteren Leiste verdeckt
+- Display bleibt an, solange Sentinel im Vordergrund ist
+
+**Markierungen**
+- Pfeile als neue Markierung; Flächen, Kreise und Linien ohne Griff in der Mitte, direkt antippbar
+- Beschriftung direkt in Flächen und Kreisen, bei schmalen Flächen entlang der längsten Seite
+- ÖPNV-Fahrzeuge bewegen sich wieder sichtbar auf der Karte (Takt war seit 0.7 verloren gegangen)
+
+**Suche**
+- Haltestellen in der Ortssuche (mit Linien); Kreuzungen und Hausnummern nur, wenn es sie wirklich gibt
+
+**Ziele**
+- Zielperson unterwegs: zu Fuß, ÖPNV, Fahrzeug oder Gebäude; zugeordnet folgt sie dem Fahrzeug bzw. Objekt,
+  Vorschläge nach Entfernung
+- Zielpersonen, -fahrzeuge und -objekte in den Kartenebenen einzeln ein- und ausblendbar
+
+**Bedienung**
+- SOS: weiße Tortenfüllung und Ring beim Halten; „Navigieren“ statt „Hierhin navigieren“
+
+
 ## 0.9.0
 
 **Karte**

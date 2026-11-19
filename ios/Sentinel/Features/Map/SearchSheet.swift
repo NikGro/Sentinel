@@ -40,6 +40,8 @@ struct SearchSheet: View {
     @State private var mode: Mode
     @State private var query = ""
     @State private var places: [SearchService.Place] = []
+    /// Haltestellen, deren Name zur Eingabe passt.
+    @State private var stops: [NearbyStop] = []
     @FocusState private var focused: Bool
     @State private var speech = SpeechInput()
 
@@ -97,11 +99,23 @@ struct SearchSheet: View {
                     Button("Schließen") { dismiss() }
                 }
             }
+            .task(id: query) {
+                // Haltestellen aus den ÖPNV-Daten des Servers, kurz verzögert während des Tippens.
+                stops = []
+                guard mode == .adresse, query.count >= 3, Self.intersection(query) == false, let client = model.client else { return }
+                try? await Task.sleep(for: .milliseconds(300))
+                guard !Task.isCancelled else { return }
+                stops = (try? await client.searchStops(query, near: model.myPoint)) ?? []
+            }
             .onChange(of: query) { _, value in
                 places = []
                 if mode == .adresse { search.update(query: value, near: region) }
             }
-            .onAppear { focused = mode == .adresse }
+            .onAppear {
+                focused = mode == .adresse
+                search.client = model.client
+                search.near = model.myPoint
+            }
             .onChange(of: speech.transcript) { _, text in if speech.isListening { query = text } }
             .onDisappear { speech.stop() }
 
@@ -121,7 +135,7 @@ struct SearchSheet: View {
             Label(failure, systemImage: "exclamationmark.triangle")
                 .foregroundStyle(.orange)
         }
-        if search.isSearching {
+        if search.isSearching || search.isValidating {
             HStack {
                 ProgressView()
                 Text("Suche …")
@@ -140,7 +154,34 @@ struct SearchSheet: View {
                     .tint(.primary)
                 }
             }
-        } else if !search.suggestions.isEmpty {
+        } else if !search.suggestions.isEmpty || !stops.isEmpty {
+            if !stops.isEmpty {
+                Section("Haltestellen") {
+                    ForEach(stops) { stop in
+                        Button {
+                            if let pick { pick(stop.point, stop.name) } else { showOnMap(stop.point, stop.name) }
+                            dismiss()
+                        } label: {
+                            HStack(spacing: 12) {
+                                StationSymbol(lines: stop.linien)
+                                    .frame(minWidth: 28)
+                                VStack(alignment: .leading, spacing: 3) {
+                                    Text(stop.name)
+                                    LineBadges(lines: stop.linien, limit: 8)
+                                }
+                                Spacer()
+                                if let distance = model.myPoint?.distance(to: stop.point) {
+                                    Text(Format.distance(distance))
+                                        .font(.caption.monospacedDigit())
+                                        .foregroundStyle(.secondary)
+                                }
+                            }
+                        }
+                        .tint(.primary)
+                    }
+                }
+            }
+            if !search.suggestions.isEmpty {
             Section("Vorschläge") {
                 ForEach(search.suggestions) { suggestion in
                     Button {
@@ -150,6 +191,7 @@ struct SearchSheet: View {
                     }
                     .tint(.primary)
                 }
+            }
             }
         } else if query.isEmpty {
             Section {
@@ -198,6 +240,8 @@ struct SearchSheet: View {
             places = result
         }
     }
+
+    nonisolated static func intersection(_ text: String) -> Bool { text.contains("/") || text.contains("&") }
 
     private func row(title: String, subtitle: String, symbol: String, distance: Double?) -> some View {
         HStack(spacing: 12) {

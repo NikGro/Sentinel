@@ -198,6 +198,13 @@ struct MapScreen: View {
     /// Rückfragen zu Suchtreffern und ÖPNV-Fahrzeugen, getrennt vom Rest, damit der Compiler die Ansicht schafft.
     private func dialogs(_ content: some View) -> some View {
         content
+        // Takt für die ÖPNV-Fahrzeuge: alle zwei Sekunden, gleitend, solange welche sichtbar sind.
+        .task(id: hasTransit) {
+            while hasTransit, !Task.isCancelled {
+                try? await Task.sleep(for: .seconds(2))
+                withAnimation(.linear(duration: 2)) { transitNow = .now }
+            }
+        }
         .confirmationDialog(
             virtualVehicle.map { "\($0.line.ref) Richtung \($0.line.richtung)" } ?? "",
             isPresented: Binding(get: { virtualVehicle != nil }, set: { if !$0 { virtualVehicle = nil } }),
@@ -228,19 +235,20 @@ struct MapScreen: View {
                     Marker(searchPin.title, systemImage: "magnifyingglass", coordinate: searchPin.point.coordinate)
                         .tint(.red)
                 }
-                CoverageLayer(segments: coverageSegments)
+                CoverageLayer(runs: CoverageRun.cached(coverageSegments))
                 ReachLayer(rings: reachRings)
-                MapObjectsLayer(lines: objects(.linie), areas: objects(.flaeche), circles: objects(.kreis) + objects(.haltestellen), handles: handles) { id in
+                MapObjectsLayer(lines: objects(.linie) + objects(.pfeil), areas: objects(.flaeche), circles: objects(.kreis) + objects(.haltestellen), handles: handles, offsets: clutterOffsets) { id in
                     openEditor(for: id)
                 }
                 TransitLayer(sections: objects(.oepnvlinie), vehicles: transitPins, showsStopNames: cameraState.distance < 5000) { pin in
                     if let id = pin.objectId { openEditor(for: id) } else { virtualVehicle = pin }
                 }
+                AreaLabelLayer(objects: objects(.flaeche) + objects(.kreis), metersPerPoint: cameraState.distance / 700)
                 NearbyStopsLayer(stops: nearbyStops)
                 RouteLayer(lines: routeLines)
                 StopsLayer(stops: lage.operation.ueberschlagen.naechste, mine: lage.myLeapfrogStop, line: lage.aHolder?.data.oepnv.map { NearbyStop.Line(ref: $0.linie, typ: "", farbe: nil) })
-                SymbolLayer(pins: vehiclePins + targetPins) { selection = $0 }
-                ForcesLayer(pins: forcePins) { selection = $0 }
+                SymbolLayer(pins: vehiclePins + targetPins, offsets: clutterOffsets) { selection = $0 }
+                ForcesLayer(pins: forcePins, offsets: clutterOffsets) { selection = $0 }
                 DraftLayer(points: draftPoints, outline: draftOutline)
             }
             .mapStyle(mapStyle)
@@ -249,7 +257,9 @@ struct MapScreen: View {
             }
             // Karte bis an den unteren Rand: Apples Rechtshinweis sitzt dann klein unter der Tableiste
             // statt über den Bedienelementen.
-            .ignoresSafeArea(.container, edges: .bottom)
+            // In der Navigation zählt die untere Leiste zum sicheren Bereich: MapKit setzt den eigenen Standort
+            // dann darüber, statt ihn verdecken zu lassen.
+            .ignoresSafeArea(.container, edges: route.isActive ? Edge.Set() : .bottom)
             .onMapCameraChange(frequency: .continuous) { context in cameraState.update(context.camera) }
             .simultaneousGesture(DragGesture(minimumDistance: 12).onChanged { _ in
                 userMovedCamera = true
@@ -274,6 +284,16 @@ struct MapScreen: View {
                     )
                 }
             }
+            // Langes Drücken auf einen Ort: wie ein Suchtreffer „Navigieren“ oder „Hier anlegen“ anbieten.
+            .simultaneousGesture(
+                LongPressGesture(minimumDuration: 0.5)
+                    .sequenced(before: DragGesture(minimumDistance: 0, coordinateSpace: .local))
+                    .onEnded { value in
+                        guard tapMode == .none, case .second(true, let drag?) = value,
+                              let coordinate = proxy.convert(drag.location, from: .local) else { return }
+                        pressed(at: GeoPoint(coordinate))
+                    }
+            )
             .onTapGesture { point in
                 guard let coordinate = proxy.convert(point, from: .local) else { return }
                 if tapMode == .none {
@@ -404,7 +424,7 @@ struct MapScreen: View {
                     }
                     .font(.body)
                     .padding(.horizontal, 18)
-                    .frame(height: Theme.barHeight)
+                    .frame(height: Theme.roundButton)
                     .contentShape(.rect)
                 }
                 .buttonStyle(.plain)
@@ -464,10 +484,17 @@ struct MapScreen: View {
         GlassEffectContainer(spacing: Theme.barSpacing) {
             VStack(spacing: Theme.barSpacing) {
                 SOSButton()
-                // Nativer Kompass von Apple Karten: zeigt die Richtung oben, Antippen richtet nach Norden aus.
-                MapCompass(scope: mapScope)
-                    .mapControlVisibility(.visible)
-                    .frame(width: Theme.roundButton, height: Theme.roundButton)
+                // Ein Knopf für Kompass und Standort: erst zentrieren und folgen (Norden oben),
+                // dann zwischen Norden oben und Gerätekompass wechseln. Verschieben löst die Kopplung.
+                LocationCompassButton(state: cameraState, following: followsMe, heading: camera.followsUserHeading) {
+                    if !followsMe {
+                        startFollowing(heading: false, north: true)
+                    } else if camera.followsUserHeading {
+                        startFollowing(heading: false, north: true)
+                    } else {
+                        camera = .userLocation(followsHeading: true, fallback: .automatic)
+                    }
+                }
                 MapStyleButton { on in
                     let heading = camera.followsUserHeading
                     let following = followsMe
@@ -480,19 +507,6 @@ struct MapScreen: View {
                     }
                 }
                 MapRoundButton(title: "Ebenen", symbol: "square.3.layers.3d") { showsLayers = true }
-                // Wie in Apple Karten: aus → folgen → folgen mit Blickrichtung → aus.
-                MapRoundButton(
-                    title: "Auf eigenen Standort zentrieren",
-                    symbol: camera.followsUserHeading ? "location.north.line.fill" : (followsMe ? "location.fill" : "location")
-                ) {
-                    if camera.followsUserHeading {
-                        camera = .camera(cameraState.camera())
-                    } else if followsMe {
-                        camera = .userLocation(followsHeading: true, fallback: .automatic)
-                    } else {
-                        startFollowing(heading: false)
-                    }
-                }
                 if let a = lage.aPosition, !lage.holdsA {
                     Button {
                         withAnimation { camera = .camera(MapCamera(centerCoordinate: a.point.coordinate, distance: 900, heading: 0, pitch: 55)) }
@@ -529,13 +543,13 @@ struct MapScreen: View {
     }
 
     /// Fahrmodus: erst nah und gekippt auf den Standort, dann der nativen, flüssigen Nachführung übergeben.
-    private func startFollowing(heading: Bool) {
+    private func startFollowing(heading: Bool, north: Bool = false) {
         if let current = location.current {
             withAnimation(.easeInOut(duration: 0.6)) {
                 camera = .camera(MapCamera(
                     centerCoordinate: current.coordinate,
-                    distance: route.isActive ? 700 : 1000,
-                    heading: cameraState.heading,
+                    distance: followsMe ? cameraState.distance : (route.isActive ? 700 : 1000),
+                    heading: north ? 0 : cameraState.heading,
                     pitch: settings.prefers3D ? 55 : 0
                 ))
             }
@@ -622,6 +636,12 @@ struct MapScreen: View {
         editor = EditorContext(id: LageStore.newId(), object: draft(shape, points), isNew: true)
     }
 
+    /// Versatz für übereinanderliegende Symbole (Kräfte, Fahrzeuge, Ziele, Marker).
+    private var clutterOffsets: [String: CGSize] {
+        let items = forcePins.map { ($0.id, $0.coordinate) } + (vehiclePins + targetPins).map { ($0.id, $0.coordinate) } + handles.map { ($0.id, $0.coordinate) }
+        return Declutter.offsets(items.map { (id: $0.0, coordinate: $0.1) }, metersPerPoint: cameraState.distance / 700)
+    }
+
     private var hasTransit: Bool { visibleObjects.contains { $0.data.typ.isTransit } }
 
     /// Angelegte ÖPNV-Fahrzeuge und die im Takt eingeblendeten auf ÖPNV-Linien.
@@ -701,7 +721,7 @@ struct MapScreen: View {
                 guard let center = data.punkte.first else { continue }
                 let radius = data.radius ?? 100
                 size = center.distance(to: point) <= radius ? Double.pi * radius * radius : nil
-            case .linie where data.punkte.count >= 2, .oepnvlinie where data.punkte.count >= 2:
+            case .linie where data.punkte.count >= 2, .oepnvlinie where data.punkte.count >= 2, .pfeil where data.punkte.count >= 2:
                 size = Self.distance(from: point, toLine: data.punkte) <= tolerance ? 0 : nil
             default:
                 size = nil
@@ -755,6 +775,18 @@ struct MapScreen: View {
         return inside
     }
 
+    /// Gedrückter Ort: Feld mit Navigieren und Anlegen; der Name kommt aus der Umkehrsuche nach.
+    private func pressed(at point: GeoPoint) {
+        searchPin = SearchPin(point: point, title: "Markierter Ort")
+        Task {
+            let placemarks = try? await CLGeocoder().reverseGeocodeLocation(CLLocation(latitude: point.lat, longitude: point.lon), preferredLocale: Locale(identifier: "de_DE"))
+            guard let place = placemarks?.first, searchPin?.point == point else { return }
+            let street = [place.thoroughfare, place.subThoroughfare].compactMap { $0 }.joined(separator: " ")
+            let title = street.isEmpty ? (place.name ?? "Markierter Ort") : street
+            searchPin = SearchPin(point: point, title: title)
+        }
+    }
+
     /// Suchtreffer auf der Karte zeigen, ohne loszufahren.
     private func show(_ pin: SearchPin) {
         searchPin = pin
@@ -805,7 +837,7 @@ struct MapScreen: View {
 
     /// Antippbare Griffe. Prognosezellen (mit Kennwert) bekommen keinen, sonst würde die Karte überladen.
     private var handles: [ObjectHandle] {
-        visibleObjects.filter { $0.data.wert == nil && !$0.data.punkte.isEmpty && !$0.data.typ.isTransit }.map { object in
+        visibleObjects.filter { $0.data.wert == nil && !$0.data.punkte.isEmpty && $0.data.typ.hasHandle }.map { object in
             ObjectHandle(
                 id: object.id,
                 object: object.data,
@@ -870,7 +902,7 @@ struct MapScreen: View {
 
     private var targetPins: [SymbolPin] {
         lage.sortedTargets.compactMap { target in
-            guard let position = lage.position(ofTarget: target) else { return nil }
+            guard !settings.hiddenTargetKinds.contains(target.data.art.rawValue), let position = lage.position(ofTarget: target) else { return nil }
             return SymbolPin(id: target.id, title: target.data.displayName, symbol: target.data.art.symbolName, color: Theme.target, coordinate: position.point.coordinate, selection: .target(target.id))
         }
     }

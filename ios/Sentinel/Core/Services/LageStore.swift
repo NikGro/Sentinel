@@ -178,8 +178,19 @@ final class LageStore {
     }
 
     /// Standort eines Ziels: Tracker vor von Hand gesetztem Standort.
-    func position(ofTarget target: Versioned<Target>) -> (point: GeoPoint, date: Date, fromTracker: Bool)? {
+    func position(ofTarget target: Versioned<Target>, depth: Int = 0) -> (point: GeoPoint, date: Date, fromTracker: Bool)? {
         if let tracker = target.data.trackerId.flatMap({ trackerPositions[$0] }) { return (tracker.point, tracker.date, true) }
+        // Gebunden an ÖPNV-Fahrzeug, Zielfahrzeug oder Zielobjekt: dessen Standort (Ketten nur zwei Stufen tief).
+        if let binding = target.data.bindung, binding.art != .fuss, let id = binding.zielId, depth < 2 {
+            switch binding.art {
+            case .oepnv:
+                if let object = mapObjects[id]?.data { return (position(ofObject: object), .now, false) }
+            case .fahrzeug, .objekt:
+                if let other = targets[id], let position = position(ofTarget: other, depth: depth + 1) { return position }
+            case .fuss:
+                break
+            }
+        }
         if let standort = target.data.standort { return (standort.point, standort.date, false) }
         return nil
     }

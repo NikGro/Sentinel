@@ -24,12 +24,14 @@ struct ForcePin: Identifiable, Equatable {
 
 struct ForcesLayer: MapContent {
     let pins: [ForcePin]
+    var offsets: [String: CGSize] = [:]
     let onSelect: (MapSelection) -> Void
 
     var body: some MapContent {
         ForEach(pins) { pin in
             Annotation(pin.label, coordinate: pin.coordinate, anchor: .center) {
                 ForceMarker(pin: pin)
+                    .offset(offsets[pin.id] ?? .zero)
                     .onTapGesture { onSelect(pin.target) }
             }
             .annotationTitles(.hidden)
@@ -42,19 +44,23 @@ private struct ForceMarker: View {
 
     var body: some View {
         VStack(spacing: 2) {
+            // Wie der eigene Standortpunkt, aber eckig: andere Kräfte; innen das Symbol der Fortbewegung.
             ZStack {
-                Circle()
+                RoundedRectangle(cornerRadius: pin.isA ? 11 : 8)
+                    .fill((pin.isA ? Theme.aPosition : (pin.isStale ? Color.gray : Theme.force)).opacity(0.18))
+                    .frame(width: pin.isA ? 50 : 40, height: pin.isA ? 50 : 40)
+                RoundedRectangle(cornerRadius: pin.isA ? 9 : 7)
                     .fill(pin.isA ? Theme.aPosition : (pin.isStale ? Color.gray : Theme.force))
-                    .frame(width: pin.isA ? 40 : 28, height: pin.isA ? 40 : 28)
-                    .overlay(Circle().stroke(.white, lineWidth: 2))
-                    .shadow(radius: 2)
+                    .frame(width: pin.isA ? 38 : 28, height: pin.isA ? 38 : 28)
+                    .overlay(RoundedRectangle(cornerRadius: pin.isA ? 9 : 7).stroke(.white, lineWidth: 2.5))
+                    .shadow(color: .black.opacity(0.3), radius: 3, y: 1)
                 if pin.isA {
                     Text("A")
                         .font(.system(size: 22, weight: .heavy, design: .rounded))
                         .foregroundStyle(.white)
                 } else {
                     Image(systemName: pin.symbol)
-                        .font(.system(size: 12, weight: .bold))
+                        .font(.system(size: 13, weight: .bold))
                         .foregroundStyle(.white)
                 }
             }
@@ -85,12 +91,14 @@ struct SymbolPin: Identifiable {
 
 struct SymbolLayer: MapContent {
     let pins: [SymbolPin]
+    var offsets: [String: CGSize] = [:]
     let onSelect: (MapSelection) -> Void
 
     var body: some MapContent {
         ForEach(pins) { pin in
             Annotation(pin.title, coordinate: pin.coordinate, anchor: .center) {
                 BadgeMarker(symbol: pin.symbol, color: pin.color, title: pin.title)
+                    .offset(offsets[pin.id] ?? .zero)
                     .onTapGesture { onSelect(pin.selection) }
             }
             .annotationTitles(.hidden)
@@ -142,6 +150,7 @@ struct MapObjectsLayer: MapContent {
     let areas: [Versioned<MapObject>]
     let circles: [Versioned<MapObject>]
     let handles: [ObjectHandle]
+    var offsets: [String: CGSize] = [:]
     let onSelect: (String) -> Void
 
     var body: some MapContent {
@@ -158,10 +167,15 @@ struct MapObjectsLayer: MapContent {
         ForEach(lines) { object in
             MapPolyline(coordinates: object.data.punkte.map(\.coordinate))
                 .stroke(Color(hex: object.data.farbe), style: StrokeStyle(lineWidth: 4, lineCap: .round, lineJoin: .round))
+            if object.data.typ == .pfeil, let head = ArrowHead.coordinates(object.data.punkte) {
+                MapPolyline(coordinates: head)
+                    .stroke(Color(hex: object.data.farbe), style: StrokeStyle(lineWidth: 4, lineCap: .round, lineJoin: .round))
+            }
         }
         ForEach(handles) { handle in
             Annotation(handle.object.titel, coordinate: handle.coordinate, anchor: .center) {
                 MapObjectHandle(object: handle.object, locked: handle.locked)
+                    .offset(offsets[handle.id] ?? .zero)
                     .onTapGesture { onSelect(handle.id) }
             }
             .annotationTitles(.hidden)
@@ -229,15 +243,67 @@ private struct MapObjectHandle: View {
 // MARK: Bestreifung und Fahndungsräume
 
 struct CoverageLayer: MapContent {
-    let segments: [CoverageSegment]
+    let runs: [CoverageRun]
 
     var body: some MapContent {
-        // Halbtransparente breite Linien: Mehrfach bestreifte Abschnitte überlagern sich und erscheinen kräftiger.
-        ForEach(segments) { segment in
-            MapPolyline(coordinates: segment.points.map(\.coordinate))
-                .stroke(Theme.coverage.opacity(0.28), style: StrokeStyle(lineWidth: 14, lineCap: .round, lineJoin: .round))
+        // Dezente orange Spur; je öfter ein Abschnitt bestreift wurde, desto kräftiger (nach oben begrenzt).
+        ForEach(runs) { run in
+            MapPolyline(coordinates: run.points.map(\.coordinate))
+                .stroke(Theme.coverage.opacity(run.opacity), style: StrokeStyle(lineWidth: 9, lineCap: .round, lineJoin: .round))
         }
     }
+}
+
+/// Zusammenhängender Abschnitt der Bestreifung mit gleicher Häufigkeit.
+struct CoverageRun: Identifiable {
+    let id: Int
+    let points: [GeoPoint]
+    let opacity: Double
+
+    /// Zerlegt die Spuren in Abschnitte und zählt, wie oft ein Ort (Raster ca. 20 m) von verschiedenen Fahrten
+    /// berührt wurde. Einmal: 0,22; jede weitere Fahrt +0,12, höchstens 0,6.
+    static func make(from segments: [CoverageSegment]) -> [CoverageRun] {
+        func cell(_ p: GeoPoint) -> Int64 {
+            let la = Int64((p.lat * 5000).rounded()), lo = Int64((p.lon * 3000).rounded())
+            return la &* 1_000_003 &+ lo
+        }
+        var visits: [Int64: Int] = [:]
+        for segment in segments {
+            var seen = Set<Int64>()
+            for point in segment.points { seen.insert(cell(point)) }
+            for key in seen { visits[key, default: 0] += 1 }
+        }
+        func level(_ a: GeoPoint, _ b: GeoPoint) -> Int {
+            min(visits[cell(a)] ?? 1, visits[cell(b)] ?? 1)
+        }
+        var runs: [CoverageRun] = []
+        for segment in segments where segment.points.count > 1 {
+            var current: [GeoPoint] = [segment.points[0]]
+            var currentLevel = level(segment.points[0], segment.points[1])
+            for i in 1..<segment.points.count {
+                let l = level(segment.points[i - 1], segment.points[i])
+                if l != currentLevel, current.count > 1 {
+                    runs.append(CoverageRun(id: runs.count, points: current, opacity: opacity(currentLevel)))
+                    current = [segment.points[i - 1]]
+                }
+                currentLevel = l
+                current.append(segment.points[i])
+            }
+            if current.count > 1 { runs.append(CoverageRun(id: runs.count, points: current, opacity: opacity(currentLevel))) }
+        }
+        return runs
+    }
+
+    /// Die Karte zeichnet sehr oft neu; berechnet wird nur, wenn neue Punkte dazukommen.
+    private static var cache: (key: Int, runs: [CoverageRun]) = (-1, [])
+
+    static func cached(_ segments: [CoverageSegment]) -> [CoverageRun] {
+        let key = segments.reduce(segments.count) { $0 &* 31 &+ $1.points.count }
+        if cache.key != key { cache = (key, make(from: segments)) }
+        return cache.runs
+    }
+
+    static func opacity(_ visits: Int) -> Double { min(0.22 + Double(max(visits - 1, 0)) * 0.12, 0.6) }
 }
 
 struct ReachRing: Identifiable {
@@ -772,5 +838,128 @@ struct LocationDot: View {
                     .offset(y: -8)
             }
         }
+    }
+}
+
+/// Pfeilspitze am letzten Punkt: zwei Schenkel, je etwa ein Fünftel der letzten Strecke (12 bis 60 m).
+enum ArrowHead {
+    static func coordinates(_ points: [GeoPoint]) -> [CLLocationCoordinate2D]? {
+        guard points.count >= 2, let tip = points.last else { return nil }
+        let from = points[points.count - 2]
+        let k = cos(tip.lat * .pi / 180)
+        let dx = (tip.lon - from.lon) * k, dy = tip.lat - from.lat
+        let length = hypot(dx, dy)
+        guard length > 0 else { return nil }
+        let meters = min(max(tip.distance(to: from) * 0.2, 12), 60)
+        let size = meters / 111_320
+        let angle = atan2(dy, dx)
+        func wing(_ offset: Double) -> CLLocationCoordinate2D {
+            let a = angle + .pi + offset
+            return CLLocationCoordinate2D(latitude: tip.lat + sin(a) * size, longitude: tip.lon + cos(a) * size / k)
+        }
+        return [wing(0.45), tip.coordinate, wing(-0.45)]
+    }
+}
+
+/// Beschriftung direkt in Flächen und Kreisen, ohne Griff in der Mitte. Waagerecht, solange es passt;
+/// lange, schmale Flächen bekommen die Schrift entlang der längsten Seite; zu kleine Flächen keine Schrift.
+struct AreaLabelLayer: MapContent {
+    let objects: [Versioned<MapObject>]
+    /// Meter pro Bildpunkt bei der aktuellen Zoomstufe (grob).
+    let metersPerPoint: Double
+
+    var body: some MapContent {
+        ForEach(objects.filter { !$0.data.titel.isEmpty && $0.data.wert == nil }) { object in
+            let layout = AreaLabelLayout(object.data, metersPerPoint: metersPerPoint)
+            if layout.width > 30 {
+                Annotation("", coordinate: layout.center, anchor: .center) {
+                    Text(object.data.titel)
+                        .font(.caption.weight(.bold))
+                        .foregroundStyle(Color(hex: object.data.farbe))
+                        .shadow(color: .white.opacity(0.9), radius: 1.5)
+                        .lineLimit(2)
+                        .multilineTextAlignment(.center)
+                        .minimumScaleFactor(0.6)
+                        .frame(width: min(layout.width, 320), height: min(max(layout.height, 16), 120))
+                        .rotationEffect(.radians(layout.angle))
+                        .allowsHitTesting(false)
+                }
+                .annotationTitles(.hidden)
+            }
+        }
+    }
+}
+
+struct AreaLabelLayout {
+    let center: CLLocationCoordinate2D
+    /// Platz für den Text in Bildpunkten.
+    let width: Double
+    let height: Double
+    /// Drehung in Bogenmaß (0 = waagerecht).
+    let angle: Double
+
+    init(_ object: MapObject, metersPerPoint: Double) {
+        let mpp = max(metersPerPoint, 0.05)
+        if object.typ == .kreis || object.typ == .haltestellen {
+            let diameter = (object.radius ?? 100) * 2 / mpp
+            center = object.anchor.coordinate
+            // Waagerecht und gestaucht: das größte Rechteck im Kreis mit Seitenverhältnis 3:1.
+            width = diameter * 0.9
+            height = diameter * 0.3
+            angle = 0
+            return
+        }
+        let points = object.punkte
+        center = object.anchor.coordinate
+        let k = cos((points.first?.lat ?? 0) * .pi / 180) * 111_320
+        // Ausdehnung waagerecht/senkrecht und längste Seite.
+        let xs = points.map { $0.lon * k }, ys = points.map { $0.lat * 111_320 }
+        let w = ((xs.max() ?? 0) - (xs.min() ?? 0)) / mpp
+        let h = ((ys.max() ?? 0) - (ys.min() ?? 0)) / mpp
+        var longest = (length: 0.0, angle: 0.0)
+        for i in points.indices {
+            let a = points[i], b = points[(i + 1) % points.count]
+            let dx = (b.lon - a.lon) * k, dy = (b.lat - a.lat) * 111_320
+            let length = hypot(dx, dy)
+            if length > longest.length { longest = (length, atan2(dy, dx)) }
+        }
+        if w >= h * 0.8 || longest.length / mpp < w {
+            width = w * 0.7
+            height = h * 0.5
+            angle = 0
+        } else {
+            // Schmal und hoch: entlang der längsten Seite schreiben, Schrift nie auf dem Kopf.
+            var a = -longest.angle
+            if a > .pi / 2 { a -= .pi } else if a < -.pi / 2 { a += .pi }
+            width = longest.length / mpp * 0.7
+            height = min(w, h) * 0.5
+            angle = a
+        }
+    }
+}
+
+/// Liegen Punkte (fast) übereinander, werden sie im Kreis auseinandergerückt, damit jeder einzeln sichtbar
+/// und antippbar ist. Bezug ist die Bildschirmentfernung: unter 30 Bildpunkten gilt ein Punkt als verdeckt.
+enum Declutter {
+    static func offsets(_ items: [(id: String, coordinate: CLLocationCoordinate2D)], metersPerPoint: Double) -> [String: CGSize] {
+        let threshold = max(metersPerPoint, 0.05) * 30
+        var groups: [[(id: String, coordinate: CLLocationCoordinate2D)]] = []
+        for item in items {
+            let point = GeoPoint(item.coordinate)
+            if let index = groups.firstIndex(where: { GeoPoint($0[0].coordinate).distance(to: point) < threshold }) {
+                groups[index].append(item)
+            } else {
+                groups.append([item])
+            }
+        }
+        var result: [String: CGSize] = [:]
+        for group in groups where group.count > 1 {
+            let radius = 24.0 + Double(group.count) * 3
+            for (index, item) in group.enumerated() {
+                let angle = Double(index) / Double(group.count) * 2 * .pi - .pi / 2
+                result[item.id] = CGSize(width: cos(angle) * radius, height: sin(angle) * radius)
+            }
+        }
+        return result
     }
 }

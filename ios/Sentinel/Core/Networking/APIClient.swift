@@ -201,6 +201,16 @@ struct APIClient: Sendable {
         ).haltestellen
     }
 
+    /// Haltestellen nach Namen, mit den dort haltenden Linien.
+    func searchStops(_ query: String, near: GeoPoint?) async throws -> [NearbyStop] {
+        var items = [URLQueryItem(name: "q", value: query)]
+        if let near {
+            items.append(URLQueryItem(name: "lat", value: String(near.lat)))
+            items.append(URLQueryItem(name: "lon", value: String(near.lon)))
+        }
+        return try await json(StopsNearby.self, "GET", "api/v1/oepnv/haltestellen/suche", query: items).haltestellen
+    }
+
     private struct Crossing: Decodable {
         let punkte: [GeoPoint]
     }

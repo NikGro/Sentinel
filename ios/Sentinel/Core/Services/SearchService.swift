@@ -16,6 +16,8 @@ final class SearchService: NSObject, MKLocalSearchCompleterDelegate {
         fileprivate let completion: MKLocalSearchCompletion?
         /// Bei „Hausnummer zuerst“: Suchtext für die Auflösung, z. B. "Hegpark 3, Hamburg".
         fileprivate var query: String?
+        /// Bereits geprüfter Ort (Kreuzung oder Hausnummer): wird direkt übernommen.
+        fileprivate var point: GeoPoint?
     }
 
     struct Place: Identifiable, Hashable {
@@ -43,7 +45,13 @@ final class SearchService: NSObject, MKLocalSearchCompleterDelegate {
 
     private(set) var suggestions: [Suggestion] = []
     private(set) var isSearching = false
+    /// Vorschläge werden gerade auf Existenz geprüft (Kreuzung, Hausnummer).
+    private(set) var isValidating = false
     var failure: String?
+    /// Für die Prüfung von Kreuzungen über den Server und als Bezugspunkt.
+    @ObservationIgnored var client: APIClient?
+    @ObservationIgnored var near: GeoPoint?
+    @ObservationIgnored private var validation: Task<Void, Never>?
 
     @ObservationIgnored private let completer = MKLocalSearchCompleter()
     @ObservationIgnored private var intersectionPrefix: String?
@@ -86,6 +94,8 @@ final class SearchService: NSObject, MKLocalSearchCompleterDelegate {
 
     func update(query: String, near region: MKCoordinateRegion?) {
         failure = nil
+        validation?.cancel()
+        isValidating = false
         // Vorschläge nur aus der Nähe: Wer „Heg“ tippt, meint den Hegpark um die Ecke, nicht einen Ort weit weg.
         completer.region = region ?? Self.fallbackRegion
         completer.regionPriority = .required
@@ -123,10 +133,22 @@ final class SearchService: NSObject, MKLocalSearchCompleterDelegate {
             if let prefix = self.intersectionPrefix {
                 // Für Kreuzungen nur den Straßennamen ohne Ort übernehmen.
                 var seen = Set<String>()
-                self.suggestions = results.compactMap { result in
+                let candidates: [(String, Suggestion)] = results.compactMap { result in
                     let street = result.title.components(separatedBy: ",").first?.trimmingCharacters(in: .whitespaces) ?? result.title
                     guard seen.insert(street).inserted else { return nil }
-                    return Suggestion(title: "\(prefix) / \(street)", subtitle: "Kreuzung", completion: nil)
+                    return (street, Suggestion(title: "\(prefix) / \(street)", subtitle: "Kreuzung", completion: nil))
+                }
+                // Nur Kreuzungen zeigen, an denen beide Straßen wirklich aufeinandertreffen.
+                self.validate { client, near in
+                    var kept: [Suggestion] = []
+                    for (street, var suggestion) in candidates.prefix(6) {
+                        if Task.isCancelled { return kept }
+                        if let points = try? await client?.intersections(prefix, street, near: near ?? GeoPoint(lat: 53.57, lon: 10)), let first = points.first {
+                            suggestion.point = first
+                            kept.append(suggestion)
+                        }
+                    }
+                    return kept
                 }
             } else if let number = self.leadingHouseNumber {
                 var seen = Set<String>()
@@ -140,9 +162,42 @@ final class SearchService: NSObject, MKLocalSearchCompleterDelegate {
                     suggestion.query = [base + " " + number, city].filter { !$0.isEmpty }.joined(separator: ", ")
                     return suggestion
                 }.prefix(10).map { $0 }
+                // Nur Straßen, in denen es diese Hausnummer wirklich gibt.
+                let candidates = self.suggestions
+                self.suggestions = []
+                self.validate { _, near in
+                    var kept: [Suggestion] = []
+                    for var suggestion in candidates.prefix(5) {
+                        if Task.isCancelled { return kept }
+                        let text = suggestion.query ?? suggestion.title
+                        let region = near.map { CLCircularRegion(center: $0.coordinate, radius: 50_000, identifier: "umkreis") }
+                        let placemarks = try? await CLGeocoder().geocodeAddressString(text, in: region, preferredLocale: Locale(identifier: "de_DE"))
+                        if let placemark = placemarks?.first(where: { Self.matches($0, text) && $0.subThoroughfare != nil }), let location = placemark.location {
+                            suggestion.point = GeoPoint(location.coordinate)
+                            kept.append(suggestion)
+                        }
+                    }
+                    return kept
+                }
             } else {
                 self.suggestions = results.prefix(12).map { Suggestion(title: $0.title, subtitle: $0.subtitle, completion: $0) }
             }
+        }
+    }
+
+    /// Prüft Vorschläge im Hintergrund; neue Eingaben brechen die laufende Prüfung ab.
+    private func validate(_ check: @escaping (APIClient?, GeoPoint?) async -> [Suggestion]) {
+        validation?.cancel()
+        suggestions = []
+        isValidating = true
+        let client = client, near = near
+        validation = Task {
+            try? await Task.sleep(for: .milliseconds(350))
+            guard !Task.isCancelled else { return }
+            let kept = await check(client, near)
+            guard !Task.isCancelled else { return }
+            suggestions = kept
+            isValidating = false
         }
     }
 
@@ -177,6 +232,9 @@ final class SearchService: NSObject, MKLocalSearchCompleterDelegate {
         isSearching = true
         defer { isSearching = false }
         let text = suggestion?.query ?? suggestion?.title ?? query
+        if let suggestion, let point = suggestion.point {
+            return [Place(title: suggestion.title, subtitle: suggestion.subtitle, point: point)]
+        }
         if let (a, b) = Self.intersectionParts(text), !b.isEmpty {
             guard let client, let near else {
                 failure = "Für die Kreuzungssuche wird der eigene Standort benötigt."
