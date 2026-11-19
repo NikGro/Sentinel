@@ -1,0 +1,161 @@
+import MapKit
+import SwiftUI
+
+// Aufbereitung der Lage für die Karte: sichtbare Objekte, Symbole, Flächen und Routen.
+
+extension MapScreen {
+    // MARK: Aufbereitung für die Karte
+
+    /// Sonderbereich (dauerhafte Orte oder Paket): nur Werkzeuge zum Anlegen und Bearbeiten, kein Einsatzbetrieb.
+    var reducedTools: Bool { model.editsPermanentLayer || lage.isPackageArea }
+
+    /// Nur geladene Ebenen erscheinen auf der Karte; Entwürfe bleiben in der Ebenenliste.
+    var visibleObjects: [Versioned<MapObject>] {
+        lage.mapObjects.values.filter { object in
+            // Beim Bearbeiten der dauerhaften Orte ist nur diese Ebene zu sehen.
+            if model.editsPermanentLayer, object.data.layerId != Layer.dauerhaftId { return false }
+            guard let layer = lage.layers[object.data.layerId], !object.data.isExpired() else { return false }
+            return layer.data.isLive && !settings.hiddenLayers.contains(object.data.layerId)
+        }
+    }
+
+    func objects(_ shape: MapObject.Shape) -> [Versioned<MapObject>] {
+        visibleObjects.filter { $0.data.typ == shape && $0.data.punkte.count >= shape.minimumPoints }
+    }
+
+    /// Antippbare Griffe. Prognosezellen (mit Kennwert) bekommen keinen, sonst würde die Karte überladen.
+    var handles: [ObjectHandle] {
+        visibleObjects.filter { $0.data.wert == nil && !$0.data.punkte.isEmpty && $0.data.typ.hasHandle }.map { object in
+            ObjectHandle(
+                id: object.id,
+                object: object.data,
+                coordinate: lage.position(ofObject: object.data).coordinate,
+                locked: !settings.canEdit(layerId: object.data.layerId)
+            )
+        }
+    }
+
+    var forcePins: [ForcePin] {
+        var pins: [ForcePin] = []
+        var crews: [String: (names: [String], position: Position, isA: Bool, stale: Bool)] = [:]
+        guard !reducedTools else { return [] }
+        for member in lage.activeMembers {
+            guard let position = lage.positions[member.id] else { continue }
+            let isA = lage.operation.a?.memberId == member.id
+            let stale = !lage.isOnline(member.id) || now.timeIntervalSince(position.date) > 120
+            if let vehicle = lage.vehicle(of: member.data) {
+                // Das eigene Fahrzeug zeigt der eigene Standort, kein zweites Symbol darüber.
+                if let me = lage.me, lage.vehicle(of: me.data)?.id == vehicle.id { continue }
+                var crew = crews[vehicle.id] ?? (names: [], position: position, isA: false, stale: true)
+                crew.names.append(member.data.spitzname)
+                if position.ts > crew.position.ts { crew.position = position }
+                crew.isA = crew.isA || isA
+                crew.stale = crew.stale && stale
+                crews[vehicle.id] = crew
+                continue
+            }
+            // Der eigene Standort hat sein eigenes Symbol (mit A, falls man sie hält).
+            if member.id == lage.selfId { continue }
+            pins.append(ForcePin(
+                id: member.id,
+                label: lage.label(of: member.data),
+                coordinate: position.point.coordinate,
+                isA: isA,
+                isStale: stale,
+                symbol: member.data.fortbewegung.symbolName,
+                target: .member(member.id)
+            ))
+        }
+        for (vehicleId, crew) in crews {
+            guard let vehicle = lage.vehicles[vehicleId] else { continue }
+            let point = lage.position(ofVehicle: vehicle)?.point ?? crew.position.point
+            pins.append(ForcePin(
+                id: "fz-\(vehicleId)",
+                label: vehicle.data.funkrufname,
+                coordinate: point.coordinate,
+                isA: crew.isA,
+                isStale: crew.stale,
+                symbol: "car.fill",
+                target: .vehicle(vehicleId)
+            ))
+        }
+        return pins
+    }
+
+    var vehiclePins: [SymbolPin] {
+        guard !reducedTools else { return [] }
+        return lage.activeVehicles.compactMap { vehicle in
+            guard lage.occupants(of: vehicle.id).isEmpty, let position = lage.position(ofVehicle: vehicle) else { return nil }
+            return SymbolPin(id: vehicle.id, title: vehicle.data.funkrufname, symbol: "car.fill", color: .indigo, coordinate: position.point.coordinate, selection: .vehicle(vehicle.id))
+        }
+    }
+
+    var targetPins: [SymbolPin] {
+        guard !model.editsPermanentLayer else { return [] }
+        return lage.sortedTargets.compactMap { target in
+            guard !settings.hiddenTargetKinds.contains(target.data.art.rawValue), let position = lage.position(ofTarget: target) else { return nil }
+            return SymbolPin(id: target.id, title: target.data.displayName, symbol: target.data.art.symbolName, color: Theme.target, coordinate: position.point.coordinate, selection: .target(target.id))
+        }
+    }
+
+    var stopCircles: [(point: GeoPoint, radius: Double)] {
+        objects(.haltestellen).compactMap { object in
+            object.data.punkte.first.map { (point: $0, radius: object.data.radius ?? 500) }
+        }
+    }
+
+    var nearbyStops: [NearbyStop] {
+        var seen = Set<String>()
+        return stopCircles.flatMap { fahndung.nearbyStops[FahndungStore.stopsKey($0.point, radius: $0.radius)] ?? [] }
+            .filter { seen.insert($0.id).inserted }
+    }
+
+    var enabledReachModes: [ReachMode] {
+        ReachMode.allCases.filter(settings.isReachEnabled)
+    }
+
+    var reachInputs: [FahndungStore.ReachInput] {
+        objects(.fahndungsraum).compactMap { object in
+            guard let since = object.data.since, let point = object.data.punkte.first else { return nil }
+            return FahndungStore.ReachInput(id: object.id, point: point, since: since)
+        }
+    }
+
+    var reachRings: [ReachRing] {
+        fahndung.reachAreas.flatMap { roomId, areas in
+            areas.filter { settings.isReachEnabled($0.modus) }.flatMap { area in
+                area.ringe.enumerated().map { index, ring in
+                    ReachRing(
+                        id: "\(roomId)-\(area.modus.rawValue)-\(index)",
+                        mode: area.modus,
+                        coordinates: ring.filter { $0.count >= 2 }.map { CLLocationCoordinate2D(latitude: $0[0], longitude: $0[1]) }
+                    )
+                }
+            }
+        }
+    }
+
+    var coverageSegments: [CoverageSegment] {
+        guard settings.showsCoverage else { return [] }
+        return fahndung.segments.filter { $0.points.count > 1 }
+    }
+
+    var routeLines: [RouteLine] {
+        guard let current = route.route, current.coordinates.count > 1 else { return [] }
+        // Bereits gefahrene Strecke verschwindet hinter einem.
+        var remaining = Array(current.coordinates.dropFirst(min(route.progressIndex, current.coordinates.count - 2)))
+        if let here = location.current?.coordinate { remaining.insert(here, at: 0) }
+        return [RouteLine(polyline: MKPolyline(coordinates: remaining, count: remaining.count), specialRights: route.specialRights)]
+    }
+
+    var draftPoints: [DraftPoint] {
+        guard case .drawing(_, let points) = tapMode else { return [] }
+        return points.enumerated().map { DraftPoint(id: $0.offset, coordinate: $0.element.coordinate) }
+    }
+
+    var draftOutline: [RouteLine] {
+        guard case .drawing(_, let points) = tapMode, points.count > 1 else { return [] }
+        let coordinates = points.map(\.coordinate)
+        return [RouteLine(polyline: MKPolyline(coordinates: coordinates, count: coordinates.count), specialRights: false)]
+    }
+}

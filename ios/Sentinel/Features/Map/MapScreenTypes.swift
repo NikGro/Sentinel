@@ -1,0 +1,90 @@
+import MapKit
+import SwiftUI
+
+// Zustände und Werte der Lagekarte, die mehrere Bausteine teilen.
+
+/// Was auf der Karte angetippt wurde und als Kurzübersicht erscheint.
+enum MapSelection: Identifiable, Hashable {
+    case member(String)
+    case vehicle(String)
+    case target(String)
+    /// Angetippte Fläche ohne eigenen Griff, z. B. eine Argus-Prognosezelle.
+    case object(String)
+
+    var id: String {
+        switch self {
+        case .member(let id): "member-\(id)"
+        case .vehicle(let id): "vehicle-\(id)"
+        case .target(let id): "target-\(id)"
+        case .object(let id): "object-\(id)"
+        }
+    }
+}
+
+/// Was ein Tipp auf die Karte gerade bewirkt.
+enum MapTapMode: Equatable {
+    case none
+    case drawing(MapObject.Shape, points: [GeoPoint])
+    case moving(objectId: String)
+    /// Neues Ziel (Person, Fahrzeug, Objekt) an der getippten Stelle anlegen.
+    case newTarget(ZielArt)
+    /// Standort eines bestehenden Ziels neu setzen.
+    case placingTarget(String)
+
+    /// Einzelner Ort: erst als Vorschau zeigen, dann bestätigen.
+    var needsConfirmation: Bool {
+        switch self {
+        case .none: false
+        case .drawing(let shape, _): !shape.isMultiPoint
+        case .moving, .newTarget, .placingTarget: true
+        }
+    }
+
+    var hint: String? {
+        switch self {
+        case .none: nil
+        case .drawing(let shape, let points):
+            shape.isMultiPoint ? "\(shape.title): Punkte antippen (\(points.count) gesetzt)" : "\(shape.title): Ort antippen"
+        case .moving: "Neuen Ort antippen"
+        case .newTarget(let art): "\(art.title): Standort antippen"
+        case .placingTarget: "Neuen Standort des Ziels antippen"
+        }
+    }
+}
+
+/// Was sich an einem Ort (z. B. einem Suchtreffer) direkt anlegen lässt.
+enum PlaceableKind: Hashable, Identifiable {
+    case shape(MapObject.Shape)
+    case target(ZielArt)
+
+    static let all: [PlaceableKind] = [
+        .shape(.marker), .shape(.text), .shape(.kreis), .shape(.fahndungsraum), .shape(.haltestellen), .shape(.oepnvlinie), .shape(.oepnvfahrzeug),
+        .target(.person), .target(.fahrzeug), .target(.objekt),
+    ]
+
+    var id: String {
+        switch self {
+        case .shape(let shape): "shape-\(shape.rawValue)"
+        case .target(let art): "target-\(art.rawValue)"
+        }
+    }
+
+    var title: String {
+        switch self {
+        case .shape(.haltestellen): "Haltestellen im Umkreis"
+        case .shape(let shape): shape.title
+        case .target(let art): art.title
+        }
+    }
+}
+
+struct SearchPin: Equatable {
+    let point: GeoPoint
+    let title: String
+}
+
+struct EditorContext: Identifiable {
+    let id: String
+    let object: MapObject
+    let isNew: Bool
+}
