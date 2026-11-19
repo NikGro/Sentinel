@@ -513,6 +513,23 @@ struct MapScreen: View {
                         camera = .userLocation(followsHeading: true, fallback: .automatic)
                     }
                 }
+                // Beim Folgen: Zoomen per Knopf, ohne dass ein leichtes Verrutschen der Finger die Kopplung löst.
+                if followsMe {
+                    VStack(spacing: 0) {
+                        Button { zoomFollowing(by: 0.6) } label: {
+                            Image(systemName: "plus").frame(width: Theme.roundButton, height: Theme.roundButton).contentShape(.rect)
+                        }
+                        .accessibilityLabel("Näher heranzoomen")
+                        Divider().frame(width: 24)
+                        Button { zoomFollowing(by: 1.6) } label: {
+                            Image(systemName: "minus").frame(width: Theme.roundButton, height: Theme.roundButton).contentShape(.rect)
+                        }
+                        .accessibilityLabel("Weiter herauszoomen")
+                    }
+                    .font(.system(size: 17, weight: .semibold))
+                    .buttonStyle(.plain)
+                    .glassEffect(.regular.interactive(), in: .capsule)
+                }
                 MapStyleButton { on in
                     let heading = camera.followsUserHeading
                     let following = followsMe
@@ -562,13 +579,28 @@ struct MapScreen: View {
         return locationContext.compassDegrees
     }
 
+    /// Zoomt, während die Karte dem Standort folgt, und bleibt dabei gekoppelt.
+    private func zoomFollowing(by factor: Double) {
+        let heading = camera.followsUserHeading
+        let distance = min(max(cameraState.distance * factor, 150), 20_000)
+        if let current = location.current {
+            withAnimation(.easeInOut(duration: 0.35)) {
+                camera = .camera(MapCamera(centerCoordinate: current.coordinate, distance: distance, heading: cameraState.heading, pitch: cameraState.pitch))
+            }
+        }
+        Task {
+            try? await Task.sleep(for: .milliseconds(380))
+            camera = .userLocation(followsHeading: heading, fallback: .automatic)
+        }
+    }
+
     /// Fahrmodus: erst nah und gekippt auf den Standort, dann der nativen, flüssigen Nachführung übergeben.
     private func startFollowing(heading: Bool, north: Bool = false) {
         if let current = location.current {
             withAnimation(.easeInOut(duration: 0.6)) {
                 camera = .camera(MapCamera(
                     centerCoordinate: current.coordinate,
-                    distance: followsMe ? cameraState.distance : (route.isActive ? 700 : 1000),
+                    distance: followsMe ? cameraState.distance : (route.isActive ? 450 : 500),
                     heading: north ? 0 : cameraState.heading,
                     pitch: settings.prefers3D ? 55 : 0
                 ))
