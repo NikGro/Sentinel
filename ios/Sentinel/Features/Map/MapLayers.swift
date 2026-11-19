@@ -151,22 +151,25 @@ struct MapObjectsLayer: MapContent {
     let circles: [Versioned<MapObject>]
     let handles: [ObjectHandle]
     var offsets: [String: CGSize] = [:]
+    /// Mehrfachauswahl (Gruppen): ausgewählte Objekte sind hervorgehoben.
+    var selected: Set<String> = []
     let onSelect: (String) -> Void
+    var onLongPress: (String) -> Void = { _ in }
 
     var body: some MapContent {
         ForEach(areas) { object in
             MapPolygon(coordinates: object.data.punkte.map(\.coordinate))
                 .foregroundStyle(Color(hex: object.data.farbe).opacity(object.data.wert == nil ? 0.18 : 0.32))
-                .stroke(Color(hex: object.data.farbe), lineWidth: object.data.wert == nil ? 2 : 1)
+                .stroke(selected.contains(object.id) ? Color.accentColor : Color(hex: object.data.farbe), lineWidth: selected.contains(object.id) ? 4 : (object.data.wert == nil ? 2 : 1))
         }
         ForEach(circles) { object in
             MapCircle(center: object.data.anchor.coordinate, radius: object.data.radius ?? 100)
                 .foregroundStyle(Color(hex: object.data.farbe).opacity(0.15))
-                .stroke(Color(hex: object.data.farbe), lineWidth: 2)
+                .stroke(selected.contains(object.id) ? Color.accentColor : Color(hex: object.data.farbe), lineWidth: selected.contains(object.id) ? 4 : 2)
         }
         ForEach(lines) { object in
             MapPolyline(coordinates: object.data.punkte.map(\.coordinate))
-                .stroke(Color(hex: object.data.farbe), style: StrokeStyle(lineWidth: 4, lineCap: .round, lineJoin: .round))
+                .stroke(selected.contains(object.id) ? Color.accentColor : Color(hex: object.data.farbe), style: StrokeStyle(lineWidth: selected.contains(object.id) ? 6 : 4, lineCap: .round, lineJoin: .round))
             if object.data.typ == .pfeil, let head = ArrowHead.coordinates(object.data.punkte) {
                 MapPolyline(coordinates: head)
                     .stroke(Color(hex: object.data.farbe), style: StrokeStyle(lineWidth: 4, lineCap: .round, lineJoin: .round))
@@ -175,8 +178,14 @@ struct MapObjectsLayer: MapContent {
         ForEach(handles) { handle in
             Annotation(handle.object.titel, coordinate: handle.coordinate, anchor: .center) {
                 MapObjectHandle(object: handle.object, locked: handle.locked)
+                    .overlay {
+                        if selected.contains(handle.id) {
+                            Circle().stroke(Color.accentColor, lineWidth: 3).frame(width: 42, height: 42)
+                        }
+                    }
                     .offset(offsets[handle.id] ?? .zero)
                     .onTapGesture { onSelect(handle.id) }
+                    .onLongPressGesture(minimumDuration: 0.45) { onLongPress(handle.id) }
             }
             .annotationTitles(.hidden)
         }
@@ -199,7 +208,10 @@ private struct MapObjectHandle: View {
 
     var body: some View {
         VStack(spacing: 2) {
-            if object.typ == .marker || object.typ == .fahndungsraum || object.typ == .haltestellen {
+            if object.typ == .haltestelle {
+                // Dasselbe Haltestellensymbol wie überall (H-Schild bzw. S-/U-Logo).
+                StationSymbol(lines: object.linie.map { [$0.badge] } ?? [])
+            } else if object.typ == .marker || object.typ == .fahndungsraum || object.typ == .haltestellen {
                 Image(systemName: object.typ == .marker ? (object.symbol.isEmpty ? "mappin" : object.symbol) : object.typ.symbolName)
                     .font(.system(size: 14, weight: .bold))
                     .foregroundStyle(.white)
@@ -754,6 +766,8 @@ struct TransitLayer: MapContent {
     let sections: [Versioned<MapObject>]
     let vehicles: [TransitVehiclePin]
     let showsStopNames: Bool
+    /// Gruppen mit eigenen Haltestellen-Markierungen: deren Halte zeichnet die Linie nicht noch einmal.
+    var groupsWithStops: Set<String> = []
     let onSelect: (TransitVehiclePin) -> Void
 
     var body: some MapContent {
@@ -764,7 +778,7 @@ struct TransitLayer: MapContent {
             MapPolyline(coordinates: path.map(\.coordinate))
                 .stroke(Color(hex: object.data.farbe), style: StrokeStyle(lineWidth: 5, lineCap: .round, lineJoin: .round))
         }
-        ForEach(sections) { object in
+        ForEach(sections.filter { $0.data.gruppe.map(groupsWithStops.contains) != true }) { object in
             ForEach(Array(object.data.punkte.enumerated()), id: \.offset) { index, point in
                 let name = object.data.haltNamen?[safe: index] ?? ""
                 Annotation(name, coordinate: point.coordinate, anchor: .center) {

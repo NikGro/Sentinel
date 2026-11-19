@@ -170,6 +170,9 @@ struct MapObjectInfo: View {
 
     var body: some View {
         List {
+            if let group = object.gruppe, editable {
+                GroupSection(group: group, objectId: id) { dismiss() }
+            }
             // Eine ÖPNV-Linie ist kein einzelner Zielort.
             if object.typ != .oepnvlinie {
                 NavigateHereSection {
@@ -226,13 +229,21 @@ struct MapObjectInfo: View {
                         LabeledContent("Abschnitt", value: "\(first) → \(last) (\(names.count) Halte)")
                     }
                     if object.typ == .oepnvfahrzeug, let departure = object.since {
-                        let state = TransitSimulation.state(object.punkte, typ: line.typ, path: object.weg ?? [], departure: departure)
+                        let state = object.fahrt.flatMap { TransitSimulation.state(object.punkte, path: object.weg ?? [], times: $0.zeiten) }
+                            ?? TransitSimulation.state(object.punkte, typ: line.typ, path: object.weg ?? [], departure: departure)
                         if let state, let name = object.haltNamen?[safe: state.nextIndex] {
                             LabeledContent(state.atStop ? "Hält in" : "Nächster Halt", value: name)
                         } else {
                             LabeledContent("Status", value: Date.now < departure ? "Abfahrt \(Format.time(departure))" : "Angekommen")
                         }
-                        LabeledContent("Ankunft Endhalt", value: Format.time(departure.addingTimeInterval(TransitSimulation.duration(object.punkte, typ: line.typ, path: object.weg ?? []))))
+                        if let end = TransitSimulation.endTime(of: object) {
+                            LabeledContent("Ankunft Endhalt", value: Format.time(end))
+                        }
+                        if object.fahrt != nil {
+                            Label("Echte Fahrt mit Fahrplan- und Echtzeitdaten", systemImage: "dot.radiowaves.left.and.right")
+                                .font(.caption)
+                                .foregroundStyle(.green)
+                        }
                     }
                     if object.typ == .oepnvlinie, let takt = object.takt {
                         LabeledContent("Fahrzeuge im Takt", value: "alle \(takt) Min.")
@@ -250,7 +261,7 @@ struct MapObjectInfo: View {
                 } header: {
                     Text("Linie")
                 } footer: {
-                    Text("Positionen nach typischem Tempo geschätzt, keine Echtzeitdaten.")
+                    Text(object.fahrt == nil ? "Positionen nach typischem Tempo geschätzt, keine Echtzeitdaten." : "Daten: Transitous (DELFI u. a.), Echtzeit wo verfügbar.")
                 }
             }
 
@@ -318,6 +329,48 @@ struct MapObjectInfo: View {
                 .fill(color.opacity(0.6))
                 .overlay(RoundedRectangle(cornerRadius: 6).stroke(color, lineWidth: 2))
                 .frame(width: 44, height: 44)
+        }
+    }
+}
+
+/// Schmale Gruppenleiste über dem Detailfenster: Gruppe auflösen oder ganz löschen.
+private struct GroupSection: View {
+    let group: String
+    let objectId: String
+    let close: () -> Void
+
+    @Environment(LageStore.self) private var lage
+    @State private var confirmsDelete = false
+
+    private var members: [Versioned<MapObject>] { lage.mapObjects.values.filter { $0.data.gruppe == group } }
+
+    var body: some View {
+        Section {
+            HStack(spacing: 10) {
+                Label("Gruppe · \(members.count) Objekte", systemImage: "square.on.square")
+                    .font(.subheadline.weight(.semibold))
+                Spacer()
+                Button("Auflösen") {
+                    for member in members {
+                        var data = member.data
+                        data.gruppe = nil
+                        lage.saveMapObject(data, id: member.id)
+                    }
+                }
+                .buttonStyle(.bordered)
+                Button("Alle löschen", role: .destructive) { confirmsDelete = true }
+                    .buttonStyle(.bordered)
+            }
+            .controlSize(.small)
+        }
+        .alert("Ganze Gruppe für alle löschen?", isPresented: $confirmsDelete) {
+            Button("Abbrechen", role: .cancel) {}
+            Button("Löschen", role: .destructive) {
+                for member in members { lage.deleteMapObject(id: member.id) }
+                close()
+            }
+        } message: {
+            Text("\(members.count) Objekte werden gelöscht.")
         }
     }
 }

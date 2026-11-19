@@ -261,15 +261,7 @@ struct NavigationBottomBar: View {
             }
 
             if route.transit {
-                HStack {
-                    Image(systemName: "tram.fill")
-                        .foregroundStyle(.tint)
-                    Text(route.transitArrival.map { "Mit Bus und Bahn: Ankunft ca. \(Format.time($0))" } ?? "Verbindung wird gesucht …")
-                        .font(.subheadline.monospacedDigit())
-                    Spacer(minLength: 0)
-                    Button("Verbindung") { route.openInMaps() }
-                        .buttonStyle(.glass)
-                }
+                TransitPlanCard()
             }
 
             if !route.walking {
@@ -380,6 +372,7 @@ struct SearchPinCard: View {
                 let kind: PlaceableKind = switch action {
                 case .shape(let shape): .shape(shape)
                 case .target(let art): .target(art)
+                case .transitMap: .shape(.haltestelle)
                 }
                 Task {
                     try? await Task.sleep(for: .milliseconds(350))
@@ -387,6 +380,111 @@ struct SearchPinCard: View {
                 }
             }
             .presentationDetents([.medium, .large])
+        }
+    }
+}
+
+/// Leiste für die Mehrfachauswahl: gruppieren, Gruppe auflösen, löschen, fertig.
+struct GroupToolbar: View {
+    let count: Int
+    let hasGroup: Bool
+    let group: () -> Void
+    let ungroup: () -> Void
+    let delete: () -> Void
+    let done: () -> Void
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            HStack {
+                Text(count == 1 ? "1 Objekt ausgewählt" : "\(count) Objekte ausgewählt")
+                    .font(.headline)
+                Spacer()
+                Button("Fertig", action: done)
+                    .fontWeight(.semibold)
+            }
+            Text("Weitere Objekte antippen oder lange drücken.")
+                .font(.caption)
+                .foregroundStyle(.secondary)
+            HStack(spacing: Theme.barSpacing) {
+                Button(action: group) {
+                    Label("Gruppieren", systemImage: "square.on.square")
+                        .frame(maxWidth: .infinity)
+                }
+                .buttonStyle(.glassProminent)
+                .disabled(count < 2)
+                if hasGroup {
+                    Button(action: ungroup) {
+                        Label("Auflösen", systemImage: "square.slash")
+                            .frame(maxWidth: .infinity)
+                    }
+                    .buttonStyle(.glass)
+                }
+                Button(role: .destructive, action: delete) {
+                    Label("Löschen", systemImage: "trash")
+                        .frame(maxWidth: .infinity)
+                }
+                .buttonStyle(.glass)
+                .tint(.red)
+            }
+            .controlSize(.large)
+            .labelStyle(.titleAndIcon)
+        }
+        .padding(14)
+        .glassEffect(.regular, in: .rect(cornerRadius: 22))
+    }
+}
+
+/// ÖPNV in der Navigation: beste Verbindung mit Bus und Bahn als Fahrtenkette (Transitous, Echtzeit wo vorhanden).
+struct TransitPlanCard: View {
+    @Environment(AppModel.self) private var model
+    @Environment(RouteFollower.self) private var route
+    @State private var plan: TransitPlan?
+    @State private var loading = true
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            if let plan {
+                HStack {
+                    Text("\(Format.time(Date(timeIntervalSince1970: plan.start / 1000))) – \(Format.time(Date(timeIntervalSince1970: plan.end / 1000)))")
+                        .font(.subheadline.weight(.semibold).monospacedDigit())
+                    Text(plan.transfers == 0 ? "ohne Umstieg" : "\(plan.transfers)× umsteigen")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                    Spacer()
+                }
+                ScrollView(.horizontal, showsIndicators: false) {
+                    HStack(spacing: 6) {
+                        ForEach(Array(plan.legs.enumerated()), id: \.offset) { index, leg in
+                            if index > 0 { Image(systemName: "chevron.right").font(.caption2).foregroundStyle(.secondary) }
+                            if leg.mode == "WALK" {
+                                Label("\(max(1, Int((leg.to.time - leg.from.time) / 60_000))) Min.", systemImage: "figure.walk")
+                                    .font(.caption)
+                            } else {
+                                HStack(spacing: 4) {
+                                    LineBadge(line: NearbyStop.Line(ref: leg.name, typ: LiveSegment.osmType(leg.mode, name: leg.name), farbe: nil))
+                                    Text("\(Format.time(Date(timeIntervalSince1970: leg.from.time / 1000))) \(leg.from.name)")
+                                        .font(.caption)
+                                        .lineLimit(1)
+                                }
+                            }
+                        }
+                    }
+                }
+            } else if loading {
+                HStack { ProgressView(); Text("Verbindung wird gesucht …").font(.subheadline) }
+            } else {
+                HStack {
+                    Text("Keine Verbindung gefunden.").font(.subheadline)
+                    Spacer()
+                    Button("Apple Karten") { route.openInMaps() }.buttonStyle(.glass)
+                }
+            }
+        }
+        .task(id: route.destination.map { "\($0.lat),\($0.lon)" }) {
+            loading = true
+            defer { loading = false }
+            guard let client = model.client, let from = model.myPoint, let to = route.destination else { return }
+            plan = (try? await client.transitPlans(from: from, to: to))?.first
         }
     }
 }

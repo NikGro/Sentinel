@@ -194,6 +194,8 @@ struct MapObject: LageEntity {
         case oepnvfahrzeug
         /// Linie mit Pfeilspitze am Ende, z. B. Fluchtrichtung.
         case pfeil
+        /// Einzelne Haltestelle (von Hand gesetzt oder aus einer Linie übernommen).
+        case haltestelle
 
         var isTransit: Bool { self == .oepnvlinie || self == .oepnvfahrzeug }
 
@@ -209,6 +211,7 @@ struct MapObject: LageEntity {
             case .oepnvlinie: "ÖPNV-Linie"
             case .oepnvfahrzeug: "ÖPNV-Fahrzeug"
             case .pfeil: "Pfeil"
+            case .haltestelle: "Haltestelle"
             }
         }
 
@@ -224,6 +227,7 @@ struct MapObject: LageEntity {
             case .oepnvlinie: "point.bottomleft.forward.to.point.topright.scurvepath"
             case .oepnvfahrzeug: "bus.doubledecker.fill"
             case .pfeil: "arrow.up.right"
+            case .haltestelle: "h.circle.fill"
             }
         }
 
@@ -239,7 +243,7 @@ struct MapObject: LageEntity {
         var isMultiPoint: Bool { self == .linie || self == .flaeche || self == .pfeil }
 
         /// Flächen und Linien sind selbst antippbar und brauchen keinen Griff in der Mitte.
-        var hasHandle: Bool { [.marker, .text, .fahndungsraum].contains(self) }
+        var hasHandle: Bool { [.marker, .text, .fahndungsraum, .haltestelle].contains(self) }
     }
 
     var layerId: String
@@ -265,6 +269,10 @@ struct MapObject: LageEntity {
     var haltNamen: [String]?
     /// Tatsächlicher Fahrweg des Abschnitts.
     var weg: [GeoPoint]?
+    /// Echte Fahrt (Transitous) mit Zeit an jedem Halt; der Server führt Verspätungen nach.
+    var fahrt: TransitTrip?
+    /// Gemeinsame Gruppe, z. B. eine übernommene Linie mit ihren Haltestellen.
+    var gruppe: String?
     /// ÖPNV-Linie: Fahrzeuge im Takt (Minuten) ab der Abfahrt `zeit` am ersten Halt; `nil` aus.
     var takt: Int?
 
@@ -697,6 +705,128 @@ struct NearbyStop: Codable, Identifiable, Hashable, Sendable {
 }
 
 /// Eine Fahrtrichtung einer ÖPNV-Linie aus der Suche.
+// MARK: Deutschlandweiter ÖPNV (Transitous)
+
+struct LiveStop: Codable, Hashable, Identifiable, Sendable {
+    var name: String
+    var stopId: String
+    var lat: Double
+    var lon: Double
+
+    var id: String { stopId.isEmpty ? "\(name)|\(lat)|\(lon)" : stopId }
+    var point: GeoPoint { GeoPoint(lat: lat, lon: lon) }
+}
+
+/// Ein fahrendes Fahrzeug auf einem Abschnitt zwischen zwei Halten.
+struct LiveSegment: Codable, Hashable, Identifiable, Sendable {
+    var tripId: String
+    var name: String
+    var mode: String
+    var from: LiveStop
+    var to: LiveStop
+    var dep: Double
+    var arr: Double
+    var realTime: Bool
+    var delay: Int?
+    var path: [[Double]]
+
+    var id: String { "\(tripId)|\(dep)" }
+    var points: [GeoPoint] { path.compactMap { $0.count == 2 ? GeoPoint(lat: $0[0], lon: $0[1]) : nil } }
+    /// Verkehrsart im Sentinel-Format (wie OpenStreetMap: bus, tram, subway, train, ferry).
+    var osmType: String { LiveSegment.osmType(mode, name: name) }
+
+    static func osmType(_ mode: String, name: String) -> String {
+        switch mode {
+        case "SUBWAY": "subway"
+        case "TRAM": "tram"
+        case "FERRY": "ferry"
+        case "SUBURBAN", "REGIONAL_RAIL", "RAIL": "train"
+        default: "bus"
+        }
+    }
+
+    var badge: NearbyStop.Line { NearbyStop.Line(ref: name, typ: osmType, farbe: nil) }
+
+    /// Position zur Zeit `now` auf diesem Abschnitt, `nil` außerhalb.
+    func position(at now: Date) -> GeoPoint? {
+        let t = now.timeIntervalSince1970 * 1000
+        guard t >= dep - 1000, t <= arr + 1000 else { return nil }
+        let fraction = arr > dep ? (t - dep) / (arr - dep) : 1
+        let line = points
+        guard line.count >= 2 else { return line.first ?? from.point }
+        return TransitSimulation.point(along: line[...], fraction: fraction)
+    }
+}
+
+struct TripDetail: Codable, Hashable, Sendable {
+    struct Stop: Codable, Hashable, Sendable {
+        var name: String
+        var stopId: String
+        var lat: Double
+        var lon: Double
+        var arr: Double?
+        var dep: Double?
+
+        var point: GeoPoint { GeoPoint(lat: lat, lon: lon) }
+    }
+
+    var tripId: String
+    var name: String
+    var mode: String
+    var headsign: String
+    var color: String?
+    var stops: [Stop]
+    var path: [[Double]]
+    var realTime: Bool
+
+    var points: [GeoPoint] { path.compactMap { $0.count == 2 ? GeoPoint(lat: $0[0], lon: $0[1]) : nil } }
+}
+
+struct LiveDeparture: Codable, Hashable, Identifiable, Sendable {
+    var tripId: String
+    var name: String
+    var mode: String
+    var headsign: String
+    var time: Double
+    var scheduled: Double
+    var realTime: Bool
+    var color: String?
+
+    var id: String { "\(tripId)|\(time)" }
+    var delayMinutes: Int { Int(((time - scheduled) / 60_000).rounded()) }
+}
+
+/// Verbindung mit Bus und Bahn (Transitous).
+struct TransitPlan: Codable, Hashable, Sendable {
+    struct Place: Codable, Hashable, Sendable {
+        var name: String
+        var lat: Double
+        var lon: Double
+        var time: Double
+    }
+
+    struct Leg: Codable, Hashable, Sendable {
+        var mode: String
+        var name: String
+        var headsign: String
+        var from: Place
+        var to: Place
+        var stops: Int
+        var realTime: Bool
+    }
+
+    var start: Double
+    var end: Double
+    var transfers: Int
+    var legs: [Leg]
+}
+
+/// Echte Fahrt: Kennung bei Transitous und Zeit (ms) an jedem Halt.
+struct TransitTrip: Codable, Equatable, Hashable, Sendable {
+    var id: String
+    var zeiten: [Double?]
+}
+
 /// Verweis auf eine ÖPNV-Linie in einer Markierung.
 struct TransitRef: Codable, Equatable, Hashable, Sendable {
     var id: String

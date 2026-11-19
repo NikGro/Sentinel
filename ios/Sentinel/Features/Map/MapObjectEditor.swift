@@ -137,6 +137,9 @@ struct MapObjectEditor: View {
                 if object.typ.isTransit {
                     TransitObjectSection(object: $object, origin: context.object.punkte.first)
                 }
+                if object.typ == .haltestelle {
+                    StopMatchSection(object: $object)
+                }
 
                 Section {
                     TextField(object.typ == .text ? "Text" : "Bezeichnung", text: $object.titel)
@@ -318,5 +321,58 @@ struct MapObjectEditor: View {
             lage.saveMapObject(stops, id: LageStore.newId())
         }
         dismiss()
+    }
+}
+
+/// Haltestelle von Hand gesetzt: echte Haltestellen in der Nähe vorschlagen und eine davon übernehmen.
+private struct StopMatchSection: View {
+    @Binding var object: MapObject
+    @Environment(AppModel.self) private var model
+    @State private var nearby: [NearbyStop] = []
+    @State private var loaded = false
+
+    var body: some View {
+        Section {
+            if !loaded {
+                ProgressView()
+            } else if nearby.isEmpty {
+                Text("Keine bekannte Haltestelle in der Nähe.")
+                    .foregroundStyle(.secondary)
+            }
+            ForEach(nearby.prefix(8)) { stop in
+                Button {
+                    object.titel = stop.name
+                    object.punkte = [stop.point]
+                    if let line = stop.linien.first {
+                        object.linie = TransitRef(id: "", ref: line.ref, typ: line.typ, richtung: "", farbe: line.farbe)
+                    }
+                } label: {
+                    HStack(spacing: 10) {
+                        StationSymbol(lines: stop.linien, size: 18)
+                        VStack(alignment: .leading, spacing: 2) {
+                            Text(stop.name)
+                            LineBadges(lines: stop.linien)
+                        }
+                        Spacer()
+                        Text(Format.distance(stop.meter))
+                            .font(.caption.monospacedDigit())
+                            .foregroundStyle(.secondary)
+                        if object.titel == stop.name {
+                            Image(systemName: "checkmark").foregroundStyle(.tint)
+                        }
+                    }
+                }
+                .tint(.primary)
+            }
+        } header: {
+            Text("Echte Haltestelle zuordnen")
+        } footer: {
+            Text("Übernimmt Name, genaue Lage und Linien der gewählten Haltestelle.")
+        }
+        .task {
+            guard let point = object.punkte.first, let client = model.client else { loaded = true; return }
+            nearby = (try? await client.stops(near: point, radius: 400)) ?? []
+            loaded = true
+        }
     }
 }

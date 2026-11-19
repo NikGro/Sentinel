@@ -5,6 +5,7 @@ import websocket from '@fastify/websocket';
 import Fastify, { type FastifyInstance, type FastifyReply, type FastifyRequest } from 'fastify';
 import type { ArgusImporter } from '../argus.js';
 import type { Auth } from '../auth.js';
+import type { TransitousClient } from '../transit/transitous.js';
 import type { Config } from '../config.js';
 import type { Database } from '../db.js';
 import type { Hub } from '../hub.js';
@@ -36,6 +37,8 @@ export interface Services {
   paj: PajPoller;
   mapkit: MapKitTokens;
   oepnv: OepnvStore;
+  /** Deutschlandweiter ÖPNV mit Echtzeit (Transitous); `null`, wenn abgeschaltet. */
+  transit: TransitousClient | null;
   /** `null`, wenn die Overpass-API abgeschaltet ist. */
   overpass: OverpassClient | null;
   /** Kennungen von Trackern, die sich gemeldet haben, aber noch nicht angelegt sind. */

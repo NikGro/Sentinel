@@ -124,6 +124,11 @@ struct MapScreen: View {
     @State private var searchPin: SearchPin?
     /// Ort für das gerade gewählte Werkzeug über die Adresssuche statt per Tipp bestimmen.
     @State private var pickingBySearch = false
+    /// Deutschlandweite ÖPNV-Karte.
+    @State private var showsTransitMap = false
+    /// Mehrfachauswahl für Gruppen (per langem Drücken); leer = keine Auswahl.
+    @State private var selectedObjects: Set<String> = []
+    @State private var confirmsGroupDelete = false
     /// Vorschau des neuen Orts: erst „Übernehmen“ setzt ihn endgültig; erneutes Tippen verschiebt die Vorschau.
     @State private var pendingPoint: GeoPoint?
     /// Takt für die geschätzten ÖPNV-Fahrzeuge (alle 2 Sekunden, solange welche sichtbar sind).
@@ -138,6 +143,16 @@ struct MapScreen: View {
     /// Alle Fenster über der Karte.
     private func sheets(_ content: some View) -> some View {
         content
+        .alert("\(selectedObjects.count) Objekte für alle löschen?", isPresented: $confirmsGroupDelete) {
+            Button("Abbrechen", role: .cancel) {}
+            Button("Löschen", role: .destructive) {
+                for id in selectedObjects { lage.deleteMapObject(id: id) }
+                selectedObjects = []
+            }
+        }
+        .fullScreenCover(isPresented: $showsTransitMap) {
+            TransitExplorer(start: GeoPoint(cameraState.center))
+        }
         .sheet(isPresented: $pickingBySearch) {
             SearchSheet(mode: .adresse, navigate: { _ in }, pick: { point, _ in
                 withAnimation(.easeInOut(duration: 0.6)) {
@@ -237,10 +252,12 @@ struct MapScreen: View {
                 }
                 CoverageLayer(runs: CoverageRun.cached(coverageSegments))
                 ReachLayer(rings: reachRings)
-                MapObjectsLayer(lines: objects(.linie) + objects(.pfeil), areas: objects(.flaeche), circles: objects(.kreis) + objects(.haltestellen), handles: handles, offsets: clutterOffsets) { id in
+                MapObjectsLayer(lines: objects(.linie) + objects(.pfeil), areas: objects(.flaeche), circles: objects(.kreis) + objects(.haltestellen), handles: handles, offsets: clutterOffsets, selected: selectedObjects) { id in
                     openEditor(for: id)
+                } onLongPress: { id in
+                    toggleSelection(id)
                 }
-                TransitLayer(sections: objects(.oepnvlinie), vehicles: transitPins, showsStopNames: cameraState.distance < 5000) { pin in
+                TransitLayer(sections: objects(.oepnvlinie), vehicles: transitPins, showsStopNames: cameraState.distance < 5000, groupsWithStops: Set(objects(.haltestelle).compactMap(\.data.gruppe))) { pin in
                     if let id = pin.objectId { openEditor(for: id) } else { virtualVehicle = pin }
                 }
                 AreaLabelLayer(objects: objects(.flaeche) + objects(.kreis), metersPerPoint: cameraState.distance / 700)
@@ -291,7 +308,8 @@ struct MapScreen: View {
                     .onEnded { value in
                         guard tapMode == .none, case .second(true, let drag?) = value,
                               let coordinate = proxy.convert(drag.location, from: .local) else { return }
-                        pressed(at: GeoPoint(coordinate))
+                        // Auf einer Form: zur Mehrfachauswahl; sonst Ort für Navigieren oder Anlegen.
+                        if let id = shape(at: GeoPoint(coordinate)) { toggleSelection(id) } else { pressed(at: GeoPoint(coordinate)) }
                     }
             )
             .onTapGesture { point in
@@ -521,6 +539,8 @@ struct MapScreen: View {
                 }
                 AddMenu { action in
                     switch action {
+                    case .transitMap:
+                        showsTransitMap = true
                     case .shape(let shape) where shape.isTransit:
                         // ÖPNV: kein Antippen nötig, Linien werden rund um den Kartenausschnitt vorgeschlagen.
                         editor = EditorContext(id: LageStore.newId(), object: draft(shape, [GeoPoint(cameraState.center)]), isNew: true)
@@ -572,7 +592,16 @@ struct MapScreen: View {
                     create(kind, at: pin.point, title: pin.title, delayed: false)
                 }, close: { searchPin = nil })
             }
-            if route.isActive {
+            if !selectedObjects.isEmpty {
+                GroupToolbar(
+                    count: selectedObjects.count,
+                    hasGroup: selectedObjects.contains { lage.mapObjects[$0]?.data.gruppe != nil },
+                    group: groupSelection,
+                    ungroup: ungroupSelection,
+                    delete: { confirmsGroupDelete = true },
+                    done: { selectedObjects = [] }
+                )
+            } else if route.isActive {
                 NavigationBottomBar()
             } else if searchPin == nil {
                 HStack(spacing: Theme.barSpacing) {
@@ -818,7 +847,40 @@ struct MapScreen: View {
     /// Bestehende Markierungen öffnen erst die Ansicht; bearbeitet wird über deren Bearbeiten-Knopf.
     private func openEditor(for id: String) {
         guard tapMode == .none, lage.mapObjects[id] != nil else { return }
+        if !selectedObjects.isEmpty {
+            toggleSelection(id)
+            return
+        }
         selection = .object(id)
+    }
+
+    private func toggleSelection(_ id: String) {
+        guard tapMode == .none, let object = lage.mapObjects[id], settings.canEdit(layerId: object.data.layerId) else { return }
+        withAnimation(.snappy) {
+            if selectedObjects.contains(id) { selectedObjects.remove(id) } else { selectedObjects.insert(id) }
+        }
+    }
+
+    /// Ausgewählte Objekte zu einer neuen Gruppe zusammenfassen (keine Verschachtelung: alte Zugehörigkeit entfällt).
+    private func groupSelection() {
+        let group = LageStore.newId()
+        for id in selectedObjects {
+            guard var object = lage.mapObjects[id]?.data else { continue }
+            object.gruppe = group
+            lage.saveMapObject(object, id: id)
+        }
+        selectedObjects = []
+    }
+
+    /// Gruppen der ausgewählten Objekte auflösen: alle Mitglieder werden wieder eigenständig.
+    private func ungroupSelection() {
+        let groups = Set(selectedObjects.compactMap { lage.mapObjects[$0]?.data.gruppe })
+        for object in lage.mapObjects.values where object.data.gruppe.map(groups.contains) == true {
+            var data = object.data
+            data.gruppe = nil
+            lage.saveMapObject(data, id: object.id)
+        }
+        selectedObjects = []
     }
 
     // MARK: Aufbereitung für die Karte

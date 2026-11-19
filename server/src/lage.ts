@@ -517,6 +517,33 @@ export class Lage extends EventEmitter<{ event: [LageEvent] }> {
     this.emit('event', { type: 'bestreifungReset' });
   }
 
+  /** Übernommene echte Fahrten: Zeiten an den Halten aus der Echtzeit nachführen. */
+  async refreshTrips(load: (tripId: string) => Promise<{ stops: { lat: number; lon: number; arr: number | null; dep: number | null }[] }>): Promise<number> {
+    let updated = 0;
+    const now = Date.now();
+    for (const a of this.list('annotation')) {
+      const fahrt = a.data.fahrt;
+      if (!fahrt || a.data.typ !== 'oepnvfahrzeug') continue;
+      const last = fahrt.zeiten.at(-1);
+      if (last && last < now - 600_000) continue;
+      try {
+        const trip = await load(fahrt.id);
+        const zeiten = a.data.punkte.map((p) => {
+          const match = trip.stops.find((s) => Math.abs(s.lat - p.lat) < 0.0015 && Math.abs(s.lon - p.lon) < 0.0025);
+          return match ? (match.dep ?? match.arr) : null;
+        });
+        if (JSON.stringify(zeiten) !== JSON.stringify(fahrt.zeiten) && zeiten.some((z) => z !== null)) {
+          const current = this.get('annotation', a.id);
+          if (current) this.write('annotation', a.id, { ...current.data, fahrt: { id: fahrt.id, zeiten } }, 'system');
+          updated++;
+        }
+      } catch {
+        // Nicht erreichbar: beim nächsten Mal erneut.
+      }
+    }
+    return updated;
+  }
+
   /** Löscht Markierungen, deren Lebensdauer abgelaufen ist. Liefert die Anzahl. */
   expireAnnotations(now = Date.now()): number {
     let count = 0;

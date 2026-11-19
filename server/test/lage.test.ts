@@ -224,3 +224,19 @@ test('Ziele: Freitexte werden zusammengeführt, Einzelbilder wandern in die Foto
   lage.put(fahnder('a'), 'target', 't1', { ...t, fotoBlob: 'blobB', anhaenge: t.anhaenge.slice(1) });
   assert.equal(lage.get('target', 't1')!.data.fotoBlob, 'blobB');
 });
+
+test('Echte ÖPNV-Fahrten: Zeiten an den Halten werden nachgeführt', async () => {
+  const lage = newLage();
+  const now = Date.now();
+  const punkte = [{ lat: 53.55, lon: 10 }, { lat: 53.56, lon: 10.01 }];
+  lage.put(fahnder('a'), 'annotation', 'bus', {
+    layerId: LAYER_LAGE, typ: 'oepnvfahrzeug', punkte, zeit: now,
+    linie: { id: 'x', ref: '4', typ: 'bus', richtung: 'B' }, fahrt: { id: 't1', zeiten: [now, now + 120_000] },
+  });
+  const updated = await lage.refreshTrips(async () => ({ stops: [
+    { lat: 53.55, lon: 10, arr: null, dep: now + 60_000 },
+    { lat: 53.56, lon: 10.01, arr: now + 180_000, dep: null },
+  ] }));
+  assert.equal(updated, 1);
+  assert.deepEqual(lage.get('annotation', 'bus')?.data.fahrt?.zeiten, [now + 60_000, now + 180_000]);
+});

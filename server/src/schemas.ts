@@ -79,7 +79,7 @@ const vehicle = z.object({
 });
 
 /** "haltestellen": Umkreis, in dem alle ÖPNV-Haltestellen angezeigt werden. */
-export const SHAPES = ['marker', 'text', 'linie', 'flaeche', 'kreis', 'fahndungsraum', 'haltestellen', 'oepnvlinie', 'oepnvfahrzeug', 'pfeil'] as const;
+export const SHAPES = ['marker', 'text', 'linie', 'flaeche', 'kreis', 'fahndungsraum', 'haltestellen', 'oepnvlinie', 'oepnvfahrzeug', 'pfeil', 'haltestelle'] as const;
 
 export const ANHANG_ARTEN = ['bild', 'audio', 'datei'] as const;
 
@@ -128,6 +128,13 @@ const annotation = z
       .transform((v) => v ?? null),
     /** Tatsächlicher Fahrweg des Abschnitts (Straßen, Gleise). */
     weg: z.array(geoPoint).max(5000).default([]),
+    /** Echte Fahrt (Transitous): Fahrt-ID und Zeit (ms) an jedem Halt zu `punkte`; der Server frischt sie auf. */
+    fahrt: z
+      .object({ id: z.string().min(1).max(200), zeiten: z.array(timestamp.nullable()).max(400) })
+      .nullish()
+      .transform((v) => v ?? null),
+    /** Gemeinsame Gruppe, z. B. eine übernommene Linie mit ihren Haltestellen. Gruppen sind nicht verschachtelt. */
+    gruppe: z.string().regex(/^[A-Za-z0-9_-]{1,40}$/).nullish().transform((v) => v ?? null),
     /** Namen der Halte zu `punkte`. */
     haltNamen: z.array(z.string().max(120)).max(400).default([]),
     /** ÖPNV-Linie: Fahrzeuge im Takt (Minuten) einblenden, ab der Abfahrt `zeit` am ersten Halt; `null` aus. */

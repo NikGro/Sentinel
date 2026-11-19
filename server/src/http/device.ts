@@ -79,7 +79,7 @@ const safeFilename = (name: string) => name.replace(/[^\p{L}\p{N} ._-]/gu, '_').
 
 /** Routen für angemeldete Geräte und die Kommandozentrale: Dateien, Bestreifung, Weg-Zeit, Routen, ÖPNV, Kreuzungen. */
 export function registerDeviceRoutes(app: FastifyInstance, services: Services, guards: Guards): void {
-  const { db, lage, reach, routes, oepnv, overpass } = services;
+  const { db, lage, reach, routes, oepnv, overpass, transit } = services;
   const uploadLimiter = new RateLimiter(60, 10 * 60_000);
   const reachLimiter = new RateLimiter(120, 60_000);
   const crossingLimiter = new RateLimiter(90, 60_000);
@@ -171,11 +171,91 @@ export function registerDeviceRoutes(app: FastifyInstance, services: Services, g
     return { haltestellen: oepnv.stopsNear({ lat, lon }, radius), verfuegbar: oepnv.count > 0 };
   });
 
+  // ── Deutschlandweiter ÖPNV (Transitous, zwischengespeichert) ──
+  const transitLimiter = new RateLimiter(240, 60_000);
+  const bboxQuery = z.object({
+    minLat: z.coerce.number().min(-90).max(90),
+    minLon: z.coerce.number().min(-180).max(180),
+    maxLat: z.coerce.number().min(-90).max(90),
+    maxLon: z.coerce.number().min(-180).max(180),
+    zoom: z.coerce.number().min(0).max(22).default(14),
+  });
+  const transitCall = async <T>(load: () => Promise<T>): Promise<T> => {
+    if (!transit) throw new HttpError(503, 'ÖPNV-Livedaten sind auf diesem Server abgeschaltet.');
+    try {
+      return await load();
+    } catch {
+      throw new HttpError(502, 'ÖPNV-Livedaten zurzeit nicht erreichbar.');
+    }
+  };
+
+  app.get('/api/v1/oepnv/live', async (request) => {
+    guards.actor(request);
+    guards.limit(transitLimiter, request);
+    const q = bboxQuery.safeParse(request.query);
+    if (!q.success) throw new HttpError(400, 'Kartenausschnitt fehlt.');
+    const { minLat, minLon, maxLat, maxLon, zoom } = q.data;
+    // Zu großer Ausschnitt: keine Fahrzeuge (sonst zehntausende), die App zeigt einen Hinweis.
+    if (maxLat - minLat > 0.6 || maxLon - minLon > 0.9) return { fahrzeuge: [], zuGross: true };
+    const segments = await transitCall(() => transit!.liveSegments({ lat: minLat, lon: minLon }, { lat: maxLat, lon: maxLon }, zoom));
+    return { fahrzeuge: segments, zuGross: false };
+  });
+
+  app.get('/api/v1/oepnv/live/haltestellen', async (request) => {
+    guards.actor(request);
+    guards.limit(transitLimiter, request);
+    const q = bboxQuery.safeParse(request.query);
+    if (!q.success) throw new HttpError(400, 'Kartenausschnitt fehlt.');
+    const { minLat, minLon, maxLat, maxLon } = q.data;
+    if (maxLat - minLat > 0.08 || maxLon - minLon > 0.12) return { haltestellen: [] };
+    return { haltestellen: await transitCall(() => transit!.stops({ lat: minLat, lon: minLon }, { lat: maxLat, lon: maxLon })) };
+  });
+
+  app.get('/api/v1/oepnv/fahrt', async (request) => {
+    guards.actor(request);
+    guards.limit(transitLimiter, request);
+    const { id } = request.query as { id?: string };
+    if (!id || id.length > 200) throw new HttpError(400, 'Fahrt fehlt.');
+    return transitCall(() => transit!.trip(id));
+  });
+
+  app.get('/api/v1/oepnv/abfahrten', async (request) => {
+    guards.actor(request);
+    guards.limit(transitLimiter, request);
+    const { halt } = request.query as { halt?: string };
+    if (!halt || halt.length > 200) throw new HttpError(400, 'Haltestelle fehlt.');
+    return { abfahrten: await transitCall(() => transit!.departures(halt)) };
+  });
+
+  app.get('/api/v1/oepnv/verbindung', async (request) => {
+    guards.actor(request);
+    guards.limit(transitLimiter, request);
+    const q = z.object({
+      vonLat: z.coerce.number().min(-90).max(90), vonLon: z.coerce.number().min(-180).max(180),
+      nachLat: z.coerce.number().min(-90).max(90), nachLon: z.coerce.number().min(-180).max(180),
+    }).safeParse(request.query);
+    if (!q.success) throw new HttpError(400, 'Start und Ziel fehlen.');
+    const { vonLat, vonLon, nachLat, nachLon } = q.data;
+    return { verbindungen: await transitCall(() => transit!.plan({ lat: vonLat, lon: vonLon }, { lat: nachLat, lon: nachLon })) };
+  });
+
   app.get('/api/v1/oepnv/haltestellen/suche', async (request) => {
     guards.actor(request);
     const { q, lat, lon } = request.query as { q?: string; lat?: string; lon?: string };
     const near = lat && lon && Number.isFinite(Number(lat)) && Number.isFinite(Number(lon)) ? { lat: Number(lat), lon: Number(lon) } : null;
-    return { haltestellen: oepnv.searchStops(String(q ?? '').slice(0, 80), near) };
+    const text = String(q ?? '').slice(0, 80);
+    const local = oepnv.searchStops(text, near);
+    // Außerhalb des eigenen OSM-Ausschnitts: deutschlandweit über Transitous ergänzen.
+    if (local.length >= 3 || !transit || text.trim().length < 3) return { haltestellen: local };
+    try {
+      const remote = await transit.searchStops(text, near);
+      const extra = remote
+        .filter((r) => !local.some((l) => l.name === r.name))
+        .map((r) => ({ name: r.name, lat: r.lat, lon: r.lon, meter: near ? Math.round(Math.hypot((r.lat - near.lat) * 111_320, (r.lon - near.lon) * 111_320 * Math.cos((near.lat * Math.PI) / 180))) : 0, linien: [] }));
+      return { haltestellen: [...local, ...extra].slice(0, 10) };
+    } catch {
+      return { haltestellen: local };
+    }
   });
 
   app.get('/api/v1/oepnv/linien/:id', async (request) => {

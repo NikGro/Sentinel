@@ -257,3 +257,24 @@ test('ÖPNV: Fahrweg aus den Wegen der Linie, Farbe aus OpenStreetMap', async ()
   assert.equal(lines[0]?.farbe, '#0072BC');
   assert.equal(lines[0]?.weg?.length, 3);
 });
+
+test('Transitous: Linienzüge, Verkehrsarten und fahrende Fahrzeuge', async () => {
+  const { decodePolyline, normalizeMode, TransitousClient } = await import('../src/transit/transitous.js');
+  // Bekanntes Beispiel aus der Google-Dokumentation (Genauigkeit 5).
+  assert.deepEqual(decodePolyline('_p~iF~ps|U_ulLnnqC_mqNvxq`@'), [[38.5, -120.2], [40.7, -120.95], [43.252, -126.453]]);
+  assert.equal(normalizeMode('AIRPLANE'), null);
+  assert.equal(normalizeMode('HIGHSPEED_RAIL'), 'RAIL');
+  assert.equal(normalizeMode('BUS'), 'BUS');
+  const now = Date.now();
+  const fake = (async () => new Response(JSON.stringify([
+    { mode: 'BUS', trips: [{ tripId: 't1', displayName: '4' }], from: { name: 'A', stopId: 'a', lat: 53.55, lon: 9.99 }, to: { name: 'B', stopId: 'b', lat: 53.56, lon: 10 },
+      departure: new Date(now).toISOString(), arrival: new Date(now + 120_000).toISOString(), scheduledDeparture: new Date(now - 60_000).toISOString(), realTime: true, polyline: '_p~iF~ps|U' },
+    { mode: 'AIRPLANE', trips: [{ tripId: 'f1' }], from: {}, to: {}, departure: '', arrival: '' },
+  ]))) as unknown as typeof fetch;
+  const client = new TransitousClient('https://example.invalid', fake);
+  const segments = await client.liveSegments({ lat: 53.5, lon: 9.9 }, { lat: 53.6, lon: 10.1 }, 14);
+  assert.equal(segments.length, 1);
+  assert.equal(segments[0]!.name, '4');
+  assert.equal(segments[0]!.delay, 60);
+  assert.equal(segments[0]!.path.length, 1);
+});

@@ -97,6 +97,8 @@ struct AddMenu: View {
     enum Action {
         case shape(MapObject.Shape)
         case target(ZielArt)
+        /// Deutschlandweite ÖPNV-Karte zum Auswählen und Übernehmen.
+        case transitMap
     }
 
     let select: (Action) -> Void
@@ -139,7 +141,7 @@ struct AddChooser: View {
             ScrollView {
                 VStack(alignment: .leading, spacing: 18) {
                     group("Fahndung", [.shape(.fahndungsraum), .shape(.haltestellen)])
-                    group("ÖPNV", [.shape(.oepnvlinie), .shape(.oepnvfahrzeug)])
+                    group("ÖPNV", [.transitMap, .shape(.haltestelle), .shape(.oepnvlinie), .shape(.oepnvfahrzeug)])
                     group("Ziele", ZielArt.allCases.map { .target($0) })
                     group("Markierung", [.shape(.marker), .shape(.text), .shape(.linie), .shape(.pfeil), .shape(.flaeche), .shape(.kreis)])
                 }
@@ -189,6 +191,7 @@ extension AddMenu.Action {
         switch self {
         case .shape(let shape): shape.title
         case .target(let art): art.title
+        case .transitMap: "ÖPNV-Karte (live)"
         }
     }
 
@@ -196,6 +199,7 @@ extension AddMenu.Action {
         switch self {
         case .shape(let shape): shape.symbolName
         case .target(let art): art.symbolName
+        case .transitMap: "map.fill"
         }
     }
 }

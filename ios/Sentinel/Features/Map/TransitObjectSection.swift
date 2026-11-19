@@ -20,7 +20,20 @@ struct TransitObjectSection: View {
     private var isVehicle: Bool { object.typ == .oepnvfahrzeug }
 
     var body: some View {
-        if object.linie == nil || (line == nil && isLoading) {
+        if object.fahrt != nil || (object.linie != nil && object.linie?.id.allSatisfy(\.isNumber) == false) {
+            // Aus der ÖPNV-Karte übernommen: Halte und Zeiten kommen aus dem Fahrplan, nichts von Hand einzustellen.
+            Section("Echte Fahrt") {
+                if let ref = object.linie {
+                    Label("\(ref.ref) Richtung \(ref.richtung)", systemImage: ref.symbolName)
+                }
+                if let names = object.haltNamen, let first = names.first, let last = names.last {
+                    LabeledContent("Strecke", value: "\(first) → \(last)")
+                }
+                Text("Zeiten und Verspätungen führt der Server laufend nach (Transitous).")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
+        } else if object.linie == nil || (line == nil && isLoading) {
             search
         } else {
             chosenLine

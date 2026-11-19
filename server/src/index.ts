@@ -5,6 +5,7 @@ import { Database } from './db.js';
 import { buildApp, type Services } from './http/app.js';
 import { Hub } from './hub.js';
 import { Lage } from './lage.js';
+import { TransitousClient } from './transit/transitous.js';
 import { MapKitTokens } from './mapkit.js';
 import { createOverpassClient, OepnvStore } from './oepnv.js';
 import { ReachService } from './reach/reach.js';
@@ -14,7 +15,7 @@ import { Vault } from './security.js';
 import { intervalCommand, startH02Listener, type H02Listener } from './trackers/h02.js';
 import { PajPoller, type PajCredentials } from './trackers/paj.js';
 
-export const SERVER_VERSION = '0.10.0';
+export const SERVER_VERSION = '0.11.0';
 const MAX_UNKNOWN_TRACKERS = 50;
 
 /** Baut alle Dienste zusammen. Getrennt von `main`, damit Tests denselben Aufbau mit einer Speicher-Datenbank nutzen. */
@@ -49,6 +50,7 @@ export async function createServices(config: Config, database?: Database): Promi
     paj,
     oepnv,
     overpass,
+    transit: process.env.SENTINEL_TRANSITOUS === 'aus' ? null : new TransitousClient(),
     mapkit: new MapKitTokens(config.mapkit, new URL(config.publicUrl).origin),
     argus: new ArgusImporter(config.argusDir),
     releases: new ReleaseStore(config.dataDir, config.publicUrl),
@@ -88,6 +90,11 @@ async function main(): Promise<void> {
   setInterval(() => services.oepnv.refreshIfStale(), 15 * 60_000).unref();
   // Markierungen mit Lebensdauer verschwinden von selbst.
   setInterval(() => services.lage.expireAnnotations(), 30_000).unref();
+  // Echte ÖPNV-Fahrten: Verspätungen jede Minute übernehmen.
+  if (services.transit) {
+    const transit = services.transit;
+    setInterval(() => void services.lage.refreshTrips((id) => transit.trip(id)), 60_000).unref();
+  }
   await app.listen({ host: config.host, port: config.port });
   console.log(`SENTINEL Server ${SERVER_VERSION} läuft auf ${config.host}:${config.port}`);
 

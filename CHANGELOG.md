@@ -1,5 +1,24 @@
 # Änderungen
 
+## 0.11.0
+
+**ÖPNV deutschlandweit (Transitous, Daten DELFI u. a., Echtzeit wo verfügbar)**
+- Neue ÖPNV-Karte im Plus-Menü, angelehnt an Travic: fahrende Fahrzeuge in Linienfarbe bewegen sich live,
+  Haltestellen mit Abfahrten; Suche nach Linien (alle Fahrzeuge der Linie) und Haltestellen
+- Fahrzeug antippen: hervorgehoben mit Linienverlauf und Halten, Verspätung; wählen, was übernommen wird –
+  Fahrzeug, Strecke, Haltestellen, beliebig kombiniert; mehrere Teile werden eine Gruppe
+- Übernommene Fahrzeuge fahren nach echtem Fahrplan; der Server führt Verspätungen jede Minute nach
+- Haltestelle antippen: Abfahrten ansehen, eine Fahrt daraus wählen oder die Haltestelle übernehmen
+- ÖPNV in der Navigation: beste Verbindung mit Bus und Bahn als Fahrtenkette in der App
+- Haltestellen in der Ortssuche jetzt auch außerhalb Hamburgs
+
+**Gruppen und Haltestellen**
+- Lange drücken auf eine Markierung oder Fläche startet die Mehrfachauswahl; Leiste mit Gruppieren,
+  Auflösen, Löschen; keine verschachtelten Gruppen
+- Objekte in einer Gruppe zeigen über dem Detailfenster eine Gruppenleiste (auflösen, alle löschen)
+- „Haltestelle“ als eigene Markierung; beim Setzen werden echte Haltestellen in der Nähe zur Zuordnung angeboten
+
+
 ## 0.10.0
 
 **Karte**

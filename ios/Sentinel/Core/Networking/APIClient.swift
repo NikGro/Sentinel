@@ -201,6 +201,57 @@ struct APIClient: Sendable {
         ).haltestellen
     }
 
+    // MARK: Deutschlandweiter ÖPNV (Transitous über den eigenen Server)
+
+    private struct LiveVehicles: Decodable {
+        let fahrzeuge: [LiveSegment]
+        let zuGross: Bool
+    }
+
+    private struct LiveStops: Decodable {
+        let haltestellen: [LiveStop]
+    }
+
+    private struct Departures: Decodable {
+        let abfahrten: [LiveDeparture]
+    }
+
+    private static func box(_ min: GeoPoint, _ max: GeoPoint) -> [URLQueryItem] {
+        [
+            URLQueryItem(name: "minLat", value: String(min.lat)), URLQueryItem(name: "minLon", value: String(min.lon)),
+            URLQueryItem(name: "maxLat", value: String(max.lat)), URLQueryItem(name: "maxLon", value: String(max.lon)),
+        ]
+    }
+
+    /// Fahrende Fahrzeuge im Ausschnitt; `tooLarge`, wenn der Ausschnitt zu groß ist.
+    func liveVehicles(min: GeoPoint, max: GeoPoint, zoom: Int) async throws -> (segments: [LiveSegment], tooLarge: Bool) {
+        let result = try await json(LiveVehicles.self, "GET", "api/v1/oepnv/live", query: Self.box(min, max) + [URLQueryItem(name: "zoom", value: String(zoom))])
+        return (result.fahrzeuge, result.zuGross)
+    }
+
+    func liveStops(min: GeoPoint, max: GeoPoint) async throws -> [LiveStop] {
+        try await json(LiveStops.self, "GET", "api/v1/oepnv/live/haltestellen", query: Self.box(min, max)).haltestellen
+    }
+
+    func trip(id: String) async throws -> TripDetail {
+        try await json(TripDetail.self, "GET", "api/v1/oepnv/fahrt", query: [URLQueryItem(name: "id", value: id)])
+    }
+
+    private struct Plans: Decodable {
+        let verbindungen: [TransitPlan]
+    }
+
+    func transitPlans(from: GeoPoint, to: GeoPoint) async throws -> [TransitPlan] {
+        try await json(Plans.self, "GET", "api/v1/oepnv/verbindung", query: [
+            URLQueryItem(name: "vonLat", value: String(from.lat)), URLQueryItem(name: "vonLon", value: String(from.lon)),
+            URLQueryItem(name: "nachLat", value: String(to.lat)), URLQueryItem(name: "nachLon", value: String(to.lon)),
+        ]).verbindungen
+    }
+
+    func departures(stopId: String) async throws -> [LiveDeparture] {
+        try await json(Departures.self, "GET", "api/v1/oepnv/abfahrten", query: [URLQueryItem(name: "halt", value: stopId)]).abfahrten
+    }
+
     /// Haltestellen nach Namen, mit den dort haltenden Linien.
     func searchStops(_ query: String, near: GeoPoint?) async throws -> [NearbyStop] {
         var items = [URLQueryItem(name: "q", value: query)]

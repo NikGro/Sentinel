@@ -101,6 +101,34 @@ enum TransitSimulation {
         return State(point: points[points.count - 1], nextIndex: points.count - 1, atStop: true)
     }
 
+    /// Position nach echten Zeiten (Fahrplan mit Echtzeit) an jedem Halt; fehlende Zeiten werden übersprungen.
+    static func state(_ points: [GeoPoint], path: [GeoPoint], times: [Double?], at now: Date = .now) -> State? {
+        guard points.count >= 2, times.count == points.count else { return nil }
+        let t = now.timeIntervalSince1970 * 1000
+        let known = times.enumerated().compactMap { index, time in time.map { (index, $0) } }
+        guard let first = known.first, let last = known.last, t >= first.1, t <= last.1 + 30_000 else { return nil }
+        let indices = stopIndices(points, on: path)
+        for pair in zip(known, known.dropFirst()) {
+            let (i, ti) = pair.0, (j, tj) = pair.1
+            guard t <= tj else { continue }
+            // Kurz am Halt stehen, dann gleichmäßig bis zum nächsten bekannten Halt.
+            let fraction = tj > ti ? (t - ti) / (tj - ti) : 1
+            if let indices, let along = point(along: path[indices[i]...indices[j]], fraction: fraction) {
+                return State(point: along, nextIndex: j, atStop: fraction <= 0)
+            }
+            let a = points[i], b = points[j]
+            return State(point: GeoPoint(lat: a.lat + (b.lat - a.lat) * fraction, lon: a.lon + (b.lon - a.lon) * fraction), nextIndex: j, atStop: false)
+        }
+        return State(point: points[last.0], nextIndex: last.0, atStop: true)
+    }
+
+    /// Ankunft am Endhalt: echte Zeit, sonst geschätzt.
+    static func endTime(of object: MapObject) -> Date? {
+        if let last = object.fahrt?.zeiten.compactMap({ $0 }).last { return Date(timeIntervalSince1970: last / 1000) }
+        guard let line = object.linie, let departure = object.since else { return nil }
+        return departure.addingTimeInterval(duration(object.punkte, typ: line.typ, path: object.weg ?? []))
+    }
+
     /// Fahrzeuge im Takt, die sich gerade auf dem Abschnitt befinden: jeweils Abfahrtszeit am ersten Halt und Zustand.
     static func vehicles(on object: MapObject, at now: Date = .now) -> [(departure: Date, state: State)] {
         guard object.typ == .oepnvlinie, let takt = object.takt, takt > 0, let line = object.linie, let reference = object.since else { return [] }
