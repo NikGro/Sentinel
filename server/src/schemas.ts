@@ -253,7 +253,7 @@ const message = z
 export const ENTITY_SCHEMAS = { member, vehicle, annotation, target, tracker, layer, room, message, instance } as const;
 
 /** Objektarten, die zu einer Instanz gehören. Alle anderen gelten instanzübergreifend. */
-export const SCOPED_KINDS: ReadonlySet<string> = new Set(['annotation', 'target', 'layer', 'room', 'message']);
+export const SCOPED_KINDS: ReadonlySet<Kind> = new Set<Kind>(['annotation', 'target', 'layer', 'room', 'message']);
 export type Kind = keyof typeof ENTITY_SCHEMAS;
 export const KINDS = Object.keys(ENTITY_SCHEMAS) as Kind[];
 export const isKind = (value: unknown): value is Kind => typeof value === 'string' && value in ENTITY_SCHEMAS;

@@ -329,14 +329,9 @@ export async function uploadFile(file: Blob): Promise<{ id: string; mime: string
   return body as { id: string; mime: string; groesse: number };
 }
 
+/** Bild hochladen; liefert die Kennung oder `null` (Fehler steht dann im Hinweis). */
 export async function uploadImage(file: File): Promise<string | null> {
-  const response = await fetch('/api/v1/blobs', { method: 'POST', headers: { 'content-type': file.type }, body: file, credentials: 'same-origin' });
-  const body = await response.json().catch(() => ({}));
-  if (!response.ok) {
-    notice.value = body.fehler ?? 'Bild konnte nicht hochgeladen werden.';
-    return null;
-  }
-  return body.id as string;
+  return (await uploadFile(file))?.id ?? null;
 }
 
 // ───────────── Markierungen mit Rückgängig/Wiederholen ─────────────

@@ -1,12 +1,13 @@
 import { randomBytes } from 'node:crypto';
 import { EventEmitter } from 'node:events';
 import type { Database } from './db.js';
+import { EntityStore, TrackStore } from './entities.js';
+import { migrateEntities, normalizeTargetPhotos } from './migrations.js';
 import { distanceMeters } from './geo.js';
 import {
   commandArgs,
   ENTITY_SCHEMAS,
   INSTANZ_HAUPT,
-  KINDS,
   SCOPED_KINDS,
   type CommandName,
   type Entity,
@@ -17,7 +18,6 @@ import {
   type OepnvFahrt,
   type Operation,
   type Position,
-  normalizeCallsign,
 } from './schemas.js';
 
 export type Role = 'fahnder' | 'zentrale';
@@ -88,61 +88,24 @@ export class Lage extends EventEmitter<{ event: [LageEvent] }> {
   private readonly positions = new Map<string, Position>();
   private readonly trackerPositions = new Map<string, Position>();
   private readonly lastTrackPoint = new Map<string, Position>();
+  private readonly entities: EntityStore;
+  private readonly tracks: TrackStore;
 
   constructor(
     private readonly db: Database,
     private readonly upcomingStops: UpcomingStops = () => [],
   ) {
     super();
+    this.entities = new EntityStore(db);
+    this.tracks = new TrackStore(db);
     const trackerPos = db.getKv('trackerPositions');
     if (trackerPos) for (const [id, p] of Object.entries(JSON.parse(trackerPos) as Record<string, Position>)) this.trackerPositions.set(id, p);
-    this.migrate();
+    migrateEntities(db);
     this.ensure('instance', '', INSTANZ_HAUPT, { name: 'Hauptlage', art: 'einsatz', beschreibung: '', mitglieder: [], erstelltVon: 'system' });
     this.ensure('layer', '', LAYER_DAUERHAFT, { name: 'Dauerhafte Orte', art: 'dauerhaft', status: 'live', beschreibung: 'In allen Instanzen sichtbar' });
     for (const instance of this.list('instance')) this.ensureInstance(instance.id);
     this.pruneTrack();
     this.expireAnnotations();
-  }
-
-  /**
-   * Bringt gespeicherte Objekte auf den aktuellen Stand des Datenmodells.
-   * Fehlende Felder erhalten ihre Vorgabewerte; umbenannte Felder werden übertragen.
-   */
-  private migrate(): void {
-    const rows = this.db.sql.prepare('SELECT kind, inst, id, data FROM entities').all() as unknown as { kind: string; inst: string; id: string; data: string }[];
-    const trackerNames = new Map(
-      rows.filter((r) => r.kind === 'tracker').map((r) => [r.id, String((JSON.parse(r.data) as { name?: unknown }).name ?? '')]),
-    );
-    for (const row of rows) {
-      if (!(KINDS as string[]).includes(row.kind)) continue;
-      const raw = JSON.parse(row.data) as Record<string, unknown>;
-      if (row.kind === 'member') {
-        raw.spitzname ??= raw.funkrufname ?? raw.name;
-        if (raw.fahrzeugId && !raw.fortbewegung) raw.fortbewegung = 'fahrzeug';
-        delete raw.funkrufname;
-      }
-      if (row.kind === 'vehicle') {
-        if (!raw.funkrufname) raw.funkrufname = String(raw.bezeichnung || 'Fahrzeug').slice(0, 20);
-        // Bezeichnung und Beschreibung waren doppelt: zu einer Beschreibung zusammenführen.
-        if (typeof raw.beschreibung === 'string' && raw.beschreibung.trim()) {
-          const teile = [String(raw.bezeichnung ?? '').trim(), raw.beschreibung.trim()].filter(Boolean);
-          raw.bezeichnung = teile.join(', ').slice(0, 300);
-          raw.beschreibung = '';
-        }
-        // Aus 0.1 übernommene Fahrzeuge trugen Marke und Modell als Namen. Hat der verbundene Tracker einen
-        // gültigen Funkrufnamen, gilt dieser.
-        if (normalizeCallsign(String(raw.funkrufname)) === null && typeof raw.trackerId === 'string') {
-          const callsign = normalizeCallsign(trackerNames.get(raw.trackerId) ?? '');
-          if (callsign) raw.funkrufname = callsign;
-        }
-      }
-      if (row.kind === 'target') mergeTargetTexts(raw);
-      const parsed = ENTITY_SCHEMAS[row.kind as Kind].safeParse(raw);
-      if (!parsed.success) continue;
-      if (row.kind === 'target') normalizeTargetPhotos(parsed.data as EntityData<'target'>);
-      const next = JSON.stringify(parsed.data);
-      if (next !== row.data) this.db.sql.prepare('UPDATE entities SET data = ? WHERE kind = ? AND inst = ? AND id = ?').run(next, row.kind, row.inst, row.id);
-    }
   }
 
   // ───────────────────────────── Lesen ─────────────────────────────
@@ -174,27 +137,11 @@ export class Lage extends EventEmitter<{ event: [LageEvent] }> {
 
   /** Objekte einer Art: instanzbezogene aus `inst` und die übergreifenden, sonst alle. */
   list<K extends Kind>(kind: K, inst: string = INSTANZ_HAUPT): Entity<K>[] {
-    const rows = SCOPED_KINDS.has(kind)
-      ? (this.db.sql.prepare("SELECT id, rev, data, updated_at, updated_by FROM entities WHERE kind = ? AND inst IN (?, '')").all(kind, inst) as unknown as EntityRow[])
-      : (this.db.sql.prepare('SELECT id, rev, data, updated_at, updated_by FROM entities WHERE kind = ?').all(kind) as unknown as EntityRow[]);
-    return rows.map((row) => fromRow<K>(row));
-  }
-
-  /** Alle Objekte einer Art über alle Instanzen, mit ihrer Instanz. */
-  private listAll<K extends Kind>(kind: K): { inst: string; entity: Entity<K> }[] {
-    const rows = this.db.sql.prepare('SELECT inst, id, rev, data, updated_at, updated_by FROM entities WHERE kind = ?').all(kind) as unknown as (EntityRow & {
-      inst: string;
-    })[];
-    return rows.map((row) => ({ inst: row.inst, entity: fromRow<K>(row) }));
+    return this.entities.list(kind, inst);
   }
 
   get<K extends Kind>(kind: K, id: string, inst: string = INSTANZ_HAUPT): Entity<K> | null {
-    const row = (
-      SCOPED_KINDS.has(kind)
-        ? this.db.sql.prepare("SELECT id, rev, data, updated_at, updated_by FROM entities WHERE kind = ? AND id = ? AND inst IN (?, '') ORDER BY inst DESC").get(kind, id, inst)
-        : this.db.sql.prepare('SELECT id, rev, data, updated_at, updated_by FROM entities WHERE kind = ? AND id = ?').get(kind, id)
-    ) as EntityRow | undefined;
-    return row ? fromRow<K>(row) : null;
+    return this.entities.get(kind, id, inst);
   }
 
   positionOf(memberId: string): Position | undefined {
@@ -236,19 +183,7 @@ export class Lage extends EventEmitter<{ event: [LageEvent] }> {
   }
 
   coverage(inst: string = INSTANZ_HAUPT): { memberId: string; punkte: [number, number, number][] }[] {
-    const rows = this.db.sql.prepare('SELECT member_id, ts, lat, lon FROM track WHERE inst = ? ORDER BY member_id, ts').all(inst) as unknown as {
-      member_id: string;
-      ts: number;
-      lat: number;
-      lon: number;
-    }[];
-    const byMember = new Map<string, [number, number, number][]>();
-    for (const row of rows) {
-      let list = byMember.get(row.member_id);
-      if (!list) byMember.set(row.member_id, (list = []));
-      list.push([row.lat, row.lon, row.ts]);
-    }
-    return [...byMember].map(([memberId, punkte]) => ({ memberId, punkte }));
+    return this.tracks.byMember(inst);
   }
 
   // ───────────────────────────── Objekte schreiben ─────────────────────────────
@@ -289,7 +224,7 @@ export class Lage extends EventEmitter<{ event: [LageEvent] }> {
         if (!this.get('layer', (data as EntityData<'annotation'>).layerId, inst)) throw new LageError('ungueltig', 'Ebene existiert nicht.');
         // Wechselt die Markierung zwischen dauerhaften Orten und Lage, zieht sie in den anderen Bereich um.
         const other = scope === '' ? inst : '';
-        if (this.rowExists('annotation', other, id)) this.remove('annotation', other, id);
+        if (this.entities.exists('annotation', other, id)) this.remove('annotation', other, id);
         break;
       }
       case 'layer': {
@@ -353,9 +288,9 @@ export class Lage extends EventEmitter<{ event: [LageEvent] }> {
         for (const m of this.occupants(id)) this.write('member', '', m.id, { ...m.data, fortbewegung: 'fuss', fahrzeugId: null }, actor.id);
         break;
       case 'tracker':
-        for (const { inst: i, entity: t } of this.listAll('target')) if (t.data.trackerId === id) this.write('target', i, t.id, { ...t.data, trackerId: null }, actor.id);
+        for (const { inst: i, entity: t } of this.entities.listAll('target')) if (t.data.trackerId === id) this.write('target', i, t.id, { ...t.data, trackerId: null }, actor.id);
         for (const v of this.list('vehicle')) if (v.data.trackerId === id) this.write('vehicle', '', v.id, { ...v.data, trackerId: null }, actor.id);
-        for (const { inst: i, entity: a } of this.listAll('annotation')) if (a.data.trackerId === id) this.write('annotation', i, a.id, { ...a.data, trackerId: null }, actor.id);
+        for (const { inst: i, entity: a } of this.entities.listAll('annotation')) if (a.data.trackerId === id) this.write('annotation', i, a.id, { ...a.data, trackerId: null }, actor.id);
         this.trackerPositions.delete(id);
         this.persistTrackerPositions();
         break;
@@ -384,7 +319,7 @@ export class Lage extends EventEmitter<{ event: [LageEvent] }> {
     const last = this.lastTrackPoint.get(memberId);
     if (last && (p.ts <= last.ts || distanceMeters(last, p) < TRACK_MIN_DISTANCE_M)) return;
     this.lastTrackPoint.set(memberId, p);
-    this.db.sql.prepare('INSERT OR IGNORE INTO track (member_id, ts, lat, lon, inst) VALUES (?, ?, ?, ?, ?)').run(memberId, p.ts, p.lat, p.lon, inst);
+    this.tracks.add(inst, memberId, p);
   }
 
   /** Position eines Trackers, gemeldet von einem Tracker-Anbieter. `kennung` ist die Gerätekennung. */
@@ -571,11 +506,8 @@ export class Lage extends EventEmitter<{ event: [LageEvent] }> {
     if (id === INSTANZ_HAUPT) throw new LageError('verboten', 'Die Hauptlage kann nicht gelöscht werden.');
     this.requireMembership(actor, instance);
     for (const m of this.list('member')) if (m.data.instanz === id) this.switchInstance(m.id, INSTANZ_HAUPT);
-    for (const kind of SCOPED_KINDS) {
-      const rows = this.db.sql.prepare('SELECT id FROM entities WHERE kind = ? AND inst = ?').all(kind, id) as { id: string }[];
-      for (const row of rows) this.remove(kind as Kind, id, row.id);
-    }
-    this.db.sql.prepare('DELETE FROM track WHERE inst = ?').run(id);
+    for (const kind of SCOPED_KINDS) for (const entity of this.entities.listIn(kind, id)) this.remove(kind, id, entity.id);
+    this.tracks.clear(id);
     this.db.deleteKv(operationKey(id));
     this.operations.delete(id);
     this.remove('instance', '', id);
@@ -622,15 +554,13 @@ export class Lage extends EventEmitter<{ event: [LageEvent] }> {
       return next;
     };
     this.db.transaction(() => {
-      const targets = this.db.sql.prepare("SELECT id, data FROM entities WHERE kind = 'target' AND inst = ?").all(paketId) as { id: string; data: string }[];
-      for (const row of targets) {
-        const data = JSON.parse(row.data) as EntityData<'target'>;
+      for (const row of this.entities.listIn('target', paketId)) {
+        const { data } = row;
         const bindung = data.bindung?.zielId ? { ...data.bindung, zielId: newId(data.bindung.zielId) } : data.bindung;
         this.write('target', inst, newId(row.id), { ...data, bindung }, actor.id);
       }
-      const annotations = this.db.sql.prepare("SELECT id, data FROM entities WHERE kind = 'annotation' AND inst = ?").all(paketId) as { id: string; data: string }[];
-      for (const row of annotations) {
-        const data = JSON.parse(row.data) as EntityData<'annotation'>;
+      for (const row of this.entities.listIn('annotation', paketId)) {
+        const { data } = row;
         this.write('annotation', inst, newId(row.id), { ...data, layerId: LAYER_LAGE, gruppe: group(data.gruppe) }, actor.id);
       }
     });
@@ -736,7 +666,7 @@ export class Lage extends EventEmitter<{ event: [LageEvent] }> {
   }
 
   private resetCoverage(inst: string): void {
-    this.db.sql.prepare('DELETE FROM track WHERE inst = ?').run(inst);
+    this.tracks.clear(inst);
     for (const m of this.list('member')) if (this.activeInstance(m.id) === inst) this.lastTrackPoint.delete(m.id);
     this.emit('event', { type: 'bestreifungReset', inst });
   }
@@ -745,7 +675,7 @@ export class Lage extends EventEmitter<{ event: [LageEvent] }> {
   async refreshTrips(load: (tripId: string) => Promise<{ stops: { lat: number; lon: number; arr: number | null; dep: number | null }[] }>): Promise<number> {
     let updated = 0;
     const now = Date.now();
-    for (const { inst, entity: a } of this.listAll('annotation')) {
+    for (const { inst, entity: a } of this.entities.listAll('annotation')) {
       const fahrt = a.data.fahrt;
       if (!fahrt || a.data.typ !== 'oepnvfahrzeug') continue;
       const last = fahrt.zeiten.at(-1);
@@ -771,7 +701,7 @@ export class Lage extends EventEmitter<{ event: [LageEvent] }> {
   /** Löscht Markierungen, deren Lebensdauer abgelaufen ist. Liefert die Anzahl. */
   expireAnnotations(now = Date.now()): number {
     let count = 0;
-    for (const { inst, entity: a } of this.listAll('annotation')) {
+    for (const { inst, entity: a } of this.entities.listAll('annotation')) {
       if (a.data.ablauf !== null && a.data.ablauf !== undefined && a.data.ablauf <= now) {
         this.remove('annotation', inst, a.id);
         count++;
@@ -781,7 +711,7 @@ export class Lage extends EventEmitter<{ event: [LageEvent] }> {
   }
 
   private pruneTrack(now = Date.now()): void {
-    this.db.sql.prepare('DELETE FROM track WHERE ts < ?').run(now - TRACK_RETENTION_MS);
+    this.tracks.pruneBefore(now - TRACK_RETENTION_MS);
   }
 
   /** Setzt die Lage einer Instanz zurück. Dauerhafte Orte, Profile, Fahrzeuge, Tracker und Chaträume bleiben erhalten. */
@@ -807,10 +737,6 @@ export class Lage extends EventEmitter<{ event: [LageEvent] }> {
     return inst;
   }
 
-  private rowExists(kind: Kind, inst: string, id: string): boolean {
-    return !!this.db.sql.prepare('SELECT 1 FROM entities WHERE kind = ? AND inst = ? AND id = ?').get(kind, inst, id);
-  }
-
   private occupants(vehicleId: string): Entity<'member'>[] {
     return this.list('member').filter((m) => m.data.fortbewegung === 'fahrzeug' && m.data.fahrzeugId === vehicleId);
   }
@@ -826,26 +752,18 @@ export class Lage extends EventEmitter<{ event: [LageEvent] }> {
   }
 
   private write<K extends Kind>(kind: K, inst: string, id: string, data: EntityData<K>, actorId: string): Entity<K> {
-    const now = Date.now();
-    const row = this.db.sql
-      .prepare(
-        `INSERT INTO entities (kind, inst, id, rev, data, updated_at, updated_by) VALUES (?, ?, ?, 1, ?, ?, ?)
-         ON CONFLICT (kind, inst, id) DO UPDATE SET rev = rev + 1, data = excluded.data, updated_at = excluded.updated_at, updated_by = excluded.updated_by
-         RETURNING rev`,
-      )
-      .get(kind, inst, id, JSON.stringify(data), now, actorId) as { rev: number };
-    const entity: Entity<K> = { id, rev: row.rev, updatedAt: now, updatedBy: actorId, data };
+    const entity = this.entities.write(kind, inst, id, data, actorId);
     this.emit('event', { type: 'put', kind, entity: entity as Entity, inst });
     return entity;
   }
 
   private remove(kind: Kind, inst: string, id: string): void {
-    this.db.sql.prepare('DELETE FROM entities WHERE kind = ? AND inst = ? AND id = ?').run(kind, inst, id);
+    this.entities.remove(kind, inst, id);
     this.emit('event', { type: 'del', kind, id, inst });
   }
 
   private ensure<K extends Kind>(kind: K, inst: string, id: string, data: EntityData<K>): void {
-    if (!this.rowExists(kind, inst, id)) this.write(kind, inst, id, data, 'system');
+    if (!this.entities.exists(kind, inst, id)) this.write(kind, inst, id, data, 'system');
   }
 
   private trimMessages(inst: string, roomId: string): void {
@@ -869,51 +787,4 @@ function randomId(length = 20): string {
   return randomBytes(Math.ceil(length * 0.75)).toString('base64url').slice(0, length);
 }
 
-interface EntityRow {
-  id: string;
-  rev: number;
-  data: string;
-  updated_at: number;
-  updated_by: string;
-}
 
-function fromRow<K extends Kind>(row: EntityRow): Entity<K> {
-  return { id: row.id, rev: row.rev, updatedAt: row.updated_at, updatedBy: row.updated_by, data: JSON.parse(row.data) as EntityData<K> };
-}
-
-export { KINDS };
-
-/**
- * Ziele hatten bis 0.6 mehrere Freitextfelder. Sie werden mit Überschrift in das gemeinsame Feld `hinweise` übernommen.
- */
-export function mergeTargetTexts(raw: Record<string, unknown>): void {
-  const text = (v: unknown) => (typeof v === 'string' ? v.trim() : '');
-  const extra: [string, string][] = [
-    [raw.art === 'objekt' ? 'Beschreibung' : 'Merkmale', text(raw.merkmale)],
-    [raw.art === 'fahrzeug' ? 'Besonderheiten' : 'Fahrzeug', text(raw.fahrzeugBeschreibung)],
-    ['Sachverhalt', text(raw.sachverhalt)],
-  ];
-  const after: [string, string][] = [['Maßnahmen', text(raw.massnahmen)]];
-  if (![...extra, ...after].some(([, v]) => v)) return;
-  const hinweise = text(raw.hinweise);
-  const teile = [...extra, ['Hinweise', hinweise] as [string, string], ...after]
-    .filter(([, v]) => v)
-    .map(([label, v]) => `${label}: ${v}`);
-  raw.hinweise = teile.join('\n\n').slice(0, 12000);
-  raw.merkmale = '';
-  raw.fahrzeugBeschreibung = '';
-  raw.sachverhalt = '';
-  raw.massnahmen = '';
-}
-
-/** Einzelne Bildfelder wandern in die Fotoliste; das Titelbild ist immer deren erstes Foto. */
-export function normalizeTargetPhotos(target: EntityData<'target'>): void {
-  const bild = (blobId: string) => ({ blobId, art: 'bild' as const, name: 'Foto.jpg', mime: 'image/jpeg', groesse: 0, dauer: null, wellenform: null });
-  const anhaenge = [...target.anhaenge];
-  for (const blobId of [target.fahrzeugFotoBlob, target.fotoBlob]) {
-    if (blobId && !anhaenge.some((a) => a.blobId === blobId)) anhaenge.unshift(bild(blobId));
-  }
-  target.anhaenge = anhaenge.slice(0, 100);
-  target.fahrzeugFotoBlob = null;
-  target.fotoBlob = target.anhaenge.find((a) => a.art === 'bild')?.blobId ?? null;
-}

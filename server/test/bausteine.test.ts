@@ -12,7 +12,7 @@ import { costingFor, decodePolyline6, RouteService, sonderrechteLohnen } from '.
 import { hashPassword, RateLimiter, Vault, verifyPassword } from '../src/security.js';
 import { intervalCommand, parseH02Binary, parseH02Text } from '../src/trackers/h02.js';
 import { nextStopIndex, OepnvStore, parseRoutes } from '../src/oepnv.js';
-import { sniffMime } from '../src/http/device.js';
+import { sniffMime } from '../src/http/files.js';
 
 test('UTM 32N nach WGS84 (Hamburger Rathaus)', () => {
   const p = utmToWgs84(565_835.6, 5_933_949.0);

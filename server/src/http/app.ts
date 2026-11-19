@@ -3,6 +3,7 @@ import cookie from '@fastify/cookie';
 import fastifyStatic from '@fastify/static';
 import websocket from '@fastify/websocket';
 import Fastify, { type FastifyInstance, type FastifyReply, type FastifyRequest } from 'fastify';
+import type { z } from 'zod';
 import type { ArgusImporter } from '../argus.js';
 import type { Auth } from '../auth.js';
 import type { TransitousClient } from '../transit/transitous.js';
@@ -18,7 +19,10 @@ import type { ReleaseStore } from '../release.js';
 import { RateLimiter, type Vault } from '../security.js';
 import type { PajPoller } from '../trackers/paj.js';
 import { registerAdminRoutes } from './admin.js';
-import { registerDeviceRoutes } from './device.js';
+import { registerFileRoutes } from './files.js';
+import { registerNavigationRoutes } from './navigation.js';
+import { registerTrackerRoutes } from './trackers.js';
+import { registerTransitRoutes } from './transit.js';
 import { registerPublicRoutes } from './public.js';
 
 export const SESSION_COOKIE = 'sentinel_sitzung';
@@ -52,6 +56,16 @@ export class HttpError extends Error {
   ) {
     super(message);
   }
+}
+
+/**
+ * Prüft eine Eingabe gegen ihr Schema. Ungültig heißt 400 mit `message`, oder mit der ersten Meldung des Schemas,
+ * wenn keine angegeben ist. Alle Routen prüfen ihre Eingaben so, nie von Hand.
+ */
+export function parse<T>(schema: z.ZodType<T>, value: unknown, message?: string): T {
+  const result = schema.safeParse(value);
+  if (!result.success) throw new HttpError(400, message ?? result.error.issues[0]?.message ?? 'Ungültige Anfrage.');
+  return result.data;
 }
 
 /** Zugriffshilfen, die alle Routen gemeinsam nutzen. */
@@ -160,7 +174,10 @@ export async function buildApp(services: Services): Promise<FastifyInstance> {
   });
 
   registerPublicRoutes(app, services, guards);
-  registerDeviceRoutes(app, services, guards);
+  registerFileRoutes(app, services, guards);
+  registerNavigationRoutes(app, services, guards);
+  registerTransitRoutes(app, services, guards);
+  registerTrackerRoutes(app, services, guards);
   registerAdminRoutes(app, services, guards);
 
   if (existsSync(config.webDir)) {
