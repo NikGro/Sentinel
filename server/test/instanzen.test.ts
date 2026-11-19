@@ -148,3 +148,21 @@ test('Datenbank aus 0.12: Lageobjekte wandern in die Hauptinstanz, dauerhafte Or
   assert.equal(lage.get('member', 'a')?.data.instanz, 'nord');
   assert.equal(lage.coverage('haupt').length, 1);
 });
+
+test('Instanzen lassen sich nicht direkt schreiben, nur über Kommandos', () => {
+  const lage = mitZwei();
+  assert.throws(() => lage.put(fahnder('a'), 'instance', 'x', { name: 'X' }), /Instanzenmenü/);
+  assert.throws(() => lage.del(zentrale, 'instance', 'haupt'), /Instanzenmenü/);
+  assert.throws(() => lage.command(fahnder('a'), 'instanz.wechseln', { id: 'gibtsnicht' }), /existiert nicht/);
+});
+
+test('Markierung zieht zwischen Lage und dauerhaften Orten um', () => {
+  const lage = mitZwei();
+  lage.command(fahnder('a'), 'instanz.erstellen', { id: 'nord', name: 'Nord' });
+  lage.put(fahnder('a'), 'annotation', 'm1', { layerId: LAYER_LAGE, typ: 'marker', punkte: punkt }, 'nord');
+  lage.put(fahnder('a'), 'annotation', 'm1', { layerId: LAYER_DAUERHAFT, typ: 'marker', punkte: punkt }, 'nord');
+  assert.deepEqual(lage.list('annotation', 'haupt').map((a) => a.id), ['m1'], 'Jetzt in allen Instanzen');
+  lage.put(fahnder('a'), 'annotation', 'm1', { layerId: LAYER_LAGE, typ: 'marker', punkte: punkt }, 'nord');
+  assert.equal(lage.list('annotation', 'haupt').length, 0);
+  assert.equal(lage.list('annotation', 'nord').length, 1, 'Kein Doppel');
+});

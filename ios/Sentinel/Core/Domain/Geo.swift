@@ -18,8 +18,13 @@ struct GeoPoint: Codable, Hashable, Sendable {
         self.init(lat: coordinate.latitude, lon: coordinate.longitude)
     }
 
+    /// Großkreisentfernung in Metern (Haversine). Ohne `CLLocation`, weil sie beim Zeichnen der Karte sehr oft läuft.
     func distance(to other: GeoPoint) -> CLLocationDistance {
-        CLLocation(latitude: lat, longitude: lon).distance(from: CLLocation(latitude: other.lat, longitude: other.lon))
+        let rad = Double.pi / 180
+        let dLat = (other.lat - lat) * rad
+        let dLon = (other.lon - lon) * rad
+        let h = sin(dLat / 2) * sin(dLat / 2) + cos(lat * rad) * cos(other.lat * rad) * sin(dLon / 2) * sin(dLon / 2)
+        return 2 * 6_371_008.8 * asin(min(1, h.squareRoot()))
     }
 }
 

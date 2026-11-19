@@ -249,12 +249,10 @@ struct PackagesScreen: View {
             Button("Abbrechen", role: .cancel) {}
             Button("Übernehmen") {
                 guard let package = importing, let target = targetInstance else { return }
-                // Aus einem geöffneten Paket heraus zuerst zurück in den Einsatz, dann übernehmen.
+                // Aus einem geöffneten Paket heraus zuerst zurück in den Einsatz, dann übernehmen. Der Server
+                // verarbeitet beides in dieser Reihenfolge, weil beides über dieselbe Verbindung geht.
                 if lage.isPackageArea { model.openInstance(target.id) }
-                Task {
-                    if lage.instanz != target.id { try? await Task.sleep(for: .milliseconds(600)) }
-                    lage.importPackage(package.id)
-                }
+                lage.importPackage(package.id)
             }
         } message: {
             Text("Alle Objekte des Pakets werden in „\(targetInstance?.data.name ?? "")“ kopiert und sind danach eigenständige Objekte dieser Instanz. Das lässt sich nicht rückgängig machen.")

@@ -124,6 +124,9 @@ interface Cached<T> {
   value: Promise<T>;
 }
 
+/** Obergrenze des Zwischenspeichers; darüber fallen die ältesten Antworten heraus. */
+const MAX_CACHE_ENTRIES = 800;
+
 export class TransitousClient {
   private readonly cache = new Map<string, Cached<unknown>>();
 
@@ -145,10 +148,18 @@ export class TransitousClient {
     const hit = this.cache.get(key) as Cached<T> | undefined;
     if (hit && now - hit.at < ttl) return hit.value;
     const value = load();
-    this.cache.set(key, { at: now, value });
-    value.catch(() => this.cache.delete(key));
-    if (this.cache.size > 500) {
-      for (const [k, v] of this.cache) if (now - v.at > 600_000) this.cache.delete(k);
+    // Neu einfügen, damit die Reihenfolge der Map dem Alter entspricht.
+    const entry: Cached<unknown> = { at: now, value };
+    this.cache.delete(key);
+    this.cache.set(key, entry);
+    // Fehlgeschlagen: nicht zwischenspeichern, aber nur diesen Eintrag entfernen, keinen neueren.
+    value.catch(() => {
+      if (this.cache.get(key) === entry) this.cache.delete(key);
+    });
+    // Fest begrenzt: die ältesten Einträge zuerst verwerfen (Maps behalten die Einfügereihenfolge).
+    for (const k of this.cache.keys()) {
+      if (this.cache.size <= MAX_CACHE_ENTRIES) break;
+      this.cache.delete(k);
     }
     return value;
   }

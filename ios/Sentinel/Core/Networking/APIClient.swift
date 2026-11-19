@@ -361,6 +361,14 @@ struct APIClient: Sendable {
         _ = try await request("DELETE", "api/v1/admin/paj")
     }
 
+    private struct CrossStreetsRequest: Encodable { let punkte: [GeoPoint] }
+    private struct CrossStreetsResult: Decodable { let strassen: [CrossStreet] }
+
+    /// Querstraßen entlang einer Route (OpenStreetMap über den eigenen Server).
+    func crossStreets(along points: [GeoPoint]) async throws -> [CrossStreet] {
+        try await json(CrossStreetsResult.self, "POST", "api/v1/route/querstrassen", body: CrossStreetsRequest(punkte: points)).strassen
+    }
+
     private struct PajTrackerRequest: Encodable {
         let id: String
         let name: String
