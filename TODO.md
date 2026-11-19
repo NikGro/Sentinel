@@ -54,7 +54,7 @@ statt jede Änderung sofort einzubauen. Erledigtes wandert mit Version ins CHANG
 ### App-/Server-Kompatibilität
 
 - **Funktionsgleichheit zwischen iOS-App, Server-Webversion und Kommandozentrale überprüfen:** Einen systematischen Abgleich durchführen, ob die Web-Version des Servers und die Web-Version der Kommandozentrale hinsichtlich Funktionen, Auswahlmöglichkeiten und Bedienoptionen auf demselben aktuellen Stand wie die iOS-App sind. Fehlende, abweichende oder veraltete Funktionen dokumentieren und die Web-Oberflächen entsprechend angleichen, soweit die jeweilige Plattform dies unterstützt.
-- **Apple-CarPlay-Version für Sentinel prüfen und konzipieren:** Untersuchen, welche sinnvollen Sentinel-Funktionen sich als CarPlay-Erlebnis bereitstellen lassen und welche technischen bzw. von Apple vorgegebenen Einschränkungen gelten. Ein schlankes, für die Nutzung im Fahrzeug geeignetes Konzept erarbeiten und die Umsetzbarkeit bewerten.
+- **Apple-CarPlay-Version für Sentinel prüfen und konzipieren (geprüft, siehe docs/CARPLAY.md: braucht Apples CarPlay-Berechtigung, die es nur mit bezahltem Entwicklerkonto und Antrag gibt – mit SideStore nicht möglich; Konzept liegt vor):** Untersuchen, welche sinnvollen Sentinel-Funktionen sich als CarPlay-Erlebnis bereitstellen lassen und welche technischen bzw. von Apple vorgegebenen Einschränkungen gelten. Ein schlankes, für die Nutzung im Fahrzeug geeignetes Konzept erarbeiten und die Umsetzbarkeit bewerten.
 
 ### Codebase-Qualität und Architektur
 
