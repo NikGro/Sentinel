@@ -13,15 +13,10 @@ statt jede Änderung sofort einzubauen. Erledigtes wandert mit Version ins CHANG
 ### Marker und Oberfläche
 
 - **Zielperson: Karte friert ein (0.13: ÖPNV-Positionsberechnung als wahrscheinliche Ursache stark beschleunigt):** Offene Rückfrage, welches Symbol genau gemeint ist: im Plus-Menü, im Editor („Unterwegs“) oder auf der Karte. Mit 0.13 erneut prüfen.
-- **Marker auf 3D-Gebäudefassaden (geprüft, mit Apple MapKit nicht machbar):** Markierungen liegen immer am Boden, Fassadenhöhen lassen sich nicht abfragen. Machbar wäre es nur mit einer eigenen 3D-Engine, z. B. Google Photorealistic 3D Tiles mit CesiumJS. Das wäre sehr aufwendig.
 
 ### Tracker
 
 - **SinoTrack „Test“ (7026222172) sendet nicht:** Am Router die Portweiterleitung TCP 5013 zur Synology prüfen. Am Gerät die SMS-Einrichtung prüfen: öffentliche Adresse, Port 5013, Protokoll H02.
-
-### Fahrzeug
-
-- **Apple CarPlay (geprüft, siehe docs/CARPLAY.md):** Braucht Apples CarPlay-Berechtigung. Die gibt es nur mit bezahltem Entwicklerkonto und Antrag. Das Konzept liegt vor.
 
 ### Codebase-Qualität
 
