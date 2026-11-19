@@ -44,6 +44,8 @@ statt jede Änderung sofort einzubauen. Erledigtes wandert mit Version ins CHANG
 - **Orts- und Kreuzungssuche um Haltestellen und Businesses erweitern:** Die allgemeine Ortssuche sowie die Suche nach Kreuzungen soll neben Straßen und Adressen auch Haltestellen sowie Businesses/POIs (z. B. Geschäfte, Einrichtungen und andere relevante Orte) finden und als passende Suchergebnisse anbieten.
 - **Suchergebnisse auf tatsächlich plausible Treffer beschränken:** Nicht nur einzelne Bestandteile eines Suchbegriffs validieren, sondern prüfen, ob die Kombination als realer Ort existiert. Bei einer Kreuzung müssen beide Straßen tatsächlich an dieser Stelle aufeinandertreffen; bei Straße und Hausnummer muss die konkrete Hausnummer dieser Straße zugeordnet sein. Unplausible oder nur teilweise passende Kombinationen dürfen nicht in der Vorschlagsliste erscheinen. Die Prüfung soll für alle unterstützten Ortstypen gelten.
 - **Suchleiste für ÖPNV-Marker umfunktionieren:** Beim Setzen eines ÖPNV-Markers wird die Suchleiste als Teil des Popups zur Suche nach einer ÖPNV-Verbindung verwendet.
+- **Flächen und Kreise ohne zusätzlichen Mittelpunkt darstellen:** Beim Erstellen von Polygonen, Kreisen und anderen Flächen darf kein zusätzlicher Mittelpunkt-/Zentralpunkt-Marker innerhalb der Fläche erscheinen. Die Fläche selbst ist das eigenständige interaktive und antippbare Kartenobjekt; Auswahl, Bearbeitung und Benennung erfolgen direkt über die Fläche und benötigen keinen separaten Punkt.
+- **Flächen direkt innerhalb der Fläche beschriften:** Flächen sollen direkt benannt werden können. Die Bezeichnung wird als Text innerhalb der Fläche dargestellt und möglichst mittig bzw. passend zur Geometrie positioniert. Die Textausrichtung soll bevorzugt horizontal bleiben. Wenn die verfügbare Breite dafür nicht ausreicht, darf der Text passend zur Form gedreht oder schräg ausgerichtet werden – möglichst parallel zu einer der längeren Seiten der Fläche –, damit er vollständig innerhalb der Fläche Platz findet. Bei Kreisen soll die Beschriftung bevorzugt horizontal und bei Bedarf kompakt bzw. gestaucht dargestellt werden, sofern sie dadurch innerhalb des Kreises bleibt. Die Beschriftung darf keinen separaten Mittelpunkt-Marker oder zusätzlichen Kreis erfordern.
 
 ### Bedienoberfläche und Liquid Glass
 
@@ -53,7 +55,6 @@ statt jede Änderung sofort einzubauen. Erledigtes wandert mit Version ins CHANG
 - **Zielpersonen und Zielfahrzeuge auf der Karte ein-/ausblenden:** Zielpersonen und Fahrzeuge sollen über eigene Sichtbarkeitsschalter im Menü direkt ein- und ausgeblendet werden können. Ausblenden darf die Objekte nicht löschen; sie bleiben angelegt und können jederzeit wieder eingeblendet werden. Es soll nicht nötig sein, sie zum Wiederanzeigen neu anzulegen.
 - **SOS-Haltefortschritt wieder sichtbar machen:** Der weiße Fortschrittsring des SOS-Buttons ist in der aktuellen Umsetzung vollständig verschwunden. Eine gut sichtbare Fortschrittsanzeige während des Gedrückthaltens wieder einführen. Möglich sind ein ausreichend großer äußerer Ring, der nicht vom Button verdeckt wird, oder eine kreis-/tortenförmige weiße Füllung des Buttons. Die Darstellung muss den fortschreitenden Haltevorgang klar und zuverlässig anzeigen.
 - **Zielperson-Icon-Auswahl darf Karte nicht einfrieren (Rückfrage: welches Icon genau – im Plus-Menü, im Editor oder auf der Karte?):** Beim Anlegen einer Zielperson friert die Karte ein, sobald das Icon angetippt wird. Ursache für den UI-/Map-Freeze beheben und die Icon-Auswahl ohne Blockieren der Karteninteraktion ermöglichen.
-
 
 ### ÖPNV, Linien und Fahrzeuge
 
@@ -85,14 +86,12 @@ statt jede Änderung sofort einzubauen. Erledigtes wandert mit Version ins CHANG
 
 ### Lage, Karten-Layer und Bestreifung
 
-
 ### Tracker
 
 - **PAJ-Tracker mit eigenem Konto je Tracker:** Beim Hinzufügen nicht nur die Geräte-ID, sondern einmalig E-Mail und Passwort des PAJ-Kontos angeben, dem das Gerät gehört (jeder Fahnder hat sein eigenes Konto). Zugangsdaten nur für diesen Tracker speichern, nicht global in Sentinel. Beim Anlegen prüfen, ob die ID wirklich zu diesem Konto gehört, sonst „Gerät nicht in diesem Konto“ anzeigen.
 - **SinoTrack „Test“ (7026222172) sendet nicht:** Portweiterleitung TCP 5013 im Router zur Synology und die SMS-Einrichtung des Geräts (öffentliche Adresse, Port 5013, Protokoll H02) prüfen.
 
 ### App-/Server-Kompatibilität
-
 
 ### Codebase-Qualität und Architektur
 
