@@ -36,6 +36,8 @@ final class AlertCenter {
         let level: Level
         let title: String
         let message: String
+        /// Hinweis aus einer anderen Instanz: Antippen öffnet sie.
+        var instanceId: String?
     }
 
     private(set) var current: Alert?
@@ -44,13 +46,26 @@ final class AlertCenter {
 
     @ObservationIgnored private var queue: [Alert] = []
     @ObservationIgnored private var dismissTask: Task<Void, Never>?
+    private let delegate = NotificationDelegate()
+    /// Öffnet eine Instanz (aus dem Banner oder der iOS-Mitteilung).
+    @ObservationIgnored var openInstance: (String) -> Void = { _ in } {
+        didSet { delegate.onOpen = { [weak self] id in Task { @MainActor in self?.openInstance(id) } } }
+    }
+
+    init() {
+        UNUserNotificationCenter.current().delegate = delegate
+        let open = UNNotificationAction(identifier: NotificationDelegate.openAction, title: "Instanz öffnen", options: [.foreground])
+        UNUserNotificationCenter.current().setNotificationCategories([
+            UNNotificationCategory(identifier: NotificationDelegate.instanceCategory, actions: [open], intentIdentifiers: []),
+        ])
+    }
 
     func requestPermission() {
         UNUserNotificationCenter.current().requestAuthorization(options: [.alert, .sound, .badge]) { _, _ in }
     }
 
-    func post(_ level: Level, _ title: String, _ message: String = "") {
-        let alert = Alert(level: level, title: title, message: message)
+    func post(_ level: Level, _ title: String, _ message: String = "", instance: String? = nil) {
+        let alert = Alert(level: level, title: title, message: message, instanceId: instance)
         vibrate(level)
         if UIApplication.shared.applicationState != .active { notify(alert) }
         // Kritisches verdrängt Weniger-Wichtiges sofort.
@@ -113,8 +128,32 @@ final class AlertCenter {
         content.body = alert.message
         content.sound = alert.level == .critical ? .defaultCritical : .default
         content.interruptionLevel = alert.level == .critical ? .timeSensitive : (alert.level == .warning ? .active : .passive)
+        if let instance = alert.instanceId {
+            content.userInfo = ["instanz": instance]
+            content.categoryIdentifier = NotificationDelegate.instanceCategory
+        }
         let request = UNNotificationRequest(identifier: alert.id.uuidString, content: content, trigger: nil)
         UNUserNotificationCenter.current().add(request)
+    }
+}
+
+/// Antippen einer Mitteilung aus einer anderen Instanz öffnet diese.
+private final class NotificationDelegate: NSObject, UNUserNotificationCenterDelegate {
+    static let instanceCategory = "instanz"
+    static let openAction = "instanz.oeffnen"
+    var onOpen: (String) -> Void = { _ in }
+
+    func userNotificationCenter(_ center: UNUserNotificationCenter, didReceive response: UNNotificationResponse, withCompletionHandler completionHandler: @escaping () -> Void) {
+        if let id = response.notification.request.content.userInfo["instanz"] as? String,
+           response.actionIdentifier == Self.openAction || response.actionIdentifier == UNNotificationDefaultActionIdentifier {
+            onOpen(id)
+        }
+        completionHandler()
+    }
+
+    /// Im Vordergrund zeigt die App selbst einen Hinweis; keine doppelte iOS-Mitteilung.
+    func userNotificationCenter(_ center: UNUserNotificationCenter, willPresent notification: UNNotification, withCompletionHandler completionHandler: @escaping (UNNotificationPresentationOptions) -> Void) {
+        completionHandler([])
     }
 }
 
@@ -122,6 +161,7 @@ final class AlertCenter {
 struct AlertBanner: View {
     let alert: AlertCenter.Alert
     let dismiss: () -> Void
+    var open: (String) -> Void = { _ in }
 
     var body: some View {
         HStack(alignment: .top, spacing: 12) {
@@ -139,6 +179,16 @@ struct AlertBanner: View {
             }
             .foregroundStyle(alert.level == .warning ? .black : .white)
             Spacer(minLength: 0)
+            if let instance = alert.instanceId {
+                Button("Öffnen") {
+                    open(instance)
+                    dismiss()
+                }
+                .buttonStyle(.borderedProminent)
+                .tint(.white)
+                .foregroundStyle(.black)
+                .font(.subheadline.weight(.semibold))
+            }
         }
         .padding(14)
         .frame(maxWidth: .infinity, alignment: .leading)

@@ -9,6 +9,12 @@ struct SettingsScreen: View {
     @Environment(LocationService.self) private var location
     @Environment(\.openURL) private var openURL
 
+    private var currentArea: String {
+        if model.editsPermanentLayer { return "Dauerhafte Orte bearbeiten" }
+        let name = lage.currentInstance?.data.name ?? "Hauptlage"
+        return lage.isPackageArea ? "Paket: \(name)" : "Geöffnet: \(name)"
+    }
+
     var body: some View {
         @Bindable var settings = settings
         NavigationStack {
@@ -49,11 +55,20 @@ struct SettingsScreen: View {
                 }
 
                 Section {
-                    Toggle(isOn: $settings.permanentLayerUnlocked) {
-                        Label("Dauerhafte Orte bearbeiten", systemImage: "lock.open")
+                    NavigationLink { InstancesScreen() } label: {
+                        HStack(spacing: 12) {
+                            Image(systemName: "square.stack.3d.up.fill")
+                                .foregroundStyle(.tint)
+                            VStack(alignment: .leading, spacing: 2) {
+                                Text("Instanzen")
+                                Text(currentArea)
+                                    .font(.caption)
+                                    .foregroundStyle(.secondary)
+                            }
+                        }
                     }
                 } footer: {
-                    Text("Aus: Die Ebene mit dauerhaft wichtigen Orten ist vor versehentlichem Ändern geschützt. Nach jedem Neustart der App ist sie wieder geschützt.")
+                    Text("Einsätze wechseln und verwalten, dauerhafte Orte bearbeiten und Pakete vorbereiten.")
                 }
 
                 Section("Einsatz") {

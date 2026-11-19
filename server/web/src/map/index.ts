@@ -25,6 +25,7 @@ import {
   tool,
   trackerPoint,
   vehicleOf,
+  membersHere,
 } from '../store';
 import { ZIEL_TITEL, type GeoPoint, type MapObject } from '../types';
 import { createAppleBackend } from './apple';
@@ -194,7 +195,7 @@ function bind(map: MapBackend, disposers: (() => void)[]): void {
       const a = operation.value.a?.memberId;
       const pins: Pin[] = [];
       const crews = new Map<string, { names: string[]; point: GeoPoint; online: boolean; isA: boolean; ts: number }>();
-      for (const m of Object.values(tables.member.value)) {
+      for (const m of membersHere.value) {
         const position = positions.value[m.id];
         if (!position || !m.data.aktiv) continue;
         const isOnline = online.value.has(m.id);

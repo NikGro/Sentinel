@@ -361,6 +361,21 @@ struct APIClient: Sendable {
         _ = try await request("DELETE", "api/v1/admin/paj")
     }
 
+    private struct PajTrackerRequest: Encodable {
+        let id: String
+        let name: String
+        let kennung: String
+        let email: String
+        let passwort: String
+    }
+
+    private struct PajTrackerResult: Decodable {}
+
+    /// Legt einen PAJ-Tracker mit eigenem Konto an; der Server prüft vorher, ob das Gerät zum Konto gehört.
+    func addPajTracker(id: String, name: String, kennung: String, email: String, password: String) async throws {
+        _ = try await json(PajTrackerResult.self, "POST", "api/v1/trackers/paj", body: PajTrackerRequest(id: id, name: name, kennung: kennung, email: email, passwort: password))
+    }
+
     struct PajDevice: Decodable, Identifiable {
         let kennung: String
         let name: String

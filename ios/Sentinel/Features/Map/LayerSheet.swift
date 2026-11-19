@@ -88,7 +88,7 @@ struct LayerSheet: View {
             .alert("Lage-Ebene für alle leeren?", isPresented: $showsClear) {
                 Button("Abbrechen", role: .cancel) {}
                 Button("Leeren", role: .destructive) {
-                    for id in lageObjects { lage.deleteMapObject(id: id) }
+                    lage.clearLageLayer()
                 }
             } message: {
                 Text("\(lageObjects.count) Markierungen werden gelöscht. Das lässt sich nicht rückgängig machen.")

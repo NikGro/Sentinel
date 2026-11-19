@@ -218,6 +218,38 @@ struct TrackersAdminScreen: View {
     @State private var pajEmail = ""
     @State private var pajPassword = ""
     @State private var pajDevices: [APIClient.PajDevice] = []
+    @State private var addEmail = ""
+    @State private var addPassword = ""
+
+    private var canAdd: Bool {
+        guard !addName.trimmingCharacters(in: .whitespaces).isEmpty else { return false }
+        if addProvider == "paj" {
+            return addId.wholeMatch(of: #/[0-9]{1,15}/#) != nil && addEmail.contains("@") && !addPassword.isEmpty
+        }
+        return addId.wholeMatch(of: #/[0-9A-Za-z-]{4,32}/#) != nil
+    }
+
+    private func subtitle(of tracker: Tracker) -> String {
+        let base = "\(tracker.providerTitle), \(tracker.kennung)"
+        guard let email = tracker.kontoEmail, !email.isEmpty else { return base }
+        return base + " · " + email
+    }
+
+    /// PAJ-Tracker mit eigenem Konto: Der Server prüft das Konto und legt den Tracker erst dann an.
+    private func addPaj() {
+        let name = String(addName.trimmingCharacters(in: .whitespaces).prefix(60))
+        let id = addId.trimmingCharacters(in: .whitespaces)
+        let email = addEmail.trimmingCharacters(in: .whitespaces)
+        let password = addPassword
+        Task {
+            await state.run(model.client) { client in
+                try await client.addPajTracker(id: LageStore.newId(), name: name, kennung: id, email: email, password: password)
+                addName = ""
+                addId = ""
+                addPassword = ""
+            }
+        }
+    }
 
     private var trackers: [Versioned<Tracker>] { lage.trackers.values.sorted { $0.data.name < $1.data.name } }
 
@@ -234,7 +266,7 @@ struct TrackersAdminScreen: View {
                             VStack(alignment: .leading, spacing: 2) {
                                 Text(tracker.data.name)
                                     .font(.headline)
-                                Text("\(tracker.data.providerTitle), \(tracker.data.kennung)")
+                                Text(subtitle(of: tracker.data))
                                     .font(.caption.monospaced())
                                     .foregroundStyle(.secondary)
                                 Text(lage.trackerPositions[tracker.id].map { "Letzte Position \(Format.ago($0.date))" } ?? "Noch keine Position empfangen")
@@ -273,22 +305,41 @@ struct TrackersAdminScreen: View {
                 Text("Zugeordnet werden Tracker beim Ziel, beim Fahrzeug oder bei einem Marker. Das Intervall wird an SinoTrack-Geräte geschickt, sobald sie verbunden sind; PAJ-Geräte stellt man im PAJ-Portal ein.")
             }
 
-            Section("Tracker anlegen") {
+            Section {
                 TextField("Name, z. B. ST-901 Nr. 3", text: $addName)
                 Picker("Anbieter", selection: $addProvider) {
                     Text("SinoTrack (direkt)").tag("sinotrack")
                     Text("PAJ").tag("paj")
                 }
                 TextField(addProvider == "paj" ? "Geräte-ID im PAJ-Portal" : "Geräte-ID (auf dem Tracker)", text: $addId)
-                    .keyboardType(.asciiCapable)
+                    .keyboardType(addProvider == "paj" ? .numberPad : .asciiCapable)
                     .autocorrectionDisabled()
                     .textInputAutocapitalization(.never)
-                Button("Anlegen") {
-                    add(name: addName, provider: addProvider, id: addId)
-                    addName = ""
-                    addId = ""
+                if addProvider == "paj" {
+                    TextField("E-Mail des PAJ-Kontos", text: $addEmail)
+                        .keyboardType(.emailAddress)
+                        .textContentType(.username)
+                        .autocorrectionDisabled()
+                        .textInputAutocapitalization(.never)
+                    SecureField("Passwort des PAJ-Kontos", text: $addPassword)
+                        .textContentType(.password)
                 }
-                .disabled(addName.trimmingCharacters(in: .whitespaces).isEmpty || addId.wholeMatch(of: #/[0-9A-Za-z-]{4,32}/#) == nil)
+                Button {
+                    if addProvider == "paj" { addPaj() } else {
+                        add(name: addName, provider: addProvider, id: addId)
+                        addName = ""
+                        addId = ""
+                    }
+                } label: {
+                    if state.busy { ProgressView() } else { Text(addProvider == "paj" ? "Prüfen und anlegen" : "Anlegen") }
+                }
+                .disabled(!canAdd || state.busy)
+            } header: {
+                Text("Tracker anlegen")
+            } footer: {
+                if addProvider == "paj" {
+                    Text("Jeder PAJ-Tracker gehört zu einem PAJ-Konto, meist dem des Fahnders. Die Zugangsdaten gelten nur für diesen Tracker und werden verschlüsselt auf dem Server gespeichert. Vorher wird geprüft, ob das Gerät zu diesem Konto gehört.")
+                }
             }
 
             if let status = state.status {

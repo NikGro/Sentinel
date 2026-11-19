@@ -189,6 +189,12 @@ struct NavigationBanner: View {
                         .foregroundStyle(.white.opacity(0.85))
                         .lineLimit(1)
                 }
+                if let cross = route.nextCrossStreet {
+                    Label("Querstraße \(cross.name) · \(Format.distance(cross.distance))", systemImage: "plus")
+                        .font(.footnote.weight(.semibold))
+                        .foregroundStyle(.white.opacity(0.7))
+                        .lineLimit(1)
+                }
             }
         }
         .animation(.snappy, value: route.isCalculating)
@@ -323,6 +329,7 @@ struct SpeedLimitSign: View {
 /// Feld unten zu einem Suchtreffer, wie in Apple Karten: Name, Hierhin navigieren, Hier anlegen.
 struct SearchPinCard: View {
     let pin: SearchPin
+    var scope: AddMenu.Scope = .all
     let navigate: () -> Void
     let create: (PlaceableKind) -> Void
     let close: () -> Void
@@ -348,12 +355,14 @@ struct SearchPinCard: View {
             }
             // Zwei gleich gestaltete Knöpfe; „Hier anlegen“ öffnet dasselbe große Auswahlmenü wie das Plus.
             HStack(spacing: Theme.barSpacing) {
-                Button(action: navigate) {
-                    Label("Navigieren", systemImage: "arrow.triangle.turn.up.right.diamond.fill")
-                        .font(.subheadline.weight(.semibold))
-                        .frame(maxWidth: .infinity)
+                if scope == .all {
+                    Button(action: navigate) {
+                        Label("Navigieren", systemImage: "arrow.triangle.turn.up.right.diamond.fill")
+                            .font(.subheadline.weight(.semibold))
+                            .frame(maxWidth: .infinity)
+                    }
+                    .buttonStyle(.glassProminent)
                 }
-                .buttonStyle(.glassProminent)
                 Button { showsChooser = true } label: {
                     Label("Hier anlegen", systemImage: "plus")
                         .font(.subheadline.weight(.semibold))
@@ -367,7 +376,7 @@ struct SearchPinCard: View {
         .padding(14)
         .glassEffect(.regular, in: .rect(cornerRadius: 22))
         .sheet(isPresented: $showsChooser) {
-            AddChooser { action in
+            AddChooser(scope: scope) { action in
                 showsChooser = false
                 let kind: PlaceableKind = switch action {
                 case .shape(let shape): .shape(shape)

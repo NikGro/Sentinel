@@ -10,6 +10,7 @@ export const connected = signal(false);
 export const notice = signal<string | null>(null);
 
 export const tables = {
+  instance: signal<Table<'instance'>>({}),
   member: signal<Table<'member'>>({}),
   vehicle: signal<Table<'vehicle'>>({}),
   annotation: signal<Table<'annotation'>>({}),
@@ -19,6 +20,20 @@ export const tables = {
   room: signal<Table<'room'>>({}),
   message: signal<Table<'message'>>({}),
 };
+
+/** Geöffnete Instanz. Lage, Ziele, Chats und Einsatzzustand gehören zu ihr. */
+export const instanz = signal('haupt');
+export const currentInstance = computed(() => tables.instance.value[instanz.value]);
+export const instances = computed(() =>
+  Object.values(tables.instance.value).sort((a, b) => Number(b.id === 'haupt') - Number(a.id === 'haupt') || a.data.art.localeCompare(b.data.art) || a.data.name.localeCompare(b.data.name, 'de')),
+);
+/** Fahnder, die gerade in der geöffneten Instanz sind (Profile gelten instanzübergreifend). */
+export const membersHere = computed(() => Object.values(tables.member.value).filter((m) => (m.data.instanz ?? 'haupt') === instanz.value));
+
+/** Andere Instanz öffnen: der Server schickt danach deren vollständigen Zustand. */
+export function openInstance(id: string): void {
+  command('instanz.wechseln', { id });
+}
 
 export const operation = signal<Operation>({ funkkanal: null, titel: '', hinweise: '', a: null, ueberschlagen: { teilnehmer: [], zuweisungen: {}, naechste: [] }, sos: null, rev: 0 });
 export const positions = signal<Record<string, Position>>({});
@@ -175,6 +190,8 @@ export const command = (name: string, args: unknown = {}) => send({ t: 'cmd', na
 function receive(m: any): void {
   switch (m.t) {
     case 'snapshot':
+      instanz.value = m.instanz ?? 'haupt';
+      tables.instance.value = index(m.instances ?? []);
       tables.member.value = index(m.members);
       tables.vehicle.value = index(m.vehicles);
       tables.annotation.value = index(m.annotations);
@@ -223,6 +240,9 @@ function receive(m: any): void {
     case 'err':
       notice.value = m.message;
       break;
+    case 'hinweis':
+      notice.value = `${m.art === 'sos' ? 'Notruf' : 'A-Position'} in „${m.name}“: ${m.spitzname}`;
+      break;
   }
 }
 
@@ -270,7 +290,7 @@ export async function loadCoverage(): Promise<void> {
     return;
   }
   try {
-    coverage.value = (await api('/coverage')).tracks;
+    coverage.value = (await api(`/coverage?instanz=${encodeURIComponent(instanz.value)}`)).tracks;
   } catch {
     /* Anzeige bleibt beim letzten Stand */
   }

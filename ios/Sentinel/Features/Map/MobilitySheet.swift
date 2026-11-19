@@ -146,12 +146,8 @@ struct MobilitySheet: View {
                     dismiss()
                 } label: {
                     HStack(spacing: 12) {
-                        Image(systemName: line.symbolName)
-                            .foregroundStyle(.tint)
-                            .frame(width: 26)
-                        Text(line.ref)
-                            .font(.headline)
-                            .frame(minWidth: 44, alignment: .leading)
+                        LineBadge(line: line.badge, size: 15)
+                            .frame(minWidth: 52, alignment: .leading)
                         Text("Richtung \(line.richtung)")
                             .lineLimit(2)
                         Spacer()

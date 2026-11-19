@@ -26,6 +26,14 @@ struct RouteResult {
     var usesSpecialRights: Bool
 }
 
+/// Kreuzende oder einmündende Straße an der Route, `meter` ab Routenbeginn.
+struct CrossStreet: Decodable, Equatable {
+    let name: String
+    let lat: Double
+    let lon: Double
+    let meter: Double
+}
+
 /// Eine Fahrspur am nächsten Manöver.
 struct LaneHint: Hashable {
     var directions: [String]
@@ -67,6 +75,20 @@ final class RouteFollower {
     private(set) var snappedLocation: CLLocation?
     /// Erlaubte Höchstgeschwindigkeit auf dem aktuellen Abschnitt in km/h, soweit bekannt.
     private(set) var speedLimit: Int?
+    /// Querstraßen entlang der Route (aus OpenStreetMap über den eigenen Server).
+    private(set) var crossStreets: [CrossStreet] = []
+    /// Entfernung ab Routenbeginn je Routenpunkt.
+    @ObservationIgnored private var cumulative: [CLLocationDistance] = []
+    @ObservationIgnored private var server: (url: URL, token: String)?
+    @ObservationIgnored private var crossTask: Task<Void, Never>?
+
+    /// Nächste Querstraße voraus mit Entfernung, sobald die Route bekannt ist.
+    var nextCrossStreet: (name: String, distance: CLLocationDistance)? {
+        guard !cumulative.isEmpty else { return nil }
+        let here = cumulative[min(progressIndex, cumulative.count - 1)]
+        guard let next = crossStreets.first(where: { $0.meter > here + 10 }) else { return nil }
+        return (next.name, next.meter - here)
+    }
 
     var walking = false {
         didSet { if walking != oldValue { recalculateSoon() } }
@@ -129,6 +151,7 @@ final class RouteFollower {
     /// Mit Server und Anmeldung verbinden. Ohne diesen Aufruf ist keine Navigation möglich.
     func configure(serverURL: URL, token: String) {
         stop()
+        server = (serverURL, token)
         let loader = NaviRequestLoader(token: token)
         do {
             let core = try FerrostarCore(
@@ -208,6 +231,9 @@ final class RouteFollower {
         speedLimit = nil
         routedDestination = nil
         needsRoute = true
+        crossTask?.cancel()
+        crossStreets = []
+        cumulative = []
     }
 
     private func recalculateSoon() {
@@ -274,6 +300,37 @@ final class RouteFollower {
             usesSpecialRights: loader?.lastRouteUsedSpecialRights ?? false
         )
         progressIndex = 0
+        let coordinates = self.route?.coordinates ?? []
+        var sum: CLLocationDistance = 0
+        cumulative = coordinates.indices.map { i in
+            if i > 0 { sum += GeoPoint(coordinates[i - 1]).distance(to: GeoPoint(coordinates[i])) }
+            return sum
+        }
+        loadCrossStreets(coordinates)
+    }
+
+    /// Holt die Querstraßen zur neuen Route. Ausgedünnt auf höchstens 500 Punkte; Entfernungen bleiben ab Routenbeginn.
+    private func loadCrossStreets(_ coordinates: [CLLocationCoordinate2D]) {
+        crossTask?.cancel()
+        crossStreets = []
+        guard let server, coordinates.count >= 2 else { return }
+        let step = max(1, coordinates.count / 500)
+        var points = stride(from: 0, to: coordinates.count, by: step).map { GeoPoint(coordinates[$0]) }
+        if let last = coordinates.last, points.last != GeoPoint(last) { points.append(GeoPoint(last)) }
+        crossTask = Task { [weak self] in
+            struct Body: Encodable { let punkte: [GeoPoint] }
+            struct Answer: Decodable { let strassen: [CrossStreet] }
+            var request = URLRequest(url: server.url.appending(path: "api/v1/route/querstrassen"))
+            request.httpMethod = "POST"
+            request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+            request.setValue("Bearer \(server.token)", forHTTPHeaderField: "Authorization")
+            request.httpBody = try? JSONEncoder().encode(Body(punkte: points))
+            request.timeoutInterval = 40
+            guard let result = try? await URLSession.shared.data(for: request),
+                  (result.1 as? HTTPURLResponse)?.statusCode == 200,
+                  let answer = try? JSONDecoder().decode(Answer.self, from: result.0), !Task.isCancelled else { return }
+            self?.crossStreets = answer.strassen
+        }
     }
 
     private func apply(_ state: NavigationState?) {

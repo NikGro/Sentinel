@@ -168,6 +168,30 @@ struct MapObjectInfo: View {
     private var layer: Versioned<Layer>? { lage.layers[object.layerId] }
     private var editable: Bool { !isCell && layer?.data.art != "argus" && settings.canEdit(layerId: object.layerId) }
 
+    /// Teilt eine ÖPNV-Strecke in einzelne Abschnitte von Halt zu Halt, damit sich Teile löschen lassen.
+    /// Die Abschnitte bleiben in einer gemeinsamen Gruppe.
+    private func splitIntoSections() {
+        let points = object.punkte
+        let path = object.weg ?? []
+        let indices = TransitSimulation.stopIndices(points, on: path)
+        let names = object.haltNamen ?? []
+        let group = object.gruppe ?? String(LageStore.newId().prefix(16))
+        for i in 1..<points.count {
+            var section = object
+            section.punkte = [points[i - 1], points[i]]
+            section.haltNamen = names.count == points.count ? [names[i - 1], names[i]] : nil
+            if let indices, indices[i - 1] < indices[i] { section.weg = Array(path[indices[i - 1]...indices[i]]) } else { section.weg = nil }
+            section.takt = nil
+            section.gruppe = group
+            if let from = section.haltNamen?.first, let to = section.haltNamen?.last, let line = object.linie {
+                section.titel = "\(line.ref): \(from) → \(to)"
+            }
+            lage.saveMapObject(section, id: LageStore.newId())
+        }
+        // Die ganze Strecke wird durch die Abschnitte ersetzt; zugehörige Halte bleiben in der Gruppe.
+        lage.deleteMapObject(id: id)
+    }
+
     var body: some View {
         List {
             if let group = object.gruppe, editable {
@@ -224,7 +248,10 @@ struct MapObjectInfo: View {
 
             if object.typ.isTransit, let line = object.linie {
                 Section {
-                    Label("\(line.ref) Richtung \(line.richtung)", systemImage: line.symbolName)
+                    HStack(spacing: 10) {
+                        LineBadge(line: line.badge, size: 15)
+                        Text("Richtung \(line.richtung)")
+                    }
                     if let names = object.haltNamen, let first = names.first, let last = names.last {
                         LabeledContent("Abschnitt", value: "\(first) → \(last) (\(names.count) Halte)")
                     }
@@ -247,6 +274,12 @@ struct MapObjectInfo: View {
                     }
                     if object.typ == .oepnvlinie, let takt = object.takt {
                         LabeledContent("Fahrzeuge im Takt", value: "alle \(takt) Min.")
+                    }
+                    if object.typ == .oepnvlinie, editable, object.punkte.count >= 3 {
+                        Button("In Abschnitte zwischen den Halten teilen", systemImage: "scissors") {
+                            splitIntoSections()
+                            dismiss()
+                        }
                     }
                     if object.typ == .oepnvfahrzeug, editable {
                         Button("Strecke als ÖPNV-Linie anlegen", systemImage: MapObject.Shape.oepnvlinie.symbolName) {
@@ -284,7 +317,7 @@ struct MapObjectInfo: View {
 
             Section {
                 if !editable, !isCell, layer?.data.art != "argus" {
-                    Label("Dauerhafte Orte sind gesperrt. Zum Bearbeiten unter Mehr „Dauerhafte Orte bearbeiten“ einschalten.", systemImage: "lock.fill")
+                    Label(settings.permanentLayerUnlocked ? "Hier sind nur dauerhafte Orte bearbeitbar." : "Dauerhafte Orte sind gesperrt. Zum Bearbeiten unter Mehr, Instanzen „Dauerhafte Orte bearbeiten“ öffnen.", systemImage: "lock.fill")
                         .font(.footnote)
                         .foregroundStyle(.secondary)
                 }

@@ -118,7 +118,10 @@ struct MainView: View {
     @Environment(LageStore.self) private var lage
     @Environment(LocalSettings.self) private var settings
     @Environment(AlertCenter.self) private var alerts
+    @Environment(AppModel.self) private var model
     @State private var selection: Section = .lage
+
+    private var inSpecialArea: Bool { model.editsPermanentLayer || lage.isPackageArea }
 
     var body: some View {
         TabView(selection: $selection) {
@@ -128,20 +131,25 @@ struct MainView: View {
             Tab("Ziele", systemImage: "person.crop.rectangle.stack", value: Section.ziele) {
                 TargetListScreen()
             }
-            Tab("Kräfte", systemImage: "person.3", value: Section.kraefte) {
-                ForcesScreen()
+            // In den Sonderbereichen gibt es keinen Einsatzbetrieb: keine Kräfte und kein Chat.
+            if !inSpecialArea {
+                Tab("Kräfte", systemImage: "person.3", value: Section.kraefte) {
+                    ForcesScreen()
+                }
+                Tab("Chat", systemImage: "bubble.left.and.bubble.right", value: Section.chat) {
+                    ChatScreen()
+                }
+                .badge(unreadCount)
             }
-            Tab("Chat", systemImage: "bubble.left.and.bubble.right", value: Section.chat) {
-                ChatScreen()
-            }
-            .badge(unreadCount)
             Tab("Mehr", systemImage: "ellipsis", value: Section.mehr) {
                 SettingsScreen()
             }
         }
+        .onChange(of: model.mapRequest) { selection = .lage }
+        .onChange(of: inSpecialArea) { if inSpecialArea, selection == .kraefte || selection == .chat { selection = .lage } }
         .overlay(alignment: .top) {
             if let alert = alerts.current {
-                AlertBanner(alert: alert) { alerts.dismiss() }
+                AlertBanner(alert: alert, dismiss: { alerts.dismiss() }, open: { model.openInstance($0) })
                     .padding(.top, 4)
                     .transition(.move(edge: .top).combined(with: .opacity))
                     .id(alert.id)

@@ -1,8 +1,8 @@
 import { useSignal } from '@preact/signals';
 import { finishDrawing } from '../map';
-import { canRedo, canUndo, deleteObject, isLocked, layers, nameOf, newId, put, redo, saveObject, selectedObject, tables, targetLayer, tool, undo } from '../store';
-import { PALETTE, SHAPE_TITEL, ZIEL_TITEL, type MapObject, type Shape, type Target, type ZielArt } from '../types';
-import { ago, Field, TextInput } from '../ui';
+import { canRedo, canUndo, deleteObject, isLocked, layers, nameOf, newId, put, redo, saveObject, selectedObject, tables, targetLayer, tool, undo, uploadFile } from '../store';
+import { PALETTE, SHAPE_TITEL, ZIEL_TITEL, type Attachment, type MapObject, type Shape, type Target, type ZielArt } from '../types';
+import { ago, dateTime, Field, TextInput } from '../ui';
 
 const HINWEIS: Record<string, string> = {
   zielstandort: 'Standort des Ziels auf der Karte anklicken',
@@ -176,6 +176,27 @@ function ObjectForm(props: { id: string; initial: MapObject; updatedBy: string; 
           <input type="number" min={5} max={100000} value={object.radius ?? 150} onInput={(e) => change({ radius: Math.min(Math.max(Number(e.currentTarget.value) || 150, 5), 100000) })} />
         </Field>
       )}
+      <Field label="Lebensdauer">
+        <select
+          value={object.ablauf ? 'gesetzt' : ''}
+          onChange={(e) => {
+            const value = e.currentTarget.value;
+            if (value === '') change({ ablauf: null });
+            else if (value !== 'gesetzt') change({ ablauf: Date.now() + Number(value) * 1000 });
+          }}
+        >
+          <option value="">Unbegrenzt</option>
+          {object.ablauf && <option value="gesetzt">Bis {dateTime(object.ablauf)}</option>}
+          {LIFETIMES.map(([seconds, label]) => (
+            <option key={seconds} value={String(seconds)}>
+              {label}
+            </option>
+          ))}
+        </select>
+      </Field>
+      {object.typ !== 'haltestelle' && object.typ !== 'fahndungsraum' && (
+        <PhotoList value={object.anhaenge ?? []} onChange={(anhaenge) => change({ anhaenge })} />
+      )}
       <Field label="Ebene">
         <select value={object.layerId} onChange={(e) => change({ layerId: e.currentTarget.value })}>
           {layers.value
@@ -213,4 +234,64 @@ function ObjectForm(props: { id: string; initial: MapObject; updatedBy: string; 
 function toLocalInput(ts: number): string {
   const d = new Date(ts - new Date(ts).getTimezoneOffset() * 60_000);
   return d.toISOString().slice(0, 16);
+}
+
+/** Auswahl der Lebensdauer wie in der App. */
+const LIFETIMES: [number, string][] = [
+  [900, '15 Minuten'],
+  [1800, '30 Minuten'],
+  [3600, '1 Stunde'],
+  [7200, '2 Stunden'],
+  [14_400, '4 Stunden'],
+  [28_800, '8 Stunden'],
+  [43_200, '12 Stunden'],
+  [86_400, '24 Stunden'],
+  [259_200, '3 Tage'],
+  [604_800, '7 Tage'],
+];
+
+/** Fotos und Dateien einer Markierung: anzeigen, hinzufügen, entfernen. */
+function PhotoList(props: { value: Attachment[]; onChange: (value: Attachment[]) => void }) {
+  return (
+    <div class="field">
+      <span>Fotos und Dateien</span>
+      <div class="photo-list">
+        {props.value.map((a) => (
+          <div key={a.blobId} class="photo">
+            {a.art === 'bild' ? (
+              <a href={`/api/v1/blobs/${a.blobId}`} target="_blank" rel="noreferrer">
+                <img src={`/api/v1/blobs/${a.blobId}`} alt={a.name} />
+              </a>
+            ) : (
+              <a class="file" href={`/api/v1/blobs/${a.blobId}?name=${encodeURIComponent(a.name)}`}>
+                {a.name || 'Datei'}
+              </a>
+            )}
+            <button class="quiet" title="Entfernen" onClick={() => props.onChange(props.value.filter((x) => x.blobId !== a.blobId))}>
+              ✕
+            </button>
+          </div>
+        ))}
+        <label class="button">
+          Hinzufügen
+          <input
+            type="file"
+            multiple
+            hidden
+            onChange={async (e) => {
+              const files = [...(e.currentTarget.files ?? [])];
+              const added: Attachment[] = [];
+              for (const file of files) {
+                const uploaded = await uploadFile(file);
+                if (!uploaded) continue;
+                const art = uploaded.mime.startsWith('image/') ? 'bild' : uploaded.mime.startsWith('audio/') ? 'audio' : 'datei';
+                added.push({ blobId: uploaded.id, art, name: file.name.slice(0, 120), mime: uploaded.mime, groesse: uploaded.groesse, dauer: null, wellenform: null });
+              }
+              if (added.length) props.onChange([...props.value, ...added].slice(0, 100));
+            }}
+          />
+        </label>
+      </div>
+    </div>
+  );
 }

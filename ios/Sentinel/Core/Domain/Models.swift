@@ -111,6 +111,8 @@ struct Member: LageEntity {
     var fortbewegung: Fortbewegung = .fuss
     var fahrzeugId: String?
     var oepnv: OepnvFahrt?
+    /// Aktive Instanz; ändert sich nur über `instanz.wechseln`.
+    var instanz: String = Instance.mainId
 
     init(name: String, spitzname: String, dienststelle: String, telefon: String = "", fotoBlob: String? = nil) {
         self.name = name
@@ -121,7 +123,7 @@ struct Member: LageEntity {
     }
 
     private enum CodingKeys: String, CodingKey {
-        case name, spitzname, dienststelle, telefon, fotoBlob, aktiv, fortbewegung, fahrzeugId, oepnv
+        case name, spitzname, dienststelle, telefon, fotoBlob, aktiv, fortbewegung, fahrzeugId, oepnv, instanz
     }
 
     init(from decoder: Decoder) throws {
@@ -135,6 +137,33 @@ struct Member: LageEntity {
         fortbewegung = (try? c.decodeIfPresent(Fortbewegung.self, forKey: .fortbewegung)) ?? .fuss
         fahrzeugId = try c.decodeIfPresent(String.self, forKey: .fahrzeugId)
         oepnv = try c.decodeIfPresent(OepnvFahrt.self, forKey: .oepnv)
+        instanz = try c.decodeIfPresent(String.self, forKey: .instanz) ?? Instance.mainId
+    }
+}
+
+/// Instanz: eigener Einsatz mit eigener Lage, eigenen Zielen, Chats und Einsatzzustand.
+/// Ein Paket (`art == "paket"`) ist ein Vorbereitungsbereich, dessen Inhalt in einen Einsatz übernommen wird.
+struct Instance: LageEntity {
+    static let kind = "instance"
+    static let mainId = "haupt"
+
+    var name: String
+    var art: String = "einsatz"
+    var beschreibung: String = ""
+    var mitglieder: [String] = []
+    var erstelltVon: String = ""
+
+    var isPackage: Bool { art == "paket" }
+
+    private enum CodingKeys: String, CodingKey { case name, art, beschreibung, mitglieder, erstelltVon }
+
+    init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        name = try c.decode(String.self, forKey: .name)
+        art = try c.decodeIfPresent(String.self, forKey: .art) ?? "einsatz"
+        beschreibung = try c.decodeIfPresent(String.self, forKey: .beschreibung) ?? ""
+        mitglieder = try c.decodeIfPresent([String].self, forKey: .mitglieder) ?? []
+        erstelltVon = try c.decodeIfPresent(String.self, forKey: .erstelltVon) ?? ""
     }
 }
 
@@ -525,6 +554,8 @@ struct Tracker: LageEntity {
     var anbieter: String
     var kennung: String
     var intervall: Int?
+    /// PAJ: E-Mail des eigenen Kontos, falls für diesen Tracker eines hinterlegt ist.
+    var kontoEmail: String?
 
     var providerTitle: String { anbieter == "paj" ? "PAJ" : "SinoTrack" }
 }

@@ -135,6 +135,15 @@ final class RundgangTests: XCTestCase {
         app.tabBars.buttons["Mehr"].tap()
         XCTAssertTrue(app.navigationBars["Mehr"].waitForExistence(timeout: 5), "Mehr-Ansicht erscheint")
         capture("08-mehr")
+        // Instanzenmenü mit den beiden Sonderbereichen.
+        let instances = app.buttons.matching(NSPredicate(format: "label BEGINSWITH 'Instanzen'")).firstMatch
+        if instances.waitForExistence(timeout: 3) {
+            instances.tap()
+            XCTAssertTrue(app.staticTexts["Dauerhafte Orte bearbeiten"].waitForExistence(timeout: 3), "Sonderbereich im Instanzenmenü")
+            XCTAssertTrue(app.staticTexts["Paket vorbereiten"].exists, "Pakete im Instanzenmenü")
+            capture("08a-instanzen")
+            app.navigationBars.buttons["Mehr"].tap()
+        }
         app.swipeUp()
         XCTAssertTrue(app.buttons["GPS-Tracker"].waitForExistence(timeout: 5) || app.staticTexts["GPS-Tracker"].exists, "Verwaltung auch in der App")
 

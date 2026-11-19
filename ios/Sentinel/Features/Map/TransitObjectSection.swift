@@ -24,7 +24,10 @@ struct TransitObjectSection: View {
             // Aus der ÖPNV-Karte übernommen: Halte und Zeiten kommen aus dem Fahrplan, nichts von Hand einzustellen.
             Section("Echte Fahrt") {
                 if let ref = object.linie {
-                    Label("\(ref.ref) Richtung \(ref.richtung)", systemImage: ref.symbolName)
+                    HStack(spacing: 10) {
+                        LineBadge(line: ref.badge, size: 15)
+                        Text("Richtung \(ref.richtung)")
+                    }
                 }
                 if let names = object.haltNamen, let first = names.first, let last = names.last {
                     LabeledContent("Strecke", value: "\(first) → \(last)")
@@ -64,13 +67,10 @@ struct TransitObjectSection: View {
                     Task { await choose(hit) }
                 } label: {
                     HStack(spacing: 12) {
-                        Image(systemName: hit.symbolName)
-                            .foregroundStyle(.tint)
-                            .frame(width: 26)
-                        VStack(alignment: .leading, spacing: 2) {
-                            Text(hit.ref).font(.headline)
-                            Text("Richtung \(hit.richtung)").font(.caption).foregroundStyle(.secondary)
-                        }
+                        LineBadge(line: hit.badge, size: 15)
+                            .frame(minWidth: 52, alignment: .leading)
+                        Text("Richtung \(hit.richtung)")
+                            .lineLimit(2)
                         Spacer()
                         if let meter = hit.meter {
                             Text(Format.distance(meter)).font(.caption.monospacedDigit()).foregroundStyle(.secondary)
@@ -166,14 +166,10 @@ struct TransitObjectSection: View {
         Section("Linie") {
             if let ref = object.linie {
                 HStack(spacing: 12) {
-                    Image(systemName: ref.symbolName)
-                        .font(.title3)
-                        .foregroundStyle(Color(hex: object.farbe))
-                        .frame(width: 28)
-                    VStack(alignment: .leading, spacing: 2) {
-                        Text(ref.ref).font(.headline)
-                        Text("Richtung \(ref.richtung)").font(.caption).foregroundStyle(.secondary)
-                    }
+                    LineBadge(line: ref.badge, size: 15)
+                        .frame(minWidth: 52, alignment: .leading)
+                    Text("Richtung \(ref.richtung)")
+                        .lineLimit(2)
                     Spacer()
                     Button("Andere Linie") {
                         object.linie = nil

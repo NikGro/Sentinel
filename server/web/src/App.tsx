@@ -2,6 +2,7 @@ import { useSignal } from '@preact/signals';
 import { useEffect, useRef } from 'preact/hooks';
 import { createMap, mapProvider } from './map';
 import { ChatPanel } from './panels/ChatPanel';
+import { InstancesPanel } from './panels/InstancesPanel';
 import { LagePanel } from './panels/LagePanel';
 import { LayersPanel } from './panels/LayersPanel';
 import { MapToolbar, ObjectEditor } from './panels/MapTools';
@@ -9,11 +10,12 @@ import { SystemPanel } from './panels/SystemPanel';
 import { TargetsPanel } from './panels/TargetsPanel';
 import { TeamPanel } from './panels/TeamPanel';
 import { TrackersPanel } from './panels/TrackersPanel';
-import { adminStatus, api, attempt, authed, command, connect, connected, disconnect, focusRequest, hiddenLayers, loadCoverage, loadReach, memberLabel, messages, notice, online, operation, positions, reachModes, refreshStatus, showCoverage, tables } from './store';
+import { adminStatus, api, attempt, authed, command, connect, connected, disconnect, focusRequest, hiddenLayers, loadCoverage, loadReach, memberLabel, messages, notice, online, operation, positions, reachModes, refreshStatus, membersHere, showCoverage, tables, instanz, currentInstance } from './store';
 import { FORTBEWEGUNG_TITEL } from './types';
 import { ago } from './ui';
 
 const SECTIONS = [
+  { id: 'instanzen', title: 'Instanzen', panel: InstancesPanel },
   { id: 'lage', title: 'Lage', panel: LagePanel },
   { id: 'ziele', title: 'Ziele', panel: TargetsPanel },
   { id: 'kraefte', title: 'Kräfte', panel: TeamPanel },
@@ -102,7 +104,7 @@ function Console() {
     if (!showCoverage.value) return;
     const timer = window.setInterval(() => void loadCoverage(), 30_000);
     return () => window.clearInterval(timer);
-  }, [showCoverage.value]);
+  }, [showCoverage.value, instanz.value]);
 
   useEffect(() => {
     if (section.value === 'chat') chatSeen.value = Date.now();
@@ -159,7 +161,7 @@ function SituationBand() {
     const timer = window.setInterval(() => (clock.value = new Date()), 10_000);
     return () => window.clearInterval(timer);
   }, []);
-  const activeMembers = Object.values(tables.member.value).filter((m) => m.data.aktiv && online.value.has(m.id)).length;
+  const activeMembers = membersHere.value.filter((m) => m.data.aktiv && online.value.has(m.id)).length;
   const aHolder = op.a ? tables.member.value[op.a.memberId] : null;
   const aLine = aHolder?.data.fortbewegung === 'oepnv' ? aHolder.data.oepnv : null;
 
@@ -192,6 +194,10 @@ function SituationBand() {
       </div>
 
       <dl class="facts">
+        <div>
+          <dt>{currentInstance.value?.data.art === 'paket' ? 'Paket' : 'Instanz'}</dt>
+          <dd>{currentInstance.value?.data.name ?? 'Hauptlage'}</dd>
+        </div>
         <div>
           <dt>Funkkanal</dt>
           <dd class="mono">{op.funkkanal ?? 'nicht gesetzt'}</dd>
@@ -242,7 +248,7 @@ function SituationBand() {
 
 /** Kräfteliste am rechten Rand: wer ist verbunden, wie unterwegs, wer hält die A. Ein Klick zeigt die Kraft auf der Karte. */
 function Roster() {
-  const members = Object.values(tables.member.value).sort((a, b) => Number(b.data.aktiv) - Number(a.data.aktiv) || a.data.spitzname.localeCompare(b.data.spitzname, 'de', { numeric: true }));
+  const members = [...membersHere.value].sort((a, b) => Number(b.data.aktiv) - Number(a.data.aktiv) || a.data.spitzname.localeCompare(b.data.spitzname, 'de', { numeric: true }));
   const a = operation.value.a?.memberId;
   return (
     <aside class="roster" aria-label="Kräfte">

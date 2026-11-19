@@ -101,6 +101,10 @@ struct AddMenu: View {
         case transitMap
     }
 
+    /// Was angeboten wird: im Einsatz alles, beim Paket ohne Fahndungswerkzeuge, bei dauerhaften Orten nur Markierungen.
+    enum Scope { case all, package, places }
+
+    var scope: Scope = .all
     let select: (Action) -> Void
 
     @State private var showsChooser = false
@@ -117,7 +121,7 @@ struct AddMenu: View {
         .glassEffect(.regular.tint(Theme.accent).interactive(), in: .circle)
         .accessibilityLabel("Hinzufügen")
         .sheet(isPresented: $showsChooser) {
-            AddChooser { action in
+            AddChooser(scope: scope) { action in
                 showsChooser = false
                 Task {
                     try? await Task.sleep(for: .milliseconds(350))
@@ -131,6 +135,7 @@ struct AddMenu: View {
 
 /// Großes Auswahlmenü zum Anlegen: Kacheln nach Gruppen, statt einer kleinen Aufklappliste.
 struct AddChooser: View {
+    var scope: AddMenu.Scope = .all
     let select: (AddMenu.Action) -> Void
     @Environment(\.dismiss) private var dismiss
 
@@ -140,9 +145,15 @@ struct AddChooser: View {
         NavigationStack {
             ScrollView {
                 VStack(alignment: .leading, spacing: 18) {
-                    group("Fahndung", [.shape(.fahndungsraum), .shape(.haltestellen)])
-                    group("ÖPNV", [.transitMap, .shape(.haltestelle), .shape(.oepnvlinie), .shape(.oepnvfahrzeug)])
-                    group("Ziele", ZielArt.allCases.map { .target($0) })
+                    if scope == .all {
+                        group("Fahndung", [.shape(.fahndungsraum), .shape(.haltestellen)])
+                        group("ÖPNV", [.transitMap, .shape(.haltestelle), .shape(.oepnvlinie), .shape(.oepnvfahrzeug)])
+                    } else {
+                        group("ÖPNV", [.shape(.haltestelle), .shape(.oepnvlinie)])
+                    }
+                    if scope != .places {
+                        group("Ziele", ZielArt.allCases.map { .target($0) })
+                    }
                     group("Markierung", [.shape(.marker), .shape(.text), .shape(.linie), .shape(.pfeil), .shape(.flaeche), .shape(.kreis)])
                 }
                 .padding(16)

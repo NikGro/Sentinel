@@ -1,5 +1,40 @@
 # Änderungen
 
+## 0.13.0
+
+**Instanzen**
+- Instanzenmenü unter Mehr: eigene Einsätze anlegen, öffnen, beitreten, verlassen, umbenennen und löschen;
+  Mitglied in mehreren, geöffnet ist immer genau eine; die Hauptlage bleibt immer bestehen
+- Jede Instanz hat eigene Lage, Ziele, Chats, A-Position, Notruf, Funkkanal und Bestreifung; Kräfte sieht man in
+  der Instanz, in der sie gerade arbeiten
+- A-Position und Notruf in einer anderen eigenen Instanz kommen als Hinweis mit „Öffnen“, im Hintergrund als
+  iOS-Mitteilung mit „Instanz öffnen“
+- Dauerhafte Orte gelten in allen Instanzen und werden im eigenen Sonderbereich „Dauerhafte Orte bearbeiten“
+  geändert (statt des Schalters unter Mehr); dort sind nur die Werkzeuge für Markierungen sichtbar
+- Sonderbereich „Paket vorbereiten“: Pakete anlegen, bearbeiten, löschen; Bibliothek auf dem Server;
+  „Übernehmen“ kopiert den Inhalt unwiderruflich als eigenständige Objekte in den geöffneten Einsatz
+- Lage-Layer jeder Instanz lässt sich leeren, aber nicht löschen
+- Kommandozentrale: Bereich „Instanzen“ mit Einsätzen und Paketen, Anzeige der geöffneten Instanz
+
+**Navigation**
+- Querstraßen: Die nächste kreuzende Straße steht mit Entfernung im Navi-Banner (OpenStreetMap über den
+  eigenen Server)
+
+**ÖPNV**
+- Linienschilder im HVV-Stil in allen ÖPNV-Listen (Fortbewegung, Liniensuche, Linie, Fahrzeug), gleich egal
+  wie die Linie angelegt wurde
+- ÖPNV-Strecke in einzelne Abschnitte zwischen den Halten teilen; Abschnitte sind einzeln löschbar
+- Positionsberechnung der ÖPNV-Fahrzeuge deutlich schneller (zwischengespeichert, ohne CLLocation), damit die
+  Karte bei vielen übernommenen Fahrten nicht stockt
+
+**Tracker**
+- PAJ-Tracker mit eigenem Konto: E-Mail und Passwort gelten nur für diesen Tracker, werden verschlüsselt
+  gespeichert; beim Anlegen wird geprüft, ob das Gerät zum Konto gehört („Gerät nicht in diesem Konto“)
+
+**Kommandozentrale**
+- Lebensdauer und Fotos bzw. Dateien an Markierungen bearbeitbar, PAJ-Tracker mit eigenem Konto anlegen
+
+
 ## 0.11.0
 
 **ÖPNV deutschlandweit (Transitous, Daten DELFI u. a., Echtzeit wo verfügbar)**

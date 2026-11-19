@@ -29,7 +29,8 @@ final class LocalSettings {
     var showsTraffic: Bool { didSet { defaults.set(showsTraffic, forKey: "karte.verkehr") } }
     /// Karte gekippt (3D) statt von oben.
     var prefers3D: Bool { didSet { defaults.set(prefers3D, forKey: "karte.3d") } }
-    /// Die Ebene "Dauerhafte Orte" ist gesperrt, bis sie bewusst entsperrt wird. Gilt nur bis zum Neustart der App.
+    /// Bereich „Dauerhafte Orte bearbeiten“ ist geöffnet. Nur dort sind dauerhafte Orte änderbar, dafür nichts anderes.
+    /// Gilt nur bis zum Neustart der App.
     var permanentLayerUnlocked = false
     var lastReadMessageAt: Double { didSet { defaults.set(lastReadMessageAt, forKey: "chat.gelesen") } }
 
@@ -51,8 +52,11 @@ final class LocalSettings {
 
     /// Darf eine Markierung auf dieser Ebene bearbeitet werden?
     func canEdit(layerId: String) -> Bool {
-        layerId != Layer.dauerhaftId || permanentLayerUnlocked
+        permanentLayerUnlocked ? layerId == Layer.dauerhaftId : layerId != Layer.dauerhaftId
     }
+
+    /// Ebene für neue Markierungen.
+    var defaultLayerId: String { permanentLayerUnlocked ? Layer.dauerhaftId : Layer.lageId }
 
     func isReachEnabled(_ mode: ReachMode) -> Bool {
         !disabledReachModes.contains(mode.rawValue)

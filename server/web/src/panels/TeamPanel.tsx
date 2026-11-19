@@ -1,5 +1,5 @@
 import { useSignal } from '@preact/signals';
-import { del, focusRequest, newId, online, operation, positions, put, tables, trackerPoint, vehicleOf } from '../store';
+import { del, membersHere, focusRequest, newId, online, operation, positions, put, tables, trackerPoint, vehicleOf } from '../store';
 import { FORTBEWEGUNG_TITEL, type Vehicle } from '../types';
 import { ago, Field, ImageField, Section, TextInput } from '../ui';
 
@@ -8,7 +8,7 @@ const LEERES_FAHRZEUG: Vehicle = { funkrufname: '', bezeichnung: '', kennzeichen
 /** Kräfte im Einsatz und die Fahrzeugflotte. Fahnder schalten sich in der App selbst aktiv, Fahrzeuge kann jeder schalten. */
 export function TeamPanel() {
   const editing = useSignal<{ id: string; data: Vehicle; neu: boolean } | null>(null);
-  const members = Object.values(tables.member.value).sort((a, b) => Number(b.data.aktiv) - Number(a.data.aktiv) || a.data.spitzname.localeCompare(b.data.spitzname, 'de'));
+  const members = [...membersHere.value].sort((a, b) => Number(b.data.aktiv) - Number(a.data.aktiv) || a.data.spitzname.localeCompare(b.data.spitzname, 'de'));
   const vehicles = Object.values(tables.vehicle.value).sort((a, b) => Number(b.data.aktiv) - Number(a.data.aktiv) || a.data.funkrufname.localeCompare(b.data.funkrufname, 'de', { numeric: true }));
 
   if (editing.value) {

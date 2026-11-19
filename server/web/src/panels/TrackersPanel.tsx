@@ -11,6 +11,8 @@ export function TrackersPanel() {
   const kennung = useSignal('');
   const pajEmail = useSignal('');
   const pajPassword = useSignal('');
+  const ownEmail = useSignal('');
+  const ownPassword = useSignal('');
   const pajDevices = useSignal<{ kennung: string; name: string }[] | null>(null);
   const trackers = Object.values(tables.tracker.value).sort((a, b) => a.data.name.localeCompare(b.data.name));
   const host = location.hostname;
@@ -24,7 +26,7 @@ export function TrackersPanel() {
     return marker ? `Marker ${marker.data.titel || ''}`.trim() : 'nicht zugeordnet';
   };
 
-  const add = (data: Omit<Tracker, 'intervall'>) => {
+  const add = (data: Omit<Tracker, 'intervall' | 'kontoEmail'>) => {
     if (put('tracker', newId(), { ...data, intervall: null })) {
       name.value = '';
       kennung.value = '';
@@ -45,7 +47,7 @@ export function TrackersPanel() {
                 <div class="grow">
                   <b>{t.data.name}</b>
                   <small>
-                    {t.data.anbieter === 'paj' ? 'PAJ' : 'SinoTrack'}, <span class="mono">{t.data.kennung}</span>, {usage(t.id)}
+                    {t.data.anbieter === 'paj' ? 'PAJ' : 'SinoTrack'}, <span class="mono">{t.data.kennung}</span>, {t.data.kontoEmail ? `, Konto ${t.data.kontoEmail}` : ''}, {usage(t.id)}
                   </small>
                   <small class="hint">{position ? `Letzte Position ${ago(position.ts)}` : 'Noch keine Position empfangen'}</small>
                 </div>
@@ -110,8 +112,36 @@ export function TrackersPanel() {
         <Field label={anbieter.value === 'paj' ? 'Geräte-ID im PAJ-Portal' : 'Geräte-ID (auf dem Tracker aufgedruckt)'}>
           <TextInput value={kennung.value} onInput={(v) => (kennung.value = v.trim())} maxLength={32} />
         </Field>
-        <button class="primary" disabled={!name.value.trim() || !/^[0-9A-Za-z-]{4,32}$/.test(kennung.value)} onClick={() => add({ name: name.value.trim(), anbieter: anbieter.value, kennung: kennung.value })}>
-          Anlegen
+        {anbieter.value === 'paj' && (
+          <>
+            <div class="grid2">
+              <Field label="E-Mail des PAJ-Kontos">
+                <TextInput type="email" value={ownEmail.value} onInput={(v) => (ownEmail.value = v.trim())} maxLength={120} />
+              </Field>
+              <Field label="Passwort des PAJ-Kontos">
+                <TextInput type="password" value={ownPassword.value} onInput={(v) => (ownPassword.value = v)} maxLength={200} />
+              </Field>
+            </div>
+            <p class="hint">Jeder PAJ-Tracker kann zu einem eigenen Konto gehören. Die Zugangsdaten gelten nur für diesen Tracker und werden verschlüsselt gespeichert; vorher wird geprüft, ob das Gerät zum Konto gehört. Leer lassen, um das zentrale PAJ-Konto unten zu nutzen.</p>
+          </>
+        )}
+        <button
+          class="primary"
+          disabled={!name.value.trim() || !/^[0-9A-Za-z-]{4,32}$/.test(kennung.value) || (anbieter.value === 'paj' && (ownEmail.value !== '') !== (ownPassword.value !== ''))}
+          onClick={() => {
+            if (anbieter.value === 'paj' && ownEmail.value) {
+              void attempt(async () => {
+                await api('/trackers/paj', { method: 'POST', body: { id: newId(), name: name.value.trim(), kennung: kennung.value, email: ownEmail.value, passwort: ownPassword.value } });
+                name.value = '';
+                kennung.value = '';
+                ownPassword.value = '';
+              }, 'PAJ-Tracker angelegt.');
+            } else {
+              add({ name: name.value.trim(), anbieter: anbieter.value, kennung: kennung.value });
+            }
+          }}
+        >
+          {anbieter.value === 'paj' && ownEmail.value ? 'Prüfen und anlegen' : 'Anlegen'}
         </button>
       </Section>
 

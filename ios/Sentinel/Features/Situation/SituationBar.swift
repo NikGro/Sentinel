@@ -6,6 +6,12 @@ struct SituationBar: View {
 
     @Environment(LageStore.self) private var lage
 
+    /// Einsatzname; ohne Namen in einer eigenen Instanz deren Name.
+    private var barTitle: String {
+        if !lage.operation.titel.isEmpty { return lage.operation.titel }
+        return lage.instanz == Instance.mainId ? "" : (lage.currentInstance?.data.name ?? "")
+    }
+
     var body: some View {
         Button(action: onTap) {
             HStack(spacing: 10) {
@@ -31,9 +37,9 @@ struct SituationBar: View {
                 .layoutPriority(1)
 
                 // Einsatzname, wenn Platz ist.
-                if !lage.operation.titel.isEmpty {
+                if !barTitle.isEmpty {
                     Divider().frame(height: 16)
-                    Text(lage.operation.titel)
+                    Text(barTitle)
                         .font(.caption.weight(.semibold))
                         .foregroundStyle(.secondary)
                         .lineLimit(1)

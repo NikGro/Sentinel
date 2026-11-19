@@ -46,6 +46,7 @@ final class AppModel {
             self.lage.sendPosition(position)
         }
         lage.onEvent = { [weak self] event in self?.handle(event) }
+        alerts.openInstance = { [weak self] id in self?.openInstance(id) }
         lage.onMemberPosition = { [weak self] memberId, position in
             guard let self, self.settings.showsCoverage else { return }
             self.fahndung.appendLive(memberId: memberId, position: position)
@@ -142,7 +143,62 @@ final class AppModel {
             let room = lage.rooms[message.data.roomId]?.data.name
             let text = message.data.text.isEmpty ? (message.data.anhang.map { $0.art == .audio ? "Sprachnachricht" : ($0.art == .bild ? "Foto" : "Datei") } ?? "") : message.data.text
             alerts.post(.info, "\(name(message.updatedBy))\(room.map { " in \($0)" } ?? "")", text)
+        case .instanceNotice(let notice):
+            if notice.art == "sos" {
+                alerts.post(.critical, "SOS in \(notice.name)", "\(notice.spitzname) hat einen Notruf ausgelöst.", instance: notice.instanz)
+            } else {
+                alerts.post(.warning, "A in \(notice.name)", "\(notice.spitzname) hat die A-Position.", instance: notice.instanz)
+            }
         }
+    }
+
+    // MARK: Instanzen
+
+    /// Bereich der App: normale Instanz oder Bearbeitung der dauerhaften Orte (reduzierte Werkzeuge).
+    private(set) var editsPermanentLayer = false
+    /// Wird hochgezählt, wenn die Karte in den Vordergrund soll (nach einem Wechsel der Instanz).
+    private(set) var mapRequest = 0
+    /// Einsatz, in den man nach dem Vorbereiten eines Pakets zurückkehrt.
+    private(set) var returnInstance: String?
+
+    /// Wechselt in eine Instanz; eine laufende Navigation gehört zur alten Lage und endet.
+    func openInstance(_ id: String) {
+        editsPermanentLayer = false
+        settings.permanentLayerUnlocked = false
+        mapRequest += 1
+        guard id != lage.instanz else { return }
+        if lage.instances[id]?.data.isPackage == true, !lage.isPackageArea { returnInstance = lage.instanz }
+        if route.isActive { stopNavigation() }
+        lage.switchInstance(id)
+    }
+
+    func showMap() { mapRequest += 1 }
+
+    /// Ein neues Paket öffnet der Server gleich; danach geht es in den bisherigen Einsatz zurück.
+    func prepareNewPackage() {
+        editPermanentLayer(false)
+        if !lage.isPackageArea { returnInstance = lage.instanz }
+        if route.isActive { stopNavigation() }
+    }
+
+    /// Verlässt den Sonderbereich (dauerhafte Orte oder Paket) zurück in den Einsatz.
+    func leaveSpecialArea() {
+        if editsPermanentLayer {
+            editPermanentLayer(false)
+        } else if lage.isPackageArea {
+            let back = returnInstance.flatMap { lage.instances[$0] }.map(\.id) ?? Instance.mainId
+            returnInstance = nil
+            openInstance(back)
+        }
+    }
+
+    func editPermanentLayer(_ on: Bool) {
+        if on, route.isActive { stopNavigation() }
+        // Dauerhafte Orte werden aus einem Einsatz heraus bearbeitet, nicht aus einem Paket.
+        if on, lage.isPackageArea { openInstance(returnInstance ?? Instance.mainId) }
+        editsPermanentLayer = on
+        settings.permanentLayerUnlocked = on
+        if on { mapRequest += 1 }
     }
 
     // MARK: Navigation

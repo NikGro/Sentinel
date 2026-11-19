@@ -17,15 +17,51 @@ enum TransitSimulation {
         return perMinute / 60
     }
 
-    /// Index des nächstgelegenen Punkts im Fahrweg für jeden Halt, aufsteigend.
+    /// Schnelle Entfernung in Metern (flache Näherung, auf Stadtgröße genau genug). Ohne CLLocation, denn die
+    /// Positionen der ÖPNV-Fahrzeuge werden alle zwei Sekunden für viele Punkte berechnet.
+    static func meters(_ a: GeoPoint, _ b: GeoPoint) -> Double {
+        let x = (b.lon - a.lon) * 111_320 * cos((a.lat + b.lat) * .pi / 360)
+        let y = (b.lat - a.lat) * 110_540
+        return (x * x + y * y).squareRoot()
+    }
+
+    private struct IndexKey: Hashable {
+        let points: [GeoPoint]
+        let count: Int
+        let first: GeoPoint?
+        let middle: GeoPoint?
+        let last: GeoPoint?
+    }
+
+    private static let cacheLock = NSLock()
+    nonisolated(unsafe) private static var indexCache: [IndexKey: [Int]?] = [:]
+
+    /// Index des nächstgelegenen Punkts im Fahrweg für jeden Halt, aufsteigend. Zwischengespeichert, denn Halte
+    /// und Fahrweg einer Markierung ändern sich selten, die Abfrage kommt aber bei jedem Bildaufbau.
     static func stopIndices(_ points: [GeoPoint], on path: [GeoPoint]) -> [Int]? {
         guard path.count >= 2 else { return nil }
+        let key = IndexKey(points: points, count: path.count, first: path.first, middle: path[path.count / 2], last: path.last)
+        cacheLock.lock()
+        if let hit = indexCache[key] {
+            cacheLock.unlock()
+            return hit
+        }
+        cacheLock.unlock()
+        let result = computeStopIndices(points, on: path)
+        cacheLock.lock()
+        if indexCache.count > 400 { indexCache.removeAll() }
+        indexCache[key] = result
+        cacheLock.unlock()
+        return result
+    }
+
+    private static func computeStopIndices(_ points: [GeoPoint], on path: [GeoPoint]) -> [Int]? {
         var result: [Int] = []
         var from = 0
         for stop in points {
             var best = from, bestDistance = Double.greatestFiniteMagnitude
             for i in from..<path.count {
-                let d = path[i].distance(to: stop)
+                let d = meters(path[i], stop)
                 if d < bestDistance { bestDistance = d; best = i }
             }
             guard bestDistance < 250 else { return nil }
@@ -36,7 +72,7 @@ enum TransitSimulation {
     }
 
     static func length(_ path: ArraySlice<GeoPoint>) -> Double {
-        zip(path, path.dropFirst()).reduce(0) { $0 + $1.0.distance(to: $1.1) }
+        zip(path, path.dropFirst()).reduce(0) { $0 + meters($1.0, $1.1) }
     }
 
     /// Punkt nach einem Anteil der Strecke entlang eines Teilstücks des Fahrwegs.
@@ -44,7 +80,7 @@ enum TransitSimulation {
         guard let first = path.first else { return nil }
         var remaining = length(path) * min(max(fraction, 0), 1)
         for (a, b) in zip(path, path.dropFirst()) {
-            let d = a.distance(to: b)
+            let d = meters(a, b)
             if remaining <= d, d > 0 {
                 let f = remaining / d
                 return GeoPoint(lat: a.lat + (b.lat - a.lat) * f, lon: a.lon + (b.lon - a.lon) * f)
@@ -63,8 +99,8 @@ enum TransitSimulation {
         for i in 1..<points.count {
             let previous = result[i - 1] + (i > 1 ? dwell : 0)
             // Fahrweg ist länger als die Luftlinie: Tempo darauf etwa ein Viertel höher.
-            let meters = indices.map { length(path[$0[i - 1]...$0[i]]) / 1.25 } ?? points[i - 1].distance(to: points[i])
-            result.append(previous + meters / v)
+            let distance = indices.map { length(path[$0[i - 1]...$0[i]]) / 1.25 } ?? meters(points[i - 1], points[i])
+            result.append(previous + distance / v)
         }
         return result
     }

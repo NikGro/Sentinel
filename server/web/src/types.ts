@@ -38,6 +38,17 @@ export interface Member {
   fortbewegung: Fortbewegung;
   fahrzeugId: string | null;
   oepnv: OepnvFahrt | null;
+  /** Aktive Instanz des Fahnders. */
+  instanz?: string;
+}
+
+/** Instanz: eigener Einsatz oder ein Paket in Vorbereitung. */
+export interface Instance {
+  name: string;
+  art: 'einsatz' | 'paket';
+  beschreibung: string;
+  mitglieder: string[];
+  erstelltVon: string;
 }
 
 export interface Vehicle {
@@ -69,6 +80,8 @@ export interface MapObject {
   trackerId: string | null;
   /** Lebensdauer: Zeitpunkt, zu dem sich die Markierung selbst löscht. */
   ablauf?: number | null;
+  /** Fotos und Dateien. */
+  anhaenge?: Attachment[];
 }
 
 export type ZielArt = 'person' | 'fahrzeug' | 'objekt';
@@ -99,6 +112,8 @@ export interface Tracker {
   anbieter: 'sinotrack' | 'paj';
   kennung: string;
   intervall: number | null;
+  /** PAJ: E-Mail des eigenen Kontos dieses Trackers. */
+  kontoEmail?: string;
 }
 
 export interface Layer {
@@ -119,6 +134,7 @@ export interface Attachment {
   mime: string;
   groesse: number;
   dauer: number | null;
+  wellenform?: number[] | null;
 }
 
 export interface Message {
@@ -142,6 +158,7 @@ export interface Operation {
 }
 
 export interface KindMap {
+  instance: Instance;
   member: Member;
   vehicle: Vehicle;
   annotation: MapObject;

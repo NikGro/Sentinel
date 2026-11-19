@@ -512,15 +512,18 @@ struct LineBadges: View {
 
 struct LineBadge: View {
     let line: NearbyStop.Line
+    /// Schriftgröße: klein auf der Karte, größer in Listen.
+    var size: CGFloat = 9
 
     var body: some View {
         let kind = LineKind(line)
+        let scale = size / 9
         Text(line.ref)
-            .font(.system(size: 9, weight: .heavy))
+            .font(.system(size: size, weight: .heavy))
             .foregroundStyle(foreground(kind))
             .lineLimit(1)
-            .padding(.horizontal, 4)
-            .frame(minWidth: 18, minHeight: 14)
+            .padding(.horizontal, 4 * scale)
+            .frame(minWidth: 18 * scale, minHeight: 14 * scale)
             .background(background(kind), in: shape(kind))
             .overlay(shape(kind).stroke(Self.colorHex(line) == "#FFFFFF" ? Color.black.opacity(0.7) : .clear, lineWidth: 1))
             .accessibilityLabel(label(kind))
@@ -528,7 +531,7 @@ struct LineBadge: View {
 
     private func shape(_ kind: LineKind) -> RoundedRectangle {
         // S-Bahn rund, U-Bahn und Bus eckig wie auf den HVV-Plänen.
-        RoundedRectangle(cornerRadius: kind == .sBahn ? 7 : 1.5)
+        RoundedRectangle(cornerRadius: (kind == .sBahn ? 7 : 1.5) * size / 9)
     }
 
     private func background(_ kind: LineKind) -> Color { Color(hex: Self.colorHex(line)) }

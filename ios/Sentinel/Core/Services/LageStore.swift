@@ -32,6 +32,9 @@ final class LageStore {
     private(set) var layers: [String: Versioned<Layer>] = [:]
     private(set) var rooms: [String: Versioned<ChatRoom>] = [:]
     private(set) var messages: [Versioned<ChatMessage>] = []
+    private(set) var instances: [String: Versioned<Instance>] = [:]
+    /// Geöffnete Instanz. Alle lagebezogenen Daten oben gehören zu ihr.
+    private(set) var instanz = Instance.mainId
 
     private(set) var operation = OperationState()
     private(set) var positions: [String: Position] = [:]
@@ -78,6 +81,8 @@ final class LageStore {
         positions = [:]
         trackerPositions = [:]
         online = []
+        instances = [:]
+        instanz = Instance.mainId
         operation = OperationState()
     }
 
@@ -93,8 +98,34 @@ final class LageStore {
     var joinedLeapfrog: Bool { selfId.map { operation.ueberschlagen.teilnehmer.contains($0) } ?? false }
     var myLeapfrogStop: LeapfrogStop? { selfId.flatMap { operation.ueberschlagen.zuweisungen[$0] } }
 
+    var currentInstance: Versioned<Instance>? { instances[instanz] }
+    /// In einem Paket wird nur vorbereitet: kein Einsatzbetrieb (A, Notruf, Navigation, Fortbewegung).
+    var isPackageArea: Bool { currentInstance?.data.isPackage ?? false }
+
+    /// Einsatz-Instanzen, in denen man Mitglied ist (die Hauptlage immer), Hauptlage zuerst.
+    var myInstances: [Versioned<Instance>] {
+        instances.values
+            .filter { !$0.data.isPackage && ($0.id == Instance.mainId || $0.data.mitglieder.contains(selfId ?? "")) }
+            .sorted { a, b in
+                if a.id == Instance.mainId { return b.id != Instance.mainId }
+                if b.id == Instance.mainId { return false }
+                return a.data.name.localizedStandardCompare(b.data.name) == .orderedAscending
+            }
+    }
+
+    /// Einsatz-Instanzen, denen man beitreten kann.
+    var otherInstances: [Versioned<Instance>] {
+        let mine = Set(myInstances.map(\.id))
+        return instances.values.filter { !$0.data.isPackage && !mine.contains($0.id) }.sorted { $0.data.name.localizedStandardCompare($1.data.name) == .orderedAscending }
+    }
+
+    var packages: [Versioned<Instance>] {
+        instances.values.filter(\.data.isPackage).sorted { $0.data.name.localizedStandardCompare($1.data.name) == .orderedAscending }
+    }
+
+    /// Kräfte in der geöffneten Instanz (Profile gelten instanzübergreifend).
     var sortedMembers: [Versioned<Member>] {
-        members.values.sorted { lhs, rhs in
+        members.values.filter { $0.data.instanz == instanz }.sorted { lhs, rhs in
             if lhs.data.aktiv != rhs.data.aktiv { return lhs.data.aktiv }
             return lhs.data.spitzname.localizedStandardCompare(rhs.data.spitzname) == .orderedAscending
         }
@@ -294,6 +325,33 @@ final class LageStore {
 
     func setActive(_ active: Bool) { command("aktiv.setzen", args: ["aktiv": active]) }
 
+    // MARK: Instanzen
+
+    private struct InstanceArgs: Encodable {
+        let id: String
+        var name: String?
+        var beschreibung: String?
+        var art: String?
+    }
+
+    /// Legt eine Instanz oder ein Paket an und öffnet es.
+    func createInstance(name: String, description: String = "", package: Bool) {
+        command("instanz.erstellen", args: InstanceArgs(id: Self.newId(), name: name, beschreibung: description, art: package ? "paket" : "einsatz"))
+    }
+
+    func editInstance(_ id: String, name: String, description: String) {
+        command("instanz.bearbeiten", args: InstanceArgs(id: id, name: name, beschreibung: description))
+    }
+
+    func deleteInstance(_ id: String) { command("instanz.loeschen", args: InstanceArgs(id: id)) }
+    func joinInstance(_ id: String) { command("instanz.beitreten", args: InstanceArgs(id: id)) }
+    func leaveInstance(_ id: String) { command("instanz.verlassen", args: InstanceArgs(id: id)) }
+    func switchInstance(_ id: String) { command("instanz.wechseln", args: InstanceArgs(id: id)) }
+    /// Übernimmt ein Paket unwiderruflich in die geöffnete Instanz.
+    func importPackage(_ id: String) { command("paket.importieren", args: ["paketId": id]) }
+    /// Leert den Lage-Layer der geöffneten Instanz; der Layer selbst bleibt.
+    func clearLageLayer() { command("lage.leeren") }
+
     private struct MobilityArgs: Encodable {
         let art: Fortbewegung
         let fahrzeugId: String?
@@ -345,6 +403,8 @@ final class LageStore {
                 }
             }
             selfId = snapshot.me.id
+            instanz = snapshot.instanz
+            instances = index(snapshot.instances)
             routingAvailable = snapshot.server.routing
             serverVersion = snapshot.server.version
             members = index(snapshot.members)
@@ -368,6 +428,8 @@ final class LageStore {
         case .putTracker(let entity): trackers[entity.id] = entity
         case .putLayer(let entity): layers[entity.id] = entity
         case .putRoom(let entity): rooms[entity.id] = entity
+        case .putInstance(let entity): instances[entity.id] = entity
+        case .notice(let notice): onEvent(.instanceNotice(notice))
         case .putMessage(let entity) where !messages.contains(where: { $0.id == entity.id }) && entity.updatedBy != selfId && hasSnapshot:
             messages.append(entity)
             onEvent(.message(entity))
@@ -410,6 +472,7 @@ final class LageStore {
             rooms[id] = nil
             messages.removeAll { $0.data.roomId == id }
         case ChatMessage.kind: messages.removeAll { $0.id == id }
+        case Instance.kind: instances[id] = nil
         default: break
         }
     }
@@ -434,4 +497,6 @@ enum LageEvent {
     case sosStarted(memberId: String, mine: Bool)
     case sosEnded(memberId: String)
     case message(Versioned<ChatMessage>)
+    /// A-Position oder Notruf in einer anderen eigenen Instanz.
+    case instanceNotice(InstanceNotice)
 }

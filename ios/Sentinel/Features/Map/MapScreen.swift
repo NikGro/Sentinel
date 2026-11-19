@@ -448,16 +448,16 @@ struct MapScreen: View {
                 .buttonStyle(.plain)
                 .glassEffect(.regular.interactive(), in: .capsule)
                 .accessibilityLabel(tapMode == .none ? "Suchen oder navigieren" : "Ort oder Adresse suchen")
-                    if tapMode == .none {
+                    if tapMode == .none, !reducedTools {
                         MapRoundButton(title: "Zu Objekten navigieren", symbol: "location.viewfinder", prominent: true) { searchMode = .objekte }
                     }
                 }
             }
 
-            SOSBanner { memberId in
+            if !reducedTools { SOSBanner { memberId in
                 model.navigate(to: .member(memberId))
                 route.specialRights = true
-            }
+            } }
 
             if let hint = tapMode.hint {
                 HStack(spacing: 12) {
@@ -501,7 +501,7 @@ struct MapScreen: View {
     private var sideButtons: some View {
         GlassEffectContainer(spacing: Theme.barSpacing) {
             VStack(spacing: Theme.barSpacing) {
-                SOSButton()
+                if !reducedTools { SOSButton() }
                 // Ein Knopf für Kompass und Standort: erst zentrieren und folgen (Norden oben),
                 // dann zwischen Norden oben und Gerätekompass wechseln. Verschieben löst die Kopplung.
                 LocationCompassButton(state: cameraState, following: followsMe, heading: camera.followsUserHeading) {
@@ -542,7 +542,7 @@ struct MapScreen: View {
                     }
                 }
                 MapRoundButton(title: "Ebenen", symbol: "square.3.layers.3d") { showsLayers = true }
-                if let a = lage.aPosition, !lage.holdsA {
+                if !reducedTools, let a = lage.aPosition, !lage.holdsA {
                     Button {
                         withAnimation { camera = .camera(MapCamera(centerCoordinate: a.point.coordinate, distance: 900, heading: 0, pitch: 55)) }
                     } label: {
@@ -554,7 +554,7 @@ struct MapScreen: View {
                     .glassEffect(.regular.interactive(), in: .circle)
                     .accessibilityLabel("A-Position zeigen")
                 }
-                AddMenu { action in
+                AddMenu(scope: model.editsPermanentLayer ? .places : (lage.isPackageArea ? .package : .all)) { action in
                     switch action {
                     case .transitMap:
                         showsTransitMap = true
@@ -617,7 +617,7 @@ struct MapScreen: View {
     private var bottomArea: some View {
         VStack(spacing: Theme.barSpacing) {
             if let pin = searchPin, !route.isActive {
-                SearchPinCard(pin: pin, navigate: {
+                SearchPinCard(pin: pin, scope: model.editsPermanentLayer ? .places : (lage.isPackageArea ? .package : .all), navigate: {
                     searchPin = nil
                     model.navigate(to: .point(pin.point, title: pin.title))
                 }, create: { kind in
@@ -635,6 +635,8 @@ struct MapScreen: View {
                 )
             } else if route.isActive {
                 NavigationBottomBar()
+            } else if searchPin == nil, reducedTools {
+                SpecialAreaBar()
             } else if searchPin == nil {
                 HStack(spacing: Theme.barSpacing) {
                     MobilityControl { mobilityChoice = $0 }
@@ -642,7 +644,7 @@ struct MapScreen: View {
                     ToAButton()
                 }
             }
-            if searchPin == nil {
+            if searchPin == nil, !reducedTools {
                 SituationBar { showsSituation = true }
             }
         }
@@ -746,7 +748,7 @@ struct MapScreen: View {
     private func draft(_ shape: MapObject.Shape, _ points: [GeoPoint]) -> MapObject {
         let isRoom = shape == .fahndungsraum
         return MapObject(
-            layerId: Layer.lageId,
+            layerId: settings.defaultLayerId,
             typ: shape,
             farbe: isRoom ? "#C97C7C" : shape == .haltestellen || shape.isTransit ? "#0A84FF" : "#FF9F0A",
             punkte: points,
@@ -918,8 +920,13 @@ struct MapScreen: View {
     // MARK: Aufbereitung für die Karte
 
     /// Nur geladene Ebenen erscheinen auf der Karte; Entwürfe bleiben in der Ebenenliste.
+    /// Sonderbereich (dauerhafte Orte oder Paket): nur Werkzeuge zum Anlegen und Bearbeiten, kein Einsatzbetrieb.
+    private var reducedTools: Bool { model.editsPermanentLayer || lage.isPackageArea }
+
     private var visibleObjects: [Versioned<MapObject>] {
         lage.mapObjects.values.filter { object in
+            // Beim Bearbeiten der dauerhaften Orte ist nur diese Ebene zu sehen.
+            if model.editsPermanentLayer, object.data.layerId != Layer.dauerhaftId { return false }
             guard let layer = lage.layers[object.data.layerId], !object.data.isExpired() else { return false }
             return layer.data.isLive && !settings.hiddenLayers.contains(object.data.layerId)
         }
@@ -944,6 +951,7 @@ struct MapScreen: View {
     private var forcePins: [ForcePin] {
         var pins: [ForcePin] = []
         var crews: [String: (names: [String], position: Position, isA: Bool, stale: Bool)] = [:]
+        guard !reducedTools else { return [] }
         for member in lage.activeMembers {
             guard let position = lage.positions[member.id] else { continue }
             let isA = lage.operation.a?.memberId == member.id
@@ -988,14 +996,16 @@ struct MapScreen: View {
     }
 
     private var vehiclePins: [SymbolPin] {
-        lage.activeVehicles.compactMap { vehicle in
+        guard !reducedTools else { return [] }
+        return lage.activeVehicles.compactMap { vehicle in
             guard lage.occupants(of: vehicle.id).isEmpty, let position = lage.position(ofVehicle: vehicle) else { return nil }
             return SymbolPin(id: vehicle.id, title: vehicle.data.funkrufname, symbol: "car.fill", color: .indigo, coordinate: position.point.coordinate, selection: .vehicle(vehicle.id))
         }
     }
 
     private var targetPins: [SymbolPin] {
-        lage.sortedTargets.compactMap { target in
+        guard !model.editsPermanentLayer else { return [] }
+        return lage.sortedTargets.compactMap { target in
             guard !settings.hiddenTargetKinds.contains(target.data.art.rawValue), let position = lage.position(ofTarget: target) else { return nil }
             return SymbolPin(id: target.id, title: target.data.displayName, symbol: target.data.art.symbolName, color: Theme.target, coordinate: position.point.coordinate, selection: .target(target.id))
         }

@@ -33,6 +33,9 @@ struct Snapshot: Decodable, Sendable {
     var operation: OperationState
     var positions: [PositionEntry]
     var trackerPositions: [PositionEntry]
+    /// Geöffnete Instanz und alle Instanzen des Servers (ab 0.13).
+    var instanz: String
+    var instances: [Versioned<Instance>]
 
     init(from decoder: Decoder) throws {
         let c = try decoder.container(keyedBy: CodingKeys.self)
@@ -50,12 +53,23 @@ struct Snapshot: Decodable, Sendable {
         operation = try c.decode(OperationState.self, forKey: .operation)
         positions = try c.lossy(PositionEntry.self, forKey: .positions)
         trackerPositions = try c.lossy(PositionEntry.self, forKey: .trackerPositions)
+        instanz = try c.decodeIfPresent(String.self, forKey: .instanz) ?? Instance.mainId
+        instances = (try? c.lossy(Versioned<Instance>.self, forKey: .instances)) ?? []
     }
 
     private enum CodingKeys: String, CodingKey {
         case me = "self"
-        case server, online, members, vehicles, annotations, targets, trackers, layers, rooms, messages, operation, positions, trackerPositions
+        case server, online, members, vehicles, annotations, targets, trackers, layers, rooms, messages, operation, positions, trackerPositions, instanz, instances
     }
+}
+
+/// A-Position oder Notruf in einer anderen Instanz, in der man Mitglied ist.
+struct InstanceNotice: Decodable, Equatable, Sendable {
+    let instanz: String
+    let name: String
+    let art: String
+    let memberId: String
+    let spitzname: String
 }
 
 enum ServerMessage: Sendable {
@@ -68,6 +82,8 @@ enum ServerMessage: Sendable {
     case putLayer(Versioned<Layer>)
     case putRoom(Versioned<ChatRoom>)
     case putMessage(Versioned<ChatMessage>)
+    case putInstance(Versioned<Instance>)
+    case notice(InstanceNotice)
     case delete(kind: String, id: String)
     case operation(OperationState)
     case position(id: String, Position)
@@ -130,6 +146,7 @@ enum WireCodec {
             case Layer.kind: return .putLayer(try decoder.decode(Put<Layer>.self, from: data).entity)
             case ChatRoom.kind: return .putRoom(try decoder.decode(Put<ChatRoom>.self, from: data).entity)
             case ChatMessage.kind: return .putMessage(try decoder.decode(Put<ChatMessage>.self, from: data).entity)
+            case Instance.kind: return .putInstance(try decoder.decode(Put<Instance>.self, from: data).entity)
             default: return .unknown
             }
         case "del":
@@ -145,6 +162,8 @@ enum WireCodec {
             return .trackerPosition(id: body.id, body.p)
         case "online":
             return .online(try decoder.decode(Online.self, from: data).ids)
+        case "hinweis":
+            return .notice(try decoder.decode(InstanceNotice.self, from: data))
         case "bestreifungReset":
             return .coverageReset
         case "ack":
