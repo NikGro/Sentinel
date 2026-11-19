@@ -22,6 +22,8 @@ statt jede Änderung sofort einzubauen. Erledigtes wandert mit Version ins CHANG
 
 ### Karte, Kompass und Navigation
 
+- **Eigenen Standort beim Zoomen weiterhin kamerafixiert halten:** Beim Fokussieren auf die eigene Position soll die Kamera näher heranzoomen können, ohne dass eine unbeabsichtigte kleine seitliche Bewegung beim Zwei-Finger-Zoom sofort die Standort-Fixierung aufhebt. Zoom-Gesten sollen innerhalb einer geeigneten Bewegungstoleranz als reine Zoom-Interaktion behandelt werden; erst ein bewusstes Verschieben der Karte löst die Fixierung. Zusätzlich prüfen, ob ein separater Zoom-Button bzw. eine komfortablere Zoomsteuerung sinnvoll ist. Auch den aktuell recht großen Kameraabstand beim Fokussieren auf die eigene Position überprüfen und eine nähere Standard-Zoomstufe ermöglichen.
+
 
 - **Querstraßen in der Navigation:** Namen kreuzender Straßen entlang der Route anzeigen. Valhalla liefert diese nicht mit; dafür ist eine eigene Abfrage der Kreuzungen entlang der Route (OSM) erforderlich.
 - **App-Absturz während aktiver Navigation untersuchen (0.9: mögliche Ursache beim Neuberechnen abgesichert; Absturzbericht nötig – Einstellungen › Datenschutz & Sicherheit › Analyse & Verbesserungen › Analysedaten › „Sentinel-…“):** Die App ist während einer laufenden Navigation abgestürzt. Crash-Ursache anhand von Crash-Logs und reproduzierbaren Navigationsabläufen ermitteln und beheben. Navigation gezielt auf längere Laufzeit, häufige Positions-/Routenupdates, Wechsel zwischen Vorder- und Hintergrund sowie ungültige oder ausbleibende Standortdaten testen. Sicherstellen, dass ein einzelner fehlerhafter Standort- oder Routen-Update die App nicht zum Absturz bringt.
@@ -50,6 +52,9 @@ statt jede Änderung sofort einzubauen. Erledigtes wandert mit Version ins CHANG
 - **SinoTrack „Test“ (7026222172) sendet nicht:** Portweiterleitung TCP 5013 im Router zur Synology und die SMS-Einrichtung des Geräts (öffentliche Adresse, Port 5013, Protokoll H02) prüfen.
 
 ### App-/Server-Kompatibilität
+
+- **Funktionsgleichheit zwischen iOS-App, Server-Webversion und Kommandozentrale überprüfen:** Einen systematischen Abgleich durchführen, ob die Web-Version des Servers und die Web-Version der Kommandozentrale hinsichtlich Funktionen, Auswahlmöglichkeiten und Bedienoptionen auf demselben aktuellen Stand wie die iOS-App sind. Fehlende, abweichende oder veraltete Funktionen dokumentieren und die Web-Oberflächen entsprechend angleichen, soweit die jeweilige Plattform dies unterstützt.
+- **Apple-CarPlay-Version für Sentinel prüfen und konzipieren:** Untersuchen, welche sinnvollen Sentinel-Funktionen sich als CarPlay-Erlebnis bereitstellen lassen und welche technischen bzw. von Apple vorgegebenen Einschränkungen gelten. Ein schlankes, für die Nutzung im Fahrzeug geeignetes Konzept erarbeiten und die Umsetzbarkeit bewerten.
 
 ### Codebase-Qualität und Architektur
 
