@@ -326,6 +326,13 @@ struct MapScreen: View {
             if let limit = try? await client.speedLimit(at: point) { roadSpeedLimit = limit } else if !Task.isCancelled { roadSpeedLimit = nil }
         }
         .overlay(alignment: .topTrailing) { if tapMode == .none, searchPin == nil { sideButtons } }
+        .overlay(alignment: .topLeading) {
+            if settings.showsCameraDebug {
+                CameraDebugOverlay(state: cameraState, pin: pin, navigating: route.isActive)
+                    .padding(.leading, Theme.barInset)
+                    .padding(.top, topAreaHeight + Theme.barSpacing)
+            }
+        }
         .mapScope(mapScope)
         .task(id: CoverageKey(enabled: settings.showsCoverage, since: settings.coverageSince, generation: lage.coverageGeneration)) {
             guard settings.showsCoverage else {

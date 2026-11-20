@@ -16,7 +16,6 @@ final class LocalSettings {
     var disabledReachModes: Set<String> { didSet { defaults.set(Array(disabledReachModes), forKey: "wegzeit.aus") } }
     /// Ausgeblendete Zielarten (person, fahrzeug, objekt); sie bleiben angelegt.
     var hiddenTargetKinds: Set<String> { didSet { defaults.set(Array(hiddenTargetKinds), forKey: "ziele.ausgeblendet") } }
-    /// Einzelne ausgeblendete Ziele (Schalter in der Zielliste); nur auf diesem Gerät.
     /// Bestreifte Wege zeigen; angezeigt wird nur, was seit dem Einschalten zurückgelegt wurde.
     var showsCoverage: Bool {
         didSet {
@@ -34,6 +33,8 @@ final class LocalSettings {
     /// Gilt nur bis zum Neustart der App.
     var permanentLayerUnlocked = false
     var lastReadMessageAt: Double { didSet { defaults.set(lastReadMessageAt, forKey: "chat.gelesen") } }
+    /// Entwickleroption: Kamera-Abstand, Neigung und Richtung als Einblendung auf der Karte.
+    var showsCameraDebug: Bool { didSet { defaults.set(showsCameraDebug, forKey: "entwickler.kamera") } }
 
     init(defaults: UserDefaults = .standard) {
         self.defaults = defaults
@@ -49,6 +50,7 @@ final class LocalSettings {
         showsTraffic = defaults.bool(forKey: "karte.verkehr")
         prefers3D = defaults.bool(forKey: "karte.3d")
         lastReadMessageAt = defaults.double(forKey: "chat.gelesen")
+        showsCameraDebug = defaults.bool(forKey: "entwickler.kamera")
     }
 
     /// Darf eine Markierung auf dieser Ebene bearbeitet werden?

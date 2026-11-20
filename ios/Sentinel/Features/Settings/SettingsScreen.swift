@@ -91,6 +91,14 @@ struct SettingsScreen: View {
                     Text("Beim Verlassen wird die App gesperrt und erst nach Face ID, Touch ID oder Gerätecode wieder freigegeben. Im App-Umschalter sind nie Einsatzdaten zu sehen.")
                 }
 
+                Section {
+                    Toggle("Kamerawerte einblenden", systemImage: "camera.metering.center.weighted", isOn: $settings.showsCameraDebug)
+                } header: {
+                    Text("Entwickler")
+                } footer: {
+                    Text("Zeigt auf der Karte Abstand, Neigung und Richtung der Kamera und den Anheft-Modus, z. B. um Wunschwerte für Kompass und Navigation festzulegen.")
+                }
+
                 Section("Verbindung") {
                     LabeledContent("Server", value: model.credentials?.serverURL.host() ?? "–")
                     LabeledContent("Zustand", value: lage.connection.title)
