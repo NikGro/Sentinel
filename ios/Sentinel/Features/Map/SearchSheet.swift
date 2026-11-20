@@ -155,6 +155,18 @@ struct SearchSheet: View {
                 }
             }
         } else if !search.suggestions.isEmpty || !stops.isEmpty {
+            if !search.suggestions.isEmpty {
+            Section("Vorschläge") {
+                ForEach(search.suggestions) { suggestion in
+                    Button {
+                        Task { await choose(suggestion) }
+                    } label: {
+                        row(title: suggestion.title, subtitle: suggestion.subtitle, symbol: suggestion.subtitle == "Kreuzung" ? "arrow.triangle.merge" : "magnifyingglass", distance: nil)
+                    }
+                    .tint(.primary)
+                }
+            }
+            }
             if !stops.isEmpty {
                 Section("Haltestellen") {
                     ForEach(stops) { stop in
@@ -181,21 +193,9 @@ struct SearchSheet: View {
                     }
                 }
             }
-            if !search.suggestions.isEmpty {
-            Section("Vorschläge") {
-                ForEach(search.suggestions) { suggestion in
-                    Button {
-                        Task { await choose(suggestion) }
-                    } label: {
-                        row(title: suggestion.title, subtitle: suggestion.subtitle, symbol: suggestion.subtitle == "Kreuzung" ? "arrow.triangle.merge" : "magnifyingglass", distance: nil)
-                    }
-                    .tint(.primary)
-                }
-            }
-            }
         } else if query.isEmpty {
             Section {
-                Text("Hausnummer vorn oder hinten ist egal, z. B. „12 Musterstraße“. Kreuzungen mit „&“ oder „/“, z. B. „Mönckebergstraße / Steinstraße“.")
+                Text("Straßen, Hausnummern (vorn oder hinten), Kreuzungen wie „Heegbarg Ecke Wentzelplatz“ oder „Mönckebergstraße / Steinstraße“, Örtlichkeiten und Haltestellen. Kleine Tippfehler in Straßennamen werden verziehen.")
                     .font(.footnote)
                     .foregroundStyle(.secondary)
             }

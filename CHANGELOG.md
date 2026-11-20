@@ -24,6 +24,13 @@
 - Ort setzen sieht überall gleich aus: Antippen, Vorschau-Nadel, Leiste mit „Übernehmen“ – auf der Lagekarte und
   bei der Standortwahl eines Ziels
 
+**Suche**
+- Straßen und Adressen stehen immer vorn, dann Örtlichkeiten, dann Haltestellen
+- Kreuzungen auch mit „Ecke“, „x“ oder „und“ („Heegbarg Ecke Wentzelplatz“); Tipp- und Hörfehler in Straßennamen
+  werden der ähnlichsten Straße der Umgebung zugeordnet („Hegbark Ecke Wenzelplatz“ findet die Kreuzung) und
+  richtig geschrieben angezeigt
+- Die Eingabe selbst wird immer mitgeprüft, auch wenn Apple Karten sie nicht vervollständigt
+
 **Ziele und Kräfte**
 - Ziele-Tab wie der Kräfte-Tab: getrennte Abschnitte für Zielfahrzeuge, Zielpersonen und Zielobjekte, je Ziel ein
   Schalter zum Ein- und Ausblenden auf der Karte

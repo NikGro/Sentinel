@@ -168,6 +168,11 @@ struct SearchTests {
         #expect(SearchService.intersectionParts("Mönckebergstraße / Steinstraße")?.1 == "Steinstraße")
         #expect(SearchService.intersectionParts("A & B")?.0 == "A")
         #expect(SearchService.intersectionParts("Musterstraße 12") == nil)
+        #expect(SearchService.intersectionParts("Hegbark Ecke Wenzelplatz")?.0 == "Hegbark")
+        #expect(SearchService.intersectionParts("Hegbark ecke Wenzelplatz")?.1 == "Wenzelplatz")
+        #expect(SearchService.intersectionParts("Heegbarg x Saseler Damm")?.1 == "Saseler Damm")
+        #expect(SearchService.intersectionParts("Heegbarg Ecke")?.1 == "")
+        #expect(SearchService.intersectionParts("Eckernförder Straße 3") == nil, "„Ecke“ nur als eigenes Wort")
     }
 }
 

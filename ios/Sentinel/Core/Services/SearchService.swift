@@ -4,8 +4,9 @@ import Observation
 /// Freie Ortssuche über Apple Karten mit Autovervollständigung.
 ///
 /// - Hausnummer zuerst wird verstanden: "12 Musterstraße" sucht nach "Musterstraße 12".
-/// - Kreuzungen mit "&" oder "/": "Mönckebergstraße / Steinstraße". Beide Straßennamen werden einzeln vervollständigt,
-///   den Kreuzungspunkt ermittelt der Sentinel-Server aus den Kartendaten.
+/// - Kreuzungen mit „/“, „&“, „Ecke“, „x“ oder „und“: „Heegbarg Ecke Wentzelplatz“. Den Kreuzungspunkt ermittelt der
+///   Sentinel-Server aus den Kartendaten und verzeiht dabei Tipp- und Hörfehler („Hegbark“).
+/// - Reihenfolge: Straßen und Adressen zuerst, dann Örtlichkeiten, dann Haltestellen.
 @MainActor
 @Observable
 final class SearchService: NSObject, MKLocalSearchCompleterDelegate {
@@ -54,22 +55,41 @@ final class SearchService: NSObject, MKLocalSearchCompleterDelegate {
     @ObservationIgnored private var validation: Task<Void, Never>?
 
     @ObservationIgnored private let completer = MKLocalSearchCompleter()
+    /// Örtlichkeiten (Geschäfte, Behörden, Plätze) getrennt, damit Straßen immer vorn stehen.
+    @ObservationIgnored private let placeCompleter = MKLocalSearchCompleter()
+    @ObservationIgnored private var addressResults: [Suggestion] = []
+    @ObservationIgnored private var placeResults: [Suggestion] = []
     @ObservationIgnored private var intersectionPrefix: String?
+    /// Bei Kreuzungen: zweiter Straßenname, wie eingegeben.
+    @ObservationIgnored private var typedSecondStreet = ""
     /// Hausnummer, die vorn eingegeben wurde und an die vervollständigte Straße angehängt wird.
     @ObservationIgnored private var leadingHouseNumber: String?
 
     override init() {
         super.init()
         completer.delegate = self
-        completer.resultTypes = [.address, .pointOfInterest]
+        completer.resultTypes = .address
+        placeCompleter.delegate = self
+        placeCompleter.resultTypes = .pointOfInterest
     }
 
-    /// Teilt eine Eingabe an "&" oder "/" in zwei Straßennamen.
+    /// Teilt eine Kreuzung in zwei Straßennamen: „A / B“, „A & B“, „A Ecke B“, „A x B“, „A und B“, „Kreuzung A B“
+    /// geht nicht (zu mehrdeutig). Hausnummern („Musterstraße 12“) sind keine Kreuzung.
     nonisolated static func intersectionParts(_ text: String) -> (String, String)? {
-        guard let separator = text.firstIndex(where: { $0 == "&" || $0 == "/" }) else { return nil }
-        let a = text[..<separator].trimmingCharacters(in: .whitespaces)
-        let b = text[text.index(after: separator)...].trimmingCharacters(in: .whitespaces)
-        return a.isEmpty ? nil : (a, b)
+        let separators = [#/\s*[\/&]\s*/#, #/\s+(?i:ecke|x|und|u\.)\s+/#]
+        for separator in separators {
+            if let match = text.firstMatch(of: separator) {
+                let a = text[..<match.range.lowerBound].trimmingCharacters(in: .whitespaces)
+                let b = text[match.range.upperBound...].trimmingCharacters(in: .whitespaces)
+                if !a.isEmpty { return (a, b) }
+            }
+        }
+        // Am Ende getippt: „Heegbarg Ecke“ – die zweite Straße kommt noch.
+        if let match = text.firstMatch(of: #/\s+(?i:ecke)\s*$/#) {
+            let a = text[..<match.range.lowerBound].trimmingCharacters(in: .whitespaces)
+            if !a.isEmpty { return (a, "") }
+        }
+        return nil
     }
 
     /// "12 Musterstraße" wird zu "Musterstraße 12"; andere Eingaben bleiben unverändert.
@@ -102,6 +122,7 @@ final class SearchService: NSObject, MKLocalSearchCompleterDelegate {
         if let (a, b) = Self.intersectionParts(query) {
             // Zweiten Straßennamen vervollständigen, den ersten voranstellen.
             intersectionPrefix = a
+            typedSecondStreet = b
             completer.resultTypes = .address
             if b.count >= 2 {
                 completer.queryFragment = b
@@ -111,6 +132,7 @@ final class SearchService: NSObject, MKLocalSearchCompleterDelegate {
             return
         }
         intersectionPrefix = nil
+        placeResults = []
         if let (number, street) = Self.leadingNumber(query) {
             // Hausnummer vorn: nur die Straße vervollständigen und die Nummer wieder anhängen.
             leadingHouseNumber = number
@@ -119,34 +141,56 @@ final class SearchService: NSObject, MKLocalSearchCompleterDelegate {
             return
         }
         leadingHouseNumber = nil
-        completer.resultTypes = [.address, .pointOfInterest]
+        completer.resultTypes = .address
+        placeCompleter.region = completer.region
+        placeCompleter.regionPriority = .required
         if query.trimmingCharacters(in: .whitespaces).count >= 2 {
             completer.queryFragment = query
+            placeCompleter.queryFragment = query
         } else {
             suggestions = []
+            addressResults = []
         }
     }
 
     nonisolated func completerDidUpdateResults(_ completer: MKLocalSearchCompleter) {
         let results = completer.results
+        let isPlaces = completer === placeCompleter
         Task { @MainActor in
+            if isPlaces {
+                // Örtlichkeiten nur im freien Suchmodus, hinter den Straßen.
+                guard self.intersectionPrefix == nil, self.leadingHouseNumber == nil else { return }
+                self.placeResults = results.prefix(8).map { Suggestion(title: $0.title, subtitle: $0.subtitle, completion: $0) }
+                self.mergeSuggestions()
+                return
+            }
             if let prefix = self.intersectionPrefix {
                 // Für Kreuzungen nur den Straßennamen ohne Ort übernehmen.
                 var seen = Set<String>()
-                let candidates: [(String, Suggestion)] = results.compactMap { result in
+                // Die Eingabe selbst zuerst prüfen: Apple vervollständigt nicht jeden (auch falsch geschriebenen) Namen,
+                // der Server ordnet ihn trotzdem der richtigen Straße zu.
+                let typed = self.typedSecondStreet
+                if !typed.isEmpty { seen.insert(typed) }
+                let typedCandidate: [(String, Suggestion)] = typed.count >= 3 ? [(typed, Suggestion(title: "\(prefix) / \(typed)", subtitle: "Kreuzung", completion: nil))] : []
+                let candidates: [(String, Suggestion)] = typedCandidate + results.compactMap { result in
                     let street = result.title.components(separatedBy: ",").first?.trimmingCharacters(in: .whitespaces) ?? result.title
                     guard seen.insert(street).inserted else { return nil }
                     return (street, Suggestion(title: "\(prefix) / \(street)", subtitle: "Kreuzung", completion: nil))
                 }
-                // Nur Kreuzungen zeigen, an denen beide Straßen wirklich aufeinandertreffen.
+                // Nur Kreuzungen zeigen, an denen beide Straßen wirklich aufeinandertreffen; Namen so, wie der Server sie
+                // gefunden hat (Tippfehler korrigiert). Gleiche Kreuzungen erscheinen nur einmal.
                 self.validate { client, near in
                     var kept: [Suggestion] = []
-                    for (street, var suggestion) in candidates.prefix(6) {
+                    var found = Set<String>()
+                    for (street, suggestion) in candidates.prefix(7) {
                         if Task.isCancelled { return kept }
-                        if let points = try? await client?.intersections(prefix, street, near: near ?? GeoPoint(lat: 53.57, lon: 10)), let first = points.first {
-                            suggestion.point = first
-                            kept.append(suggestion)
-                        }
+                        guard let crossing = try? await client?.intersection(prefix, street, near: near ?? GeoPoint(lat: 53.57, lon: 10)),
+                              let first = crossing.punkte.first else { continue }
+                        let title = "\(crossing.a ?? prefix) / \(crossing.b ?? street)"
+                        guard found.insert(title).inserted else { continue }
+                        var corrected = Suggestion(title: title, subtitle: suggestion.subtitle, completion: nil)
+                        corrected.point = first
+                        kept.append(corrected)
                     }
                     return kept
                 }
@@ -180,9 +224,16 @@ final class SearchService: NSObject, MKLocalSearchCompleterDelegate {
                     return kept
                 }
             } else {
-                self.suggestions = results.prefix(12).map { Suggestion(title: $0.title, subtitle: $0.subtitle, completion: $0) }
+                self.addressResults = results.prefix(10).map { Suggestion(title: $0.title, subtitle: $0.subtitle, completion: $0) }
+                self.mergeSuggestions()
             }
         }
+    }
+
+    /// Straßen und Adressen zuerst, dann Örtlichkeiten; gleiche Titel nur einmal.
+    private func mergeSuggestions() {
+        var seen = Set<String>()
+        suggestions = (addressResults + placeResults).filter { seen.insert("\($0.title)|\($0.subtitle)").inserted }.prefix(14).map { $0 }
     }
 
     /// Prüft Vorschläge im Hintergrund; neue Eingaben brechen die laufende Prüfung ab.
@@ -241,10 +292,12 @@ final class SearchService: NSObject, MKLocalSearchCompleterDelegate {
                 return []
             }
             do {
-                let points = try await client.intersections(a, b, near: near)
+                let crossing = try await client.intersection(a, b, near: near)
+                let points = crossing.punkte
                 if points.isEmpty { failure = "Keine Kreuzung von \(a) und \(b) in der Nähe gefunden." }
+                let title = "\(crossing.a ?? a) / \(crossing.b ?? b)"
                 return points.enumerated().map { index, point in
-                    Place(title: "\(a) / \(b)", subtitle: points.count > 1 ? "Kreuzungspunkt \(index + 1)" : "Kreuzung", point: point)
+                    Place(title: title, subtitle: points.count > 1 ? "Kreuzungspunkt \(index + 1)" : "Kreuzung", point: point)
                 }
             } catch {
                 failure = error.localizedDescription

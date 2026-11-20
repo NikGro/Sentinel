@@ -17,6 +17,7 @@ statt jede Änderung sofort einzubauen. Erledigtes wandert mit Version ins CHANG
 - **Überschriften:** Ziele-Titel und Plus auf dieselbe Höhe wie bei Kräfte und Chat; im Chat das Plus auf Höhe der Überschrift.
 - **Untere Leiste der Karte:** A-Knopf, Dreier-Umschalter und Lageleiste so hoch wie die runden Knöpfe und die Suchleiste.
 - **Plus-Menü ÖPNV:** nur noch ein Eintrag „ÖPNV“ (die ÖPNV-Karte), darüber Haltestellen, Linien und Fahrzeuge übernehmen; keine mehrzeiligen Knöpfe, Auswahl ohne Häkchen-Liste.
+- **Ortssuche:** Straßen voran, dann Örtlichkeiten, dann Haltestellen; Kreuzungen auch mit Tippfehlern finden („Hegbark Ecke Wenzelplatz“); nur plausible Treffer, aber keine plausiblen ausschließen.
 - **Einheitliche Oberfläche:** gleiche Aufgaben (Ort setzen, Auswahl, Formulare) überall mit derselben Ansicht und demselben Design; App-weit mit UI-Design-Skills prüfen.
 
 ### Karte, Kompass und Navigation

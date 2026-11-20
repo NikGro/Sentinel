@@ -262,11 +262,15 @@ struct APIClient: Sendable {
         return try await json(StopsNearby.self, "GET", "api/v1/oepnv/haltestellen/suche", query: items).haltestellen
     }
 
-    private struct Crossing: Decodable {
+    /// Kreuzung zweier Straßen: Kreuzungspunkte und die tatsächlichen Straßennamen. Bei Tipp- oder Hörfehlern
+    /// („Hegbark“) ordnet der Server der ähnlichsten Straße der Umgebung zu und nennt den richtigen Namen („Heegbarg“).
+    struct Crossing: Decodable {
         let punkte: [GeoPoint]
+        let a: String?
+        let b: String?
     }
 
-    func intersections(_ a: String, _ b: String, near: GeoPoint) async throws -> [GeoPoint] {
+    func intersection(_ a: String, _ b: String, near: GeoPoint) async throws -> Crossing {
         try await json(
             Crossing.self,
             "GET",
@@ -275,7 +279,7 @@ struct APIClient: Sendable {
                 URLQueryItem(name: "a", value: a), URLQueryItem(name: "b", value: b),
                 URLQueryItem(name: "lat", value: String(near.lat)), URLQueryItem(name: "lon", value: String(near.lon)),
             ]
-        ).punkte
+        )
     }
 
     // MARK: Verwaltung (auch in der App verfügbar)
