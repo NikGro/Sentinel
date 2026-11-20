@@ -21,6 +21,15 @@
 - Letzte Nachrichten im Rohformat, um zu sehen, was ein Gerät tatsächlich schickt
 - Akku und Verbindung auch in der Trackerliste
 - Wird ein Tracker vom Ziel getrennt oder gelöscht, bleibt das Ziel an der letzten Trackerposition stehen
+- SinoTrack: Positionsmeldungen aller Arten werden gelesen (auch V8), die Felder werden am Muster erkannt statt an
+  festen Stellen
+
+**Fahrzeuge**
+- „Im Einsatz“ gilt je Instanz statt serverweit; neue Instanzen beginnen ohne aktive Fahrzeuge
+- Sitzen mehrere im Fahrzeug, gibt der zuerst Eingestiegene den Standort vor, auch über Instanzen hinweg
+
+**SOS**
+- Der Knopf wächst beim Halten wie die anderen Glasknöpfe, der weiße Ring ist wieder zu sehen
 
 **Karte, ÖPNV und Navigation**
 - Kompass und Anheften: Die App führt die Kamera selbst nach; kein Sprung mehr nach der Kamerafahrt. Norden-Ansicht

@@ -40,8 +40,30 @@ test('Fortbewegung: Fahrzeug bleibt stehen, wenn der letzte Insasse aussteigt', 
   assert.equal(lage.get('vehicle', 'v1')?.data.abgestellt?.lat, 53.51);
   assert.equal(lage.get('member', 'b')?.data.oepnv?.linie, 'U3');
   assert.throws(() => lage.command(fahnder('a'), 'fortbewegung.setzen', { art: 'oepnv' }), /Linie/);
-  lage.put(fahnder('a'), 'vehicle', 'v1', { ...fahrzeug(), aktiv: false });
+  lage.command(fahnder('a'), 'fahrzeug.aktivieren', { fahrzeugId: 'v1', aktiv: false });
   assert.throws(() => lage.command(fahnder('a'), 'fortbewegung.setzen', { art: 'fahrzeug', fahrzeugId: 'v1' }), /nicht aktiv/);
+});
+
+test('Fahrzeuge sind je Instanz im Einsatz; wer zuerst eingestiegen ist, gibt den Standort vor', () => {
+  const lage = newLage();
+  lage.put(fahnder('a'), 'member', 'a', profil('Falke'));
+  lage.put(fahnder('b'), 'member', 'b', profil('Adler'));
+  lage.put(fahnder('a'), 'vehicle', 'v1', fahrzeug());
+  lage.command(fahnder('b'), 'instanz.erstellen', { id: 'zwei', name: 'Zweiter Einsatz' });
+  // In der neuen Instanz ist das Fahrzeug noch nicht im Einsatz.
+  assert.throws(() => lage.command(fahnder('b'), 'fortbewegung.setzen', { art: 'fahrzeug', fahrzeugId: 'v1' }), /nicht aktiv/);
+  lage.command(fahnder('b'), 'fahrzeug.aktivieren', { fahrzeugId: 'v1', aktiv: true });
+  assert.deepEqual(lage.operationOf('zwei').fahrzeuge, ['v1']);
+  lage.command(fahnder('a'), 'fortbewegung.setzen', { art: 'fahrzeug', fahrzeugId: 'v1' });
+  lage.command(fahnder('b'), 'fortbewegung.setzen', { art: 'fahrzeug', fahrzeugId: 'v1' });
+  lage.reportPosition('a', pos(53.5, 10.0));
+  lage.reportPosition('b', pos(53.6, 10.1));
+  assert.equal(lage.vehicleLeader('v1')?.id, 'a');
+  // Abmelden in einer Instanz setzt nur deren Insassen ab.
+  lage.command(fahnder('b'), 'fahrzeug.aktivieren', { fahrzeugId: 'v1', aktiv: false });
+  assert.equal(lage.get('member', 'b')?.data.fortbewegung, 'fuss');
+  assert.equal(lage.get('member', 'a')?.data.fortbewegung, 'fahrzeug');
+  assert.ok(lage.operation.fahrzeuge.includes('v1'));
 });
 
 test('Ruhemodus: kein Standort, A-Position wird abgegeben', () => {

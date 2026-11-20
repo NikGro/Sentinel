@@ -67,6 +67,8 @@ struct Member: LageEntity {
     var instanz: String = Instance.mainId
     /// Eigenen Standortverlauf aufzeichnen (nur im Einsatz).
     var aufzeichnung: Bool = true
+    /// Seit wann im Fahrzeug (ms): Wer zuerst eingestiegen ist, gibt den Standort des Fahrzeugs vor.
+    var fahrzeugSeit: Double?
 
     init(name: String, spitzname: String, dienststelle: String, telefon: String = "", fotoBlob: String? = nil) {
         self.name = name
@@ -77,7 +79,7 @@ struct Member: LageEntity {
     }
 
     private enum CodingKeys: String, CodingKey {
-        case name, spitzname, dienststelle, telefon, fotoBlob, aktiv, fortbewegung, fahrzeugId, oepnv, instanz, aufzeichnung
+        case name, spitzname, dienststelle, telefon, fotoBlob, aktiv, fortbewegung, fahrzeugId, oepnv, instanz, aufzeichnung, fahrzeugSeit
     }
 
     init(from decoder: Decoder) throws {
@@ -93,6 +95,7 @@ struct Member: LageEntity {
         oepnv = try c.decodeIfPresent(OepnvFahrt.self, forKey: .oepnv)
         instanz = try c.decodeIfPresent(String.self, forKey: .instanz) ?? Instance.mainId
         aufzeichnung = try c.decodeIfPresent(Bool.self, forKey: .aufzeichnung) ?? true
+        fahrzeugSeit = try c.decodeIfPresent(Double.self, forKey: .fahrzeugSeit)
     }
 }
 
@@ -280,12 +283,14 @@ struct OperationState: Codable, Equatable, Sendable {
     var ueberschlagen = Leapfrog()
     /// Notruf eines Fahnders.
     var sos: APosition?
+    /// Fahrzeuge, die in dieser Instanz im Einsatz sind; `nil` bei älteren Servern (dann gilt das Fahrzeug selbst).
+    var fahrzeuge: [String]?
     var rev: Int = 0
 
     init() {}
 
     private enum CodingKeys: String, CodingKey {
-        case funkkanal, titel, hinweise, a, ueberschlagen, sos, rev
+        case funkkanal, titel, hinweise, a, ueberschlagen, sos, fahrzeuge, rev
     }
 
     init(from decoder: Decoder) throws {
@@ -296,6 +301,7 @@ struct OperationState: Codable, Equatable, Sendable {
         a = try c.decodeIfPresent(APosition.self, forKey: .a)
         ueberschlagen = try c.decodeIfPresent(Leapfrog.self, forKey: .ueberschlagen) ?? Leapfrog()
         sos = try c.decodeIfPresent(APosition.self, forKey: .sos)
+        fahrzeuge = try c.decodeIfPresent([String].self, forKey: .fahrzeuge)
         rev = try c.decodeIfPresent(Int.self, forKey: .rev) ?? 0
     }
 }

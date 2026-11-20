@@ -32,18 +32,43 @@ function toTimestamp(hhmmss: string, ddmmyy: string): number | null {
   return Number.isFinite(ts) ? ts : null;
 }
 
+/**
+ * Sucht die Positionsfelder (Uhrzeit, Gültigkeit, Breite, N/S, Länge, O/W, Knoten, Kurs, Datum) in einer
+ * Textnachricht. Die Nachrichtenarten (V1, V2, V4, V8, V19, NBR …) setzen unterschiedlich viele Felder davor; statt
+ * fester Positionen wird daher nach dem typischen Muster gesucht. Liefert den Index der Uhrzeit oder -1.
+ */
+function positionFieldsIndex(f: string[]): number {
+  for (let i = 3; i + 8 < f.length; i++) {
+    if (
+      /^\d{6}(\.\d+)?$/.test(f[i]!) &&
+      /^[AV]$/.test(f[i + 1]!) &&
+      /^\d{3,5}\.\d+$/.test(f[i + 2]!) &&
+      /^[NS]$/.test(f[i + 3]!) &&
+      /^\d{4,6}\.\d+$/.test(f[i + 4]!) &&
+      /^[EW]$/.test(f[i + 5]!) &&
+      /^\d{6}$/.test(f[i + 8]!)
+    ) {
+      return i;
+    }
+  }
+  return -1;
+}
+
+/** Nachrichtenarten mit Position: alle „V…“ (V1, V2, V4, V8, V19 …) und NBR. */
+const POSITION_TYPES = /^(V\d+|NBR)$/;
+
 /** Wertet eine Textnachricht aus. Liefert `null` für Nachrichten ohne gültige Position (z. B. Herzschlag, kein GPS-Empfang). */
 export function parseH02Text(frame: string): TrackerFix | null {
   const body = frame.replace(/^\*/, '').replace(/#$/, '');
   const f = body.split(',');
-  if (f[0] !== 'HQ' || !f[1] || !/^(V1|V2|V4|NBR|HTBT|V19)$/.test(f[2] ?? '')) return null;
-  // Bei V4 steht vor der Uhrzeit das bestätigte Kommando samt Zeit, die Positionsfelder sind verschoben.
-  const offset = f[2] === 'V4' ? 5 : 3;
-  const [time, valid, lat, ns, lon, ew, speed, course, date] = f.slice(offset, offset + 9);
+  if (f[0] !== 'HQ' || !f[1] || !POSITION_TYPES.test(f[2] ?? '')) return null;
+  const at = positionFieldsIndex(f);
+  if (at < 0) return null;
+  const [time, valid, lat, ns, lon, ew, speed, course, date] = f.slice(at, at + 9);
   if (valid !== 'A' || !time || !lat || !ns || !lon || !ew || !date) return null;
   const latitude = toDegrees(lat, ns);
   const longitude = toDegrees(lon, ew);
-  const ts = toTimestamp(time, date);
+  const ts = toTimestamp(time.slice(0, 6), date);
   if (latitude === null || longitude === null || ts === null) return null;
   if (Math.abs(latitude) > 90 || Math.abs(longitude) > 180) return null;
   const knots = Number.parseFloat(speed ?? '');
@@ -115,10 +140,11 @@ export function parseH02Status(frame: string | Buffer): Partial<TrackerStatus> {
     const rssi = num(f[4], 100);
     return { signal: rssi === undefined ? undefined : rssi <= 31 ? Math.round((rssi / 31) * 100) : rssi, satelliten: num(f[5], 60), akku: num(f[6], 100) };
   }
-  if (!/^(V1|V2|V4|V19|NBR)$/.test(f[2] ?? '')) return {};
-  const offset = f[2] === 'V4' ? 5 : 3;
-  const valid = f[offset + 1];
-  const status = f[offset + 9];
+  if (!POSITION_TYPES.test(f[2] ?? '')) return {};
+  const at = positionFieldsIndex(f);
+  if (at < 0) return {};
+  const valid = f[at + 1];
+  const status = f[at + 9];
   return { gps: valid === 'A' ? true : valid === 'V' ? false : undefined, ...(status ? statusWord(status) : {}) };
 }
 

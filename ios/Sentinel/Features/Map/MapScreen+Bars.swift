@@ -81,9 +81,11 @@ extension MapScreen {
     // MARK: Knöpfe am rechten Rand, direkt unter dem Kompass
 
     var sideButtons: some View {
+        VStack(spacing: Theme.barSpacing) {
+        // SOS außerhalb des Glas-Verbunds: Dort zeichnet der Verbund das Glas über Ring und Vergrößerung.
+        if !reducedTools { SOSButton() }
         GlassEffectContainer(spacing: Theme.barSpacing) {
             VStack(spacing: Theme.barSpacing) {
-                if !reducedTools { SOSButton() }
                 // Ein Knopf für Standort und Kompass: heftet immer an und wechselt dann zwischen Fahrtrichtung und
                 // Norden oben. Zoomen und Drehen gehen mit zwei Fingern; erst bewusstes Verschieben löst die Kopplung.
                 LocationCompassButton(state: cameraState, pin: pin) {
@@ -117,6 +119,7 @@ extension MapScreen {
                     }
                 }
             }
+        }
         }
         .padding(.trailing, Theme.barInset)
         .padding(.top, topAreaHeight + Theme.barSpacing)

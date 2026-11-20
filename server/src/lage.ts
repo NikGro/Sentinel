@@ -72,6 +72,7 @@ const DEFAULT_OPERATION: Operation = {
   a: null,
   ueberschlagen: { teilnehmer: [], zuweisungen: {}, naechste: [] },
   sos: null,
+  fahrzeuge: [],
   rev: 0,
 };
 
@@ -127,9 +128,13 @@ export class Lage extends EventEmitter<{ event: [LageEvent] }> {
         a: parsed.a ?? null,
         ueberschlagen: parsed.ueberschlagen ?? DEFAULT_OPERATION.ueberschlagen,
         sos: parsed.sos ?? null,
+        // Früher war „im Einsatz“ ein Merkmal des Fahrzeugs selbst; das gilt als Ausgangsstand je Instanz.
+        fahrzeuge: parsed.fahrzeuge ?? this.list('vehicle').filter((v) => v.data.aktiv).map((v) => v.id),
         rev: parsed.rev ?? 0,
       };
       this.operations.set(inst, op);
+      // Umstellung einmalig festhalten, damit später angelegte Fahrzeuge nicht nachträglich als aktiv gelten.
+      if (parsed.fahrzeuge === undefined) this.db.setKv(operationKey(inst), JSON.stringify(op));
     }
     return op;
   }
@@ -211,6 +216,7 @@ export class Lage extends EventEmitter<{ event: [LageEvent] }> {
           aktiv: previous?.aktiv ?? true,
           fortbewegung: previous?.fortbewegung ?? 'fuss',
           fahrzeugId: previous?.fahrzeugId ?? null,
+          fahrzeugSeit: previous?.fahrzeugSeit ?? null,
           oepnv: previous?.oepnv ?? null,
           instanz: previous?.instanz ?? INSTANZ_HAUPT,
         };
@@ -249,12 +255,6 @@ export class Lage extends EventEmitter<{ event: [LageEvent] }> {
           throw new LageError('ungueltig', 'Diese Ebenenart ist fest vergeben.');
         }
         scope = this.scopeOf(kind, id, data, inst);
-        break;
-      }
-      case 'vehicle': {
-        const next = data as EntityData<'vehicle'>;
-        // Wer in einem abgeschalteten Fahrzeug saß, ist danach zu Fuß unterwegs.
-        if (!next.aktiv) for (const m of this.occupants(id)) this.write('member', '', m.id, { ...m.data, fortbewegung: 'fuss', fahrzeugId: null }, actor.id);
         break;
       }
       default:
@@ -298,7 +298,11 @@ export class Lage extends EventEmitter<{ event: [LageEvent] }> {
         for (const a of this.list('annotation', inst)) if (a.data.layerId === id) this.remove('annotation', inst, a.id);
         break;
       case 'vehicle':
-        for (const m of this.occupants(id)) this.write('member', '', m.id, { ...m.data, fortbewegung: 'fuss', fahrzeugId: null }, actor.id);
+        for (const m of this.occupants(id)) this.write('member', '', m.id, { ...m.data, fortbewegung: 'fuss', fahrzeugId: null, fahrzeugSeit: null }, actor.id);
+        for (const instance of this.list('instance')) {
+          const fahrzeuge = this.operationOf(instance.id).fahrzeuge;
+          if (fahrzeuge.includes(id)) this.updateOperation(instance.id, { fahrzeuge: fahrzeuge.filter((v) => v !== id) });
+        }
         break;
       case 'tracker':
         for (const { inst: i, entity: t } of this.entities.listAll('target')) {
@@ -330,7 +334,7 @@ export class Lage extends EventEmitter<{ event: [LageEvent] }> {
     const old = this.get('member', oldId);
     if (!old) throw new LageError('unbekannt', 'Profil existiert nicht.');
     if (this.get('member', newId)) throw new LageError('konflikt', 'Dieses Gerät hat schon ein Profil.');
-    const entity = this.write('member', '', newId, { ...old.data, fortbewegung: 'fuss', fahrzeugId: null, oepnv: null }, newId);
+    const entity = this.write('member', '', newId, { ...old.data, fortbewegung: 'fuss', fahrzeugId: null, fahrzeugSeit: null, oepnv: null }, newId);
     for (const instance of this.list('instance')) {
       if (instance.data.mitglieder.includes(oldId)) {
         this.write('instance', '', instance.id, { ...instance.data, mitglieder: [...instance.data.mitglieder.filter((m) => m !== oldId), newId] }, newId);
@@ -393,8 +397,9 @@ export class Lage extends EventEmitter<{ event: [LageEvent] }> {
       const p = this.resolveTarget(inst, t.data, now);
       if (p) this.spuren.add('target', t.id, inst, p);
     }
+    const inUse = new Set(this.list('instance').flatMap((i) => this.operationOf(i.id).fahrzeuge));
     for (const v of this.list('vehicle')) {
-      if (v.data.aufzeichnung === false || !v.data.aktiv) continue;
+      if (v.data.aufzeichnung === false || !inUse.has(v.id)) continue;
       const p = this.resolveVehicle(v, now);
       if (p) this.spuren.add('vehicle', v.id, '', p);
     }
@@ -440,11 +445,9 @@ export class Lage extends EventEmitter<{ event: [LageEvent] }> {
 
   private resolveVehicle(v: Entity<'vehicle'>, now: number): SpurPunkt | null {
     const crew = this.occupants(v.id);
-    const latest = crew
-      .map((m) => this.positions.get(m.id))
-      .filter((p): p is Position => !!p)
-      .sort((a, b) => b.ts - a.ts)[0];
-    if (latest) return { lat: latest.lat, lon: latest.lon, ts: latest.ts, spd: latest.spd ?? null, quelle: 'besatzung', info: crew.map((m) => m.data.spitzname).join(', ') };
+    const leader = this.vehicleLeader(v.id);
+    const p = leader ? this.positions.get(leader.id) : undefined;
+    if (p) return { lat: p.lat, lon: p.lon, ts: p.ts, spd: p.spd ?? null, quelle: 'besatzung', info: crew.map((m) => m.data.spitzname).join(', ') };
     const tracker = v.data.trackerId ? this.trackerPositions.get(v.data.trackerId) : undefined;
     if (tracker) return { lat: tracker.lat, lon: tracker.lon, ts: tracker.ts, spd: tracker.spd ?? null, quelle: 'tracker', info: this.get('tracker', v.data.trackerId!)?.data.name ?? null };
     if (v.data.abgestellt) return { lat: v.data.abgestellt.lat, lon: v.data.abgestellt.lon, ts: now, quelle: 'abgestellt' };
@@ -535,6 +538,19 @@ export class Lage extends EventEmitter<{ event: [LageEvent] }> {
         this.emit('event', { type: 'trackerIntervall', anbieter: tracker.data.anbieter, kennung: tracker.data.kennung, sekunden });
         break;
       }
+      case 'fahrzeug.aktivieren': {
+        const vehicleId = args.fahrzeugId as string;
+        if (!this.get('vehicle', vehicleId)) throw new LageError('unbekannt', 'Fahrzeug nicht gefunden.');
+        const others = op.fahrzeuge.filter((v) => v !== vehicleId);
+        this.updateOperation(here, { fahrzeuge: args.aktiv ? [...others, vehicleId] : others });
+        // Wer in dieser Instanz im abgemeldeten Fahrzeug saß, ist danach zu Fuß unterwegs.
+        if (!args.aktiv) {
+          for (const m of this.occupants(vehicleId)) {
+            if (this.activeInstance(m.id) === here) this.write('member', '', m.id, { ...m.data, fortbewegung: 'fuss', fahrzeugId: null, fahrzeugSeit: null }, actor.id);
+          }
+        }
+        break;
+      }
       case 'bestreifung.zuruecksetzen':
         this.resetCoverage(here);
         break;
@@ -608,6 +624,10 @@ export class Lage extends EventEmitter<{ event: [LageEvent] }> {
     if (this.get('instance', id)) throw new LageError('konflikt', 'Diese Instanz gibt es schon.');
     if (this.list('instance').length >= MAX_INSTANCES) throw new LageError('konflikt', 'Es gibt bereits zu viele Instanzen.');
     const mitglieder = actor.role === 'fahnder' && art === 'einsatz' ? [actor.id] : [];
+    // Neue Instanz: noch kein Fahrzeug im Einsatz (auch kein Rest einer früheren Instanz gleichen Namens).
+    const fresh = { ...DEFAULT_OPERATION, fahrzeuge: [] };
+    this.operations.set(id, fresh);
+    this.db.setKv(operationKey(id), JSON.stringify(fresh));
     this.write('instance', '', id, { name, art, beschreibung, mitglieder, erstelltVon: actor.id }, actor.id);
     this.ensureInstance(id);
     if (actor.role === 'fahnder') this.switchInstance(actor.id, id);
@@ -693,7 +713,9 @@ export class Lage extends EventEmitter<{ event: [LageEvent] }> {
     if (art === 'fahrzeug' && fahrzeugId) {
       const vehicle = this.get('vehicle', fahrzeugId);
       if (!vehicle) throw new LageError('unbekannt', 'Fahrzeug nicht gefunden.');
-      if (!vehicle.data.aktiv) throw new LageError('konflikt', 'Dieses Fahrzeug ist für den Einsatz nicht aktiv geschaltet.');
+      if (!this.operationOf(this.activeInstance(actor.id)).fahrzeuge.includes(fahrzeugId)) {
+        throw new LageError('konflikt', 'Dieses Fahrzeug ist in diesem Einsatz nicht aktiv geschaltet.');
+      }
     }
     if (art === 'oepnv' && !oepnv) throw new LageError('ungueltig', 'Bitte Linie und Richtung auswählen.');
 
@@ -703,7 +725,14 @@ export class Lage extends EventEmitter<{ event: [LageEvent] }> {
       'member',
       '',
       member.id,
-      { ...member.data, fortbewegung: art, fahrzeugId: nextVehicle, oepnv: art === 'oepnv' ? oepnv : null },
+      {
+        ...member.data,
+        fortbewegung: art,
+        fahrzeugId: nextVehicle,
+        // Beim Wechsel in ein anderes Fahrzeug neu, sonst bleibt der Einstiegszeitpunkt.
+        fahrzeugSeit: nextVehicle ? (nextVehicle === previousVehicle ? (member.data.fahrzeugSeit ?? now) : now) : null,
+        oepnv: art === 'oepnv' ? oepnv : null,
+      },
       actor.id,
     );
 
@@ -854,6 +883,16 @@ export class Lage extends EventEmitter<{ event: [LageEvent] }> {
 
   private occupants(vehicleId: string): Entity<'member'>[] {
     return this.list('member').filter((m) => m.data.fortbewegung === 'fahrzeug' && m.data.fahrzeugId === vehicleId);
+  }
+
+  /**
+   * Wer den Standort eines Fahrzeugs vorgibt: wer zuerst eingestiegen ist und einen Standort hat, auch über
+   * Instanzen hinweg. So zeigen nie zwei Telefone das Fahrzeug an verschiedenen Orten.
+   */
+  vehicleLeader(vehicleId: string): Entity<'member'> | null {
+    const crew = this.occupants(vehicleId).filter((m) => this.positions.has(m.id));
+    crew.sort((a, b) => (a.data.fahrzeugSeit ?? Number.MAX_SAFE_INTEGER) - (b.data.fahrzeugSeit ?? Number.MAX_SAFE_INTEGER) || a.id.localeCompare(b.id));
+    return crew[0] ?? null;
   }
 
   private updateOperation(inst: string, patch: Partial<Operation>): void {

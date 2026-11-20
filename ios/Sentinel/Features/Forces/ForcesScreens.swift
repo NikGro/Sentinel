@@ -57,12 +57,8 @@ struct ForcesScreen: View {
                             .tint(.primary)
                             // Im heutigen Einsatz dabei: direkt in der Liste schaltbar.
                             Toggle("Im Einsatz", isOn: Binding(
-                                get: { vehicle.data.aktiv },
-                                set: { value in
-                                    var next = vehicle.data
-                                    next.aktiv = value
-                                    lage.put(next, id: vehicle.id)
-                                }
+                                get: { lage.isInUse(vehicle) },
+                                set: { lage.setVehicleInUse(vehicle.id, $0) }
                             ))
                             .labelsHidden()
                             .accessibilityLabel("\(vehicle.data.funkrufname) im Einsatz")
@@ -167,11 +163,11 @@ struct VehicleRow: View {
                     .foregroundStyle(.secondary)
             }
         }
-        .opacity(vehicle.data.aktiv ? 1 : 0.55)
+        .opacity(lage.isInUse(vehicle) ? 1 : 0.55)
     }
 
     private var occupancy: String {
-        guard vehicle.data.aktiv else { return "Nicht im Einsatz" }
+        guard lage.isInUse(vehicle) else { return "Nicht im Einsatz" }
         let names = lage.occupants(of: vehicle.id).map(\.data.spitzname)
         return names.isEmpty ? "Unbesetzt" : "Besetzt: \(names.joined(separator: ", "))"
     }
@@ -214,12 +210,8 @@ struct VehicleDetail: View {
 
             Section {
                 Toggle("Im heutigen Einsatz", isOn: Binding(
-                    get: { vehicle.data.aktiv },
-                    set: { active in
-                        var next = vehicle.data
-                        next.aktiv = active
-                        lage.put(next, id: vehicle.id)
-                    }
+                    get: { lage.isInUse(vehicle) },
+                    set: { lage.setVehicleInUse(vehicle.id, $0) }
                 ))
                 Toggle("Verlauf aufzeichnen", isOn: Binding(
                     get: { vehicle.data.aufzeichnung },
@@ -285,6 +277,8 @@ struct VehicleEditor: View {
     @Environment(\.dismiss) private var dismiss
     @State private var vehicle: Vehicle
     @State private var showsDelete = false
+    /// Im Einsatz dieser Instanz (je Instanz, nicht am Fahrzeug gespeichert).
+    @State private var inUse = true
 
     init(context: VehicleEditorContext) {
         self.context = context
@@ -315,7 +309,7 @@ struct VehicleEditor: View {
                 }
 
                 Section {
-                    Toggle("Im heutigen Einsatz", isOn: $vehicle.aktiv)
+                    Toggle("Im heutigen Einsatz", isOn: $inUse)
                     Picker("GPS-Tracker", selection: $vehicle.trackerId) {
                         Text("Keiner").tag(String?.none)
                         ForEach(lage.trackers.values.sorted { $0.data.name < $1.data.name }) { tracker in
@@ -331,6 +325,9 @@ struct VehicleEditor: View {
                         Button("Fahrzeug löschen", systemImage: "trash", role: .destructive) { showsDelete = true }
                     }
                 }
+            }
+            .onAppear {
+                if !context.isNew, let existing = lage.vehicles[context.id] { inUse = lage.isInUse(existing) }
             }
             .navigationTitle(context.isNew ? "Neues Fahrzeug" : "Fahrzeug bearbeiten")
             .navigationBarTitleDisplayMode(.inline)
@@ -360,6 +357,9 @@ struct VehicleEditor: View {
         let parts = [result.bezeichnung, result.beschreibung].map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }.filter { !$0.isEmpty }
         result.bezeichnung = String(parts.joined(separator: ", ").prefix(300))
         result.beschreibung = ""
-        if lage.put(result, id: context.id) { dismiss() }
+        guard lage.put(result, id: context.id) else { return }
+        let wasInUse = lage.vehicles[context.id].map { lage.isInUse($0) } ?? false
+        if inUse != wasInUse || context.isNew { lage.setVehicleInUse(context.id, inUse) }
+        dismiss()
     }
 }

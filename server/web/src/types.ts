@@ -156,6 +156,8 @@ export interface Operation {
   a: { memberId: string; seit: number } | null;
   ueberschlagen: { teilnehmer: string[]; zuweisungen: Record<string, LeapfrogStop>; naechste: LeapfrogStop[] };
   sos: { memberId: string; seit: number } | null;
+  /** Fahrzeuge, die in dieser Instanz im Einsatz sind. */
+  fahrzeuge?: string[];
   rev: number;
 }
 

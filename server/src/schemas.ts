@@ -64,11 +64,13 @@ const member = z.object({
   oepnv: oepnvFahrt.nullish().transform((v) => v ?? null),
   /** Aktive Instanz: genau eine je Fahnder, ändert sich nur über das Kommando `instanz.wechseln`. */
   instanz: id.default(INSTANZ_HAUPT),
+  /** Seit wann im Fahrzeug: Wer zuerst eingestiegen ist, gibt den Standort des Fahrzeugs vor. */
+  fahrzeugSeit: timestamp.nullish().transform((v) => v ?? null),
   /** Eigenen Standortverlauf aufzeichnen (nur im Einsatz, nie im Ruhemodus). */
   aufzeichnung: z.boolean().default(true),
 });
 
-/** Fahrzeug der eigenen Kräfte. Bleibt dauerhaft angelegt und wird je Einsatz aktiv geschaltet. */
+/** Fahrzeug der eigenen Kräfte. Bleibt dauerhaft angelegt und wird je Instanz in den Einsatz genommen. */
 const vehicle = z.object({
   /** Kennung des Fahrzeugs; Schreibweisen wie "p35/24" werden zu "P 35/24" vereinheitlicht. */
   funkrufname: text(20)
@@ -320,6 +322,8 @@ export interface Operation {
   ueberschlagen: { teilnehmer: string[]; zuweisungen: Record<string, LeapfrogStop>; naechste: LeapfrogStop[] };
   /** Notruf eines Fahnders: Alle anderen werden sofort mit Sonderrechten zu ihm geführt. */
   sos: { memberId: string; seit: number } | null;
+  /** Fahrzeuge, die in dieser Instanz im Einsatz sind (je Instanz, nicht serverweit). */
+  fahrzeuge: string[];
   rev: number;
 }
 
@@ -349,6 +353,7 @@ export const commandArgs = {
   'ueberschlagen.beitreten': z.object({}).optional(),
   'ueberschlagen.verlassen': z.object({}).optional(),
   'tracker.intervall': z.object({ trackerId: id, sekunden: z.number().int().min(10).max(3600) }),
+  'fahrzeug.aktivieren': z.object({ fahrzeugId: id, aktiv: z.boolean() }),
   'bestreifung.zuruecksetzen': z.object({}).optional(),
   'lage.zuruecksetzen': z.object({ ziele: z.boolean().default(false) }),
   'instanz.erstellen': z.object({ id, name: text(60).min(1), beschreibung: text(500).optional().default(''), art: z.enum(['einsatz', 'paket']).default('einsatz') }),

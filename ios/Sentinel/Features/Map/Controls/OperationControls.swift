@@ -151,19 +151,20 @@ struct SOSButton: View {
             .font(.system(size: 13, weight: .heavy, design: .rounded))
             .foregroundStyle(.white)
             .frame(width: Theme.roundButton, height: Theme.roundButton)
-            // Rotes Liquid Glass direkt am Inhalt (nicht als Hintergrundform), damit es die Schrift nicht überdeckt;
-            // ohne eigenes Drückverhalten, damit das Gedrückthalten bei der Geste ankommt.
+            // Rotes Liquid Glass direkt am Inhalt (nicht als Hintergrundform), damit es die Schrift nicht überdeckt.
             .glassEffect(.regular.tint(lage.ownSOS ? .red : .red.opacity(0.8)), in: .circle)
             // Beim Halten füllt sich innen im Knopf ein weißer Ring; ohne Halten ist kein Ring zu sehen.
             .overlay {
                 Circle()
                     .trim(from: 0, to: progress)
-                    .stroke(.white, style: StrokeStyle(lineWidth: 3, lineCap: .round))
+                    .stroke(.white, style: StrokeStyle(lineWidth: 3.5, lineCap: .round))
                     .rotationEffect(.degrees(-90))
                     .padding(4)
                     .opacity(progress > 0 ? 1 : 0)
+                    .allowsHitTesting(false)
             }
-            .scaleEffect(holding ? 1.08 : 1)
+            // Wächst beim Halten wie die anderen Glasknöpfe beim Drücken.
+            .scaleEffect(holding ? 1.18 : 1)
             .animation(.snappy, value: holding)
             .contentShape(.circle)
         .onLongPressGesture(minimumDuration: Self.holdSeconds, maximumDistance: 30) {

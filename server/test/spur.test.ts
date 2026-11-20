@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { Database } from '../src/db.js';
 import { SpurStore, transitPosition } from '../src/spur.js';
-import { parseH02Status } from '../src/trackers/h02.js';
+import { parseH02Status, parseH02Text } from '../src/trackers/h02.js';
 import { fahnder, newLage, pos, profil } from './helpers.js';
 
 test('Spur: nur Neues wird gespeichert, laufende Quellen auch im Stand alle fünf Minuten', () => {
@@ -102,4 +102,18 @@ test('H02: Akku und Empfang aus LINK, Zündung und Alarm aus dem Statuswort', ()
   assert.equal(power.gps, false);
   assert.equal(power.stromAus, true);
   assert.equal(power.alarm, 'Stromversorgung unterbrochen');
+});
+
+test('H02: V8 und andere Nachrichtenarten mit zusätzlichen Feldern werden gelesen', () => {
+  const v8 = parseH02Text('*HQ,7026222172,V8,101530,A,5333.1234,N,01001.5678,E,012.50,090,201126,FFFFFBFF,262,01,1A2B,3C4D#');
+  assert.ok(v8);
+  assert.equal(v8.kennung, '7026222172');
+  assert.ok(Math.abs(v8.position.lat - (53 + 33.1234 / 60)) < 1e-9);
+  assert.equal(v8.position.hdg, 90);
+  assert.equal(parseH02Status('*HQ,7026222172,V8,101530,A,5333.1234,N,01001.5678,E,012.50,090,201126,FFFFFBFF#').statusRoh, 'FFFFFBFF');
+  // V4: Bestätigung mit Befehl und Zeit vor den Positionsfeldern.
+  const v4 = parseH02Text('*HQ,7026222172,V4,S20,DONE,101530,A,5333.1234,N,01001.5678,E,0.00,0,201126,FFFFFBFF#');
+  assert.ok(v4);
+  // Ohne GPS-Empfang keine Position.
+  assert.equal(parseH02Text('*HQ,7026222172,V8,101530,V,5333.1234,N,01001.5678,E,0.00,0,201126,FFFFFBFF#'), null);
 });

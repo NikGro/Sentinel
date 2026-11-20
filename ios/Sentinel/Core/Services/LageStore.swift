@@ -139,12 +139,18 @@ final class LageStore {
 
     var sortedVehicles: [Versioned<Vehicle>] {
         vehicles.values.sorted { lhs, rhs in
-            if lhs.data.aktiv != rhs.data.aktiv { return lhs.data.aktiv }
+            let l = isInUse(lhs), r = isInUse(rhs)
+            if l != r { return l }
             return lhs.data.funkrufname.localizedStandardCompare(rhs.data.funkrufname) == .orderedAscending
         }
     }
 
-    var activeVehicles: [Versioned<Vehicle>] { sortedVehicles.filter(\.data.aktiv) }
+    var activeVehicles: [Versioned<Vehicle>] { sortedVehicles.filter { isInUse($0) } }
+
+    /// Ist das Fahrzeug in dieser Instanz im Einsatz?
+    func isInUse(_ vehicle: Versioned<Vehicle>) -> Bool {
+        operation.fahrzeuge?.contains(vehicle.id) ?? vehicle.data.aktiv
+    }
 
     var sortedLayers: [Versioned<Layer>] {
         layers.values.sorted { lhs, rhs in
@@ -197,7 +203,11 @@ final class LageStore {
     /// Aktueller Standort eines Fahrzeugs: Sitzt jemand drin, ist dessen Telefon die Quelle. Der Tracker zählt nur,
     /// wenn niemand drinsitzt oder seine Meldung deutlich frischer ist; sonst gilt der Abstellort.
     func position(ofVehicle vehicle: Versioned<Vehicle>) -> (point: GeoPoint, date: Date, source: String)? {
-        let occupantPosition = occupants(of: vehicle.id).compactMap { positions[$0.id] }.max { $0.ts < $1.ts }
+        // Wer zuerst eingestiegen ist (und einen Standort hat), gibt den Standort vor.
+        let leader = occupants(of: vehicle.id)
+            .filter { positions[$0.id] != nil }
+            .min { ($0.data.fahrzeugSeit ?? .greatestFiniteMagnitude, $0.id) < ($1.data.fahrzeugSeit ?? .greatestFiniteMagnitude, $1.id) }
+        let occupantPosition = leader.flatMap { positions[$0.id] }
         let trackerPosition = vehicle.data.trackerId.flatMap { trackerPositions[$0] }
         if let trackerPosition, let occupantPosition, trackerPosition.ts > occupantPosition.ts + 120_000 {
             return (trackerPosition.point, trackerPosition.date, "Tracker")
@@ -391,6 +401,16 @@ final class LageStore {
     private struct IntervalArgs: Encodable {
         let trackerId: String
         let sekunden: Int
+    }
+
+    private struct VehicleUseArgs: Encodable {
+        let fahrzeugId: String
+        let aktiv: Bool
+    }
+
+    /// Fahrzeug in dieser Instanz in den Einsatz nehmen oder abmelden.
+    func setVehicleInUse(_ vehicleId: String, _ inUse: Bool) {
+        command("fahrzeug.aktivieren", args: VehicleUseArgs(fahrzeugId: vehicleId, aktiv: inUse))
     }
 
     func setTrackerInterval(_ trackerId: String, seconds: Int) {

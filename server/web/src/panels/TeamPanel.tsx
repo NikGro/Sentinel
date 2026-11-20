@@ -1,15 +1,19 @@
 import { useSignal } from '@preact/signals';
-import { del, membersHere, focusRequest, newId, online, operation, positions, put, tables, trackerPoint, vehicleOf } from '../store';
+import { command, del, membersHere, focusRequest, newId, online, operation, positions, put, tables, trackerPoint, vehicleOf } from '../store';
 import { FORTBEWEGUNG_TITEL, type Vehicle } from '../types';
 import { ago, Field, ImageField, Section, TextInput } from '../ui';
 
 const LEERES_FAHRZEUG: Vehicle = { funkrufname: '', bezeichnung: '', kennzeichen: '', beschreibung: '', fotoBlob: null, trackerId: null, aktiv: true, abgestellt: null };
 
 /** Kräfte im Einsatz und die Fahrzeugflotte. Fahnder schalten sich in der App selbst aktiv, Fahrzeuge kann jeder schalten. */
+/** Im Einsatz der geöffneten Instanz (je Instanz, nicht am Fahrzeug gespeichert). */
+const inUse = (id: string, aktiv: boolean) => operation.value.fahrzeuge?.includes(id) ?? aktiv;
+const setInUse = (id: string, aktiv: boolean) => command('fahrzeug.aktivieren', { fahrzeugId: id, aktiv });
+
 export function TeamPanel() {
   const editing = useSignal<{ id: string; data: Vehicle; neu: boolean } | null>(null);
   const members = [...membersHere.value].sort((a, b) => Number(b.data.aktiv) - Number(a.data.aktiv) || a.data.spitzname.localeCompare(b.data.spitzname, 'de'));
-  const vehicles = Object.values(tables.vehicle.value).sort((a, b) => Number(b.data.aktiv) - Number(a.data.aktiv) || a.data.funkrufname.localeCompare(b.data.funkrufname, 'de', { numeric: true }));
+  const vehicles = Object.values(tables.vehicle.value).sort((a, b) => Number(inUse(b.id, b.data.aktiv)) - Number(inUse(a.id, a.data.aktiv)) || a.data.funkrufname.localeCompare(b.data.funkrufname, 'de', { numeric: true }));
 
   if (editing.value) {
     const { id, data, neu } = editing.value;
@@ -43,16 +47,15 @@ export function TeamPanel() {
             ))}
           </select>
         </Field>
-        <label class="check">
-          <input type="checkbox" checked={data.aktiv} onChange={() => set({ aktiv: !data.aktiv })} />
-          Im heutigen Einsatz aktiv
-        </label>
         <div class="row">
           <button
             class="primary"
             disabled={!data.funkrufname.trim()}
             onClick={() => {
-              if (put('vehicle', id, data)) editing.value = null;
+              if (!put('vehicle', id, data)) return;
+              // Neue Fahrzeuge sind gleich in der geöffneten Instanz im Einsatz.
+              if (neu) setInUse(id, true);
+              editing.value = null;
             }}
           >
             Sichern
@@ -129,13 +132,13 @@ export function TeamPanel() {
             const tracked = trackerPoint(v.data.trackerId);
             const point = tracked ?? v.data.abgestellt ?? undefined;
             return (
-              <li key={v.id} class={v.data.aktiv ? '' : 'ruhend'}>
-                <input type="checkbox" title="Im Einsatz aktiv" checked={v.data.aktiv} onChange={() => put('vehicle', v.id, { ...v.data, aktiv: !v.data.aktiv })} />
+              <li key={v.id} class={inUse(v.id, v.data.aktiv) ? '' : 'ruhend'}>
+                <input type="checkbox" title="Im Einsatz aktiv" checked={inUse(v.id, v.data.aktiv)} onChange={() => setInUse(v.id, !inUse(v.id, v.data.aktiv))} />
                 <div class="grow">
                   <b>{v.data.funkrufname}</b>
                   <small>{[v.data.bezeichnung, v.data.kennzeichen].filter(Boolean).join(', ') || 'ohne Beschreibung'}</small>
                   <small class="hint">
-                    {[v.data.aktiv ? (crew.length ? `Besetzt: ${crew.join(', ')}` : 'Unbesetzt') : 'Nicht im Einsatz', tracked ? `Tracker ${ago(tracked.ts)}` : ''].filter(Boolean).join(', ')}
+                    {[inUse(v.id, v.data.aktiv) ? (crew.length ? `Besetzt: ${crew.join(', ')}` : 'Unbesetzt') : 'Nicht im Einsatz', tracked ? `Tracker ${ago(tracked.ts)}` : ''].filter(Boolean).join(', ')}
                   </small>
                 </div>
                 {point && (
