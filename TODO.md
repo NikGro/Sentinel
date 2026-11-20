@@ -45,6 +45,13 @@ statt jede Änderung sofort einzubauen. Erledigtes wandert mit Version ins CHANG
     Standort teilen, keine A, kein Verlauf.
   - Mit dem Betreten einer Instanz ist man wieder im Dienst.
   - Dafür muss auch die Hauptlage verlassen werden können.
+- **ÖPNV-Navigation ausbauen:** Die einzelnen Schritte auf der Karte sichtbar machen: Fußwege, Ein- und
+  Ausstieg, Linie, Umstieg. Dazu eine ausklappbare Liste aller Schritte.
+- **Kfz-Navigation ohne Sonderrechte ist weiterhin seltsam:** Sie führt z. B. unterwegs in eine Sackgasse hinein und
+  wieder heraus. Routenwahl und Plausibilitätsprüfung (direkte vs. geführte Route, Apple-Vergleich) überprüfen.
+- **Kreuzungsvorschläge laden immer noch sehr lange:** Die Vorschläge plausibler Straßenecken brauchen weiterhin
+  spürbar Zeit. Messen, wo die Zeit verloren geht (Server-Abfrage, Overpass, Abgleich), und beschleunigen, z. B.
+  vorab laden oder zwischenspeichern.
 - **Punkte auf der Karte clustern:** Beim Herauszoomen nah beieinander liegende Punkte zu einem Cluster
   zusammenfassen. Auseinanderrücken nur, wenn man nah herangezoomt ist.
 - **Offene Rückfrage:** Soll der Schalter „Auf der Karte“ in der Zielliste für alle in der Instanz gelten statt nur
