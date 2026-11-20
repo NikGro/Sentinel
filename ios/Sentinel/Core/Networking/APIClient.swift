@@ -413,6 +413,97 @@ struct APIClient: Sendable {
         try await json(CrossStreetsResult.self, "POST", "api/v1/route/querstrassen", body: CrossStreetsRequest(punkte: points)).strassen
     }
 
+    // MARK: Tracker-Zustand und Befehle
+
+    private struct TrackerStatusList: Decodable { let status: [String: TrackerStatus] }
+    private struct TrackerStatusOne: Decodable {
+        let status: TrackerStatus
+        let empfang: Bool
+    }
+
+    func trackerStatuses() async throws -> [String: TrackerStatus] {
+        try await json(TrackerStatusList.self, "GET", "api/v1/trackers/status").status
+    }
+
+    /// Zustand eines Trackers samt letzter Nachrichten; `empfang`: ob der Server SinoTrack-Geräte empfängt.
+    func trackerStatus(id: String) async throws -> (status: TrackerStatus, empfang: Bool) {
+        let result = try await json(TrackerStatusOne.self, "GET", "api/v1/trackers/\(id)/status")
+        return (result.status, result.empfang)
+    }
+
+    struct TrackerCommand: Encodable {
+        let art: String
+        var sekunden: Int?
+        var text: String?
+    }
+
+    private struct CommandResult: Decodable { let sofort: Bool }
+
+    /// Befehl an einen SinoTrack. Liefert, ob er sofort ankam (sonst bei der nächsten Verbindung).
+    func sendTrackerCommand(id: String, _ command: TrackerCommand) async throws -> Bool {
+        try await json(CommandResult.self, "POST", "api/v1/trackers/\(id)/befehl", body: command).sofort
+    }
+
+    // MARK: Spuren
+
+    private struct SpurResult: Decodable { let punkte: [[SpurValue]] }
+    private struct SpurRange: Decodable {
+        struct Range: Decodable {
+            let von: Double
+            let bis: Double
+        }
+        let bereich: Range?
+    }
+
+    /// Ein Feld einer Spurzeile: Zahl, Text oder leer.
+    private enum SpurValue: Decodable {
+        case number(Double), text(String), none
+        init(from decoder: Decoder) throws {
+            let c = try decoder.singleValueContainer()
+            if c.decodeNil() { self = .none } else if let n = try? c.decode(Double.self) { self = .number(n) } else { self = .text(try c.decode(String.self)) }
+        }
+        var number: Double? { if case .number(let n) = self { n } else { nil } }
+        var text: String? { if case .text(let t) = self { t } else { nil } }
+    }
+
+    private func subjectQuery(_ subject: SpurSubject) -> [URLQueryItem] {
+        [URLQueryItem(name: "art", value: subject.art.rawValue), URLQueryItem(name: "id", value: subject.id)]
+    }
+
+    func spur(_ subject: SpurSubject, from: Date, to: Date) async throws -> Spur {
+        let ms = { (date: Date) in String(Int64(date.timeIntervalSince1970 * 1000)) }
+        let rows = try await json(SpurResult.self, "GET", "api/v1/spur", query: subjectQuery(subject) + [
+            URLQueryItem(name: "von", value: ms(from)), URLQueryItem(name: "bis", value: ms(to)),
+        ]).punkte
+        let punkte = rows.compactMap { row -> SpurPunkt? in
+            guard row.count >= 5, let lat = row[0].number, let lon = row[1].number, let ts = row[2].number,
+                  let quelle = row[4].text.flatMap(SpurQuelle.init(rawValue:)) else { return nil }
+            return SpurPunkt(point: GeoPoint(lat: lat, lon: lon), date: Date(timeIntervalSince1970: ts / 1000), speed: row[3].number,
+                             quelle: quelle, info: row.count > 5 ? row[5].text : nil)
+        }
+        return Spur(subject: subject, punkte: punkte)
+    }
+
+    /// Ältester und jüngster aufgezeichneter Punkt.
+    func spurRange(_ subject: SpurSubject) async throws -> ClosedRange<Date>? {
+        guard let range = try await json(SpurRange.self, "GET", "api/v1/spur/bereich", query: subjectQuery(subject)).bereich else { return nil }
+        return Date(timeIntervalSince1970: range.von / 1000)...Date(timeIntervalSince1970: max(range.von, range.bis) / 1000)
+    }
+
+    func deleteSpur(_ subject: SpurSubject) async throws {
+        _ = try await request("DELETE", "api/v1/spur", query: subjectQuery(subject))
+    }
+
+    private struct SpurSettings: Codable { let tage: Int }
+
+    func spurRetentionDays() async throws -> Int {
+        try await json(SpurSettings.self, "GET", "api/v1/spur/einstellungen").tage
+    }
+
+    func setSpurRetentionDays(_ days: Int) async throws {
+        _ = try await json(SpurSettings.self, "PUT", "api/v1/spur/einstellungen", body: SpurSettings(tage: days))
+    }
+
     private struct PajTrackerRequest: Encodable {
         let id: String
         let name: String

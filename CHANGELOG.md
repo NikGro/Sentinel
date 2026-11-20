@@ -1,5 +1,35 @@
 # Änderungen
 
+## 0.17.0
+
+**Standortverläufe**
+- Der Server zeichnet die Verläufe von Trackern, Zielen, Fahrzeugen und Fahndern auf, auch wenn kein Telefon offen
+  ist. Jeder Punkt merkt sich seine Quelle: GPS, Tracker, A-Position, ÖPNV-Fahrt, Besatzung oder von Hand. Wechselt
+  ein Ziel zwischen Bus, Zielfahrzeug und A, ergibt das eine durchgehende Spur
+- Aufzeichnen ist je Tracker, Ziel und Fahrzeug abschaltbar, für sich selbst unter „Mehr“. Abschalten löscht nichts,
+  es wird nur nichts Neues aufgezeichnet. Der eigene Verlauf entsteht nur im Dienst
+- Aufbewahrung einstellbar (Standard 30 Tage) unter „Mehr › GPS-Tracker“
+- Verlauf auf der Karte: Zeitraum wählen (letzte Stunde bis letzte Nacht oder frei), mehrere Spuren gleichzeitig.
+  Abschnitte sind nach Quelle gefärbt, Lücken gestrichelt und Standzeiten markiert. Die Zeitleiste zeigt, wo jeder zu
+  einem Zeitpunkt war. Antippen der Spur zeigt Zeit, Geschwindigkeit, Quelle und Standzeit
+
+**Tracker**
+- Eigene Ansicht je Tracker („Bearbeiten“ oder antippen) mit Zustand: Verbindung, letzter Kontakt, Akku,
+  Mobilfunk, Satelliten, Zündung, Stromversorgung und Alarme, soweit das Gerät sie meldet
+- Befehle über die Datenverbindung: Sendeintervall, Alarm scharf und unscharf, eigene H02-Befehle
+- SMS-Befehle direkt aus der App: Server und Port, Datenverbindung, Intervall, APN, Einstellungen abfragen
+- Letzte Nachrichten im Rohformat, um zu sehen, was ein Gerät tatsächlich schickt
+- Akku und Verbindung auch in der Trackerliste
+- Wird ein Tracker vom Ziel getrennt oder gelöscht, bleibt das Ziel an der letzten Trackerposition stehen
+
+**Karte, ÖPNV und Navigation**
+- Kompass und Anheften: Die App führt die Kamera selbst nach; kein Sprung mehr nach der Kamerafahrt. Norden-Ansicht
+  weiter weg
+- Navigation zu Zielen im Bus oder zum Bus selbst: direkt zum Fahrzeug oder 1 bis 3 Halte voraus
+- Selbst einsteigen: Fahrzeug, Strecke und Haltestellen wie beim Übernehmen auswählbar
+- Übernommene Fahrzeuge behalten die Farbe aus der ÖPNV-Karte; in der Ansicht steht das Liniensymbol oben, ohne
+  doppelte Zeile
+
 ## 0.16.0
 
 **Karte und Navigation**

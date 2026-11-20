@@ -61,6 +61,8 @@ struct Target: LageEntity {
     var bindung: TargetBinding?
     /// Woher der Standort kommt, solange das Ziel nicht in etwas eingestiegen ist.
     var quelle: LocationSource?
+    /// Standortverlauf aufzeichnen.
+    var aufzeichnung: Bool = true
 
     init(art: ZielArt = .person, bezeichnung: String = "", vorname: String = "", nachname: String = "") {
         self.art = art
@@ -72,7 +74,7 @@ struct Target: LageEntity {
     private enum CodingKeys: String, CodingKey {
         case art, bezeichnung, vorname, nachname, geburtsdatum, geburtsort, staatsangehoerigkeit, anschrift, merkmale, fotoBlob
         case kennzeichen, fahrzeugBeschreibung, fahrzeugFotoBlob, sachverhalt, hinweise, massnahmen, trackerId, standort, anhaenge
-        case bindung, quelle
+        case bindung, quelle, aufzeichnung
     }
 
     init(from decoder: Decoder) throws {
@@ -99,6 +101,7 @@ struct Target: LageEntity {
         anhaenge = (try? c.decodeIfPresent([ChatAttachment].self, forKey: .anhaenge)) ?? []
         bindung = try? c.decodeIfPresent(TargetBinding.self, forKey: .bindung)
         quelle = try? c.decodeIfPresent(LocationSource.self, forKey: .quelle)
+        aufzeichnung = (try? c.decodeIfPresent(Bool.self, forKey: .aufzeichnung)) ?? true
     }
 
     var displayName: String {

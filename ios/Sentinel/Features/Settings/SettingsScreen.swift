@@ -41,6 +41,15 @@ struct SettingsScreen: View {
                         Toggle(isOn: Binding(get: { me.data.aktiv }, set: { lage.setActive($0) })) {
                             Label("Im Dienst", systemImage: "person.badge.shield.checkmark.fill")
                         }
+                        // Nur im Dienst: Im Ruhemodus wird ohnehin nichts geteilt oder aufgezeichnet.
+                        Toggle(isOn: Binding(get: { me.data.aufzeichnung }, set: { on in
+                            var next = me.data
+                            next.aufzeichnung = on
+                            lage.put(next, id: me.id)
+                        })) {
+                            Label("Eigenen Verlauf aufzeichnen", systemImage: "point.bottomleft.forward.to.point.topright.scurvepath")
+                        }
+                        HistoryButton(subject: SpurSubject(art: .member, id: me.id))
                         if location.isDenied {
                             Button("Standortzugriff in den Einstellungen erlauben", systemImage: "exclamationmark.triangle.fill") {
                                 if let url = URL(string: UIApplication.openSettingsURLString) { openURL(url) }
@@ -49,7 +58,7 @@ struct SettingsScreen: View {
                         }
                     } footer: {
                         Text(me.data.aktiv
-                            ? "Ihr Standort wird mit den eigenen Kräften geteilt, auch im Hintergrund, und nur an den eigenen Sentinel-Server übertragen."
+                            ? "Ihr Standort wird mit den eigenen Kräften geteilt, auch im Hintergrund, und nur an den eigenen Sentinel-Server übertragen. Der Verlauf wird nur im Dienst aufgezeichnet und nach Ablauf der Aufbewahrungszeit gelöscht."
                             : "Ruhemodus: Es wird kein Standort geteilt und die A-Position ist nicht verfügbar.")
                     }
                 }

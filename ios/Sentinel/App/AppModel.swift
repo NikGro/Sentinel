@@ -176,6 +176,28 @@ final class AppModel {
 
     func showMap() { mapRequest += 1 }
 
+    // MARK: Verlauf
+
+    /// Spuren, die gerade auf der Karte gezeigt werden (Verlaufsmodus); leer = normale Karte.
+    var historySubjects: [SpurSubject] = []
+
+    /// Spur auf der Karte zeigen und zur Karte wechseln.
+    func showHistory(_ subject: SpurSubject) {
+        if !historySubjects.contains(subject) { historySubjects.append(subject) }
+        if route.isActive { stopNavigation() }
+        mapRequest += 1
+    }
+
+    /// Anzeigename einer Spur.
+    func title(of subject: SpurSubject) -> String {
+        switch subject.art {
+        case .member: lage.members[subject.id].map { lage.label(of: $0.data) } ?? "Fahnder"
+        case .target: lage.targets[subject.id]?.data.displayName ?? "Ziel"
+        case .vehicle: lage.vehicles[subject.id]?.data.funkrufname ?? "Fahrzeug"
+        case .tracker: lage.trackers[subject.id]?.data.name ?? "Tracker"
+        }
+    }
+
     /// Ein neues Paket öffnet der Server gleich; danach geht es in den bisherigen Einsatz zurück.
     func prepareNewPackage() {
         editPermanentLayer(false)

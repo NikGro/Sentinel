@@ -81,6 +81,22 @@ const MIGRATIONS: readonly string[] = [
   ALTER TABLE entities_neu RENAME TO entities;
   ALTER TABLE track ADD COLUMN inst TEXT NOT NULL DEFAULT 'haupt';
   `,
+  // 0.17: Spuren. Aufgezeichneter Standortverlauf von Fahndern, Zielen, Fahrzeugen und Trackern mit seiner Quelle.
+  `
+  CREATE TABLE spur (
+    art TEXT NOT NULL,
+    id TEXT NOT NULL,
+    ts INTEGER NOT NULL,
+    lat REAL NOT NULL,
+    lon REAL NOT NULL,
+    spd REAL,
+    quelle TEXT NOT NULL,
+    info TEXT,
+    inst TEXT NOT NULL DEFAULT '',
+    PRIMARY KEY (art, id, ts)
+  ) WITHOUT ROWID;
+  CREATE INDEX spur_ts ON spur (ts);
+  `,
 ];
 
 export class Database {

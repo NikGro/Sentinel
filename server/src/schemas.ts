@@ -64,6 +64,8 @@ const member = z.object({
   oepnv: oepnvFahrt.nullish().transform((v) => v ?? null),
   /** Aktive Instanz: genau eine je Fahnder, ändert sich nur über das Kommando `instanz.wechseln`. */
   instanz: id.default(INSTANZ_HAUPT),
+  /** Eigenen Standortverlauf aufzeichnen (nur im Einsatz, nie im Ruhemodus). */
+  aufzeichnung: z.boolean().default(true),
 });
 
 /** Fahrzeug der eigenen Kräfte. Bleibt dauerhaft angelegt und wird je Einsatz aktiv geschaltet. */
@@ -82,6 +84,7 @@ const vehicle = z.object({
   aktiv: z.boolean().default(true),
   /** Letzter Standort, nachdem alle Insassen zu Fuß oder in ein anderes Verkehrsmittel gewechselt sind. */
   abgestellt: geoPoint.extend({ ts: timestamp }).nullish().transform((v) => v ?? null),
+  aufzeichnung: z.boolean().default(true),
 });
 
 /** "haltestellen": Umkreis, in dem alle ÖPNV-Haltestellen angezeigt werden. */
@@ -215,6 +218,7 @@ const target = z.object({
   quelle: z.enum(['hand', 'tracker', 'a']).nullish().transform((v) => v ?? null),
   /** Von Hand gesetzter Standort; ein verbundener Tracker hat Vorrang. */
   standort: geoPoint.extend({ ts: timestamp }).nullish().transform((v) => v ?? null),
+  aufzeichnung: z.boolean().default(true),
 });
 
 const tracker = z.object({
@@ -226,6 +230,11 @@ const tracker = z.object({
   intervall: z.number().int().min(10).max(3600).nullish().transform((v) => v ?? null),
   /** PAJ: E-Mail des eigenen PAJ-Kontos, wenn für diesen Tracker eines hinterlegt ist (Passwort nur verschlüsselt auf dem Server). */
   kontoEmail: optionalText(120),
+  /** Rufnummer der SIM-Karte im Tracker, für Befehle per SMS. */
+  telefon: optionalText(30),
+  /** Geräte-PIN für SMS-Befehle (SinoTrack ab Werk 0000). */
+  smsPin: optionalText(8),
+  aufzeichnung: z.boolean().default(true),
 });
 
 const layer = z.object({

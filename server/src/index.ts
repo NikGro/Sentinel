@@ -6,6 +6,7 @@ import { Database } from './db.js';
 import { buildApp, type Services } from './http/app.js';
 import { Hub } from './hub.js';
 import { Lage } from './lage.js';
+import { spurDays } from './spur.js';
 import { TransitousClient } from './transit/transitous.js';
 import { MapKitTokens } from './mapkit.js';
 import { createOverpassClient, OepnvStore } from './oepnv.js';
@@ -14,9 +15,10 @@ import { RouteService } from './reach/route.js';
 import { ReleaseStore } from './release.js';
 import { Vault } from './security.js';
 import { intervalCommand, startH02Listener, type H02Listener } from './trackers/h02.js';
+import { TrackerLink, TrackerStatusStore } from './trackers/status.js';
 import { pajKey, PajPoller, type PajCredentials } from './trackers/paj.js';
 
-export const SERVER_VERSION = '0.16.0';
+export const SERVER_VERSION = '0.17.0';
 const MAX_UNKNOWN_TRACKERS = 50;
 
 /** Baut alle Dienste zusammen. Getrennt von `main`, damit Tests denselben Aufbau mit einer Speicher-Datenbank nutzen. */
@@ -36,9 +38,13 @@ export async function createServices(config: Config, database?: Database): Promi
     const plain = sealed ? vault.open(sealed) : null;
     return plain ? (JSON.parse(plain) as PajCredentials) : null;
   };
+  const trackerStatus = new TrackerStatusStore();
   const paj = new PajPoller(
     () => lage.list('tracker').filter((t) => t.data.anbieter === 'paj').map((t) => ({ kennung: t.data.kennung, konto: pajAccount(t.id) })),
-    (kennung, position) => lage.reportTrackerPosition('paj', kennung, position),
+    (kennung, position, akku) => {
+      lage.reportTrackerPosition('paj', kennung, position);
+      trackerStatus.update('paj', kennung, { zuletzt: position.ts, gps: true, akku });
+    },
   );
   // Zugangsdaten eines Trackers verschwinden mit ihm.
   lage.on('event', (event) => {
@@ -68,27 +74,37 @@ export async function createServices(config: Config, database?: Database): Promi
     argus: new ArgusImporter(config.argusDir),
     releases: new ReleaseStore(config.dataDir, config.publicUrl),
     unknownTrackers: new Map(),
+    trackerStatus,
+    trackerLink: new TrackerLink(),
   };
 }
 
 function startTrackerListener(services: Services): H02Listener | null {
-  const { config, lage, unknownTrackers } = services;
+  const { config, lage, unknownTrackers, trackerStatus, trackerLink } = services;
   if (config.trackerPort === 0) return null;
-  const listener = startH02Listener(
-    config.trackerPort,
-    config.host,
-    (fix) => {
+  const listener = startH02Listener(config.trackerPort, config.host, {
+    onFix: (fix) => {
       if (lage.reportTrackerPosition('sinotrack', fix.kennung, fix.position)) unknownTrackers.delete(fix.kennung);
     },
-    (kennung) => {
+    onSeen: (kennung) => {
+      trackerStatus.update('sinotrack', kennung, { verbunden: true });
       const known = lage.list('tracker').some((t) => t.data.anbieter === 'sinotrack' && t.data.kennung === kennung);
       if (known) return;
       if (unknownTrackers.size >= MAX_UNKNOWN_TRACKERS && !unknownTrackers.has(kennung)) return;
       unknownTrackers.set(kennung, Date.now());
     },
-  );
+    onFrame: (kennung, raw, status) => {
+      trackerStatus.log('sinotrack', kennung, raw, 'ein');
+      trackerStatus.update('sinotrack', kennung, status);
+    },
+    onDisconnect: (kennung) => trackerStatus.update('sinotrack', kennung, { verbunden: false }),
+  });
+  trackerLink.attach(listener);
   lage.on('event', (event) => {
-    if (event.type === 'trackerIntervall' && event.anbieter === 'sinotrack') listener.send(event.kennung, intervalCommand(event.kennung, event.sekunden));
+    if (event.type !== 'trackerIntervall' || event.anbieter !== 'sinotrack') return;
+    const frame = intervalCommand(event.kennung, event.sekunden);
+    listener.send(event.kennung, frame);
+    trackerStatus.log('sinotrack', event.kennung, frame, 'aus');
   });
   return listener;
 }
@@ -111,6 +127,11 @@ async function main(): Promise<void> {
   };
   pruneBlobs();
   setInterval(pruneBlobs, 6 * 3600_000).unref();
+  // Spuren: Ziele und Fahrzeuge alle 15 Sekunden fortschreiben, stündlich Altes verwerfen.
+  setInterval(() => services.lage.recordSpuren(), 15_000).unref();
+  const pruneSpuren = () => services.lage.pruneSpuren(spurDays(services.db));
+  pruneSpuren();
+  setInterval(pruneSpuren, 3600_000).unref();
   // Markierungen mit Lebensdauer verschwinden von selbst.
   setInterval(() => services.lage.expireAnnotations(), 30_000).unref();
   // Echte ÖPNV-Fahrten: Verspätungen jede Minute übernehmen.

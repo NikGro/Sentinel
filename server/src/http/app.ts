@@ -18,10 +18,12 @@ import type { RouteService } from '../reach/route.js';
 import type { ReleaseStore } from '../release.js';
 import { RateLimiter, type Vault } from '../security.js';
 import type { PajPoller } from '../trackers/paj.js';
+import type { TrackerLink, TrackerStatusStore } from '../trackers/status.js';
 import { registerAdminRoutes } from './admin.js';
 import { registerFileRoutes } from './files.js';
 import { registerNavigationRoutes } from './navigation.js';
 import { registerProfileRoutes } from './profile.js';
+import { registerSpurRoutes } from './spur.js';
 import { registerTrackerRoutes } from './trackers.js';
 import { registerTransitRoutes } from './transit.js';
 import { registerPublicRoutes } from './public.js';
@@ -48,6 +50,10 @@ export interface Services {
   overpass: OverpassClient | null;
   /** Kennungen von Trackern, die sich gemeldet haben, aber noch nicht angelegt sind. */
   unknownTrackers: Map<string, number>;
+  /** Zustand der Tracker (Akku, Empfang, letzte Nachrichten). */
+  trackerStatus: TrackerStatusStore;
+  /** Befehle an SinoTrack-Geräte über die bestehende Datenverbindung. */
+  trackerLink: TrackerLink;
 }
 
 export class HttpError extends Error {
@@ -179,6 +185,7 @@ export async function buildApp(services: Services): Promise<FastifyInstance> {
   registerNavigationRoutes(app, services, guards);
   registerTransitRoutes(app, services, guards);
   registerTrackerRoutes(app, services, guards);
+  registerSpurRoutes(app, services, guards);
   registerProfileRoutes(app, services, guards);
   registerAdminRoutes(app, services, guards);
 

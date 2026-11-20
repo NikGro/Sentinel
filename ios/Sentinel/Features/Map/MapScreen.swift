@@ -55,6 +55,9 @@ struct MapScreen: View {
     @State var transitNow = Date.now
     /// Angetipptes, nur im Takt eingeblendetes Fahrzeug.
     @State var virtualVehicle: TransitVehiclePin?
+    /// Verlaufsmodus: gezeigte Spuren, Zeitraum und Zeitleiste.
+    @State var history = HistoryState()
+    var showsHistory: Bool { !model.historySubjects.isEmpty }
 
     var body: some View {
         dialogs(sheets(mainBody))
@@ -132,6 +135,18 @@ struct MapScreen: View {
     func dialogs(_ content: some View) -> some View {
         content
         // Takt für die ÖPNV-Fahrzeuge: alle zwei Sekunden, gleitend, solange welche sichtbar sind.
+        // Verlauf: bei jeder Änderung von Spuren oder Zeitraum neu laden, solange er offen ist alle 30 Sekunden.
+        .task(id: history.loadKey(model.historySubjects)) {
+            guard showsHistory else { return }
+            let firstLoad = history.spuren.isEmpty
+            await history.load(model.historySubjects, client: model.client)
+            if firstLoad { fitHistory() }
+            while !Task.isCancelled {
+                try? await Task.sleep(for: .seconds(30))
+                guard !Task.isCancelled else { return }
+                await history.load(model.historySubjects, client: model.client)
+            }
+        }
         .task(id: hasTransit) {
             while hasTransit, !Task.isCancelled {
                 try? await Task.sleep(for: .seconds(2))
@@ -176,6 +191,9 @@ struct MapScreen: View {
                 AreaLabelLayer(objects: objects(.flaeche) + objects(.kreis), metersPerPoint: cameraState.distance / 700)
                 NearbyStopsLayer(stops: nearbyStops)
                 RouteLayer(lines: routeLines)
+                if showsHistory {
+                    HistoryLayer(state: history) { model.title(of: $0) }
+                }
                 StopsLayer(stops: lage.operation.ueberschlagen.naechste, mine: lage.myLeapfrogStop, line: lage.aHolder?.data.oepnv.map { NearbyStop.Line(ref: $0.linie, typ: "", farbe: nil) })
                 SymbolLayer(pins: vehiclePins + targetPins, offsets: clutterOffsets) { selection = $0 }
                 ForcesLayer(pins: forcePins, offsets: clutterOffsets) { selection = $0 }
@@ -239,6 +257,8 @@ struct MapScreen: View {
             )
             .onTapGesture { point in
                 guard let coordinate = proxy.convert(point, from: .local) else { return }
+                // Verlauf: Tipp auf die Spur zeigt die Daten dieses Punkts.
+                if tapMode == .none, showsHistory, history.select(near: point, proxy: proxy) { return }
                 if tapMode == .none {
                     // Tipp auf eine freie Stelle einer Form. Symbole darüber (Kräfte, Fahrzeuge, Ziele, Marker)
                     // fangen ihren Tipp selbst ab und kommen hier gar nicht erst an.

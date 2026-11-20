@@ -122,6 +122,22 @@ extension MapScreen {
         .padding(.top, topAreaHeight + Theme.barSpacing)
     }
 
+    /// Karte auf alle gezeigten Spuren einpassen.
+    func fitHistory() {
+        let points = history.allPoints
+        guard let first = points.first else { return }
+        var minLat = first.lat, maxLat = first.lat, minLon = first.lon, maxLon = first.lon
+        for p in points {
+            minLat = min(minLat, p.lat); maxLat = max(maxLat, p.lat)
+            minLon = min(minLon, p.lon); maxLon = max(maxLon, p.lon)
+        }
+        let center = CLLocationCoordinate2D(latitude: (minLat + maxLat) / 2, longitude: (minLon + maxLon) / 2)
+        // Rand lassen: die Leiste unten bedeckt einen Teil der Karte.
+        let span = MKCoordinateSpan(latitudeDelta: max((maxLat - minLat) * 1.8, 0.004), longitudeDelta: max((maxLon - minLon) * 1.4, 0.004))
+        pin = nil
+        withAnimation(.easeInOut(duration: 0.6)) { camera = .region(MKCoordinateRegion(center: center, span: span)) }
+    }
+
     /// Eigene Bewegungs- bzw. Blickrichtung für den Navi-Pfeil.
     var myCourse: CLLocationDirection? {
         if let current = route.snappedLocation ?? location.current, current.course >= 0, current.speed > 1 { return current.course }
@@ -181,7 +197,9 @@ extension MapScreen {
                     create(kind, at: pin.point, title: pin.title, delayed: false)
                 }, close: { searchPin = nil })
             }
-            if route.isActive {
+            if showsHistory {
+                HistoryPanel(state: history, fit: fitHistory)
+            } else if route.isActive {
                 NavigationBottomBar()
             } else if searchPin == nil, reducedTools {
                 SpecialAreaBar()
@@ -194,7 +212,7 @@ extension MapScreen {
                     ToAButton()
                 }
             }
-            if searchPin == nil, !reducedTools {
+            if searchPin == nil, !reducedTools, !showsHistory {
                 SituationBar { showsSituation = true }
             }
         }

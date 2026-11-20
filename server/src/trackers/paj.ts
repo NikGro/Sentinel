@@ -66,9 +66,9 @@ export class PajClient {
     return list.map((d) => ({ kennung: String(d.id), name: d.name ?? `PAJ ${d.id}` }));
   }
 
-  async lastPositions(kennungen: string[]): Promise<{ kennung: string; position: Position }[]> {
+  async lastPositions(kennungen: string[]): Promise<{ kennung: string; position: Position; akku?: number }[]> {
     if (kennungen.length === 0) return [];
-    const rows = await this.request<{ iddevice: number; lat: number; lng: number; dateunix: number; speed?: number; direction?: number }[]>(
+    const rows = await this.request<{ iddevice: number; lat: number; lng: number; dateunix: number; speed?: number; direction?: number; battery?: number }[]>(
       'POST',
       '/trackerdata/getalllastpositions',
       { deviceIDs: kennungen.map(Number), fromLastPoint: false },
@@ -77,6 +77,7 @@ export class PajClient {
       .filter((r) => Number.isFinite(r.lat) && Number.isFinite(r.lng) && Math.abs(r.lat) <= 90 && Math.abs(r.lng) <= 180)
       .map((r) => ({
         kennung: String(r.iddevice),
+        akku: typeof r.battery === 'number' && r.battery >= 0 && r.battery <= 100 ? Math.round(r.battery) : undefined,
         position: {
           lat: r.lat,
           lon: r.lng,
@@ -107,7 +108,7 @@ export class PajPoller {
 
   constructor(
     private readonly trackers: () => PajTracker[],
-    private readonly onFix: (kennung: string, position: Position) => void,
+    private readonly onFix: (kennung: string, position: Position, akku?: number) => void,
     private readonly makeClient: (credentials: PajCredentials) => PajClient = (c) => new PajClient(c),
   ) {}
 
@@ -163,7 +164,7 @@ export class PajPoller {
     const errors: string[] = [];
     for (const group of groups.values()) {
       try {
-        for (const fix of await group.client.lastPositions(group.kennungen)) this.onFix(fix.kennung, fix.position);
+        for (const fix of await group.client.lastPositions(group.kennungen)) this.onFix(fix.kennung, fix.position, fix.akku);
       } catch (error) {
         errors.push(error instanceof Error ? error.message : 'Unbekannter Fehler');
       }

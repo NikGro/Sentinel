@@ -4,6 +4,7 @@ import type { Database } from './db.js';
 import { EntityStore, TrackStore } from './entities.js';
 import { migrateEntities, normalizeTargetPhotos } from './migrations.js';
 import { distanceMeters } from './geo.js';
+import { SpurStore, transitPosition, type SpurPunkt } from './spur.js';
 import {
   commandArgs,
   ENTITY_SCHEMAS,
@@ -90,6 +91,8 @@ export class Lage extends EventEmitter<{ event: [LageEvent] }> {
   private readonly lastTrackPoint = new Map<string, Position>();
   private readonly entities: EntityStore;
   private readonly tracks: TrackStore;
+  /** Standortverlauf von Fahndern, Zielen, Fahrzeugen und Trackern. */
+  readonly spuren: SpurStore;
 
   constructor(
     private readonly db: Database,
@@ -98,6 +101,7 @@ export class Lage extends EventEmitter<{ event: [LageEvent] }> {
     super();
     this.entities = new EntityStore(db);
     this.tracks = new TrackStore(db);
+    this.spuren = new SpurStore(db);
     const trackerPos = db.getKv('trackerPositions');
     if (trackerPos) for (const [id, p] of Object.entries(JSON.parse(trackerPos) as Record<string, Position>)) this.trackerPositions.set(id, p);
     migrateEntities(db);
@@ -217,9 +221,18 @@ export class Lage extends EventEmitter<{ event: [LageEvent] }> {
         if (!this.get('room', (data as EntityData<'message'>).roomId, inst)) throw new LageError('ungueltig', 'Chatraum existiert nicht.');
         break;
       }
-      case 'target':
-        normalizeTargetPhotos(data as EntityData<'target'>);
+      case 'target': {
+        const next = data as EntityData<'target'>;
+        normalizeTargetPhotos(next);
+        // Wird der Tracker getrennt oder die Quelle gewechselt, bleibt das Ziel an der letzten Trackerposition stehen.
+        const previous = (existing as Entity<'target'> | null)?.data;
+        if (previous && sourceOf(previous) === 'tracker' && sourceOf(next) !== 'tracker' && previous.trackerId) {
+          const p = this.trackerPositions.get(previous.trackerId);
+          const standortUnchanged = JSON.stringify(next.standort) === JSON.stringify(previous.standort);
+          if (p && standortUnchanged) data = { ...next, standort: { lat: p.lat, lon: p.lon, ts: p.ts } };
+        }
         break;
+      }
       case 'annotation': {
         if (!this.get('layer', (data as EntityData<'annotation'>).layerId, inst)) throw new LageError('ungueltig', 'Ebene existiert nicht.');
         // Wechselt die Markierung zwischen dauerhaften Orten und Lage, zieht sie in den anderen Bereich um.
@@ -288,7 +301,14 @@ export class Lage extends EventEmitter<{ event: [LageEvent] }> {
         for (const m of this.occupants(id)) this.write('member', '', m.id, { ...m.data, fortbewegung: 'fuss', fahrzeugId: null }, actor.id);
         break;
       case 'tracker':
-        for (const { inst: i, entity: t } of this.entities.listAll('target')) if (t.data.trackerId === id) this.write('target', i, t.id, { ...t.data, trackerId: null }, actor.id);
+        for (const { inst: i, entity: t } of this.entities.listAll('target')) {
+          if (t.data.trackerId !== id) continue;
+          // Das Ziel bleibt an der letzten Position des gelöschten Trackers stehen.
+          const p = this.trackerPositions.get(id);
+          const standort = p && sourceOf(t.data) === 'tracker' ? { lat: p.lat, lon: p.lon, ts: p.ts } : t.data.standort;
+          this.write('target', i, t.id, { ...t.data, trackerId: null, quelle: t.data.quelle === 'tracker' ? 'hand' : t.data.quelle, standort }, actor.id);
+        }
+        this.spuren.clear('tracker', id);
         for (const v of this.list('vehicle')) if (v.data.trackerId === id) this.write('vehicle', '', v.id, { ...v.data, trackerId: null }, actor.id);
         for (const { inst: i, entity: a } of this.entities.listAll('annotation')) if (a.data.trackerId === id) this.write('annotation', i, a.id, { ...a.data, trackerId: null }, actor.id);
         this.trackerPositions.delete(id);
@@ -297,6 +317,8 @@ export class Lage extends EventEmitter<{ event: [LageEvent] }> {
       default:
         break;
     }
+    // Mit dem Objekt verschwindet auch seine Spur.
+    if (kind === 'member' || kind === 'target' || kind === 'vehicle') this.spuren.clear(kind, id);
     this.remove(kind, scope, id);
   }
 
@@ -328,6 +350,9 @@ export class Lage extends EventEmitter<{ event: [LageEvent] }> {
     this.positions.set(memberId, p);
     this.emit('event', { type: 'pos', id: memberId, p, inst });
     this.recordTrack(inst, memberId, p);
+    if (member?.data.aufzeichnung !== false && (p.acc ?? 0) <= TRACK_MAX_ACCURACY_M) {
+      this.spuren.add('member', memberId, inst, { lat: p.lat, lon: p.lon, ts: p.ts, spd: p.spd ?? null, quelle: 'gps' });
+    }
     if (this.operationOf(inst).a?.memberId === memberId) this.updateLeapfrog(inst);
   }
 
@@ -349,7 +374,86 @@ export class Lage extends EventEmitter<{ event: [LageEvent] }> {
     this.trackerPositions.set(tracker.id, p);
     this.persistTrackerPositions();
     this.emit('event', { type: 'tpos', id: tracker.id, p });
+    if (tracker.data.aufzeichnung !== false) this.spuren.add('tracker', tracker.id, '', { lat: p.lat, lon: p.lon, ts: p.ts, spd: p.spd ?? null, quelle: 'tracker' });
     return true;
+  }
+
+  /** Letzte bekannte Position eines Trackers. */
+  trackerPositionOf(trackerId: string): Position | undefined {
+    return this.trackerPositions.get(trackerId);
+  }
+
+  /**
+   * Spuren der Ziele und Fahrzeuge fortschreiben. Ihr Standort ergibt sich aus Bindung und Quelle (ÖPNV-Fahrt,
+   * Zielfahrzeug, Tracker, A-Position, von Hand); er wird hier genauso aufgelöst wie in der App.
+   */
+  recordSpuren(now = Date.now()): void {
+    for (const { inst, entity: t } of this.entities.listAll('target')) {
+      if (t.data.aufzeichnung === false) continue;
+      const p = this.resolveTarget(inst, t.data, now);
+      if (p) this.spuren.add('target', t.id, inst, p);
+    }
+    for (const v of this.list('vehicle')) {
+      if (v.data.aufzeichnung === false || !v.data.aktiv) continue;
+      const p = this.resolveVehicle(v, now);
+      if (p) this.spuren.add('vehicle', v.id, '', p);
+    }
+  }
+
+  private resolveTarget(inst: string, t: EntityData<'target'>, now: number, depth = 0): SpurPunkt | null {
+    const b = t.bindung;
+    if (b && b.art !== 'fuss' && b.zielId && depth < 2) {
+      if (b.art === 'oepnv') {
+        const a = this.get('annotation', b.zielId, inst) ?? this.get('annotation', b.zielId, '');
+        if (a) {
+          const p = transitPosition(a.data, now) ?? a.data.punkte[0];
+          const line = a.data.linie;
+          const info = line ? [line.ref, line.richtung].filter(Boolean).join(' → ') : a.data.titel;
+          if (p) return { lat: p.lat, lon: p.lon, ts: now, quelle: 'oepnv', info: info || null };
+        }
+      } else {
+        const other = this.get('target', b.zielId, inst);
+        if (other) {
+          const p = this.resolveTarget(inst, other.data, now, depth + 1);
+          const name = targetName(other.data);
+          if (p) return { ...p, info: p.info ? `${name} · ${p.info}` : name };
+        }
+      }
+    }
+    switch (sourceOf(t)) {
+      case 'a': {
+        const a = this.operationOf(inst).a;
+        const p = a ? this.positions.get(a.memberId) : undefined;
+        if (a && p) return { lat: p.lat, lon: p.lon, ts: p.ts, spd: p.spd ?? null, quelle: 'a', info: this.get('member', a.memberId)?.data.spitzname ?? null };
+        break;
+      }
+      case 'tracker': {
+        const p = t.trackerId ? this.trackerPositions.get(t.trackerId) : undefined;
+        if (t.trackerId && p) return { lat: p.lat, lon: p.lon, ts: p.ts, spd: p.spd ?? null, quelle: 'tracker', info: this.get('tracker', t.trackerId)?.data.name ?? null };
+        break;
+      }
+      case 'hand':
+        break;
+    }
+    return t.standort ? { lat: t.standort.lat, lon: t.standort.lon, ts: now, quelle: 'hand' } : null;
+  }
+
+  private resolveVehicle(v: Entity<'vehicle'>, now: number): SpurPunkt | null {
+    const crew = this.occupants(v.id);
+    const latest = crew
+      .map((m) => this.positions.get(m.id))
+      .filter((p): p is Position => !!p)
+      .sort((a, b) => b.ts - a.ts)[0];
+    if (latest) return { lat: latest.lat, lon: latest.lon, ts: latest.ts, spd: latest.spd ?? null, quelle: 'besatzung', info: crew.map((m) => m.data.spitzname).join(', ') };
+    const tracker = v.data.trackerId ? this.trackerPositions.get(v.data.trackerId) : undefined;
+    if (tracker) return { lat: tracker.lat, lon: tracker.lon, ts: tracker.ts, spd: tracker.spd ?? null, quelle: 'tracker', info: this.get('tracker', v.data.trackerId!)?.data.name ?? null };
+    if (v.data.abgestellt) return { lat: v.data.abgestellt.lat, lon: v.data.abgestellt.lon, ts: now, quelle: 'abgestellt' };
+    return null;
+  }
+
+  /** Spuren älter als `days` Tage verwerfen. */
+  pruneSpuren(days: number, now = Date.now()): void {
+    this.spuren.pruneBefore(now - days * 86_400_000);
   }
 
   memberWentOffline(memberId: string): void {
@@ -799,6 +903,15 @@ export class Lage extends EventEmitter<{ event: [LageEvent] }> {
   private persistTrackerPositions(): void {
     this.db.setKv('trackerPositions', JSON.stringify(Object.fromEntries(this.trackerPositions)));
   }
+}
+
+/** Woher der Standort eines Ziels kommt; ohne ausdrückliche Wahl der Tracker, sofern verbunden. */
+function sourceOf(t: EntityData<'target'>): 'hand' | 'tracker' | 'a' {
+  return t.quelle ?? (t.trackerId ? 'tracker' : 'hand');
+}
+
+function targetName(t: EntityData<'target'>): string {
+  return t.bezeichnung || [t.vorname, t.nachname].filter(Boolean).join(' ') || t.kennzeichen || 'Ziel';
 }
 
 /** Die Hauptinstanz speichert ihren Einsatzzustand wie bisher unter `operation`. */

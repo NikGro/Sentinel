@@ -65,6 +65,8 @@ struct Member: LageEntity {
     var oepnv: OepnvFahrt?
     /// Aktive Instanz; ändert sich nur über `instanz.wechseln`.
     var instanz: String = Instance.mainId
+    /// Eigenen Standortverlauf aufzeichnen (nur im Einsatz).
+    var aufzeichnung: Bool = true
 
     init(name: String, spitzname: String, dienststelle: String, telefon: String = "", fotoBlob: String? = nil) {
         self.name = name
@@ -75,7 +77,7 @@ struct Member: LageEntity {
     }
 
     private enum CodingKeys: String, CodingKey {
-        case name, spitzname, dienststelle, telefon, fotoBlob, aktiv, fortbewegung, fahrzeugId, oepnv, instanz
+        case name, spitzname, dienststelle, telefon, fotoBlob, aktiv, fortbewegung, fahrzeugId, oepnv, instanz, aufzeichnung
     }
 
     init(from decoder: Decoder) throws {
@@ -90,6 +92,7 @@ struct Member: LageEntity {
         fahrzeugId = try c.decodeIfPresent(String.self, forKey: .fahrzeugId)
         oepnv = try c.decodeIfPresent(OepnvFahrt.self, forKey: .oepnv)
         instanz = try c.decodeIfPresent(String.self, forKey: .instanz) ?? Instance.mainId
+        aufzeichnung = try c.decodeIfPresent(Bool.self, forKey: .aufzeichnung) ?? true
     }
 }
 
@@ -131,6 +134,7 @@ struct Vehicle: LageEntity {
     var trackerId: String?
     var aktiv: Bool = true
     var abgestellt: TimedPoint?
+    var aufzeichnung: Bool = true
 
     init(funkrufname: String, bezeichnung: String = "", kennzeichen: String = "", beschreibung: String = "") {
         self.funkrufname = funkrufname
@@ -140,7 +144,7 @@ struct Vehicle: LageEntity {
     }
 
     private enum CodingKeys: String, CodingKey {
-        case funkrufname, bezeichnung, kennzeichen, beschreibung, fotoBlob, trackerId, aktiv, abgestellt
+        case funkrufname, bezeichnung, kennzeichen, beschreibung, fotoBlob, trackerId, aktiv, abgestellt, aufzeichnung
     }
 
     init(from decoder: Decoder) throws {
@@ -153,6 +157,7 @@ struct Vehicle: LageEntity {
         trackerId = try c.decodeIfPresent(String.self, forKey: .trackerId)
         aktiv = try c.decodeIfPresent(Bool.self, forKey: .aktiv) ?? true
         abgestellt = try c.decodeIfPresent(TimedPoint.self, forKey: .abgestellt)
+        aufzeichnung = try c.decodeIfPresent(Bool.self, forKey: .aufzeichnung) ?? true
     }
 
     /// Zusatzangabe unter dem Funkrufnamen.
@@ -169,8 +174,14 @@ struct Tracker: LageEntity {
     var intervall: Int?
     /// PAJ: E-Mail des eigenen Kontos, falls für diesen Tracker eines hinterlegt ist.
     var kontoEmail: String?
+    /// Rufnummer der SIM-Karte im Tracker und Geräte-PIN, für Befehle per SMS.
+    var telefon: String?
+    var smsPin: String?
+    var aufzeichnung: Bool?
 
     var providerTitle: String { anbieter == "paj" ? "PAJ" : "SinoTrack" }
+    var records: Bool { aufzeichnung ?? true }
+    var isSinoTrack: Bool { anbieter == "sinotrack" }
 }
 
 struct Layer: LageEntity {

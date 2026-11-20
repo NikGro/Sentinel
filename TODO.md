@@ -8,7 +8,6 @@ statt jede Änderung sofort einzubauen. Erledigtes wandert mit Version ins CHANG
 ### Nächste Runde
 
 - **Kreuzungssuche nach dem Update prüfen:** Kommen plausible Straßenecken jetzt zuverlässig, auch nach dem ersten Buchstaben der zweiten Straße? Falls nicht: Beispiel nachstellen.
-- **Ziel bei wegfallendem Tracker:** Fällt der Tracker eines Ziels aus, gilt derzeit der letzte von Hand gesetzte Standort. Besser: die letzte Tracker-Position übernehmen.
 
 ### Karte, Kompass und Navigation
 
@@ -39,3 +38,5 @@ statt jede Änderung sofort einzubauen. Erledigtes wandert mit Version ins CHANG
     Einsteigen der Zielperson, Kreuzungssuche mit Tippfehlern
   - 0.15: Zoom ohne Sprung beim Anheften, Kopplungsschwelle, Tempolimit ohne Navigation, Standortquelle der Ziele,
     ÖPNV-Strecke mit Ebenen
+  - 0.17: Verlauf auf der Karte, Tracker-Ansicht mit Akku und Befehlen (welche Werte der SinoTrack tatsächlich
+    meldet, zeigen die letzten Nachrichten), Navigation „Halte voraus“, Kompass ohne Sprung

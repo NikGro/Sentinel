@@ -136,6 +136,7 @@ struct MemberQuickLook: View {
                 if !member.data.telefon.isEmpty {
                     LabeledContent("Handynummer", value: member.data.telefon)
                 }
+                HistoryButton(subject: SpurSubject(art: .member, id: member.id))
             }
 
             if let vehicle = lage.vehicle(of: member.data) {

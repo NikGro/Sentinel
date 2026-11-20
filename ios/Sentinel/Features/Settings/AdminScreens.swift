@@ -221,6 +221,9 @@ struct TrackersAdminScreen: View {
     @State private var pajDevices: [APIClient.PajDevice] = []
     @State private var addEmail = ""
     @State private var addPassword = ""
+    @State private var statuses: [String: TrackerStatus] = [:]
+    @State private var editing: String?
+    @State private var retentionDays: Int?
 
     private var canAdd: Bool {
         guard !addName.trimmingCharacters(in: .whitespaces).isEmpty else { return false }
@@ -273,9 +276,12 @@ struct TrackersAdminScreen: View {
                                 Text(lage.trackerPositions[tracker.id].map { "Letzte Position \(Format.ago($0.date))" } ?? "Noch keine Position empfangen")
                                     .font(.caption)
                                     .foregroundStyle(.secondary)
+                                if let status = statuses[tracker.id] { TrackerStatusLine(status: status, sinoTrack: tracker.data.isSinoTrack) }
                             }
                             Spacer()
                             Menu {
+                                Button("Bearbeiten", systemImage: "slider.horizontal.3") { editing = tracker.id }
+                                HistoryButton(subject: SpurSubject(art: .tracker, id: tracker.id))
                                 Button("Umbenennen", systemImage: "pencil") {
                                     newName = tracker.data.name
                                     renaming = tracker
@@ -286,24 +292,31 @@ struct TrackersAdminScreen: View {
                                     .font(.title3)
                             }
                         }
-                        if tracker.data.anbieter == "sinotrack" {
-                            Picker("Sendeintervall", selection: Binding(
-                                get: { tracker.data.intervall ?? 0 },
-                                set: { if $0 > 0 { lage.setTrackerInterval(tracker.id, seconds: $0) } }
-                            )) {
-                                Text("Unverändert").tag(0)
-                                ForEach([10, 20, 30, 60, 120, 300, 600], id: \.self) { seconds in
-                                    Text(seconds < 60 ? "\(seconds) s" : "\(seconds / 60) min").tag(seconds)
-                                }
-                            }
-                            .font(.subheadline)
-                        }
                     }
+                    .contentShape(.rect)
+                    .onTapGesture { editing = tracker.id }
                 }
             } header: {
                 Text("Tracker")
             } footer: {
-                Text("Zugeordnet werden Tracker beim Ziel, beim Fahrzeug oder bei einem Marker. Das Intervall wird an SinoTrack-Geräte geschickt, sobald sie verbunden sind; PAJ-Geräte stellt man im PAJ-Portal ein.")
+                Text("Antippen oder „Bearbeiten“ zeigt Zustand, Einstellungen und Befehle. Zugeordnet werden Tracker beim Ziel, beim Fahrzeug oder bei einem Marker.")
+            }
+
+            Section {
+                Picker("Aufbewahren", selection: Binding(
+                    get: { retentionDays ?? 30 },
+                    set: { days in
+                        retentionDays = days
+                        Task { await state.run(model.client) { try await $0.setSpurRetentionDays(days) } }
+                    }
+                )) {
+                    ForEach([7, 14, 30, 60, 90, 180, 365], id: \.self) { Text("\($0) Tage").tag($0) }
+                }
+                .disabled(retentionDays == nil)
+            } header: {
+                Text("Standortverläufe")
+            } footer: {
+                Text("Wie lange die aufgezeichneten Verläufe von Trackern, Zielen, Fahrzeugen und Fahndern auf dem Server bleiben. Aufzeichnen lässt es sich je Tracker, Ziel, Fahrzeug und für sich selbst unter „Mehr“ ein- und ausschalten.")
             }
 
             Section {
@@ -432,6 +445,17 @@ struct TrackersAdminScreen: View {
         .navigationTitle("GPS-Tracker")
         .navigationBarTitleDisplayMode(.inline)
         .task { await state.reload(model.client) }
+        .task {
+            retentionDays = try? await model.client?.spurRetentionDays()
+            // Zustand der Tracker (Akku, Verbindung) laufend aktualisieren.
+            while !Task.isCancelled {
+                if let result = try? await model.client?.trackerStatuses() { statuses = result }
+                try? await Task.sleep(for: .seconds(15))
+            }
+        }
+        .navigationDestination(item: $editing) { id in
+            TrackerDetailScreen(trackerId: id, h02Port: state.status?.tracker.h02Port)
+        }
         .refreshable { await state.reload(model.client) }
         .modifier(FailureAlert(state: state))
         .alert("Tracker umbenennen", isPresented: Binding(get: { renaming != nil }, set: { if !$0 { renaming = nil } })) {
@@ -543,5 +567,35 @@ struct DevicesAdminScreen: View {
                 if let id = deviceToRevoke?.id { Task { await state.run(model.client) { try await $0.revokeDevice(id) } } }
             }
         }
+    }
+}
+
+/// Kurzer Zustand eines Trackers in der Liste: Verbindung, Akku, GPS.
+struct TrackerStatusLine: View {
+    let status: TrackerStatus
+    let sinoTrack: Bool
+
+    var body: some View {
+        HStack(spacing: 10) {
+            if sinoTrack {
+                Label(status.verbunden ? "Verbunden" : "Offline", systemImage: status.verbunden ? "circle.fill" : "circle")
+                    .foregroundStyle(status.verbunden ? Color.green : Color.secondary)
+            }
+            if let akku = status.akku {
+                Label("\(akku) %", systemImage: status.batterySymbol)
+                    .foregroundStyle(akku < 20 ? Color.red : Color.secondary)
+            }
+            if let gps = status.gps, !gps {
+                Label("Kein GPS", systemImage: "location.slash")
+                    .foregroundStyle(.orange)
+            }
+            if let alarm = status.alarm {
+                Label(alarm, systemImage: "exclamationmark.triangle.fill")
+                    .foregroundStyle(.orange)
+                    .lineLimit(1)
+            }
+        }
+        .font(.caption)
+        .labelStyle(.titleAndIcon)
     }
 }
