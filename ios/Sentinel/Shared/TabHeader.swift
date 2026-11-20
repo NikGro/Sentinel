@@ -1,7 +1,7 @@
 import SwiftUI
 
-/// Kopf eines Haupt-Tabs: großer Titel, rechts daneben auf gleicher Höhe die Aktion (z. B. Plus), darunter auf Wunsch
-/// ein Suchfeld. In allen Tabs gleich, damit Überschriften und Knöpfe überall auf derselben Höhe stehen.
+/// Kopf eines Haupt-Tabs wie Apples Navigationsbalken mit großem Titel: Aktionen (z. B. Plus) oben rechts in der
+/// Leiste, darunter der große Titel und auf Wunsch ein Suchfeld. In allen Tabs gleich.
 struct TabHeader<Actions: View>: View {
     let title: String
     var query: Binding<String>?
@@ -9,11 +9,10 @@ struct TabHeader<Actions: View>: View {
     @ViewBuilder var actions: () -> Actions
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 10) {
-            HStack(alignment: .center, spacing: Theme.barSpacing) {
-                Text(title)
-                    .font(.largeTitle.weight(.bold))
-                    .accessibilityAddTraits(.isHeader)
+        // Aufbau wie ein Navigationsbalken mit großem Titel (Human Interface Guidelines): oben eine Leiste in
+        // Standardhöhe mit den Knöpfen rechts, darunter der große Titel, dann das Suchfeld; Abstände wie im System.
+        VStack(alignment: .leading, spacing: 0) {
+            HStack(spacing: Theme.barSpacing) {
                 Spacer(minLength: 0)
                 if Actions.self != EmptyView.self {
                     actions()
@@ -24,13 +23,19 @@ struct TabHeader<Actions: View>: View {
                         .glassEffect(.regular.interactive(), in: .circle)
                 }
             }
+            .frame(height: 44)
+            Text(title)
+                .font(.largeTitle.weight(.bold))
+                .accessibilityAddTraits(.isHeader)
+                .padding(.top, 3)
+                .padding(.bottom, 8)
             if let query {
                 SearchField(text: query, prompt: prompt)
+                    .padding(.bottom, 8)
             }
         }
-        .padding(.horizontal, 20)
-        .padding(.top, 8)
-        .padding(.bottom, 10)
+        .padding(.horizontal, 16)
+        .padding(.bottom, 4)
     }
 }
 
