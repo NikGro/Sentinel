@@ -36,6 +36,9 @@ statt jede Änderung sofort einzubauen. Erledigtes wandert mit Version ins CHANG
   Einsteigen in der ÖPNV-Karte, Ebenen der ÖPNV-Strecke) soll aussehen wie die Pillen im Verlauf: Glaskapseln, die
   man einzeln hinzufügen und entfernen kann. Sie ersetzen die bisherigen Umschaltknöpfe als zuständiges
   Bedienelement.
+- **Verlauf, Zeitraum von–bis direkt wählbar:** Von und Bis immer sichtbar im Verlauf. Heute stecken sie hinter
+  „Zeitraum › Eigener Zeitraum“; die Vorgaben werden zu Schnellwahlen. Die Zeitleiste läuft genau über den gewählten
+  Zeitraum. Prüfen, ob sie dabei auch nur die Punkte darin zeigt.
 - **Punkte auf der Karte clustern:** Beim Herauszoomen nah beieinander liegende Punkte zu einem Cluster
   zusammenfassen. Auseinanderrücken nur, wenn man nah herangezoomt ist.
 - **Offene Rückfrage:** Soll der Schalter „Auf der Karte“ in der Zielliste für alle in der Instanz gelten statt nur
