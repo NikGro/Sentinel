@@ -191,6 +191,8 @@ struct MapScreen: View {
             // statt über den Bedienelementen.
             // In der Navigation sitzt der eigene Pfeil etwas über der unteren Leiste: halb so viel Abstand wie deren Höhe.
             .safeAreaPadding(.bottom, route.isActive ? bottomAreaHeight * 0.5 : 0)
+            // Apples Rechtshinweis sitzt unten links; etwas Abstand zu den runden Bildschirmecken, damit er nicht abschneidet.
+            .safeAreaPadding(.horizontal, 14)
             .ignoresSafeArea(.container, edges: .bottom)
             .onMapCameraChange(frequency: .continuous) { context in cameraState.update(context.camera) }
             .simultaneousGesture(DragGesture(minimumDistance: 12).onChanged { _ in

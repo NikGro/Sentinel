@@ -55,10 +55,9 @@ targets:
         UILaunchScreen: {}
         UIApplicationSceneManifest:
           UIApplicationSupportsMultipleScenes: false
+        # Immer hochkant: Die Bedienung ist auf das Hochformat ausgelegt.
         UISupportedInterfaceOrientations:
           - UIInterfaceOrientationPortrait
-          - UIInterfaceOrientationLandscapeLeft
-          - UIInterfaceOrientationLandscapeRight
         UIBackgroundModes:
           - location
         ITSAppUsesNonExemptEncryption: false

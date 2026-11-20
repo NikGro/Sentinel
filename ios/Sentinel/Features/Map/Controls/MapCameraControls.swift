@@ -89,6 +89,8 @@ struct MapStyleButton: View {
                 .contentShape(.circle)
         }
         .menuOrder(.fixed)
+        // Wie die übrigen Kartenknöpfe, nicht in der Tönungsfarbe.
+        .tint(.primary)
         .glassEffect(.regular.interactive(), in: .circle)
         .accessibilityLabel("Kartenstil")
     }
@@ -96,7 +98,7 @@ struct MapStyleButton: View {
 
 /// Standort und Kompass in einem Knopf, aufgebaut wie im Tesla: In der Mitte zeigt der Pfeil immer nach oben, darum
 /// dreht sich eine Kompassrose mit den Himmelsrichtungen so, wie die Karte gerade ausgerichtet ist.
-/// Angeheftet ist der Pfeil gefüllt (in Fahrtrichtung zusätzlich farbig), frei ist er hohl.
+/// Angeheftet ist der Pfeil gefüllt, frei ist er hohl.
 struct LocationCompassButton: View {
     let state: MapCameraState
     let pin: CameraPin?
@@ -105,17 +107,17 @@ struct LocationCompassButton: View {
     var body: some View {
         Button(action: action) {
             ZStack {
-                CompassRose(heading: state.heading, onTint: pin != nil)
+                CompassRose(heading: state.heading)
+                // Angeheftet gefüllt, frei hohl; sonst ändert sich am Knopf nichts.
                 Image(systemName: pin == nil ? "location.north" : "location.north.fill")
                     .font(.system(size: 13, weight: .bold))
-                    .foregroundStyle(pin == nil ? Color.primary : Color.white)
+                    .foregroundStyle(.primary)
             }
             .frame(width: Theme.roundButton, height: Theme.roundButton)
             .contentShape(.circle)
         }
         .buttonStyle(.plain)
-        // Angeheftet: blaues Glas, darauf der weiß gefüllte Pfeil.
-        .glassEffect(pin == nil ? .regular.interactive() : .regular.tint(Theme.accent).interactive(), in: .circle)
+        .glassEffect(.regular.interactive(), in: .circle)
         .accessibilityLabel("Auf eigenen Standort anheften")
         .accessibilityValue(pin == .heading ? "angeheftet, in Fahrtrichtung" : pin == .north ? "angeheftet, Norden oben" : "frei")
         .accessibilityHint(pin == .heading ? "Wechselt zu Norden oben" : "Heftet in Fahrtrichtung an")
@@ -126,8 +128,6 @@ struct LocationCompassButton: View {
 /// aufrecht lesbar und wandern nur um den Pfeil herum.
 private struct CompassRose: View {
     let heading: CLLocationDirection
-    /// Auf blauem Glas (angeheftet): helle Teilstriche und Buchstaben.
-    var onTint = false
 
     private static let letters: [(text: String, angle: Double)] = [("N", 0), ("O", 90), ("S", 180), ("W", 270)]
 
@@ -137,7 +137,7 @@ private struct CompassRose: View {
                 // Teilstriche alle 30°, ausgenommen die Stellen der Buchstaben.
                 if index % 3 != 0 {
                     Capsule()
-                        .fill(onTint ? AnyShapeStyle(.white.opacity(0.7)) : AnyShapeStyle(.secondary))
+                        .fill(.secondary)
                         .frame(width: 1.2, height: 3)
                         .offset(y: -17)
                         .rotationEffect(.degrees(Double(index) * 30 - heading))
@@ -148,7 +148,7 @@ private struct CompassRose: View {
                 let angle = (letter.angle - heading) * .pi / 180
                 Text(letter.text)
                     .font(.system(size: 8, weight: .heavy, design: .rounded))
-                    .foregroundStyle(letter.text == "N" ? (onTint ? Color.white : Color.red) : (onTint ? Color.white.opacity(0.75) : Color.secondary))
+                    .foregroundStyle(letter.text == "N" ? Color.red : Color.secondary)
                     .offset(x: sin(angle) * 16, y: -cos(angle) * 16)
             }
         }

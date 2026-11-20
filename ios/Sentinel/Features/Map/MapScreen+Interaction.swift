@@ -65,6 +65,12 @@ extension MapScreen {
         // Fahrzeuge nach echtem Fahrplan: eigene ÖPNV-Fahrzeuge und Strecken mit eingeschalteter Fahrzeug-Ebene.
         for object in objects(.oepnvfahrzeug) + objects(.oepnvlinie).filter(\.data.hasRealVehicle) {
             guard let line = object.data.linie else { continue }
+            // Echte Fahrt: das Fahrzeug ist ab fünf Minuten vor der Abfahrt bis fünf Minuten nach der Ankunft zu sehen.
+            if let times = object.data.fahrt?.zeiten.compactMap({ $0 }), let start = times.first, let end = times.last {
+                let t = transitNow.timeIntervalSince1970 * 1000
+                let margin = TransitSimulation.standing * 1000
+                if t < start - margin || t > end + margin { continue }
+            }
             pins.append(TransitVehiclePin(
                 id: object.id, objectId: object.id, lineObjectId: nil,
                 coordinate: lage.position(ofObject: object.data, at: transitNow).coordinate,

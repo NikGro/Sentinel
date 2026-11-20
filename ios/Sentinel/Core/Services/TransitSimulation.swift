@@ -4,6 +4,8 @@ import Foundation
 /// (wie beim ÖPNV-Fluchtraum), 30 Sekunden Halt. Keine Echtzeit- oder Fahrplandaten.
 enum TransitSimulation {
     static let dwell: TimeInterval = 30
+    /// So lange vor der Abfahrt am ersten Halt und nach der Ankunft am letzten Halt ist ein Fahrzeug schon bzw. noch da.
+    static let standing: TimeInterval = 300
 
     /// Reisegeschwindigkeit in Metern Luftlinie je Sekunde.
     static func speed(_ typ: String) -> Double {
@@ -171,13 +173,17 @@ enum TransitSimulation {
         let interval = TimeInterval(takt * 60)
         let path = object.weg ?? []
         let total = duration(object.punkte, typ: line.typ, path: path)
-        // Alle Abfahrten, deren Fahrt jetzt läuft: reference + k * interval in [now - total, now].
-        let first = Int(((now.timeIntervalSince(reference) - total) / interval).rounded(.up))
-        let last = Int((now.timeIntervalSince(reference) / interval).rounded(.down))
-        guard last >= first else { return [] }
+        // Alle Fahrten, deren Fahrzeug jetzt da ist: unterwegs oder bis zu fünf Minuten vor der Abfahrt bzw. nach der
+        // Ankunft an den Endhalten stehend.
+        let elapsed = now.timeIntervalSince(reference)
+        let first = Int(((elapsed - total - standing) / interval).rounded(.up))
+        let last = Int(((elapsed + standing) / interval).rounded(.down))
+        guard last >= first, let start = object.punkte.first, let end = object.punkte.last else { return [] }
         return (first...last).compactMap { k in
             let departure = reference.addingTimeInterval(TimeInterval(k) * interval)
-            return state(object.punkte, typ: line.typ, path: path, departure: departure, at: now).map { (departure, $0) }
+            if let running = state(object.punkte, typ: line.typ, path: path, departure: departure, at: now) { return (departure, running) }
+            if now < departure { return (departure, State(point: start, nextIndex: 0, atStop: true)) }
+            return (departure, State(point: end, nextIndex: object.punkte.count - 1, atStop: true))
         }
     }
 }
