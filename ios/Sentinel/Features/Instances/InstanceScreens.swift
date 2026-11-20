@@ -51,6 +51,7 @@ struct InstancesScreen: View {
                             Spacer()
                             Button("Beitreten") { lage.joinInstance(instance.id) }
                                 .buttonStyle(.bordered)
+                                .buttonBorderShape(.capsule)
                         }
                     }
                 }
@@ -81,7 +82,7 @@ struct InstancesScreen: View {
             } header: {
                 Label("Sonderbereiche", systemImage: "wrench.and.screwdriver")
             }
-            .listRowBackground(Color.indigo.opacity(0.12))
+            .listRowBackground(Theme.special.opacity(0.12))
         }
         .navigationTitle("Instanzen")
         .sheet(isPresented: $creating) {
@@ -151,7 +152,7 @@ private struct SpecialAreaRow: View {
         HStack(spacing: 12) {
             Image(systemName: symbol)
                 .font(.title3)
-                .foregroundStyle(.indigo)
+                .foregroundStyle(Theme.special)
                 .frame(width: 26)
             VStack(alignment: .leading, spacing: 2) {
                 Text(title)
@@ -164,7 +165,7 @@ private struct SpecialAreaRow: View {
             if isOpen {
                 Text("Geöffnet")
                     .font(.caption.weight(.semibold))
-                    .foregroundStyle(.indigo)
+                    .foregroundStyle(Theme.special)
             }
         }
     }
@@ -196,7 +197,7 @@ struct PackagesScreen: View {
                     VStack(alignment: .leading, spacing: 8) {
                         HStack {
                             Image(systemName: "shippingbox.fill")
-                                .foregroundStyle(.indigo)
+                                .foregroundStyle(Theme.special)
                             VStack(alignment: .leading, spacing: 2) {
                                 Text(package.data.name).font(.headline)
                                 if !package.data.beschreibung.isEmpty {
@@ -209,7 +210,7 @@ struct PackagesScreen: View {
                             if package.id == lage.instanz {
                                 Text("In Bearbeitung")
                                     .font(.caption.weight(.semibold))
-                                    .foregroundStyle(.indigo)
+                                    .foregroundStyle(Theme.special)
                             }
                         }
                         HStack {
@@ -220,6 +221,7 @@ struct PackagesScreen: View {
                             }
                         }
                         .buttonStyle(.bordered)
+                        .buttonBorderShape(.capsule)
                         .font(.subheadline)
                     }
                     .swipeActions(edge: .trailing) {
@@ -316,7 +318,7 @@ struct SpecialAreaBar: View {
         HStack(spacing: 12) {
             Image(systemName: model.editsPermanentLayer ? "pin.fill" : "shippingbox.fill")
                 .font(.title3)
-                .foregroundStyle(.indigo)
+                .foregroundStyle(Theme.special)
             VStack(alignment: .leading, spacing: 2) {
                 Text(model.editsPermanentLayer ? "Dauerhafte Orte bearbeiten" : "Paket: \(lage.currentInstance?.data.name ?? "")")
                     .font(.subheadline.weight(.semibold))
@@ -332,6 +334,6 @@ struct SpecialAreaBar: View {
         }
         .padding(.horizontal, 14)
         .padding(.vertical, 10)
-        .glassEffect(.regular.tint(.indigo.opacity(0.2)), in: .rect(cornerRadius: 20))
+        .glassEffect(.regular.tint(Theme.special.opacity(0.2)), in: .rect(cornerRadius: 20))
     }
 }

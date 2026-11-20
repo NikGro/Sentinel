@@ -20,8 +20,16 @@ enum ZielArt: String, Codable, CaseIterable, Identifiable, Sendable {
     var symbolName: String {
         switch self {
         case .person: "person.fill"
-        case .fahrzeug: "car.side.fill"
+        case .fahrzeug: "car.fill"
         case .objekt: "house.fill"
+        }
+    }
+
+    var plural: String {
+        switch self {
+        case .person: "Zielpersonen"
+        case .fahrzeug: "Zielfahrzeuge"
+        case .objekt: "Zielobjekte"
         }
     }
 }
@@ -220,4 +228,19 @@ struct TargetBinding: Codable, Equatable, Hashable, Sendable {
     var art: Art
     /// Markierung (ÖPNV-Fahrzeug) bzw. Ziel (Zielfahrzeug, Zielobjekt).
     var zielId: String?
+}
+
+extension Target {
+    /// Symbol auf der Karte: Zielfahrzeug Auto, Zielobjekt Haus, Zielperson nach Fortbewegung (zu Fuß, im Fahrzeug, im ÖPNV).
+    var mapSymbol: String {
+        if art == .fahrzeug { return Fortbewegung.fahrzeug.symbolName }
+        if art == .objekt { return ZielArt.objekt.symbolName }
+        guard let unterwegs = bindung?.art else { return Fortbewegung.fuss.symbolName }
+        switch unterwegs {
+        case .fahrzeug: return Fortbewegung.fahrzeug.symbolName
+        case .oepnv: return Fortbewegung.oepnv.symbolName
+        case .objekt: return ZielArt.objekt.symbolName
+        case .fuss: return Fortbewegung.fuss.symbolName
+        }
+    }
 }

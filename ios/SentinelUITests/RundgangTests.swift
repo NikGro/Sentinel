@@ -41,7 +41,7 @@ final class RundgangTests: XCTestCase {
         settle(app)
         // Wie auf dem Gerät: echter Standort, Karte folgt dem eigenen Punkt. Friert die Karte dabei ein, scheitern alle weiteren Schritte.
         XCUIDevice.shared.location = XCUILocation(location: CLLocation(latitude: 53.5503, longitude: 9.9930))
-        if app.buttons["Auf eigenen Standort zentrieren"].waitForExistence(timeout: 3) { app.buttons["Auf eigenen Standort zentrieren"].tap() }
+        if app.buttons["Auf eigenen Standort anheften"].waitForExistence(timeout: 3) { app.buttons["Auf eigenen Standort anheften"].tap() }
         sleep(2)
         XCUIDevice.shared.location = XCUILocation(location: CLLocation(latitude: 53.5512, longitude: 9.9951))
         sleep(2)
@@ -133,7 +133,7 @@ final class RundgangTests: XCTestCase {
         capture("07-chat")
 
         app.tabBars.buttons["Mehr"].tap()
-        XCTAssertTrue(app.navigationBars["Mehr"].waitForExistence(timeout: 5), "Mehr-Ansicht erscheint")
+        XCTAssertTrue(app.staticTexts["Mehr"].waitForExistence(timeout: 5), "Mehr-Ansicht erscheint")
         capture("08-mehr")
         // Instanzenmenü mit den beiden Sonderbereichen.
         let instances = app.buttons.matching(NSPredicate(format: "label BEGINSWITH 'Instanzen'")).firstMatch

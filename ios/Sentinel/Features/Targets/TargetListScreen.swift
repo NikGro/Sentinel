@@ -6,53 +6,57 @@ import SwiftUI
 /// Ziele (Personen, Fahrzeuge, Objekte): jederzeit schnell aufrufbar, von allen bearbeitbar.
 struct TargetListScreen: View {
     @Environment(LageStore.self) private var lage
+    @Environment(LocalSettings.self) private var settings
     @State private var editing: TargetEditorContext?
-    @State private var targetToDelete: Versioned<Target>?
+    @State private var query = ""
+
+    /// Reihenfolge wie im Kräfte-Tab: erst Fahrzeuge, dann Personen, dann Objekte.
+    private static let sections: [ZielArt] = [.fahrzeug, .person, .objekt]
+
+    private func targets(_ art: ZielArt) -> [Versioned<Target>] {
+        lage.sortedTargets.filter { target in
+            target.data.art == art && [target.data.displayName, target.data.vorname, target.data.nachname, target.data.bezeichnung, target.data.kennzeichen, target.data.anschrift]
+                .contains { $0.matches(search: query) }
+        }
+    }
 
     var body: some View {
         NavigationStack {
             List {
-                ForEach(lage.sortedTargets) { target in
-                    NavigationLink(value: target.id) {
-                        TargetRow(target: target)
-                    }
-                    .swipeActions(edge: .trailing, allowsFullSwipe: true) {
-                        Button("Löschen", systemImage: "trash", role: .destructive) {
-                            lage.delete(Target.self, id: target.id)
+                ForEach(Self.sections) { art in
+                    let list = targets(art)
+                    Section {
+                        if list.isEmpty {
+                            Text(query.isEmpty ? "Keine \(art.plural)." : "Kein Treffer.")
+                                .foregroundStyle(.secondary)
                         }
-                    }
-                }
-            }
-            .alert(
-                "„\(targetToDelete?.data.displayName ?? "")“ für alle löschen?",
-                isPresented: Binding(get: { targetToDelete != nil }, set: { if !$0 { targetToDelete = nil } })
-            ) {
-                Button("Abbrechen", role: .cancel) {}
-                Button("Löschen", role: .destructive) {
-                    if let target = targetToDelete { lage.delete(Target.self, id: target.id) }
-                }
-            } message: {
-                Text("Das Ziel verschwindet bei allen Kräften und in der Kommandozentrale.")
-            }
-            .overlay {
-                if lage.targets.isEmpty {
-                    ContentUnavailableView {
-                        Label("Keine Ziele", systemImage: "person.crop.rectangle.stack")
-                    } description: {
-                        Text("Zielpersonen, Zielfahrzeuge und Zielobjekte lassen sich über das Plus oben oder auf der Karte anlegen. Alle im Einsatz sehen und bearbeiten dieselben Angaben.")
+                        ForEach(list) { target in
+                            HStack(spacing: 12) {
+                                NavigationLink(value: target.id) {
+                                    TargetRow(target: target)
+                                }
+                                // Wie bei den Fahrzeugen der Kräfte: direkt in der Liste auf der Karte ein- und ausblenden.
+                                Toggle("Auf der Karte", isOn: visibility(of: target.id))
+                                    .labelsHidden()
+                                    .accessibilityLabel("\(target.data.displayName) auf der Karte")
+                            }
+                            .swipeActions(edge: .trailing, allowsFullSwipe: true) {
+                                Button("Löschen", systemImage: "trash", role: .destructive) {
+                                    lage.delete(Target.self, id: target.id)
+                                }
+                            }
+                        }
+                    } header: {
+                        Label(art.plural, systemImage: art.symbolName)
                     }
                 }
             }
             .navigationTitle("Ziele")
-            // Großer Titel in einer Zeile mit dem Plus.
-            .toolbarTitleDisplayMode(.inlineLarge)
-            .navigationDestination(for: String.self) { id in
-                TargetDetail(targetId: id)
-            }
-            .toolbar {
-                ToolbarItem(placement: .primaryAction) {
+            .toolbar(.hidden, for: .navigationBar)
+            .safeAreaInset(edge: .top, spacing: 0) {
+                TabHeader(title: "Ziele", query: $query, prompt: "Name, Kennzeichen, Anschrift") {
                     Menu {
-                        ForEach(ZielArt.allCases) { art in
+                        ForEach(Self.sections) { art in
                             Button(art.title, systemImage: art.symbolName) {
                                 editing = TargetEditorContext(id: LageStore.newId(), target: Target(art: art), isNew: true)
                             }
@@ -61,11 +65,24 @@ struct TargetListScreen: View {
                         Label("Ziel anlegen", systemImage: "plus")
                     }
                 }
+                .background(Color(.systemGroupedBackground))
+            }
+            .navigationDestination(for: String.self) { id in
+                TargetDetail(targetId: id)
             }
             .sheet(item: $editing) { context in
                 TargetEditor(context: context)
             }
         }
+    }
+
+    private func visibility(of id: String) -> Binding<Bool> {
+        Binding(
+            get: { !settings.hiddenTargets.contains(id) },
+            set: { visible in
+                if visible { settings.hiddenTargets.remove(id) } else { settings.hiddenTargets.insert(id) }
+            }
+        )
     }
 }
 
@@ -88,8 +105,8 @@ private struct TargetRow: View {
                         .foregroundStyle(Theme.target)
                 }
             }
-            .frame(width: 52, height: 64)
-            .clipShape(.rect(cornerRadius: 8))
+            .frame(width: 44, height: 44)
+            .clipShape(.rect(cornerRadius: 10))
 
             VStack(alignment: .leading, spacing: 3) {
                 Text(target.data.displayName)

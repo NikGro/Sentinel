@@ -31,7 +31,7 @@ struct MapObject: LageEntity {
             case .flaeche: "Fläche"
             case .kreis: "Kreis"
             case .fahndungsraum: "Fahndungsraum"
-            case .haltestellen: "Haltestellen im Umkreis"
+            case .haltestellen: "Haltestellen-Umkreis"
             case .oepnvlinie: "ÖPNV-Linie"
             case .oepnvfahrzeug: "ÖPNV-Fahrzeug"
             case .pfeil: "Pfeil"

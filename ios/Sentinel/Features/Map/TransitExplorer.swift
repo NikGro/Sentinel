@@ -340,13 +340,14 @@ struct TransitExplorer: View {
         if trip == nil {
             ProgressView().frame(maxWidth: .infinity)
         }
-        partsPicker([.fahrzeug, .strecke, .haltestellen])
+        partsPicker
         HStack(spacing: Theme.barSpacing) {
             if let segment {
                 Button {
                     lineFilter = lineFilter == nil ? segment.name : nil
                 } label: {
-                    Label(lineFilter == nil ? "Alle der Linie" : "Alle Linien", systemImage: "line.3.horizontal.decrease.circle")
+                    Label(lineFilter == nil ? "Nur die Linie" : "Alle Linien", systemImage: "line.3.horizontal.decrease.circle")
+                        .lineLimit(1)
                         .frame(maxWidth: .infinity)
                 }
                 .buttonStyle(.glass)
@@ -355,6 +356,7 @@ struct TransitExplorer: View {
                 if let trip { adopt(trip) }
             } label: {
                 Label("Übernehmen", systemImage: "checkmark")
+                    .lineLimit(1)
                     .frame(maxWidth: .infinity)
             }
             .buttonStyle(.glassProminent)
@@ -423,23 +425,22 @@ struct TransitExplorer: View {
         .accessibilityLabel("Auswahl aufheben")
     }
 
-    private func partsPicker(_ options: [Part]) -> some View {
-        HStack(spacing: 8) {
-            ForEach(options) { part in
-                let on = parts.contains(part)
-                Button {
-                    if on { parts.remove(part) } else { parts.insert(part) }
-                } label: {
-                    Label(part.title, systemImage: on ? "checkmark.circle.fill" : "circle")
-                        .font(.subheadline.weight(.semibold))
-                        .frame(maxWidth: .infinity)
-                }
-                .buttonStyle(.bordered)
-                .buttonBorderShape(.capsule)
-                .tint(on ? .accentColor : .secondary)
-                .accessibilityAddTraits(on ? .isSelected : [])
+    /// Was übernommen wird, als Umschalter statt Häkchen: nur das Fahrzeug, die Strecke mit ihren Haltestellen oder beides.
+    private var partsPicker: some View {
+        let choices: [(title: String, parts: Set<Part>)] = [
+            ("Fahrzeug", [.fahrzeug]),
+            ("Strecke", [.strecke, .haltestellen]),
+            ("Beides", [.fahrzeug, .strecke, .haltestellen]),
+        ]
+        return Picker("Übernehmen", selection: Binding(
+            get: { choices.firstIndex { $0.parts == parts } ?? 0 },
+            set: { parts = choices[$0].parts }
+        )) {
+            ForEach(choices.indices, id: \.self) { index in
+                Text(choices[index].title).tag(index)
             }
         }
+        .pickerStyle(.segmented)
     }
 
     private func delayText(_ delay: Int?) -> String {

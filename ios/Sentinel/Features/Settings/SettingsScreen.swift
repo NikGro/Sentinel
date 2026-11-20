@@ -105,6 +105,11 @@ struct SettingsScreen: View {
                 }
             }
             .navigationTitle("Mehr")
+            .toolbar(.hidden, for: .navigationBar)
+            .safeAreaInset(edge: .top, spacing: 0) {
+                TabHeader(title: "Mehr")
+                    .background(Color(.systemGroupedBackground))
+            }
         }
     }
 }

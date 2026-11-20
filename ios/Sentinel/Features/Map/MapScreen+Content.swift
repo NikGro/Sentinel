@@ -86,15 +86,26 @@ extension MapScreen {
         guard !reducedTools else { return [] }
         return lage.activeVehicles.compactMap { vehicle in
             guard lage.occupants(of: vehicle.id).isEmpty, let position = lage.position(ofVehicle: vehicle) else { return nil }
-            return SymbolPin(id: vehicle.id, title: vehicle.data.funkrufname, symbol: "car.fill", color: .indigo, coordinate: position.point.coordinate, selection: .vehicle(vehicle.id))
+            return SymbolPin(id: vehicle.id, title: vehicle.data.funkrufname, symbol: Fortbewegung.fahrzeug.symbolName, color: Theme.force, coordinate: position.point.coordinate, selection: .vehicle(vehicle.id))
         }
     }
 
+    /// Ziele als rote Symbole. Eine Zielperson in einem Zielfahrzeug, ÖPNV-Fahrzeug oder Zielobjekt hat kein eigenes
+    /// Symbol: Sie steckt im Fahrzeug bzw. Objekt, dessen Beschriftung ihren Namen trägt (wie bei den Kräften).
     var targetPins: [SymbolPin] {
         guard !model.editsPermanentLayer else { return [] }
+        var passengers: [String: [String]] = [:]
+        for target in lage.sortedTargets {
+            if let binding = target.data.bindung, binding.art != .fuss, let id = binding.zielId, lage.targets[id] != nil || lage.mapObjects[id] != nil {
+                passengers[id, default: []].append(target.data.displayName)
+            }
+        }
         return lage.sortedTargets.compactMap { target in
-            guard !settings.hiddenTargetKinds.contains(target.data.art.rawValue), let position = lage.position(ofTarget: target) else { return nil }
-            return SymbolPin(id: target.id, title: target.data.displayName, symbol: target.data.art.symbolName, color: Theme.target, coordinate: position.point.coordinate, selection: .target(target.id))
+            guard !settings.hiddenTargetKinds.contains(target.data.art.rawValue), !settings.hiddenTargets.contains(target.id) else { return nil }
+            if let binding = target.data.bindung, binding.art != .fuss, let id = binding.zielId, lage.targets[id] != nil || lage.mapObjects[id] != nil { return nil }
+            guard let position = lage.position(ofTarget: target) else { return nil }
+            let inside = passengers[target.id].map { " (\($0.joined(separator: ", ")))" } ?? ""
+            return SymbolPin(id: target.id, title: target.data.displayName + inside, symbol: target.data.mapSymbol, color: Theme.target, coordinate: position.point.coordinate, selection: .target(target.id))
         }
     }
 

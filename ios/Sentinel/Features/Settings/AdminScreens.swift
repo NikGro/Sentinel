@@ -124,6 +124,7 @@ struct LayersAdminScreen: View {
                                 lage.put(next, id: layer.id)
                             }
                             .buttonStyle(.bordered)
+                            .buttonBorderShape(.capsule)
                             .controlSize(.small)
                         }
                     }
@@ -361,6 +362,7 @@ struct TrackersAdminScreen: View {
                                 Spacer()
                                 Button("Übernehmen") { add(name: "SinoTrack \(unknown.kennung.suffix(4))", provider: "sinotrack", id: unknown.kennung) }
                                     .buttonStyle(.bordered)
+                                    .buttonBorderShape(.capsule)
                             }
                         }
                     } else {
@@ -396,6 +398,7 @@ struct TrackersAdminScreen: View {
                                 if !trackers.contains(where: { $0.data.anbieter == "paj" && $0.data.kennung == device.kennung }) {
                                     Button("Übernehmen") { add(name: device.name, provider: "paj", id: device.kennung) }
                                         .buttonStyle(.bordered)
+                                        .buttonBorderShape(.capsule)
                                 }
                             }
                         }
@@ -472,6 +475,7 @@ struct DevicesAdminScreen: View {
                         Spacer()
                         Button(showsCode ? "Verbergen" : "Anzeigen") { showsCode.toggle() }
                             .buttonStyle(.bordered)
+                            .buttonBorderShape(.capsule)
                     }
                     Button("Neuen Zugangscode erzeugen", role: .destructive) {
                         Task { await state.run(model.client) { _ = try await $0.rotateJoinCode() } }
@@ -500,6 +504,7 @@ struct DevicesAdminScreen: View {
                             } else {
                                 Button("Sperren", role: .destructive) { deviceToRevoke = device }
                                     .buttonStyle(.bordered)
+                                    .buttonBorderShape(.capsule)
                             }
                         }
                     }

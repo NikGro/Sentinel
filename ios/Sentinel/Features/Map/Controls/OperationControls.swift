@@ -170,21 +170,26 @@ struct SOSButton: View {
             .font(.system(size: 13, weight: .heavy, design: .rounded))
             .foregroundStyle(.white)
             .frame(width: Theme.roundButton, height: Theme.roundButton)
-            // Fortschritt beim Halten: weiße Tortenfüllung und Ring, beide im Knopf und über dem Glas.
+            // Volles Rot statt Glas: In der gemeinsamen Glasfläche der Seitenknöpfe würde das Glas über Text und
+            // Füllung gezeichnet. Darauf füllt sich beim Halten eine weiße Torte, außen läuft ein Ring.
             .background {
-                PieSlice(progress: progress)
-                    .fill(.white.opacity(0.45))
-                    .padding(3)
+                ZStack {
+                    Circle().fill(Color.red.gradient)
+                    PieSlice(progress: progress)
+                        .fill(.white.opacity(0.55))
+                }
+                .shadow(color: .black.opacity(0.25), radius: 4, y: 2)
             }
             .overlay {
                 Circle()
                     .trim(from: 0, to: progress)
                     .stroke(.white, style: StrokeStyle(lineWidth: 3, lineCap: .round))
                     .rotationEffect(.degrees(-90))
-                    .padding(2)
+                    .padding(1.5)
             }
-            // Rotes Glas ohne eigenes Drückverhalten, damit das Gedrückthalten bei der Geste ankommt.
-            .background(Circle().fill(.clear).glassEffect(.regular.tint(lage.ownSOS ? .red : .red.opacity(0.75)), in: .circle))
+            .overlay {
+                if lage.ownSOS { Circle().strokeBorder(.white, lineWidth: 2) }
+            }
             .scaleEffect(holding ? 1.08 : 1)
             .animation(.snappy, value: holding)
             .contentShape(.circle)

@@ -59,7 +59,8 @@ private struct LiveMyLocationMarker: View {
     private var style: MyLocationLayer.Style { .of(lage, navigating: route.isActive) }
 }
 
-/// Darstellung des eigenen Standorts als Fahrzeug, Navi-Pfeil oder Punkt mit A.
+/// Darstellung des eigenen Standorts: ein flach auf der Karte liegender Kreis (kippt mit der Karte), immer gleich
+/// groß, mit dem Symbol der Fortbewegung wie im Dreier-Umschalter; in der Navigation mit Fahrtrichtungspfeil.
 private struct MyLocationMarker: View {
     let style: MyLocationLayer.Style
     let holdsA: Bool
@@ -67,90 +68,63 @@ private struct MyLocationMarker: View {
     let cameraState: MapCameraState
 
     var body: some View {
-        marker
+        disc
+            // Flach auf dem Boden: mit der Kartenneigung gekippt.
+            .rotation3DEffect(.degrees(cameraState.pitch), axis: (x: 1, y: 0, z: 0), perspective: 0)
             .overlay(alignment: .topTrailing) {
                 if holdsA {
                     ASymbol(size: 18)
                         .overlay(Circle().stroke(.white, lineWidth: 1.5))
-                        .offset(x: 6, y: -6)
+                        .offset(x: 2, y: -2)
                 }
             }
+            .accessibilityElement()
+            .accessibilityLabel(accessibilityText)
     }
 
-    @ViewBuilder private var marker: some View {
-        switch style {
-        case .navigation:
-            NavigationPuck(course: course, cameraState: cameraState)
-        case .vehicle(let callsign):
-            LocationDot(symbol: "car.fill", caption: callsign)
-        case .transit(let line):
-            LocationDot(symbol: line.uppercased().hasPrefix("U") || line.uppercased().hasPrefix("S") ? "tram.fill" : "bus.fill", caption: line)
-        case .dot:
-            ZStack {
-                Circle()
-                    .fill(Theme.accent.opacity(0.18))
-                    .frame(width: 44, height: 44)
-                Circle()
-                    .fill(Theme.accent)
-                    .frame(width: 20, height: 20)
-                    .overlay(Circle().stroke(.white, lineWidth: 3))
-                    .shadow(color: .black.opacity(0.3), radius: 3, y: 1)
-            }
-        }
-    }
-}
-
-/// Navi-Pfeil wie in einer Navi-App: zeigt in Fahrtrichtung, relativ zur gedrehten Karte.
-private struct NavigationPuck: View {
-    let course: CLLocationDirection
-    let cameraState: MapCameraState
-
-    var body: some View {
+    private var disc: some View {
         ZStack {
             Circle()
-                .fill(.white)
-                .frame(width: 46, height: 46)
-                .shadow(color: .black.opacity(0.3), radius: 4, y: 2)
+                .fill(Theme.accent.opacity(0.18))
+                .frame(width: OwnLocationDisc.halo, height: OwnLocationDisc.halo)
             Circle()
                 .fill(Theme.accent)
-                .frame(width: 38, height: 38)
-            Image(systemName: "location.north.fill")
-                .font(.system(size: 20, weight: .bold))
+                .frame(width: OwnLocationDisc.size, height: OwnLocationDisc.size)
+                .overlay(Circle().stroke(.white, lineWidth: 3))
+                .shadow(color: .black.opacity(0.3), radius: 3, y: 1)
+            symbol
+                .font(.system(size: 14, weight: .bold))
                 .foregroundStyle(.white)
-                .rotationEffect(.degrees(course >= 0 ? course - cameraState.heading : 0))
         }
-        .accessibilityLabel("Eigener Standort, Navigation")
+    }
+
+    @ViewBuilder private var symbol: some View {
+        switch style {
+        case .navigation:
+            // Pfeil in Fahrtrichtung, relativ zur gedrehten Karte.
+            Image(systemName: "location.north.fill")
+                .rotationEffect(.degrees(course >= 0 ? course - cameraState.heading : 0))
+        case .vehicle:
+            Image(systemName: Fortbewegung.fahrzeug.symbolName)
+        case .transit:
+            Image(systemName: Fortbewegung.oepnv.symbolName)
+        case .dot:
+            Image(systemName: Fortbewegung.fuss.symbolName)
+        }
+    }
+
+    private var accessibilityText: String {
+        switch style {
+        case .navigation: "Eigener Standort, Navigation"
+        case .vehicle(let callsign): "Eigener Standort, im Fahrzeug \(callsign)"
+        case .transit(let line): "Eigener Standort, im ÖPNV \(line)"
+        case .dot: "Eigener Standort, zu Fuß"
+        }
     }
 }
 
-/// Standortpunkt wie in Apple Karten, im Fahrzeug oder ÖPNV mit kleinem Symbol im Punkt.
-struct LocationDot: View {
-    let symbol: String
-    var caption = ""
-    var color: Color = Theme.accent
-
-    var body: some View {
-        VStack(spacing: 2) {
-            ZStack {
-                Circle()
-                    .fill(color.opacity(0.18))
-                    .frame(width: 48, height: 48)
-                Image(systemName: symbol)
-                    .font(.system(size: 13, weight: .bold))
-                    .foregroundStyle(.white)
-                    .frame(width: 28, height: 28)
-                    .background(color, in: .circle)
-                    .overlay(Circle().stroke(.white, lineWidth: 3))
-                    .shadow(color: .black.opacity(0.3), radius: 3, y: 1)
-            }
-            if !caption.isEmpty {
-                Text(caption)
-                    .font(.caption2.weight(.bold))
-                    .padding(.horizontal, 5)
-                    .background(.thinMaterial, in: .capsule)
-                    .fixedSize()
-                    .offset(y: -8)
-            }
-        }
-    }
+/// Einheitliche Größe des eigenen Standortkreises.
+enum OwnLocationDisc {
+    static let size: CGFloat = 32
+    static let halo: CGFloat = 50
 }

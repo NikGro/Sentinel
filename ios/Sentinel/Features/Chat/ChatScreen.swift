@@ -31,16 +31,18 @@ struct ChatScreen: View {
                 }
             }
             .navigationTitle("Chat")
-            .navigationDestination(for: String.self) { roomId in
-                ChatRoomView(roomId: roomId)
-            }
-            .toolbar {
-                ToolbarItem(placement: .primaryAction) {
+            .toolbar(.hidden, for: .navigationBar)
+            .safeAreaInset(edge: .top, spacing: 0) {
+                TabHeader(title: "Chat") {
                     Button("Raum anlegen", systemImage: "plus") {
                         newRoomName = ""
                         showsNewRoom = true
                     }
                 }
+                .background(Color(.systemGroupedBackground))
+            }
+            .navigationDestination(for: String.self) { roomId in
+                ChatRoomView(roomId: roomId)
             }
             .alert("Neuer Chatraum", isPresented: $showsNewRoom) {
                 TextField("Name", text: $newRoomName)

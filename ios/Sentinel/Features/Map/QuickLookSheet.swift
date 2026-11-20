@@ -391,8 +391,10 @@ private struct GroupSection: View {
                     }
                 }
                 .buttonStyle(.bordered)
+                .buttonBorderShape(.capsule)
                 Button("Alle löschen", role: .destructive) { confirmsDelete = true }
                     .buttonStyle(.bordered)
+                    .buttonBorderShape(.capsule)
             }
             .controlSize(.small)
         }

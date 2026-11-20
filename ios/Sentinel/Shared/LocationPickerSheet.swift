@@ -2,7 +2,8 @@ import CoreLocation
 import MapKit
 import SwiftUI
 
-/// Standort wählen: Karte unter das Fadenkreuz schieben oder eine Adresse eintippen, dann übernehmen.
+/// Standort wählen, genauso wie auf der Lagekarte: Ort antippen (Vorschau), bei Bedarf per Adresse hinspringen,
+/// dann „Übernehmen“.
 struct LocationPickerSheet: View {
     let title: String
     let initial: GeoPoint?
@@ -11,79 +12,52 @@ struct LocationPickerSheet: View {
     @Environment(AppModel.self) private var model
     @Environment(\.dismiss) private var dismiss
     @State private var camera: MapCameraPosition = .automatic
-    @State private var center: CLLocationCoordinate2D?
+    @State private var point: GeoPoint?
     @State private var address = ""
     @State private var isSearching = false
     @State private var failure: String?
 
     var body: some View {
         NavigationStack {
-            Map(position: $camera) {
-                UserAnnotation()
-            }
-            .mapControls { MapCompass() }
-            .onMapCameraChange(frequency: .continuous) { context in
-                center = context.region.center
-            }
-            .overlay {
-                // Fadenkreuz: die Spitze der Nadel sitzt genau in der Kartenmitte.
-                Image(systemName: "mappin")
-                    .font(.system(size: 36, weight: .bold))
-                    .foregroundStyle(.red)
-                    .shadow(color: .black.opacity(0.35), radius: 3, y: 2)
-                    .offset(y: -18)
-                    .allowsHitTesting(false)
+            MapReader { proxy in
+                Map(position: $camera) {
+                    UserAnnotation()
+                    if let point { PlacementPreview(point: point) }
+                }
+                .mapControls { MapCompass() }
+                .onTapGesture { location in
+                    if let coordinate = proxy.convert(location, from: .local) {
+                        withAnimation(.snappy) { point = GeoPoint(coordinate) }
+                    }
+                }
             }
             .safeAreaInset(edge: .top, spacing: 0) {
-                VStack(alignment: .leading, spacing: 6) {
+                VStack(alignment: .leading, spacing: Theme.barSpacing) {
                     HStack {
-                        Image(systemName: "magnifyingglass")
-                            .foregroundStyle(.secondary)
-                        TextField("Adresse eingeben", text: $address)
-                            .submitLabel(.search)
-                            .autocorrectionDisabled()
+                        SearchField(text: $address, prompt: "Adresse eingeben")
                             .onSubmit { Task { await findAddress() } }
                         if isSearching { ProgressView() }
                     }
-                    .padding(.horizontal, 12)
-                    .frame(height: 44)
-                    .glassEffect(.regular, in: .rect(cornerRadius: 14))
                     if let failure {
                         Text(failure)
                             .font(.caption)
                             .foregroundStyle(.orange)
                             .padding(.horizontal, 4)
                     }
+                    PlacementBar(hint: point == nil ? "Ort antippen" : "Antippen verschiebt den Ort", canConfirm: point != nil, confirm: {
+                        guard let point else { return }
+                        pick(point)
+                        dismiss()
+                    }, cancel: { dismiss() })
                 }
-                .padding(.horizontal, 16)
+                .padding(.horizontal, Theme.barInset)
                 .padding(.vertical, 8)
-            }
-            .safeAreaInset(edge: .bottom, spacing: 0) {
-                Button {
-                    guard let center else { return }
-                    pick(GeoPoint(center))
-                    dismiss()
-                } label: {
-                    Label("Standort übernehmen", systemImage: "checkmark")
-                        .font(.headline)
-                        .frame(maxWidth: .infinity)
-                }
-                .buttonStyle(.glassProminent)
-                .controlSize(.extraLarge)
-                .disabled(center == nil)
-                .padding(.horizontal, 16)
-                .padding(.bottom, 8)
             }
             .navigationTitle(title)
             .navigationBarTitleDisplayMode(.inline)
-            .toolbar {
-                ToolbarItem(placement: .cancellationAction) {
-                    Button("Abbrechen") { dismiss() }
-                }
-            }
             .onAppear {
                 let start = initial ?? model.myPoint ?? GeoPoint(lat: 53.5511, lon: 9.9937)
-                center = start.coordinate
+                point = initial
                 camera = .camera(MapCamera(centerCoordinate: start.coordinate, distance: 1200))
             }
         }
@@ -94,7 +68,8 @@ struct LocationPickerSheet: View {
         guard !query.isEmpty else { return }
         isSearching = true
         defer { isSearching = false }
-        let near = center.map { CLCircularRegion(center: $0, radius: 50_000, identifier: "umgebung") }
+        let reference = point ?? model.myPoint
+        let near = reference.map { CLCircularRegion(center: $0.coordinate, radius: 50_000, identifier: "umgebung") }
         let placemarks = try? await CLGeocoder().geocodeAddressString(query, in: near, preferredLocale: Locale(identifier: "de_DE"))
         guard let coordinate = placemarks?.first?.location?.coordinate else {
             failure = "Adresse nicht gefunden."
@@ -103,6 +78,7 @@ struct LocationPickerSheet: View {
         failure = nil
         withAnimation(.easeInOut(duration: 0.6)) {
             camera = .camera(MapCamera(centerCoordinate: coordinate, distance: 600))
+            point = GeoPoint(coordinate)
         }
     }
 }

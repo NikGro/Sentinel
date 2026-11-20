@@ -88,3 +88,14 @@ struct EditorContext: Identifiable {
     let object: MapObject
     let isNew: Bool
 }
+
+/// Wie die Karte am eigenen Standort hängt. `nil` heißt frei: Die Karte bleibt, wie man sie hinschiebt und dreht.
+enum CameraPin: Equatable {
+    /// In Fahrt- bzw. Blickrichtung, nah und flach wie in einer Navi-App.
+    case heading
+    /// Norden oben, senkrecht von oben.
+    case north
+
+    var distance: CLLocationDistance { self == .heading ? 280 : 500 }
+    var pitch: Double { self == .heading ? 65 : 0 }
+}

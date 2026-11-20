@@ -6,12 +6,27 @@ struct ForcesScreen: View {
     @State private var vehicleEditor: VehicleEditorContext?
     @State private var vehicleToDelete: Versioned<Vehicle>?
     @State private var openVehicle: String?
+    @State private var query = ""
+
+    /// Suche über Spitzname, Name, Dienststelle bzw. Funkrufname, Kennzeichen und Beschreibung.
+    private var members: [Versioned<Member>] {
+        lage.sortedMembers.filter { m in [m.data.spitzname, m.data.name, m.data.dienststelle].contains { $0.matches(search: query) } }
+    }
+
+    private var vehicles: [Versioned<Vehicle>] {
+        lage.sortedVehicles.filter { v in [v.data.funkrufname, v.data.kennzeichen, v.data.bezeichnung].contains { $0.matches(search: query) } }
+    }
+
+    private func newVehicle() {
+        vehicleEditor = VehicleEditorContext(id: LageStore.newId(), vehicle: Vehicle(funkrufname: ""), isNew: true)
+    }
 
     var body: some View {
         NavigationStack {
             List {
                 Section {
-                    ForEach(lage.sortedMembers) { member in
+                    if members.isEmpty { Text(query.isEmpty ? "Noch keine Fahnder." : "Kein Treffer.").foregroundStyle(.secondary) }
+                    ForEach(members) { member in
                         NavigationLink {
                             MemberQuickLook(member: member)
                                 .navigationBarTitleDisplayMode(.inline)
@@ -26,7 +41,8 @@ struct ForcesScreen: View {
                 }
 
                 Section {
-                    ForEach(lage.sortedVehicles) { vehicle in
+                    if vehicles.isEmpty, !query.isEmpty { Text("Kein Treffer.").foregroundStyle(.secondary) }
+                    ForEach(vehicles) { vehicle in
                         HStack(spacing: 12) {
                             Button {
                                 openVehicle = vehicle.id
@@ -57,9 +73,6 @@ struct ForcesScreen: View {
                             }
                         }
                     }
-                    Button("Fahrzeug anlegen", systemImage: "plus") {
-                        vehicleEditor = VehicleEditorContext(id: LageStore.newId(), vehicle: Vehicle(funkrufname: ""), isNew: true)
-                    }
                 } header: {
                     Text("Fahrzeuge")
                 } footer: {
@@ -67,6 +80,13 @@ struct ForcesScreen: View {
                 }
             }
             .navigationTitle("Kräfte")
+            .toolbar(.hidden, for: .navigationBar)
+            .safeAreaInset(edge: .top, spacing: 0) {
+                TabHeader(title: "Kräfte", query: $query, prompt: "Spitzname, Funkrufname, Kennzeichen") {
+                    Button("Fahrzeug anlegen", systemImage: "plus", action: newVehicle)
+                }
+                .background(Color(.systemGroupedBackground))
+            }
             .navigationDestination(item: $openVehicle) { id in
                 VehicleDetail(vehicleId: id)
             }
@@ -131,13 +151,13 @@ struct VehicleRow: View {
         HStack(spacing: 12) {
             RemoteImage(blobId: vehicle.data.fotoBlob) {
                 ZStack {
-                    Color.indigo.opacity(0.2)
+                    Theme.force.opacity(0.2)
                     Image(systemName: "car.fill")
-                        .foregroundStyle(.indigo)
+                        .foregroundStyle(Theme.force)
                 }
             }
-            .frame(width: 56, height: 44)
-            .clipShape(.rect(cornerRadius: 8))
+            .frame(width: 44, height: 44)
+            .clipShape(.rect(cornerRadius: 10))
 
             VStack(alignment: .leading, spacing: 2) {
                 Text(vehicle.data.funkrufname)

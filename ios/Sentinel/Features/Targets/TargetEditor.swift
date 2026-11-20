@@ -16,6 +16,8 @@ struct TargetEditor: View {
     @State private var showsPicker = false
     @State private var isGeocoding = false
     @State private var locationFailure: String?
+    /// Gewählte Art beim Einsteigen: öffnet die Auswahl des Fahrzeugs bzw. Objekts.
+    @State private var boarding: TargetBinding.Art?
 
     init(context: TargetEditorContext) {
         self.context = context
@@ -133,11 +135,12 @@ struct TargetEditor: View {
 
     // MARK: Unterwegs
 
+    /// Zu Fuß setzt sofort; ÖPNV, Fahrzeug und Gebäude fragen wie bei den Kräften, wohin die Person einsteigt.
     private var bindingArt: Binding<TargetBinding.Art> {
         Binding(
             get: { target.bindung?.art ?? .fuss },
             set: { art in
-                target.bindung = art == .fuss ? nil : TargetBinding(art: art, zielId: target.bindung?.art == art ? target.bindung?.zielId : nil)
+                if art == .fuss { target.bindung = nil } else { boarding = art }
             }
         )
     }
@@ -145,34 +148,51 @@ struct TargetEditor: View {
     /// Bezugspunkt für die Sortierung: Standort der Person, sonst der eigene.
     private var personPoint: GeoPoint? { target.standort?.point ?? lage.targets[context.id].flatMap { lage.position(ofTarget: $0)?.point } ?? model.myPoint }
 
-    /// Mögliche Ziele zur gewählten Art, nächstgelegene zuerst (höchstens zehn).
-    private var candidates: [(id: String, title: String, subtitle: String, symbol: String, distance: Double?)] {
-        let art = target.bindung?.art ?? .fuss
-        var list: [(id: String, title: String, subtitle: String, symbol: String, point: GeoPoint?)] = []
+    /// Mögliche Fahrzeuge bzw. Objekte zur Art, nächstgelegene zuerst.
+    private func candidates(for art: TargetBinding.Art) -> [BoardingCandidate] {
+        var list: [(candidate: BoardingCandidate, point: GeoPoint?)] = []
         switch art {
         case .fuss:
             return []
         case .oepnv:
             list = lage.mapObjects.values.filter { $0.data.typ == .oepnvfahrzeug && !$0.data.isExpired() }.map { object in
-                (object.id, object.data.titel.isEmpty ? (object.data.linie?.ref ?? "ÖPNV-Fahrzeug") : object.data.titel,
-                 object.data.linie.map { "\($0.ref) Richtung \($0.richtung)" } ?? "ÖPNV-Fahrzeug",
-                 object.data.linie?.symbolName ?? "bus.fill", lage.position(ofObject: object.data))
+                let line = object.data.linie
+                return (BoardingCandidate(
+                    id: object.id,
+                    title: object.data.titel.isEmpty ? (line?.ref ?? "ÖPNV-Fahrzeug") : object.data.titel,
+                    subtitle: line.map { "Richtung \($0.richtung)" } ?? "ÖPNV-Fahrzeug",
+                    badge: line?.badge
+                ), lage.position(ofObject: object.data))
             }
         case .fahrzeug, .objekt:
             let wanted: ZielArt = art == .fahrzeug ? .fahrzeug : .objekt
             list = lage.sortedTargets.filter { $0.data.art == wanted && $0.id != context.id }.map { other in
-                (other.id, other.data.displayName, other.data.art.title, other.data.art.symbolName, lage.position(ofTarget: other)?.point)
+                let passengers = lage.sortedTargets.filter { $0.data.bindung?.zielId == other.id && $0.id != context.id }.map(\.data.displayName)
+                return (BoardingCandidate(
+                    id: other.id,
+                    title: other.data.displayName,
+                    subtitle: passengers.isEmpty ? (other.data.kennzeichen.isEmpty ? other.data.art.title : other.data.kennzeichen) : "Darin: \(passengers.joined(separator: ", "))",
+                    badge: nil
+                ), lage.position(ofTarget: other)?.point)
             }
         }
         let reference = personPoint
         return list
             .map { item in
-                let distance: Double? = if let r = reference, let p = item.point { r.distance(to: p) } else { nil }
-                return (id: item.id, title: item.title, subtitle: item.subtitle, symbol: item.symbol, distance: distance)
+                var candidate = item.candidate
+                if let r = reference, let p = item.point { candidate.distance = r.distance(to: p) }
+                return candidate
             }
             .sorted { ($0.distance ?? .greatestFiniteMagnitude) < ($1.distance ?? .greatestFiniteMagnitude) }
-            .prefix(10)
-            .map { $0 }
+    }
+
+    /// Wohin die Person gerade eingestiegen ist, als lesbare Zeile.
+    private var boardedTitle: String? {
+        guard let binding = target.bindung, binding.art != .fuss else { return nil }
+        guard let id = binding.zielId else { return binding.art == .fahrzeug ? "Anderes Fahrzeug" : nil }
+        if let other = lage.targets[id] { return other.data.displayName }
+        if let object = lage.mapObjects[id]?.data { return object.titel.isEmpty ? (object.linie?.ref ?? "ÖPNV-Fahrzeug") : object.titel }
+        return nil
     }
 
     @ViewBuilder private var bindingSection: some View {
@@ -185,45 +205,43 @@ struct TargetEditor: View {
                 }
             }
             .pickerStyle(.segmented)
-            if (target.bindung?.art ?? .fuss) != .fuss {
-                if candidates.isEmpty {
-                    Text(target.bindung?.art == .oepnv ? "Kein ÖPNV-Fahrzeug angelegt. Über das Plus auf der Karte anlegen." : "Kein passendes Ziel angelegt.")
-                        .foregroundStyle(.secondary)
-                }
-                ForEach(candidates, id: \.id) { candidate in
-                    Button {
-                        target.bindung = TargetBinding(art: target.bindung?.art ?? .fuss, zielId: candidate.id)
+            if let art = target.bindung?.art, art != .fuss {
+                Button { boarding = art } label: {
+                    LabeledContent {
+                        Text("Ändern")
                     } label: {
-                        HStack(spacing: 12) {
-                            Image(systemName: candidate.symbol)
-                                .foregroundStyle(.tint)
-                                .frame(width: 26)
-                            VStack(alignment: .leading, spacing: 2) {
-                                Text(candidate.title)
-                                Text(candidate.subtitle)
-                                    .font(.caption)
-                                    .foregroundStyle(.secondary)
-                            }
-                            Spacer()
-                            if let distance = candidate.distance {
-                                Text(Format.distance(distance))
-                                    .font(.caption.monospacedDigit())
-                                    .foregroundStyle(.secondary)
-                            }
-                            if target.bindung?.zielId == candidate.id {
-                                Image(systemName: "checkmark")
-                                    .foregroundStyle(.tint)
-                            }
-                        }
+                        Label(boardedTitle ?? "Noch nicht gewählt", systemImage: art.symbolName)
                     }
-                    .tint(.primary)
                 }
+                .tint(.primary)
             }
         } header: {
             Text("Unterwegs")
         } footer: {
-            Text("Zu Fuß, im ÖPNV, im Fahrzeug oder im Gebäude. Zugeordnet folgt die Person dessen Standort; mehrere Personen können demselben Fahrzeug oder Objekt zugeordnet sein.")
+            Text("Wie bei den Kräften: Im Fahrzeug, im ÖPNV oder im Gebäude folgt die Person dessen Standort und erscheint auf der Karte nicht mehr einzeln.")
         }
+        .sheet(item: $boarding) { art in
+            let create: (() -> Void)? = art == .fahrzeug || art == .objekt ? { createAndBoard(art) } : nil
+            BoardingSheet(
+                art: art,
+                candidates: candidates(for: art),
+                selected: target.bindung?.art == art ? target.bindung?.zielId : nil,
+                otherSelected: target.bindung?.art == .fahrzeug && target.bindung?.zielId == nil,
+                pick: { id in target.bindung = TargetBinding(art: art, zielId: id) },
+                createNew: create
+            )
+        }
+    }
+
+    /// Legt ein neues Zielfahrzeug bzw. Zielobjekt am Standort der Person an und setzt die Person hinein.
+    private func createAndBoard(_ art: TargetBinding.Art) {
+        let id = LageStore.newId()
+        var other = Target(art: art == .fahrzeug ? .fahrzeug : .objekt)
+        let name = target.displayName
+        other.bezeichnung = art == .fahrzeug ? "Fahrzeug von \(name)" : "Gebäude von \(name)"
+        if let point = personPoint { other.standort = TimedPoint(point) }
+        lage.put(other, id: id)
+        target.bindung = TargetBinding(art: art, zielId: id)
     }
 
     private var notesPrompt: String {

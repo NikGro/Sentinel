@@ -57,11 +57,11 @@ struct AddChooser: View {
         NavigationStack {
             ScrollView {
                 VStack(alignment: .leading, spacing: 18) {
+                    // Ein Eintrag für alles aus dem ÖPNV: Fahrzeuge, Linien und Haltestellen kommen über die ÖPNV-Karte.
                     if scope == .all {
-                        group("Fahndung", [.shape(.fahndungsraum), .shape(.haltestellen)])
-                        group("ÖPNV", [.transitMap, .shape(.haltestelle), .shape(.oepnvlinie), .shape(.oepnvfahrzeug)])
-                    } else {
-                        group("ÖPNV", [.shape(.haltestelle), .shape(.oepnvlinie)])
+                        group("Fahndung", [.shape(.fahndungsraum), .shape(.haltestellen), .transitMap])
+                    } else if scope == .package {
+                        group("Fahndung", [.transitMap])
                     }
                     if scope != .places {
                         group("Ziele", ZielArt.allCases.map { .target($0) })
@@ -95,8 +95,8 @@ struct AddChooser: View {
                                 .frame(height: 30)
                             Text(action.title)
                                 .font(.caption.weight(.semibold))
-                                .multilineTextAlignment(.center)
-                                .lineLimit(2)
+                                .lineLimit(1)
+                                .minimumScaleFactor(0.8)
                         }
                         .frame(maxWidth: .infinity, minHeight: 86)
                         .contentShape(.rect(cornerRadius: 18))
@@ -114,7 +114,7 @@ extension AddMenu.Action {
         switch self {
         case .shape(let shape): shape.title
         case .target(let art): art.title
-        case .transitMap: "ÖPNV-Karte (live)"
+        case .transitMap: "ÖPNV"
         }
     }
 
@@ -122,7 +122,7 @@ extension AddMenu.Action {
         switch self {
         case .shape(let shape): shape.symbolName
         case .target(let art): art.symbolName
-        case .transitMap: "map.fill"
+        case .transitMap: "tram.fill"
         }
     }
 }

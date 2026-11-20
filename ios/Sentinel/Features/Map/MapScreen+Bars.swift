@@ -53,33 +53,21 @@ extension MapScreen {
             } }
 
             if let hint = tapMode.hint {
-                HStack(spacing: 12) {
-                    Label(hint, systemImage: "hand.tap.fill")
-                        .font(.footnote.weight(.semibold))
-                    Spacer(minLength: 0)
+                PlacementBar(hint: hint, canConfirm: pendingPoint != nil, confirm: {
                     if let point = pendingPoint {
-                        Button("Übernehmen") {
-                            pendingPoint = nil
-                            handleTap(point)
-                        }
-                        .buttonStyle(.glassProminent)
-                        .fontWeight(.semibold)
+                        pendingPoint = nil
+                        handleTap(point)
                     }
+                }, cancel: {
+                    pendingPoint = nil
+                    tapMode = .none
+                }) {
                     if case .drawing(let shape, let points) = tapMode, shape.isMultiPoint {
                         Button("Fertig") { finishDrawing(shape, points) }
                             .disabled(points.count < shape.minimumPoints)
                             .fontWeight(.semibold)
                     }
-                    Button("Abbrechen", systemImage: "xmark.circle.fill") {
-                        pendingPoint = nil
-                        tapMode = .none
-                    }
-                        .labelStyle(.iconOnly)
-                        .foregroundStyle(.secondary)
                 }
-                .padding(.horizontal, 14)
-                .padding(.vertical, 10)
-                .glassEffect(.regular.tint(.yellow.opacity(0.25)), in: .rect(cornerRadius: 16))
             }
         }
         .padding(.horizontal, Theme.barInset)
@@ -95,44 +83,13 @@ extension MapScreen {
         GlassEffectContainer(spacing: Theme.barSpacing) {
             VStack(spacing: Theme.barSpacing) {
                 if !reducedTools { SOSButton() }
-                // Ein Knopf für Kompass und Standort: erst zentrieren und folgen (Norden oben),
-                // dann zwischen Norden oben und Gerätekompass wechseln. Verschieben löst die Kopplung.
-                LocationCompassButton(state: cameraState, following: followsMe, heading: camera.followsUserHeading) {
-                    if !followsMe {
-                        startFollowing(heading: false, north: true)
-                    } else if camera.followsUserHeading {
-                        startFollowing(heading: false, north: true)
-                    } else {
-                        camera = .userLocation(followsHeading: true, fallback: .automatic)
-                    }
-                }
-                // Beim Folgen: Zoomen per Knopf, ohne dass ein leichtes Verrutschen der Finger die Kopplung löst.
-                if followsMe {
-                    VStack(spacing: 0) {
-                        Button { zoomFollowing(by: 0.6) } label: {
-                            Image(systemName: "plus").frame(width: Theme.roundButton, height: Theme.roundButton).contentShape(.rect)
-                        }
-                        .accessibilityLabel("Näher heranzoomen")
-                        Divider().frame(width: 24)
-                        Button { zoomFollowing(by: 1.6) } label: {
-                            Image(systemName: "minus").frame(width: Theme.roundButton, height: Theme.roundButton).contentShape(.rect)
-                        }
-                        .accessibilityLabel("Weiter herauszoomen")
-                    }
-                    .font(.system(size: 17, weight: .semibold))
-                    .buttonStyle(.plain)
-                    .glassEffect(.regular.interactive(), in: .capsule)
+                // Ein Knopf für Standort und Kompass: heftet immer an und wechselt dann zwischen Fahrtrichtung und
+                // Norden oben. Zoomen und Drehen gehen mit zwei Fingern; erst bewusstes Verschieben löst die Kopplung.
+                LocationCompassButton(state: cameraState, pin: pin) {
+                    pinCamera(pin == .heading ? .north : .heading)
                 }
                 MapStyleButton { on in
-                    let heading = camera.followsUserHeading
-                    let following = followsMe
-                    withAnimation(.easeInOut(duration: 0.6)) { camera = .camera(cameraState.camera(pitch: on ? 55 : 0)) }
-                    if following {
-                        Task {
-                            try? await Task.sleep(for: .milliseconds(650))
-                            camera = .userLocation(followsHeading: heading, fallback: .automatic)
-                        }
-                    }
+                    animateCamera(cameraState.camera(pitch: on ? 55 : 0))
                 }
                 MapRoundButton(title: "Ebenen", symbol: "square.3.layers.3d") { showsLayers = true }
                 if !reducedTools, let a = lage.aPosition, !lage.holdsA {
@@ -171,35 +128,40 @@ extension MapScreen {
     }
 
     /// Zoomt, während die Karte dem Standort folgt, und bleibt dabei gekoppelt.
-    func zoomFollowing(by factor: Double) {
-        let heading = camera.followsUserHeading
-        let distance = min(max(cameraState.distance * factor, 150), 20_000)
-        if let current = location.current {
-            withAnimation(.easeInOut(duration: 0.35)) {
-                camera = .camera(MapCamera(centerCoordinate: current.coordinate, distance: distance, heading: cameraState.heading, pitch: cameraState.pitch))
-            }
+    /// Heftet die Karte an den eigenen Standort: nah und flach in Fahrtrichtung oder senkrecht mit Norden oben.
+    /// Erst fährt die Kamera dorthin, dann übernimmt die flüssige Nachführung von Apple Karten.
+    func pinCamera(_ mode: CameraPin) {
+        pin = mode
+        guard let current = location.current else {
+            camera = .userLocation(followsHeading: mode == .heading, fallback: .automatic)
+            return
         }
+        let heading = mode == .heading ? (myCourse ?? cameraState.heading) : 0
+        animateCamera(MapCamera(centerCoordinate: current.coordinate, distance: mode.distance, heading: heading, pitch: mode.pitch))
+    }
+
+    /// Bewegt die Kamera; ist sie angeheftet, übernimmt danach wieder die Nachführung.
+    func animateCamera(_ target: MapCamera) {
+        cameraAnimating = true
+        withAnimation(.easeInOut(duration: 0.5)) { camera = .camera(target) }
+        // Fest nach der Animationsdauer übergeben (die Abschlussmeldung kommt bei der Karte nicht zuverlässig).
         Task {
-            try? await Task.sleep(for: .milliseconds(380))
-            camera = .userLocation(followsHeading: heading, fallback: .automatic)
+            try? await Task.sleep(for: .milliseconds(560))
+            cameraAnimating = false
+            if let pin { camera = .userLocation(followsHeading: pin == .heading, fallback: .automatic) }
         }
     }
 
-    /// Fahrmodus: erst nah und gekippt auf den Standort, dann der nativen, flüssigen Nachführung übergeben.
-    func startFollowing(heading: Bool, north: Bool = false) {
-        if let current = location.current {
-            withAnimation(.easeInOut(duration: 0.6)) {
-                camera = .camera(MapCamera(
-                    centerCoordinate: current.coordinate,
-                    distance: followsMe ? cameraState.distance : (route.isActive ? 450 : 500),
-                    heading: north ? 0 : cameraState.heading,
-                    pitch: settings.prefers3D ? 55 : 0
-                ))
-            }
-        }
-        Task {
-            try? await Task.sleep(for: .milliseconds(650))
-            camera = .userLocation(followsHeading: heading, fallback: .automatic)
+    /// Nach einer Geste: Ist die Karte nur gezoomt, gedreht oder leicht verrutscht (Mitte nah am eigenen Standort),
+    /// bleibt sie angeheftet. Erst wer sie bewusst wegschiebt, löst die Kopplung; die Karte bleibt dann, wie sie ist.
+    func keepPinAfterGesture(_ current: MapCamera) {
+        guard let mode = pin, !cameraAnimating, !camera.followsUserLocation else { return }
+        guard let here = location.current?.coordinate else { return }
+        let offset = GeoPoint(current.centerCoordinate).distance(to: GeoPoint(here))
+        if offset < max(current.distance * 0.18, 25) {
+            camera = .userLocation(followsHeading: mode == .heading, fallback: .automatic)
+        } else {
+            pin = nil
         }
     }
 

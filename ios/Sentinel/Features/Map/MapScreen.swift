@@ -22,8 +22,11 @@ struct MapScreen: View {
     @State var showsSituation = false
     @State var cameraState = MapCameraState()
     @Namespace var mapScope
-    /// Folgt die Karte dem eigenen Standort (nativ von Apple Karten, flüssig)? Verschieben beendet es von selbst.
-    var followsMe: Bool { camera.followsUserLocation }
+    /// Angeheftet am eigenen Standort (in Fahrtrichtung oder Norden oben); `nil` = frei.
+    @State var pin: CameraPin?
+    /// Die App bewegt die Kamera gerade selbst; solange zählt eine Kamerabewegung nicht als Verschieben.
+    @State var cameraAnimating = false
+    var followsMe: Bool { pin != nil }
     /// Die letzte Kamerabewegung kam vom Finger (nicht von der App): Neigung danach als 2D/3D-Einstellung übernehmen.
     @State var userMovedCamera = false
     /// Gerade verschobener Fahndungsraum, für die Rückfrage zum Sichtungszeitpunkt.
@@ -153,10 +156,7 @@ struct MapScreen: View {
                 if true {
                     MyLocationLayer(lage: lage, route: route, locationService: location, cameraState: cameraState)
                 }
-                if let pendingPoint {
-                    Marker("Neuer Ort", systemImage: "mappin", coordinate: pendingPoint.coordinate)
-                        .tint(.orange)
-                }
+                if let pendingPoint { PlacementPreview(point: pendingPoint) }
                 if let searchPin {
                     Marker(searchPin.title, systemImage: "magnifyingglass", coordinate: searchPin.point.coordinate)
                         .tint(.red)
@@ -194,10 +194,10 @@ struct MapScreen: View {
             })
             .onMapCameraChange(frequency: .onEnd) { context in
                 // Gekippt (auch mit zwei Fingern, das meldet keine Wischgeste): Haken bei „3D-Ansicht“ mitziehen.
-                // Die App selbst setzt nur 0° oder 55°; MapKit begrenzt die Neigung beim Herauszoomen, bleibt aber über 10°.
                 userMovedCamera = false
                 let is3D = context.camera.pitch > 10
                 if settings.prefers3D != is3D { settings.prefers3D = is3D }
+                keepPinAfterGesture(context.camera)
             }
             .overlay {
                 if followsMe {
@@ -291,7 +291,12 @@ struct MapScreen: View {
         }
         .onChange(of: route.isActive) { _, active in
             // Navigation: nah, gekippt, in Blickrichtung folgen. Danach nicht im Fahrmodus hängen bleiben.
-            if active { startFollowing(heading: true) } else if followsMe { camera = .camera(cameraState.camera()) }
+            if active {
+                pinCamera(.heading)
+            } else if followsMe {
+                pin = nil
+                camera = .camera(cameraState.camera())
+            }
         }
         .task {
             // Beim Öffnen: auf den eigenen Standort, gekippt wie in einer Navi-App.

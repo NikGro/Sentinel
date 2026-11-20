@@ -33,16 +33,18 @@ enum Theme {
 
     /// Akzent der App: Systemblau, wie in der Kommandozentrale.
     static let accent = Color.accentColor
-    static let force = Color(hex: "#30A46C")
+    static let force = Color(hex: "#5E5CE6")
+    /// Sonderbereiche (dauerhafte Orte, Pakete): deutlich anders als der Einsatz.
+    static let special = Color.purple
     static let aPosition = Color.red
     static let target = Color(hex: "#FF375F")
     static let coverage = Color(hex: "#FF9F0A")
 
-    /// Einheitliche Höhe aller Leisten und Eingabefelder über der Tableiste (Suche, A-Position, Fortbewegung, Lageleiste, Chat).
-    static let barHeight: CGFloat = 50
-    /// Einheitlicher Durchmesser runder Glasknöpfe: so hoch wie Suchleiste und übrige Leisten.
-    /// Runde Kartenknöpfe und Suchleiste: so groß wie Apples Kompassrose.
+    /// Durchmesser runder Kartenknöpfe, so groß wie Apples Kompassrose.
     static let roundButton: CGFloat = 44
+    /// Einheitliche Höhe aller Leisten über der Tableiste (Suche, A-Position, Fortbewegung, Lageleiste, Chat):
+    /// genauso hoch wie die runden Knöpfe.
+    static let barHeight: CGFloat = roundButton
     /// Seitlicher Abstand, bündig mit der schwebenden Tableiste.
     static let barInset: CGFloat = 22
     /// Abstand zwischen gestapelten Leisten.

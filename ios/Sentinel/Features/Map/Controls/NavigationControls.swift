@@ -286,7 +286,7 @@ struct FollowPuckOverlay: View {
                                 .font(.system(size: 9, weight: .bold))
                                 .foregroundStyle(.white)
                                 .frame(width: 20, height: 20)
-                                .background(Color.indigo, in: .circle)
+                                .background(Theme.force, in: .circle)
                                 .overlay(Circle().stroke(.white, lineWidth: 1.5))
                                 .offset(x: 6, y: -6)
                         }

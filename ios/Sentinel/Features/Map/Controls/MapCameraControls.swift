@@ -94,46 +94,63 @@ struct MapStyleButton: View {
     }
 }
 
-/// Kompass und Standort in einem Knopf, so groß wie Apples Kompassrose.
-/// Folgt die Karte nicht: Kompassnadel (zeigt, wo Norden liegt) bzw. Standortpfeil. Folgt sie: gefüllter Pfeil,
-/// mit Blickrichtung als Pfeil mit Strahl.
+/// Standort und Kompass in einem Knopf, aufgebaut wie im Tesla: In der Mitte zeigt der Pfeil immer nach oben, darum
+/// dreht sich eine Kompassrose mit den Himmelsrichtungen so, wie die Karte gerade ausgerichtet ist.
+/// Angeheftet ist der Pfeil gefüllt (in Fahrtrichtung zusätzlich farbig), frei ist er hohl.
 struct LocationCompassButton: View {
     let state: MapCameraState
-    let following: Bool
-    let heading: Bool
+    let pin: CameraPin?
     let action: () -> Void
 
     var body: some View {
         Button(action: action) {
             ZStack {
-                if following {
-                    Image(systemName: heading ? "location.north.line.fill" : "location.fill")
-                        .font(.system(size: 17, weight: .semibold))
-                        .foregroundStyle(Color.accentColor)
-                } else if abs(state.heading) > 1 && abs(state.heading - 360) > 1 {
-                    // Gedreht: Nadel mit rotem Nordende wie in Apple Karten.
-                    VStack(spacing: 0) {
-                        Text("N")
-                            .font(.system(size: 9, weight: .heavy))
-                            .foregroundStyle(.red)
-                        Image(systemName: "location.north.fill")
-                            .font(.system(size: 15, weight: .bold))
-                            .foregroundStyle(.red, .primary)
-                    }
-                    .rotationEffect(.degrees(-state.heading))
-                } else {
-                    Image(systemName: "location")
-                        .font(.system(size: 17, weight: .semibold))
-                        .foregroundStyle(.primary)
-                }
+                CompassRose(heading: state.heading)
+                Image(systemName: pin == nil ? "location.north" : "location.north.fill")
+                    .font(.system(size: 13, weight: .bold))
+                    .foregroundStyle(pin == nil ? Color.primary : Color.accentColor)
             }
             .frame(width: Theme.roundButton, height: Theme.roundButton)
             .contentShape(.circle)
         }
         .buttonStyle(.plain)
         .glassEffect(.regular.interactive(), in: .circle)
-        .accessibilityLabel("Auf eigenen Standort zentrieren")
-        .accessibilityValue(following ? (heading ? "folgt mit Blickrichtung" : "folgt, Norden oben") : "frei")
+        .accessibilityLabel("Auf eigenen Standort anheften")
+        .accessibilityValue(pin == .heading ? "angeheftet, in Fahrtrichtung" : pin == .north ? "angeheftet, Norden oben" : "frei")
+        .accessibilityHint(pin == .heading ? "Wechselt zu Norden oben" : "Heftet in Fahrtrichtung an")
+    }
+}
+
+/// Kompassrose: Teilstriche und Himmelsrichtungen, gedreht nach der Ausrichtung der Karte. Die Buchstaben bleiben
+/// aufrecht lesbar und wandern nur um den Pfeil herum.
+private struct CompassRose: View {
+    let heading: CLLocationDirection
+
+    private static let letters: [(text: String, angle: Double)] = [("N", 0), ("O", 90), ("S", 180), ("W", 270)]
+
+    var body: some View {
+        ZStack {
+            ForEach(0..<12, id: \.self) { index in
+                // Teilstriche alle 30°, ausgenommen die Stellen der Buchstaben.
+                if index % 3 != 0 {
+                    Capsule()
+                        .fill(.secondary)
+                        .frame(width: 1.2, height: 3)
+                        .offset(y: -17)
+                        .rotationEffect(.degrees(Double(index) * 30 - heading))
+                }
+            }
+            ForEach(Self.letters.indices, id: \.self) { index in
+                let letter = Self.letters[index]
+                let angle = (letter.angle - heading) * .pi / 180
+                Text(letter.text)
+                    .font(.system(size: 8, weight: .heavy, design: .rounded))
+                    .foregroundStyle(letter.text == "N" ? Color.red : Color.secondary)
+                    .offset(x: sin(angle) * 16, y: -cos(angle) * 16)
+            }
+        }
+        .frame(width: Theme.roundButton, height: Theme.roundButton)
+        .accessibilityHidden(true)
     }
 }
 
