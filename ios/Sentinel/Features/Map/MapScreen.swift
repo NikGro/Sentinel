@@ -28,8 +28,6 @@ struct MapScreen: View {
     @State var pin: CameraPin?
     /// Die App bewegt die Kamera gerade selbst; solange zählt eine Kamerabewegung nicht als Verschieben.
     @State var cameraAnimating = false
-    /// Hält die Zoomstufe kurz fest, während die Nachführung von Apple Karten übernimmt (sonst springt sie heraus).
-    @State var cameraBounds: MapCameraBounds?
     /// Tempolimit der Straße am eigenen Standort (OpenStreetMap), auch ohne Navigation.
     @State var roadSpeedLimit: Int?
     /// Rasterzelle (~100 m) des eigenen Standorts; ein Wechsel fragt das Tempolimit neu ab.
@@ -157,7 +155,7 @@ struct MapScreen: View {
 
     var mainBody: some View {
         MapReader { proxy in
-            Map(position: $camera, bounds: cameraBounds, scope: mapScope) {
+            Map(position: $camera, scope: mapScope) {
                 // Im Fahrmodus ohne Navigation bleibt der normale Standortpunkt; nur in der Navigation ersetzt ihn der Navi-Pfeil.
                 if true {
                     MyLocationLayer(lage: lage, route: route, locationService: location, cameraState: cameraState)
@@ -198,12 +196,22 @@ struct MapScreen: View {
             .simultaneousGesture(DragGesture(minimumDistance: 12).onChanged { _ in
                 userMovedCamera = true
             })
+            // Auch Zoomen und Drehen mit zwei Fingern: Solange die Hand auf der Karte ist, führt die App nicht nach.
+            .simultaneousGesture(MagnifyGesture().onChanged { _ in userMovedCamera = true })
+            .simultaneousGesture(RotateGesture().onChanged { _ in userMovedCamera = true })
             .onMapCameraChange(frequency: .onEnd) { context in
                 // Gekippt (auch mit zwei Fingern, das meldet keine Wischgeste): Haken bei „3D-Ansicht“ mitziehen.
+                let byUser = userMovedCamera
                 userMovedCamera = false
                 let is3D = context.camera.pitch > 10
                 if settings.prefers3D != is3D { settings.prefers3D = is3D }
-                keepPinAfterGesture(context.camera)
+                // Nur nach eigenen Gesten prüfen, nicht nach den Bewegungen der Nachführung.
+                if byUser { keepPinAfterGesture(context.camera) }
+            }
+            .onChange(of: location.current?.timestamp) { followTick() }
+            .onChange(of: locationContext.compassDegrees) {
+                // Im Stand dreht der Gerätekompass die Karte; in Fahrt der Kurs (kommt mit dem Standort).
+                if pin == .heading, (location.current?.speed ?? 0) < 1 { followTick() }
             }
             .overlay {
                 if followsMe {

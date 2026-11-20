@@ -127,51 +127,42 @@ extension MapScreen {
         return locationContext.compassDegrees
     }
 
-    /// Zoomt, während die Karte dem Standort folgt, und bleibt dabei gekoppelt.
     /// Heftet die Karte an den eigenen Standort: nah und flach in Fahrtrichtung oder senkrecht mit Norden oben.
-    /// Erst fährt die Kamera dorthin, dann übernimmt die flüssige Nachführung von Apple Karten.
+    /// Erst fährt die Kamera dorthin, dann führt `followTick` sie mit jeder Standortmeldung nach.
     func pinCamera(_ mode: CameraPin) {
         pin = mode
-        guard let current = location.current else {
-            camera = .userLocation(followsHeading: mode == .heading, fallback: .camera(cameraState.camera()))
-            return
-        }
+        guard let current = location.current else { return }
         let heading = mode == .heading ? (myCourse ?? cameraState.heading) : 0
         animateCamera(MapCamera(centerCoordinate: current.coordinate, distance: mode.distance, heading: heading, pitch: mode.pitch))
     }
 
-    /// Bewegt die Kamera; ist sie angeheftet, übernimmt danach wieder die Nachführung.
+    /// Bewegt die Kamera. Angeheftet führt die App sie danach selbst nach (siehe `followTick`).
     func animateCamera(_ target: MapCamera) {
         cameraAnimating = true
         withAnimation(.easeInOut(duration: 0.5)) { camera = .camera(target) }
-        // Fest nach der Animationsdauer übergeben (die Abschlussmeldung kommt bei der Karte nicht zuverlässig).
         Task {
             try? await Task.sleep(for: .milliseconds(560))
             cameraAnimating = false
-            if let pin { follow(pin, distance: target.distance) }
         }
     }
 
-    /// Übergibt an die flüssige Nachführung von Apple Karten. Die setzt sonst ihre eigene Zoomstufe; deshalb wird die
-    /// gewünschte Entfernung für einen Moment festgehalten und danach wieder freigegeben (Zoomen mit zwei Fingern).
-    func follow(_ mode: CameraPin, distance: CLLocationDistance) {
-        // Ohne Standort bleibt die Karte, wo sie ist (statt auf „alles zeigen“ zu springen).
-        cameraBounds = MapCameraBounds(minimumDistance: distance * 0.9, maximumDistance: distance * 1.1)
-        camera = .userLocation(followsHeading: mode == .heading, fallback: .camera(cameraState.camera()))
-        Task {
-            try? await Task.sleep(for: .milliseconds(700))
-            cameraBounds = nil
-        }
+    /// Angeheftet: Kamera auf den eigenen Standort nachführen, mit der aktuellen Zoomstufe und Neigung; in Fahrtrichtung
+    /// gedreht nach Kurs (in Fahrt) bzw. Gerätekompass (im Stand), Norden oben ohne Drehung. Die App führt selbst nach,
+    /// statt an Apples Nachführung zu übergeben: Die setzt beim Übergeben ihre eigene Zoomstufe und springt.
+    func followTick() {
+        guard let mode = pin, !cameraAnimating, !userMovedCamera, let current = location.current else { return }
+        let heading = mode == .heading ? (myCourse ?? cameraState.heading) : cameraState.heading
+        let target = MapCamera(centerCoordinate: current.coordinate, distance: cameraState.distance, heading: heading, pitch: cameraState.pitch)
+        withAnimation(.linear(duration: 0.9)) { camera = .camera(target) }
     }
 
-    /// Nach einer Geste: Ist die Karte nur gezoomt, gedreht oder leicht verrutscht (Mitte nah am eigenen Standort),
+    /// Nach einer Wischgeste: Ist die Karte nur gezoomt, gedreht oder leicht verrutscht (Mitte nah am eigenen Standort),
     /// bleibt sie angeheftet. Wer sie spürbar wegschiebt, löst die Kopplung; die Karte bleibt dann, wie sie ist.
     func keepPinAfterGesture(_ current: MapCamera) {
-        guard let mode = pin, !cameraAnimating, !camera.followsUserLocation else { return }
-        guard let here = location.current?.coordinate else { return }
+        guard pin != nil, !cameraAnimating, let here = location.current?.coordinate else { return }
         let offset = GeoPoint(current.centerCoordinate).distance(to: GeoPoint(here))
         if offset < max(current.distance * 0.06, 12) {
-            follow(mode, distance: current.distance)
+            followTick()
         } else {
             pin = nil
         }
