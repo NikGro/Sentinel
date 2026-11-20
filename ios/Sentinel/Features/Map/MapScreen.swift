@@ -233,6 +233,7 @@ struct MapScreen: View {
             .ignoresSafeArea(.container, edges: .bottom)
             .onMapCameraChange(frequency: .continuous) { context in
                 cameraState.update(context.camera)
+                if pin != nil, !cameraAnimating, !userMovedCamera, isUserCameraChange(context.camera) { userMovedCamera = true }
             }
             .simultaneousGesture(DragGesture(minimumDistance: 4).onChanged { _ in
                 userMovedCamera = true

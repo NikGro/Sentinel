@@ -198,6 +198,18 @@ extension MapScreen {
         withAnimation(.linear(duration: interval)) { camera = .camera(target) }
     }
 
+    /// Bewegt gerade der Finger die angeheftete Kamera? Die Nachführung hält Abstand und Neigung fest und bleibt mit der
+    /// Mitte nah am Standort; weicht die Kamera davon ab, kann das nur eine Geste sein (Zoomen, Kippen, Verschieben).
+    func isUserCameraChange(_ current: MapCamera) -> Bool {
+        if let distance = followDistance, abs(current.distance - distance) > distance * 0.03 { return true }
+        if let pitch = followPitch, abs(current.pitch - pitch) > 3 { return true }
+        if let target = lastFollowTarget {
+            let offset = GeoPoint(current.centerCoordinate).distance(to: GeoPoint(target.centerCoordinate))
+            if offset > max(target.distance * 0.1, 40) { return true }
+        }
+        return false
+    }
+
     /// Nach einer Wischgeste: Ist die Karte nur gezoomt, gedreht oder leicht verrutscht (Mitte nah am eigenen Standort),
     /// bleibt sie angeheftet. Wer sie spürbar wegschiebt, löst die Kopplung; die Karte bleibt dann, wie sie ist.
     func keepPinAfterGesture(_ current: MapCamera) {
