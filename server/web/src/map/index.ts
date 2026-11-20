@@ -26,6 +26,7 @@ import {
   trackerPoint,
   vehicleOf,
   membersHere,
+  targetShown,
 } from '../store';
 import { ZIEL_TITEL, type GeoPoint, type MapObject } from '../types';
 import { createAppleBackend } from './apple';
@@ -251,6 +252,7 @@ function bind(map: MapBackend, disposers: (() => void)[]): void {
       map.setPins(
         'targets',
         Object.values(tables.target.value).flatMap((t): Pin[] => {
+          if (!targetShown(t.id)) return [];
           const point = trackerPoint(t.data.trackerId) ?? t.data.standort ?? undefined;
           if (!point) return [];
           const name =

@@ -30,7 +30,10 @@ test('Instanzen: eigene Lage, Ziele und Einsatzzustand; dauerhafte Orte überall
 
   assert.deepEqual(lage.list('annotation', 'nord').map((a) => a.id).sort(), ['d1', 'n1']);
   assert.deepEqual(lage.list('annotation', 'haupt').map((a) => a.id).sort(), ['d1', 'h1']);
-  assert.equal(lage.list('target', 'haupt').length, 0);
+  // Ziele gelten überall, sichtbar sind sie nur in der Instanz, in der sie angelegt bzw. eingeschaltet wurden.
+  assert.equal(lage.list('target', 'haupt').length, 1);
+  assert.deepEqual(lage.operationOf('nord').ziele, ['z1']);
+  assert.deepEqual(lage.operationOf('haupt').ziele, []);
   assert.equal(lage.snapshot('nord').rooms.length, 1, 'Jede Instanz hat ihren allgemeinen Chatraum');
 
   lage.command(fahnder('a'), 'a.uebernehmen');
@@ -198,4 +201,37 @@ test('Standardinstanz heißt KSOD, auch nach Umbenennung einer alten Hauptlage',
   db.sql.prepare("UPDATE entities SET data = ? WHERE kind = 'instance' AND id = 'haupt'").run(JSON.stringify({ ...old.data, name: 'Hauptlage' }));
   const second = new Lage(db);
   assert.equal(second.get('instance', 'haupt', '')?.data.name, 'KSOD');
+});
+
+test('Ziele: instanzübergreifend, Sichtbarkeit je Instanz für alle, Pakete schalten Ziele sichtbar', () => {
+  const lage = mitZwei();
+  lage.put(fahnder('a'), 'target', 'z1', { vorname: 'Max' });
+  assert.deepEqual(lage.operationOf('haupt').ziele, ['z1']);
+  lage.command(fahnder('b'), 'ziel.sichtbar', { zielId: 'z1', sichtbar: false });
+  assert.deepEqual(lage.operationOf('haupt').ziele, []);
+  lage.command(fahnder('b'), 'ziel.sichtbar', { zielId: 'z1', sichtbar: true });
+  // Paket mit eigenem Ziel: beim Übernehmen wird das Ziel sichtbar, nicht kopiert.
+  lage.command(fahnder('a'), 'instanz.erstellen', { id: 'p1', name: 'Paket', art: 'paket' });
+  lage.put(fahnder('a'), 'target', 'z2', { vorname: 'Erika' }, 'p1');
+  lage.command(fahnder('a'), 'instanz.wechseln', { id: 'haupt' });
+  lage.command(fahnder('a'), 'paket.importieren', { paketId: 'p1' });
+  assert.deepEqual(lage.operationOf('haupt').ziele.sort(), ['z1', 'z2']);
+  assert.equal(lage.list('target').length, 2);
+  // Löschen entfernt das Ziel aus allen Instanzen.
+  lage.del(fahnder('a'), 'target', 'z1');
+  assert.deepEqual(lage.operationOf('haupt').ziele, ['z2']);
+});
+
+test('Umstellung 0.19: Ziele wandern aus den Instanzen in den übergreifenden Bereich', () => {
+  const db = new Database(':memory:');
+  const first = new Lage(db);
+  first.put(fahnder('a'), 'member', 'a', profil());
+  // Zustand wie vor 0.19: Ziel in der Instanz „nord“.
+  db.setKv('zieleGlobal', '');
+  db.sql.prepare("INSERT INTO entities (kind, inst, id, rev, data, updated_at, updated_by) VALUES ('target', 'nord', 'alt', 1, ?, 0, 'a')").run(JSON.stringify({ vorname: 'Alt' }));
+  db.sql.prepare("DELETE FROM kv WHERE key = 'zieleGlobal'").run();
+  const second = new Lage(db);
+  assert.equal(second.get('target', 'alt')?.data.vorname, 'Alt');
+  assert.deepEqual(second.operationOf('nord').ziele, ['alt']);
+  assert.equal(db.sql.prepare("SELECT COUNT(*) AS n FROM entities WHERE kind = 'target' AND inst = 'nord'").get()!.n, 0);
 });

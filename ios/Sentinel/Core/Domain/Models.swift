@@ -287,12 +287,14 @@ struct OperationState: Codable, Equatable, Sendable {
     var sos: APosition?
     /// Fahrzeuge, die in dieser Instanz im Einsatz sind; `nil` bei älteren Servern (dann gilt das Fahrzeug selbst).
     var fahrzeuge: [String]?
+    /// Ziele, die in dieser Instanz für alle sichtbar sind; die Ziele selbst gelten instanzübergreifend.
+    var ziele: [String]?
     var rev: Int = 0
 
     init() {}
 
     private enum CodingKeys: String, CodingKey {
-        case funkkanal, titel, hinweise, a, ueberschlagen, sos, fahrzeuge, rev
+        case funkkanal, titel, hinweise, a, ueberschlagen, sos, fahrzeuge, ziele, rev
     }
 
     init(from decoder: Decoder) throws {
@@ -304,6 +306,7 @@ struct OperationState: Codable, Equatable, Sendable {
         ueberschlagen = try c.decodeIfPresent(Leapfrog.self, forKey: .ueberschlagen) ?? Leapfrog()
         sos = try c.decodeIfPresent(APosition.self, forKey: .sos)
         fahrzeuge = try c.decodeIfPresent([String].self, forKey: .fahrzeuge)
+        ziele = try c.decodeIfPresent([String].self, forKey: .ziele)
         rev = try c.decodeIfPresent(Int.self, forKey: .rev) ?? 0
     }
 }

@@ -29,8 +29,9 @@ export function registerSpurRoutes(app: FastifyInstance, services: Services, gua
       case 'member':
         return id === actor.id ? undefined : inst;
       case 'target':
-        if (!lage.get('target', id, inst)) throw new HttpError(404, 'Ziel nicht gefunden.');
-        return inst;
+        // Ziele gelten instanzübergreifend, ihre Spur ebenso.
+        if (!lage.get('target', id)) throw new HttpError(404, 'Ziel nicht gefunden.');
+        return undefined;
       case 'vehicle':
       case 'tracker':
         return undefined;

@@ -76,12 +76,11 @@ struct TargetListScreen: View {
         }
     }
 
+    /// Sichtbar in dieser Instanz, für alle Teilnehmer (wie „Im Einsatz“ bei den Fahrzeugen).
     private func visibility(of id: String) -> Binding<Bool> {
         Binding(
-            get: { !settings.hiddenTargets.contains(id) },
-            set: { visible in
-                if visible { settings.hiddenTargets.remove(id) } else { settings.hiddenTargets.insert(id) }
-            }
+            get: { lage.isTargetShown(id) },
+            set: { lage.setTargetShown(id, $0) }
         )
     }
 }

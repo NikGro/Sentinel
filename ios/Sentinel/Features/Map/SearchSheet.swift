@@ -428,7 +428,7 @@ struct ObjectTargetList: View {
     private var targetEntries: [Entry] {
         lage.sortedTargets.compactMap { target in
             // Nur, was auch auf der Karte zu sehen ist: ausgeblendete Ziele und Zielarten fehlen.
-            guard !settings.hiddenTargetKinds.contains(target.data.art.rawValue), !settings.hiddenTargets.contains(target.id),
+            guard !settings.hiddenTargetKinds.contains(target.data.art.rawValue), lage.isTargetShown(target.id),
                   let position = lage.position(ofTarget: target) else { return nil }
             let live = lage.isLive(target)
             return Entry(id: "t-\(target.id)", title: target.data.displayName, subtitle: target.data.art.title, symbol: target.data.mapSymbol, target: .target(target.id), point: position.point, live: live)

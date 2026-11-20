@@ -158,6 +158,8 @@ export interface Operation {
   sos: { memberId: string; seit: number } | null;
   /** Fahrzeuge, die in dieser Instanz im Einsatz sind. */
   fahrzeuge?: string[];
+  /** Ziele, die in dieser Instanz sichtbar sind (Ziele gelten instanzübergreifend). */
+  ziele?: string[];
   rev: number;
 }
 

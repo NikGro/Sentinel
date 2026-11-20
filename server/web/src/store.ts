@@ -187,6 +187,10 @@ export const put = <K extends Kind>(kind: K, id: string, data: Partial<KindMap[K
 export const del = (kind: Kind, id: string) => send({ t: 'del', kind, id, ref: newId() });
 export const command = (name: string, args: unknown = {}) => send({ t: 'cmd', name, args, ref: newId() });
 
+/** Ist ein Ziel in der geöffneten Instanz sichtbar? Gilt für alle Teilnehmer der Instanz. */
+export const targetShown = (id: string) => operation.value.ziele?.includes(id) ?? true;
+export const setTargetShown = (id: string, sichtbar: boolean) => command('ziel.sichtbar', { zielId: id, sichtbar });
+
 function receive(m: any): void {
   switch (m.t) {
     case 'snapshot':

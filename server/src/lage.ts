@@ -75,6 +75,7 @@ const DEFAULT_OPERATION: Operation = {
   ueberschlagen: { teilnehmer: [], zuweisungen: {}, naechste: [] },
   sos: null,
   fahrzeuge: [],
+  ziele: [],
   rev: 0,
 };
 
@@ -122,6 +123,7 @@ export class Lage extends EventEmitter<{ event: [LageEvent] }> {
       }
       db.setKv('hauptMitglieder', '1');
     }
+    this.migrateTargetsToGlobal();
     this.ensure('layer', '', LAYER_DAUERHAFT, { name: 'Dauerhafte Orte', art: 'dauerhaft', status: 'live', beschreibung: 'In allen Instanzen sichtbar' });
     for (const instance of this.list('instance')) this.ensureInstance(instance.id);
     this.pruneTrack();
@@ -145,11 +147,12 @@ export class Lage extends EventEmitter<{ event: [LageEvent] }> {
         sos: parsed.sos ?? null,
         // Früher war „im Einsatz“ ein Merkmal des Fahrzeugs selbst; das gilt als Ausgangsstand je Instanz.
         fahrzeuge: parsed.fahrzeuge ?? this.list('vehicle').filter((v) => v.data.aktiv).map((v) => v.id),
+        ziele: parsed.ziele ?? [],
         rev: parsed.rev ?? 0,
       };
       this.operations.set(inst, op);
       // Umstellung einmalig festhalten, damit später angelegte Fahrzeuge nicht nachträglich als aktiv gelten.
-      if (parsed.fahrzeuge === undefined) this.db.setKv(operationKey(inst), JSON.stringify(op));
+      if (parsed.fahrzeuge === undefined || parsed.ziele === undefined) this.db.setKv(operationKey(inst), JSON.stringify(op));
     }
     return op;
   }
@@ -277,6 +280,11 @@ export class Lage extends EventEmitter<{ event: [LageEvent] }> {
 
     const entity = this.write(kind, scope, id, data, actor.id);
     if (kind === 'message') this.trimMessages(inst, (data as EntityData<'message'>).roomId);
+    // Neue Ziele sind in der Instanz sichtbar, in der sie angelegt wurden.
+    if (kind === 'target' && !existing) {
+      const op = this.operationOf(inst);
+      if (!op.ziele.includes(id)) this.updateOperation(inst, { ziele: [...op.ziele, id] });
+    }
     // Neue Fahnder beginnen in der Standardinstanz (und damit im Dienst).
     if (kind === 'member' && !existing) {
       const haupt = this.get('instance', INSTANZ_HAUPT, '');
@@ -325,6 +333,7 @@ export class Lage extends EventEmitter<{ event: [LageEvent] }> {
         break;
       case 'tracker':
         for (const { inst: i, entity: t } of this.entities.listAll('target')) {
+          // (Ziele liegen seit 0.19 alle unter '', `i` ist dann leer.)
           if (t.data.trackerId !== id) continue;
           // Das Ziel bleibt an der letzten Position des gelöschten Trackers stehen.
           const p = this.trackerPositions.get(id);
@@ -339,6 +348,12 @@ export class Lage extends EventEmitter<{ event: [LageEvent] }> {
         break;
       default:
         break;
+    }
+    if (kind === 'target') {
+      for (const instance of this.list('instance')) {
+        const ziele = this.operationOf(instance.id).ziele;
+        if (ziele.includes(id)) this.updateOperation(instance.id, { ziele: ziele.filter((z) => z !== id) });
+      }
     }
     // Mit dem Objekt verschwindet auch seine Spur.
     if (kind === 'member' || kind === 'target' || kind === 'vehicle') this.spuren.clear(kind, id);
@@ -411,10 +426,10 @@ export class Lage extends EventEmitter<{ event: [LageEvent] }> {
    * Zielfahrzeug, Tracker, A-Position, von Hand); er wird hier genauso aufgelöst wie in der App.
    */
   recordSpuren(now = Date.now()): void {
-    for (const { inst, entity: t } of this.entities.listAll('target')) {
+    for (const t of this.list('target')) {
       if (t.data.aufzeichnung === false) continue;
-      const p = this.resolveTarget(inst, t.data, now);
-      if (p) this.spuren.add('target', t.id, inst, p);
+      const p = this.resolveTarget(this.instanceOfTarget(t.id), t.data, now);
+      if (p) this.spuren.add('target', t.id, '', p);
     }
     const inUse = new Set(this.list('instance').flatMap((i) => this.operationOf(i.id).fahrzeuge));
     for (const v of this.list('vehicle')) {
@@ -424,11 +439,24 @@ export class Lage extends EventEmitter<{ event: [LageEvent] }> {
     }
   }
 
+  /**
+   * Instanz, in deren Lage ein Ziel aufgelöst wird (A-Position, ÖPNV-Fahrzeug): eine, in der es sichtbar ist und
+   * gerade jemand die A hält, sonst die erste, in der es sichtbar ist.
+   */
+  private instanceOfTarget(id: string): string {
+    const shown = this.list('instance').filter((i) => this.operationOf(i.id).ziele.includes(id)).map((i) => i.id);
+    return shown.find((i) => this.operationOf(i).a) ?? shown[0] ?? INSTANZ_HAUPT;
+  }
+
+  private annotationAnywhere(id: string): Entity<'annotation'> | null {
+    return this.entities.listAll('annotation').find((row) => row.entity.id === id)?.entity ?? null;
+  }
+
   private resolveTarget(inst: string, t: EntityData<'target'>, now: number, depth = 0): SpurPunkt | null {
     const b = t.bindung;
     if (b && b.art !== 'fuss' && b.zielId && depth < 2) {
       if (b.art === 'oepnv') {
-        const a = this.get('annotation', b.zielId, inst) ?? this.get('annotation', b.zielId, '');
+        const a = this.get('annotation', b.zielId, inst) ?? this.annotationAnywhere(b.zielId);
         if (a) {
           const p = transitPosition(a.data, now) ?? a.data.punkte[0];
           const line = a.data.linie;
@@ -568,6 +596,13 @@ export class Lage extends EventEmitter<{ event: [LageEvent] }> {
             if (this.activeInstance(m.id) === here) this.write('member', '', m.id, { ...m.data, fortbewegung: 'fuss', fahrzeugId: null, fahrzeugSeit: null }, actor.id);
           }
         }
+        break;
+      }
+      case 'ziel.sichtbar': {
+        const zielId = args.zielId as string;
+        if (!this.get('target', zielId)) throw new LageError('unbekannt', 'Ziel nicht gefunden.');
+        const others = op.ziele.filter((z) => z !== zielId);
+        this.updateOperation(here, { ziele: args.sichtbar ? [...others, zielId] : others });
         break;
       }
       case 'bestreifung.zuruecksetzen':
@@ -718,11 +753,10 @@ export class Lage extends EventEmitter<{ event: [LageEvent] }> {
       };
     })();
     this.db.transaction(() => {
-      for (const row of this.entities.listIn('target', paketId)) {
-        const { data } = row;
-        const bindung = data.bindung?.zielId ? { ...data.bindung, zielId: newId(data.bindung.zielId) } : data.bindung;
-        this.write('target', inst, newId(row.id), { ...data, bindung }, actor.id);
-      }
+      // Ziele gibt es nur einmal: Die des Pakets werden in der Instanz sichtbar geschaltet, nicht kopiert.
+      const ziele = this.operationOf(inst).ziele;
+      const fromPackage = this.operationOf(paketId).ziele.filter((z) => !ziele.includes(z) && this.get('target', z));
+      if (fromPackage.length) this.updateOperation(inst, { ziele: [...ziele, ...fromPackage] });
       for (const row of this.entities.listIn('annotation', paketId)) {
         const { data } = row;
         this.write('annotation', inst, newId(row.id), { ...data, layerId: LAYER_LAGE, gruppe: null }, actor.id);
@@ -906,10 +940,35 @@ export class Lage extends EventEmitter<{ event: [LageEvent] }> {
     for (const a of this.list('annotation', inst)) if (doomed.has(a.data.layerId)) this.remove('annotation', inst, a.id);
     for (const l of layers) if (doomed.has(l.id) && !PROTECTED_LAYERS.has(l.id)) this.remove('layer', inst, l.id);
     for (const m of this.list('message', inst)) this.remove('message', inst, m.id);
-    if (includeTargets) for (const t of this.list('target', inst)) this.remove('target', inst, t.id);
+    // Ziele bleiben bestehen (instanzübergreifend); in dieser Instanz werden sie nur ausgeblendet.
+    if (includeTargets) this.updateOperation(inst, { ziele: [] });
     this.updateOperation(inst, { a: null, titel: '', hinweise: '', ueberschlagen: DEFAULT_OPERATION.ueberschlagen, sos: null });
     this.resetCoverage(inst);
     this.db.audit(actor.id, 'lage.zurueckgesetzt', includeTargets ? 'inklusive Zielpersonen' : '');
+  }
+
+  /**
+   * 0.19: Ziele gelten instanzübergreifend (eine Person ist nur an einem Ort). Bisher lagen sie je Instanz; sie
+   * wandern einmalig in den übergreifenden Bereich und sind in ihrer bisherigen Instanz sichtbar geschaltet.
+   */
+  private migrateTargetsToGlobal(): void {
+    if (this.db.getKv('zieleGlobal')) return;
+    const rows = this.entities.listAll('target').filter((row) => row.inst !== '');
+    const byInstance = new Map<string, string[]>();
+    this.db.transaction(() => {
+      for (const { inst, entity } of rows) {
+        if (!this.entities.exists('target', '', entity.id)) this.entities.write('target', '', entity.id, entity.data, entity.updatedBy);
+        this.entities.remove('target', inst, entity.id);
+        byInstance.set(inst, [...(byInstance.get(inst) ?? []), entity.id]);
+      }
+    });
+    for (const [inst, ids] of byInstance) {
+      const op = this.operationOf(inst);
+      const next = { ...op, ziele: [...new Set([...op.ziele, ...ids])] };
+      this.operations.set(inst, next);
+      this.db.setKv(operationKey(inst), JSON.stringify(next));
+    }
+    this.db.setKv('zieleGlobal', '1');
   }
 
   // ───────────────────────────── intern ─────────────────────────────
@@ -952,9 +1011,10 @@ export class Lage extends EventEmitter<{ event: [LageEvent] }> {
   private freezeTargetsAtA(inst: string, memberId: string): void {
     const p = this.positions.get(memberId);
     if (!p) return;
-    for (const t of this.entities.listIn('target', inst)) {
-      if (t.data.quelle !== 'a' || (t.data.bindung && t.data.bindung.art !== 'fuss' && t.data.bindung.zielId)) continue;
-      this.write('target', inst, t.id, { ...t.data, standort: { lat: p.lat, lon: p.lon, ts: p.ts } }, 'system');
+    const shown = new Set(this.operationOf(inst).ziele);
+    for (const t of this.list('target')) {
+      if (!shown.has(t.id) || t.data.quelle !== 'a' || (t.data.bindung && t.data.bindung.art !== 'fuss' && t.data.bindung.zielId)) continue;
+      this.write('target', '', t.id, { ...t.data, standort: { lat: p.lat, lon: p.lon, ts: p.ts } }, 'system');
     }
   }
 

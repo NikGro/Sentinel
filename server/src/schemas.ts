@@ -284,7 +284,8 @@ const message = z
 export const ENTITY_SCHEMAS = { member, vehicle, annotation, target, tracker, layer, room, message, instance } as const;
 
 /** Objektarten, die zu einer Instanz gehören. Alle anderen gelten instanzübergreifend. */
-export const SCOPED_KINDS: ReadonlySet<Kind> = new Set<Kind>(['annotation', 'target', 'layer', 'room', 'message']);
+/** Instanzbezogene Arten. Ziele gelten seit 0.19 instanzübergreifend; welche eine Instanz zeigt, steht in `Operation.ziele`. */
+export const SCOPED_KINDS: ReadonlySet<Kind> = new Set<Kind>(['annotation', 'layer', 'room', 'message']);
 export type Kind = keyof typeof ENTITY_SCHEMAS;
 export const KINDS = Object.keys(ENTITY_SCHEMAS) as Kind[];
 export const isKind = (value: unknown): value is Kind => typeof value === 'string' && value in ENTITY_SCHEMAS;
@@ -332,6 +333,8 @@ export interface Operation {
   sos: { memberId: string; seit: number } | null;
   /** Fahrzeuge, die in dieser Instanz im Einsatz sind (je Instanz, nicht serverweit). */
   fahrzeuge: string[];
+  /** Ziele, die in dieser Instanz für alle sichtbar sind. Die Ziele selbst gelten instanzübergreifend. */
+  ziele: string[];
   rev: number;
 }
 
@@ -362,6 +365,7 @@ export const commandArgs = {
   'ueberschlagen.verlassen': z.object({}).optional(),
   'tracker.intervall': z.object({ trackerId: id, sekunden: z.number().int().min(10).max(3600) }),
   'fahrzeug.aktivieren': z.object({ fahrzeugId: id, aktiv: z.boolean() }),
+  'ziel.sichtbar': z.object({ zielId: id, sichtbar: z.boolean() }),
   'bestreifung.zuruecksetzen': z.object({}).optional(),
   'lage.zuruecksetzen': z.object({ ziele: z.boolean().default(false) }),
   'instanz.erstellen': z.object({ id, name: text(60).min(1), beschreibung: text(500).optional().default(''), art: z.enum(['einsatz', 'paket']).default('einsatz') }),

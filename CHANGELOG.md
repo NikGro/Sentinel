@@ -1,5 +1,18 @@
 # Änderungen
 
+## 0.19.0
+
+**Ziele instanzübergreifend**
+- Ziele gibt es nur noch einmal für alle Instanzen, wie die Fahrzeuge der Kräfte; ihr Standort ist überall derselbe
+- Der Schalter „Auf der Karte“ in der Zielliste gilt jetzt für alle Teilnehmer der Instanz (vorher nur auf dem
+  eigenen Gerät). Neue Ziele sind in der Instanz sichtbar, in der sie angelegt werden
+- Pakete schalten ihre Ziele beim Übernehmen sichtbar, statt sie zu kopieren; „Lage zurücksetzen mit Zielen“ blendet
+  sie in der Instanz aus, statt sie zu löschen
+- Bestehende Ziele wurden einmalig übernommen und sind in ihrer bisherigen Instanz sichtbar
+
+**Server**
+- 2 GB Speicher; das Straßenverzeichnis für die schnelle Kreuzungssuche ist wieder an
+
 ## 0.18.0
 
 **Navigation**

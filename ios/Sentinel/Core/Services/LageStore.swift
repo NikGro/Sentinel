@@ -147,6 +147,21 @@ final class LageStore {
 
     var activeVehicles: [Versioned<Vehicle>] { sortedVehicles.filter { isInUse($0) } }
 
+    /// Ist das Ziel in dieser Instanz sichtbar? Gilt für alle Teilnehmer der Instanz.
+    func isTargetShown(_ id: String) -> Bool {
+        operation.ziele?.contains(id) ?? true
+    }
+
+    private struct TargetShownArgs: Encodable {
+        let zielId: String
+        let sichtbar: Bool
+    }
+
+    /// Ziel in dieser Instanz für alle ein- oder ausblenden.
+    func setTargetShown(_ id: String, _ shown: Bool) {
+        command("ziel.sichtbar", args: TargetShownArgs(zielId: id, sichtbar: shown))
+    }
+
     /// Ist das Fahrzeug in dieser Instanz im Einsatz?
     func isInUse(_ vehicle: Versioned<Vehicle>) -> Bool {
         operation.fahrzeuge?.contains(vehicle.id) ?? vehicle.data.aktiv

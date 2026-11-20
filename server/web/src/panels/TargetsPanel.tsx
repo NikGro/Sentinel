@@ -1,5 +1,5 @@
 import { useSignal } from '@preact/signals';
-import { del, focusRequest, nameOf, newId, put, tables, tool, trackerPoint } from '../store';
+import { del, focusRequest, nameOf, newId, put, setTargetShown, tables, targetShown, tool, trackerPoint } from '../store';
 import { ZIEL_TITEL, type Target, type ZielArt } from '../types';
 import { ageOf, ago, Field, ImageField, Section, TextInput } from '../ui';
 
@@ -132,7 +132,8 @@ export function TargetsPanel() {
           const position = trackerPoint(t.data.trackerId) ?? t.data.standort ?? undefined;
           const age = ageOf(t.data.geburtsdatum);
           return (
-            <li key={t.id}>
+            <li key={t.id} class={targetShown(t.id) ? '' : 'ruhend'}>
+              <input type="checkbox" title="In dieser Instanz für alle sichtbar" checked={targetShown(t.id)} onChange={() => setTargetShown(t.id, !targetShown(t.id))} />
               {t.data.fotoBlob ? <img class="thumb" src={`/api/v1/blobs/${t.data.fotoBlob}`} alt="" /> : <div class="thumb empty">{t.data.art === 'fahrzeug' ? 'ZF' : t.data.art === 'objekt' ? 'ZO' : 'ZP'}</div>}
               <div class="grow">
                 <b>{anzeigename(t.data)}</b>
