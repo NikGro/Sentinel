@@ -23,6 +23,8 @@
 - Wird ein Tracker vom Ziel getrennt oder gelöscht, bleibt das Ziel an der letzten Trackerposition stehen
 - SinoTrack: Positionsmeldungen aller Arten werden gelesen (auch V8), die Felder werden am Muster erkannt statt an
   festen Stellen
+- SinoTrack V8: Satelliten, Mobilfunkempfang, Akkuspannung und Akkustand aus den Zusatzfeldern; „verbunden“, solange
+  er sich in den letzten zwei Minuten gemeldet hat (er baut je Meldung eine neue Verbindung auf)
 
 **Fahrzeuge**
 - „Im Einsatz“ gilt je Instanz statt serverweit; neue Instanzen beginnen ohne aktive Fahrzeuge

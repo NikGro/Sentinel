@@ -578,7 +578,7 @@ struct TrackerStatusLine: View {
     var body: some View {
         HStack(spacing: 10) {
             if sinoTrack {
-                Label(status.verbunden ? "Verbunden" : "Offline", systemImage: status.verbunden ? "circle.fill" : "circle")
+                Label(status.verbunden ? "Meldet sich" : "Offline", systemImage: status.verbunden ? "circle.fill" : "circle")
                     .foregroundStyle(status.verbunden ? Color.green : Color.secondary)
             }
             if let akku = status.akku {

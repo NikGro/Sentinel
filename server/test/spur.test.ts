@@ -117,3 +117,14 @@ test('H02: V8 und andere Nachrichtenarten mit zusätzlichen Feldern werden geles
   // Ohne GPS-Empfang keine Position.
   assert.equal(parseH02Text('*HQ,7026222172,V8,101530,V,5333.1234,N,01001.5678,E,0.00,0,201126,FFFFFBFF#'), null);
 });
+
+test('H02 V8: Satelliten, Empfang, Akkuspannung und Akku aus den Zusatzfeldern', () => {
+  const s = parseH02Status('*HQ,7026222172,V8,044429,A,5336.0119,N,01002.6891,E,000.00,082,201126,FFFFFBFF,262,03,11002,3180331,8,15,41,100#');
+  assert.equal(s.satelliten, 8);
+  assert.equal(s.signal, 48);
+  assert.equal(s.spannung, 4.1);
+  assert.equal(s.akku, 100);
+  assert.equal(s.gps, true);
+  const fix = parseH02Text('*HQ,7026222172,V8,044429,A,5336.0119,N,01002.6891,E,000.00,082,201126,FFFFFBFF,262,03,11002,3180331,8,15,41,100#');
+  assert.ok(fix && Math.abs(fix.position.lat - (53 + 36.0119 / 60)) < 1e-9);
+});

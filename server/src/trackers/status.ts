@@ -13,6 +13,8 @@ export interface TrackerStatus {
   gps: boolean | null;
   /** Akku in Prozent. */
   akku: number | null;
+  /** Akkuspannung in Volt. */
+  spannung: number | null;
   /** Mobilfunkempfang 0–100 %. */
   signal: number | null;
   satelliten: number | null;
@@ -29,7 +31,7 @@ export interface TrackerStatus {
 const MAX_MESSAGES = 30;
 
 function empty(): TrackerStatus {
-  return { zuletzt: null, verbunden: false, gps: null, akku: null, signal: null, satelliten: null, zuendung: null, stromAus: null, alarm: null, statusRoh: null, nachrichten: [] };
+  return { zuletzt: null, verbunden: false, gps: null, akku: null, spannung: null, signal: null, satelliten: null, zuendung: null, stromAus: null, alarm: null, statusRoh: null, nachrichten: [] };
 }
 
 export class TrackerStatusStore {

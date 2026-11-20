@@ -32,7 +32,11 @@ export function registerTrackerRoutes(app: FastifyInstance, services: Services, 
     const position = lage.trackerPositionOf(tracker.id) ?? null;
     return {
       ...status,
-      verbunden: tracker.data.anbieter === 'sinotrack' ? trackerLink.isConnected(tracker.data.kennung) : status.verbunden,
+      // SinoTrack baut je Meldung eine neue Verbindung auf: Wer sich in den letzten zwei Minuten gemeldet hat, gilt als verbunden.
+      verbunden:
+        tracker.data.anbieter === 'sinotrack'
+          ? trackerLink.isConnected(tracker.data.kennung) || (status.zuletzt !== null && Date.now() - status.zuletzt < 120_000)
+          : status.verbunden,
       zuletzt: Math.max(status.zuletzt ?? 0, position?.ts ?? 0) || null,
       position,
       nachrichten: withMessages ? status.nachrichten : [],

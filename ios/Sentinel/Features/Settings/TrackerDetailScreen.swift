@@ -84,7 +84,7 @@ struct TrackerDetailScreen: View {
             if let status {
                 if tracker.isSinoTrack {
                     LabeledContent("Verbindung") {
-                        Label(status.verbunden ? "Verbunden" : "Nicht verbunden", systemImage: status.verbunden ? "checkmark.circle.fill" : "xmark.circle")
+                        Text(status.verbunden ? "Meldet sich" : "Keine Meldung seit 2 Min.")
                             .foregroundStyle(status.verbunden ? Color.green : Color.secondary)
                     }
                 }
@@ -100,8 +100,8 @@ struct TrackerDetailScreen: View {
                 }
                 if let akku = status.akku {
                     LabeledContent("Akku") {
-                        Label("\(akku) %", systemImage: status.batterySymbol)
-                            .foregroundStyle(akku < 20 ? Color.red : Color.primary)
+                        Text("\(akku) %" + (status.spannung.map { String(format: " (%.1f V)", $0).replacingOccurrences(of: ".", with: ",") } ?? ""))
+                            .foregroundStyle(akku < 20 ? Color.red : Color.secondary)
                     }
                 }
                 if let signal = status.signal {

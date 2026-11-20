@@ -145,7 +145,23 @@ export function parseH02Status(frame: string | Buffer): Partial<TrackerStatus> {
   if (at < 0) return {};
   const valid = f[at + 1];
   const status = f[at + 9];
-  return { gps: valid === 'A' ? true : valid === 'V' ? false : undefined, ...(status ? statusWord(status) : {}) };
+  return { gps: valid === 'A' ? true : valid === 'V' ? false : undefined, ...(status ? statusWord(status) : {}), ...extendedFields(f, at) };
+}
+
+/**
+ * SinoTrack V8: Nach dem Statuswort folgen Funkzelle (MCC, MNC, LAC, CID) und dann Satelliten, Mobilfunkempfang (0–31),
+ * Akkuspannung in Zehntelvolt und Akku in Prozent, z. B. „…,FFFFFBFF,262,03,11002,3180331,8,15,41,100#“.
+ */
+function extendedFields(f: string[], at: number): Partial<TrackerStatus> {
+  const tail = f.slice(at + 14, at + 18);
+  if (f[2] !== 'V8' || tail.length < 4 || !tail.every((v) => /^\d{1,3}$/.test(v))) return {};
+  const [satellites, rssi, decivolt, percent] = tail.map(Number) as [number, number, number, number];
+  return {
+    satelliten: satellites <= 60 ? satellites : undefined,
+    signal: rssi <= 31 ? Math.round((rssi / 31) * 100) : undefined,
+    spannung: decivolt > 0 && decivolt <= 150 ? decivolt / 10 : undefined,
+    akku: percent <= 100 ? percent : undefined,
+  };
 }
 
 function statusWord(hex: string): Partial<TrackerStatus> {

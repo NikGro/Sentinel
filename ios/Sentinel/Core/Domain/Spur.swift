@@ -208,6 +208,8 @@ struct TrackerStatus: Decodable, Sendable {
     let verbunden: Bool
     let gps: Bool?
     let akku: Int?
+    /// Akkuspannung in Volt.
+    let spannung: Double?
     let signal: Int?
     let satelliten: Int?
     let zuendung: Bool?
