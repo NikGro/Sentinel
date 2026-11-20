@@ -1,5 +1,6 @@
 import { ArgusImporter } from './argus.js';
 import { Auth } from './auth.js';
+import { pruneOrphanBlobs } from './blobs.js';
 import { loadConfig, type Config } from './config.js';
 import { Database } from './db.js';
 import { buildApp, type Services } from './http/app.js';
@@ -100,6 +101,16 @@ async function main(): Promise<void> {
   services.oepnv.refreshIfStale();
   // Viertelstündlich prüfen: frische Daten werden nicht neu geladen, ein Fehler (z. B. Overpass überlastet) aber bald wiederholt.
   setInterval(() => services.oepnv.refreshIfStale(), 15 * 60_000).unref();
+  // Verwaiste Dateien (gelöschte Nachrichten, Ziele, Markierungen) belegen sonst dauerhaft Platz.
+  const pruneBlobs = () => {
+    try {
+      pruneOrphanBlobs(services.db);
+    } catch (error) {
+      console.warn('Aufräumen der Dateien fehlgeschlagen:', error);
+    }
+  };
+  pruneBlobs();
+  setInterval(pruneBlobs, 6 * 3600_000).unref();
   // Markierungen mit Lebensdauer verschwinden von selbst.
   setInterval(() => services.lage.expireAnnotations(), 30_000).unref();
   // Echte ÖPNV-Fahrten: Verspätungen jede Minute übernehmen.
