@@ -62,6 +62,13 @@ statt jede Änderung sofort einzubauen. Erledigtes wandert mit Version ins CHANG
   Name der Instanz stehen; kein eigener Lagetitel mehr.
 - **Standardinstanz umbenennen:** Die Hauptlage soll „KSOD“ heißen, auch auf dem bestehenden Server (Umbenennung
   per Migration).
+- **ÖPNV-Positionen genauer berechnen** (eigene Engine nicht nötig, Transitous/MOTIS bleibt die Quelle):
+  1. Fahrzeit zwischen zwei Halten nach der Länge des echten Wegs verteilen, mit Anfahren, Bremsen und Haltezeit,
+     statt gleichmäßig.
+  2. Echtzeit-Zeiten den Halten über die Halte-ID zuordnen statt über Koordinaten (Server, `refreshTrips`), damit
+     keine Verspätung verloren geht.
+  3. Ist die letzte Echtzeitmeldung älter, die Verspätung bis zur nächsten Meldung fortschreiben.
+  4. Beim Fahrzeug anzeigen, wie verlässlich die Position ist: „Echtzeit“, „Fahrplan“ oder „im Takt geschätzt“.
 - **Punkte auf der Karte clustern:** Beim Herauszoomen nah beieinander liegende Punkte zu einem Cluster
   zusammenfassen. Auseinanderrücken nur, wenn man nah herangezoomt ist.
 - **Offene Rückfrage:** Soll der Schalter „Auf der Karte“ in der Zielliste für alle in der Instanz gelten statt nur
