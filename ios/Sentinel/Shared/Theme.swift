@@ -68,11 +68,13 @@ enum Format {
     }
 
     static func duration(_ seconds: TimeInterval) -> String {
-        Duration.seconds(seconds).formatted(.units(allowed: [.hours, .minutes], width: .narrow).locale(locale))
+        guard seconds.isFinite else { return "–" }
+        return Duration.seconds(seconds).formatted(.units(allowed: [.hours, .minutes], width: .narrow).locale(locale))
     }
 
     /// Dauer als Minuten und Sekunden, z. B. "1:05".
     static func clock(_ seconds: TimeInterval) -> String {
+        guard seconds.isFinite else { return "–" }
         let total = max(0, Int(seconds.rounded()))
         return String(format: "%d:%02d", total / 60, total % 60)
     }

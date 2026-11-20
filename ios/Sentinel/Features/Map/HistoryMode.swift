@@ -413,7 +413,7 @@ struct HistoryPointCard: View {
             }
             row("Zeit", Format.dateTime(punkt.date))
             if let speed = spur.speed(at: index) {
-                row("Geschwindigkeit", "\(Int((speed.value * 3.6).rounded())) km/h" + (speed.estimated ? " (geschätzt)" : ""))
+                row("Geschwindigkeit", "\((speed.value * 3.6).roundedInt ?? 0) km/h" + (speed.estimated ? " (geschätzt)" : ""))
             }
             row("Quelle", [punkt.quelle.title, punkt.info].compactMap { $0 }.joined(separator: " · "))
             if let stop {

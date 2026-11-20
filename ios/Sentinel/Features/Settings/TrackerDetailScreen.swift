@@ -83,7 +83,7 @@ struct TrackerDetailScreen: View {
                 if let fix = status.position {
                     LabeledContent("Letzte Position", value: Format.ago(fix.date))
                     if let speed = fix.spd {
-                        LabeledContent("Geschwindigkeit", value: "\(Int((speed * 3.6).rounded())) km/h")
+                        LabeledContent("Geschwindigkeit", value: "\((speed * 3.6).roundedInt ?? 0) km/h")
                     }
                 }
                 if let gps = status.gps {

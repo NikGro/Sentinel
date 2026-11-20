@@ -118,7 +118,7 @@ struct MemberQuickLook: View {
                 if let position {
                     LabeledContent("Position", value: Format.ago(position.date))
                     if let speed = position.spd, speed > 1 {
-                        LabeledContent("Geschwindigkeit", value: "\(Int(speed * 3.6)) km/h")
+                        LabeledContent("Geschwindigkeit", value: "\((speed * 3.6).roundedInt ?? 0) km/h")
                     }
                 } else {
                     LabeledContent("Position", value: "unbekannt")

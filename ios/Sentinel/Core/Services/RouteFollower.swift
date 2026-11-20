@@ -195,7 +195,8 @@ final class RouteFollower {
                 .receive(on: DispatchQueue.main)
                 .sink { [weak self] limit in
                     MainActor.assumeIsolated {
-                        self?.speedLimit = limit.map { Int($0.converted(to: .kilometersPerHour).value.rounded()) }
+                        // „Unbegrenzt“ (z. B. Autobahn) kommt als unendlich; Int(∞) brachte die App beim Navigieren zum Absturz.
+                        self?.speedLimit = limit.flatMap { $0.converted(to: .kilometersPerHour).value.roundedInt }
                     }
                 }
                 .store(in: &cancellables)

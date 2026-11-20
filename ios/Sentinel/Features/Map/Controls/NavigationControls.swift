@@ -222,7 +222,7 @@ struct SpeedBadge: View {
 
     var body: some View {
         VStack(spacing: -2) {
-            Text("\(Int((metersPerSecond * 3.6).rounded()))")
+            Text("\((metersPerSecond * 3.6).roundedInt ?? 0)")
                 .font(.system(size: 20, weight: .bold, design: .rounded).monospacedDigit())
             Text("km/h")
                 .font(.system(size: 9, weight: .semibold))
@@ -231,7 +231,7 @@ struct SpeedBadge: View {
         .frame(width: Theme.roundButton, height: Theme.roundButton)
         .glassEffect(.regular, in: .circle)
         .accessibilityElement(children: .combine)
-        .accessibilityLabel("\(Int((metersPerSecond * 3.6).rounded())) Kilometer pro Stunde")
+        .accessibilityLabel("\((metersPerSecond * 3.6).roundedInt ?? 0) Kilometer pro Stunde")
     }
 }
 
