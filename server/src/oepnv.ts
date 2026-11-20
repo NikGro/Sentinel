@@ -3,6 +3,7 @@ import { join } from 'node:path';
 import { transitCircles, unionOutlines } from './reach/transit.js';
 import { distanceMeters, type GeoPoint } from './geo.js';
 import type { LeapfrogStop } from './schemas.js';
+import { bestStreetMatches, streetNamesNear } from './streets.js';
 
 /**
  * Öffentlicher Nahverkehr aus OpenStreetMap (Overpass-API).
@@ -355,32 +356,66 @@ export class OepnvStore {
   }
 }
 
-/** Sucht die Kreuzung zweier Straßen: gemeinsame Knoten der beiden benannten Straßen im Umkreis. */
-const intersectionCache = new Map<string, { at: number; points: GeoPoint[] }>();
-
-/** Kreuzungen zweier Straßen; Ergebnisse werden eine Stunde zwischengespeichert (die Suche prüft viele Vorschläge). */
-export async function findIntersections(overpass: OverpassClient, a: string, b: string, near: GeoPoint): Promise<GeoPoint[]> {
-  const key = [a.trim().toLowerCase(), b.trim().toLowerCase()].sort().join('|') + `|${near.lat.toFixed(2)},${near.lon.toFixed(2)}`;
-  const hit = intersectionCache.get(key);
-  if (hit && Date.now() - hit.at < 3600_000) return hit.points;
-  const points = await findIntersectionsUncached(overpass, a, b, near);
-  if (intersectionCache.size > 2000) intersectionCache.clear();
-  intersectionCache.set(key, { at: Date.now(), points });
-  return points;
+/** Kreuzung zweier Straßen: Kreuzungspunkte und die tatsächlichen Namen (bei unscharfer Zuordnung korrigiert). */
+export interface Intersection {
+  punkte: GeoPoint[];
+  a: string;
+  b: string;
 }
 
-async function findIntersectionsUncached(overpass: OverpassClient, a: string, b: string, near: GeoPoint): Promise<GeoPoint[]> {
-  // Nur unbedenkliche Zeichen zulassen; Punkte als Zeichenklasse, damit keine Escape-Folgen nötig sind.
-  const pattern = (name: string) => {
-    const clean = name.trim().replace(/[^\p{L}\p{N} .'-]/gu, '');
-    const suffix = /^(.*?)(straße|strasse|str\.?)$/i.exec(clean);
-    const base = (suffix ? suffix[1]! : clean).replace(/\./g, '[.]');
-    // "Musterstr." und "Musterstraße" gleich behandeln.
-    return suffix ? `^${base}str(aße|asse|[.])?$` : `^${base}$`;
-  };
+const intersectionCache = new Map<string, { at: number; result: Intersection }>();
+
+/**
+ * Kreuzungen zweier Straßen, eine Stunde zwischengespeichert (die Suche prüft viele Vorschläge). Findet der genaue
+ * Name nichts, werden die Eingaben den ähnlichsten Straßen der Umgebung zugeordnet (Tipp- und Hörfehler).
+ */
+export async function findIntersections(overpass: OverpassClient, a: string, b: string, near: GeoPoint): Promise<Intersection> {
+  const key = [a.trim().toLowerCase(), b.trim().toLowerCase()].sort().join('|') + `|${near.lat.toFixed(2)},${near.lon.toFixed(2)}`;
+  const hit = intersectionCache.get(key);
+  if (hit && Date.now() - hit.at < 3600_000) return hit.result;
+  let result: Intersection = { punkte: await intersectionPoints(overpass, [pattern(a)], [pattern(b)], near), a, b };
+  if (result.punkte.length === 0) {
+    const names = await streetNamesNear(overpass, near);
+    const as = bestStreetMatches(a, names);
+    const bs = bestStreetMatches(b, names);
+    if (as.length && bs.length) {
+      const exact = (n: string) => `^${escapeName(n)}$`;
+      const punkte = await intersectionPoints(overpass, as.map(exact), bs.map(exact), near);
+      if (punkte.length) result = { punkte, a: await nameAt(overpass, as, punkte[0]!), b: await nameAt(overpass, bs, punkte[0]!) };
+    }
+  }
+  if (intersectionCache.size > 2000) intersectionCache.clear();
+  intersectionCache.set(key, { at: Date.now(), result });
+  return result;
+}
+
+/** Regulärer Ausdruck für eine Eingabe: nur unbedenkliche Zeichen; „Musterstr.“ und „Musterstraße“ gleich. */
+function pattern(name: string): string {
+  const clean = name.trim().replace(/[^\p{L}\p{N} .'-]/gu, '');
+  const suffix = /^(.*?)(straße|strasse|str\.?)$/i.exec(clean);
+  const base = (suffix ? suffix[1]! : clean).replace(/\./g, '[.]');
+  return suffix ? `^${base}str(aße|asse|[.])?$` : `^${base}$`;
+}
+
+/** Echter Straßenname als regulärer Ausdruck; Sonderzeichen außer Punkten werden entfernt. */
+function escapeName(name: string): string {
+  return name.replace(/[^\p{L}\p{N} .'-]/gu, '.').replace(/\./g, '[.]');
+}
+
+/** Welcher der Kandidaten tatsächlich an der Kreuzung liegt (bei mehreren der erste passende). */
+async function nameAt(overpass: OverpassClient, candidates: string[], point: GeoPoint): Promise<string> {
+  if (candidates.length === 1) return candidates[0]!;
+  const ql = `[out:json][timeout:15];way(around:25,${point.lat},${point.lon})["highway"]["name"];out tags qt;`;
+  const body = (await overpass.query(ql, 15)) as { elements?: { tags?: { name?: string } }[] };
+  const here = new Set((body.elements ?? []).map((e) => e.tags?.name));
+  return candidates.find((c) => here.has(c)) ?? candidates[0]!;
+}
+
+async function intersectionPoints(overpass: OverpassClient, as: string[], bs: string[], near: GeoPoint): Promise<GeoPoint[]> {
   const d = 0.12;
   const bbox = `${near.lat - d},${near.lon - d * 1.7},${near.lat + d},${near.lon + d * 1.7}`;
-  const ql = `[out:json][timeout:25];way["highway"]["name"~"${pattern(a)}",i](${bbox})->.a;way["highway"]["name"~"${pattern(b)}",i](${bbox})->.b;node(w.a)(w.b);out;`;
+  const union = (patterns: string[], set: string) => `(${patterns.map((p) => `way["highway"]["name"~"${p}",i](${bbox});`).join('')})->.${set};`;
+  const ql = `[out:json][timeout:25];${union(as, 'a')}${union(bs, 'b')}node(w.a)(w.b);out;`;
   const body = (await overpass.query(ql, 25)) as { elements?: OsmElement[] };
   const points = (body.elements ?? []).filter((e) => e.type === 'node' && e.lat !== undefined).map((e) => ({ lat: e.lat!, lon: e.lon! }));
   // Mehrspurige Kreuzungen bestehen aus mehreren Knoten dicht beieinander: zusammenfassen.

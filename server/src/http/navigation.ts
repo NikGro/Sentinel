@@ -100,7 +100,8 @@ export function registerNavigationRoutes(app: FastifyInstance, services: Service
     guards.actor(request);
     guards.limit(crossingLimiter, request);
     const { a, b, lat, lon } = parse(crossingQuery, request.query, 'Zwei Straßennamen angeben, z. B. "Mönckebergstraße / Steinstraße".');
-    return { punkte: await overpassCall('Kreuzungssuche', (client) => findIntersections(client, a, b, { lat, lon })) };
+    // Antwort: Kreuzungspunkte und die tatsächlichen Straßennamen (bei Tippfehlern korrigiert).
+    return overpassCall('Kreuzungssuche', (client) => findIntersections(client, a, b, { lat, lon }));
   });
 
   /** Querstraßen entlang einer Navigationsroute (OpenStreetMap). */
