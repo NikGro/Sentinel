@@ -7,6 +7,46 @@ statt jede Änderung sofort einzubauen. Erledigtes wandert mit Version ins CHANG
 
 ### Nächste Runde
 
+- **Navigation, Anzeige unten:** Verbleibende Fahrtdauer groß und fett, die Ankunftsuhrzeit klein unten neben den
+  Kilometern (heute umgekehrt).
+- **„Zu Objekten navigieren“ nur mit aktiven Elementen:** Zum Beispiel erscheinen bei den Zielen zwei Fahrzeuge,
+  obwohl eins vorübergehend deaktiviert ist. Deaktivierte Fahrzeuge (je Instanz) und ausgeblendete Ziele weglassen.
+- **Mehr › Ebenen und Pakete aufräumen:**
+  - „Paket vorbereiten“ und andere Reste entfernen, das läuft jetzt über das Instanzenmenü.
+  - Neu: Knopf „Paket aus der Bibliothek importieren“.
+  - Argus Predict bleibt vorerst so; es soll später komplett integriert werden.
+- **GPS-Tracker:** Die SMS-Befehle für SinoTrack in der App wieder ausblenden; das Einrichten läuft künftig über den
+  PC (siehe Sentinel Web).
+- **ÖPNV-Fahrzeuge** (erst mit 0.17 nochmal prüfen):
+  - Fahrzeuge verschwinden nicht zuverlässig fünf Minuten nach dem Ende der Fahrt.
+  - In der Fahrzeugansicht wieder den Countdown zeigen, wie lange das Fahrzeug noch da ist (gab es zeitweise, war
+    beliebt).
+- **Zielfahrzeug und Zielperson, Ansicht:**
+  - Der Abstand zwischen „Standortquelle“ und „Hinführen“ ist zu groß und wirkt unnatürlich.
+  - In der Übersicht des Zielfahrzeugs steht nur noch das Kennzeichen. Das Kennzeichen bleibt namensgebend, auch auf
+    der Karte, aber die Bezeichnung soll ebenfalls irgendwo stehen.
+- **Fotos und Dateien beim Bearbeiten** (überall, wo es diese Auswahl gibt):
+  - „Hinzufügen“ öffnet eine Sprechblase, die oft an der falschen Stelle sitzt und manchmal von selbst zugeht.
+    Stattdessen ein Vollbild-Blatt; Sprechblasen-Menüs sind unerwünscht.
+  - „Foto aus Mediathek“: Die Mediathek schließt sofort wieder, und die Bearbeiten-Ansicht gleich mit. Ursache finden.
+  - „Ansehen“ geht beim ersten Mal sofort wieder zu, erst beim zweiten Mal bleibt es offen.
+  - In der Fotoansicht die Bedienelemente immer eingeblendet lassen. Bisher blendet ein Tipp sie aus und macht den
+    Hintergrund schwarz, zum Schließen muss man nochmal tippen; das verwirrt.
+- **Punkte auf der Karte clustern:** Beim Herauszoomen nah beieinander liegende Punkte zu einem Cluster
+  zusammenfassen. Auseinanderrücken nur, wenn man nah herangezoomt ist.
+- **Offene Rückfrage:** Soll der Schalter „Auf der Karte“ in der Zielliste für alle in der Instanz gelten statt nur
+  auf dem eigenen Gerät?
+
+### Sentinel Web (bisher „Kommandozentrale“)
+
+- **Umbenennen** in „Sentinel Web“.
+- **Anmeldung** mit demselben Zugangscode wie alle anderen statt eigenem Verwaltungspasswort.
+- **Nur noch Dark Mode**, den Light Mode entfernen.
+- **SinoTrack über USB einrichten:** Sentinel Web fragt im Browser (Chrome, WebSerial/WebUSB) nach USB-Zugriff. Der
+  angesteckte Tracker wird dann auf Sentinel programmiert: Server, Port, Intervall, APN. Die APN wird abgefragt,
+  Beispieltext ist die APN der Beach SIM (Kanada). Grundlage ist ein Chat mit Claude am Desktop, in dem der Anschluss
+  an den PC schon umgesetzt wurde; diesen Stand übernehmen.
+
 - **Kreuzungssuche nach dem Update prüfen:** Kommen plausible Straßenecken jetzt zuverlässig, auch nach dem ersten Buchstaben der zweiten Straße? Falls nicht: Beispiel nachstellen.
 
 ### Karte, Kompass und Navigation
