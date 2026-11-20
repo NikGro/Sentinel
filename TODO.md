@@ -7,6 +7,14 @@ statt jede Änderung sofort einzubauen. Erledigtes wandert mit Version ins CHANG
 
 ### Nächste Runde
 
+- **Doppeltes Profil nach Ab- und Wiederanmelden:**
+  - Beim erneuten Anmelden entsteht ein neues Konto, das alte bleibt als Karteileiche stehen und lässt sich in der App nirgends löschen.
+  - Gewünscht: altes Profil übernehmen statt neu anlegen, oder zumindest alte Profile und Geräte löschen können.
+- **Anheften der Kamera:** Die Karte teleportiert beim Anheften wild durch die Gegend. Neu seit 0.15, vermutlich durch das kurze Festhalten der Zoomstufe.
+- **SOS-Knopf:**
+  - Den dauerhaften, transparenten weißen Ring außen entfernen.
+  - Der Ring, der sich beim Halten füllt, soll innerhalb des roten Liquid-Glass-Knopfs laufen, nicht außen herum.
+
 - **Navigation:**
   - Der eigene Pfeil sitzt jetzt fast zu weit über der unteren Leiste (Beenden-Knopf). Ein Mittelding zwischen vorher und jetzt wäre gut.
   - Beim Start der Navigation ist die Karte viel zu weit herausgezoomt. Vermutlich derselbe Zoom-Sprung wie beim Anheften.
