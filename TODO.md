@@ -7,6 +7,8 @@ statt jede Änderung sofort einzubauen. Erledigtes wandert mit Version ins CHANG
 
 ### Nächste Runde
 
+- **Dreier-Umschalter der Zielperson:** Symbole statt Text (zu Fuß, Fahrzeug, ÖPNV), genau wie bei den Fahndern.
+
 - **Eigene Fortbewegung auf ÖPNV:** Der Dreier-Umschalter soll statt der alten Liniensuche die ÖPNV-Karte öffnen. Dort Fahrzeug auf der Karte antippen oder über die Suche finden und einsteigen. Die Karte öffnet wie überall am aktuellen Kartenausschnitt.
 
 - **Kreuzungssuche:** Nach dem Update (Querstraßen-Liste nach „Straße /“ bzw. „Straße Ecke“) prüfen, ob plausible Straßenecken jetzt zuverlässig kommen, auch nach dem ersten Buchstaben der zweiten Straße. Falls nicht: Beispiel nachstellen.
