@@ -7,6 +7,9 @@ statt jede Änderung sofort einzubauen. Erledigtes wandert mit Version ins CHANG
 
 ### Nächste Runde
 
+- **Ziel bleibt am letzten Ort:** Wird die A abgegeben, steigt die Zielperson aus einem Fahrzeug aus oder fällt eine dynamische Quelle weg, bleibt das Ziel am letzten bekannten Ort. Es springt nicht zum alten, von Hand gesetzten Punkt zurück.
+  - Am besten macht das der Server: Bei A-Wechsel oder Freigabe schreibt er die letzte Position als Standort.
+
 - **Live-Kennzeichen in „Zu Objekten navigieren“:** Ziele mit dynamischer Quelle zeigen das Live-Kennzeichen. Das gilt bei A-Position, Tracker, ÖPNV-Fahrzeug und bei einem Zielfahrzeug mit Live-Standort.
 
 - **Dreier-Umschalter der Zielperson:** Symbole statt Text (zu Fuß, Fahrzeug, ÖPNV), genau wie bei den Fahndern.
