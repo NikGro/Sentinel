@@ -124,13 +124,17 @@ export class StreetIndex {
     });
   }
 
-  /** Straßen (Indizes), deren Name zur Eingabe passt („Musterstr.“ = „Musterstraße“) und die in der Nähe liegen. */
+  /**
+   * Straßen (Indizes), deren Name zur Eingabe passt („Musterstr.“ = „Musterstraße“), bevorzugt in der Nähe; gibt es
+   * dort keine, alle gleichnamigen im Einsatzraum.
+   */
   private waysNamed(input: string, near: GeoPoint): number[] {
     const list = this.byName.get(normalizeStreet(input)) ?? [];
-    return list.filter((i) => this.ways[i]!.nodes.some((n) => {
+    const close = list.filter((i) => this.ways[i]!.nodes.some((n) => {
       const p = this.nodes.get(n);
       return p !== undefined && distanceMeters(p, near) < NEAR_METERS;
     }));
+    return close.length ? close : list;
   }
 
   /** Namen aller Straßen in der Nähe (für die unscharfe Zuordnung). */
@@ -143,12 +147,14 @@ export class StreetIndex {
     return [...result];
   }
 
-  /** Gemeinter Straßenname: genau, sonst der ähnlichste in der Nähe. */
+  /** Gemeinter Straßenname: genau in der Nähe, sonst der ähnlichste in der Nähe, sonst genau im ganzen Einsatzraum. */
   resolve(input: string, near: GeoPoint): string | null {
     const exact = this.waysNamed(input, near);
     if (exact.length) return this.names[this.ways[exact[0]!]!.name]!;
     const [best] = bestStreetMatches(input, this.namesNear(near), 1);
-    return best ?? null;
+    if (best) return best;
+    const anywhere = this.byName.get(normalizeStreet(input));
+    return anywhere?.length ? this.names[this.ways[anywhere[0]!]!.name]! : null;
   }
 
   /** Querstraßen einer Straße mit ihren Kreuzungspunkten, nächste zuerst. */

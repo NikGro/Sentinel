@@ -111,8 +111,8 @@ export function registerNavigationRoutes(app: FastifyInstance, services: Service
     const { a, b, lat, lon } = parse(crossingQuery, request.query, 'Zwei Straßennamen angeben, z. B. "Mönckebergstraße / Steinstraße".');
     // Antwort: Kreuzungspunkte und die tatsächlichen Straßennamen (bei Tippfehlern korrigiert). Erst im lokalen
     // Straßenverzeichnis (Millisekunden), sonst bei Overpass.
-    const local = services.streets.ready ? services.streets.intersection(a, b, { lat, lon }) : null;
-    if (local) return local;
+    // Mit Straßenverzeichnis keine Rückfrage bei Overpass (oft überlastet): unbekannt heißt einfach kein Treffer.
+    if (services.streets.ready) return services.streets.intersection(a, b, { lat, lon }) ?? { punkte: [], a, b };
     return overpassCall('Kreuzungssuche', (client) => findIntersections(client, a, b, { lat, lon }));
   });
 
@@ -121,8 +121,7 @@ export function registerNavigationRoutes(app: FastifyInstance, services: Service
     guards.actor(request);
     guards.limit(crossingLimiter, request);
     const { a, lat, lon } = parse(crossingStreetsQuery, request.query, 'Straßenname angeben.');
-    const local = services.streets.ready ? services.streets.crossingStreets(a, { lat, lon }) : null;
-    if (local) return local;
+    if (services.streets.ready) return services.streets.crossingStreets(a, { lat, lon }) ?? { a, strassen: [] };
     return overpassCall('Kreuzungssuche', (client) => findCrossingStreets(client, a, { lat, lon }));
   });
 

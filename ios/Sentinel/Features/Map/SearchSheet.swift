@@ -74,16 +74,18 @@ struct SearchSheet: View {
                                 .labelStyle(.iconOnly)
                                 .foregroundStyle(.secondary)
                         }
-                        // Ziel sprechen, z. B. „Navigiere zur A-Position“ oder „Fahr zum Hauptbahnhof“.
-                        Button(speech.isListening ? "Spracheingabe beenden" : "Ziel sprechen", systemImage: speech.isListening ? "stop.circle.fill" : "mic.fill") {
-                            if speech.isListening { speech.stop() } else {
-                                focused = false
-                                speech.start { text in interpret(text) }
+                        // Ziel sprechen, z. B. „Fahr zum Hauptbahnhof“; in der Objektauswahl nicht nötig (kurze Liste).
+                        if mode != .objekte {
+                            Button(speech.isListening ? "Spracheingabe beenden" : "Ziel sprechen", systemImage: speech.isListening ? "stop.circle.fill" : "mic.fill") {
+                                if speech.isListening { speech.stop() } else {
+                                    focused = false
+                                    speech.start { text in interpret(text) }
+                                }
                             }
+                            .labelStyle(.iconOnly)
+                            .foregroundStyle(speech.isListening ? Color.red : Color.accentColor)
+                            .symbolEffect(.pulse, isActive: speech.isListening)
                         }
-                        .labelStyle(.iconOnly)
-                        .foregroundStyle(speech.isListening ? Color.red : Color.accentColor)
-                        .symbolEffect(.pulse, isActive: speech.isListening)
                     }
                     .padding(.horizontal, 12)
                     .frame(height: 42)
