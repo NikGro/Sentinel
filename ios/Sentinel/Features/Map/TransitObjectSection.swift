@@ -228,7 +228,7 @@ struct TransitObjectSection: View {
                 } label: {
                     HStack(spacing: 10) {
                         Circle()
-                            .fill(inside ? Color(hex: object.farbe) : Color.secondary.opacity(0.25))
+                            .fill(inside ? Color(hex: object.transitHex) : Color.secondary.opacity(0.25))
                             .frame(width: 10, height: 10)
                         Text(stop.name.isEmpty ? "Halt \(index + 1)" : stop.name)
                             .foregroundStyle(inside ? .primary : .secondary)

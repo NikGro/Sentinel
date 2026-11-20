@@ -256,7 +256,7 @@ struct TransitLayer: MapContent {
             MapPolyline(coordinates: path.map(\.coordinate))
                 .stroke(.white, style: StrokeStyle(lineWidth: 9, lineCap: .round, lineJoin: .round))
             MapPolyline(coordinates: path.map(\.coordinate))
-                .stroke(Color(hex: object.data.farbe), style: StrokeStyle(lineWidth: 5, lineCap: .round, lineJoin: .round))
+                .stroke(Color(hex: object.data.transitHex), style: StrokeStyle(lineWidth: 5, lineCap: .round, lineJoin: .round))
         }
         ForEach(sections.filter(\.data.showsStops)) { object in
             ForEach(Array(object.data.punkte.enumerated()), id: \.offset) { index, point in
@@ -296,5 +296,19 @@ struct TransitLayer: MapContent {
             }
             .annotationTitles(.hidden)
         }
+    }
+}
+
+extension MapObject {
+    /// Liniensymbol einer ÖPNV-Markierung. Echte Fahrten (Transitous) erscheinen in der ÖPNV-Karte ohne eigene
+    /// Linienfarbe, also nach Verkehrsart; so sehen sie auch nach dem Übernehmen überall gleich aus.
+    var transitBadge: NearbyStop.Line? {
+        linie.map { NearbyStop.Line(ref: $0.ref, typ: $0.typ, farbe: fahrt == nil ? $0.farbe : nil) }
+    }
+
+    /// Farbe für Strecke und Fahrzeug einer ÖPNV-Markierung.
+    var transitHex: String {
+        if fahrt != nil, let badge = transitBadge { return LineBadge.routeHex(badge) }
+        return farbe
     }
 }

@@ -74,7 +74,7 @@ extension MapScreen {
             pins.append(TransitVehiclePin(
                 id: object.id, objectId: object.id, lineObjectId: nil,
                 coordinate: lage.position(ofObject: object.data, at: transitNow).coordinate,
-                line: line, color: Color(hex: object.data.farbe), departure: object.data.since ?? transitNow
+                line: line, color: Color(hex: object.data.transitHex), departure: object.data.since ?? transitNow
             ))
         }
         for object in objects(.oepnvlinie) {
@@ -82,7 +82,7 @@ extension MapScreen {
             for vehicle in TransitSimulation.vehicles(on: object.data, at: transitNow) {
                 pins.append(TransitVehiclePin(
                     id: "\(object.id)-\(Int(vehicle.departure.timeIntervalSince1970))", objectId: nil, lineObjectId: object.id,
-                    coordinate: vehicle.state.point.coordinate, line: line, color: Color(hex: object.data.farbe), departure: vehicle.departure
+                    coordinate: vehicle.state.point.coordinate, line: line, color: Color(hex: object.data.transitHex), departure: vehicle.departure
                 ))
             }
         }

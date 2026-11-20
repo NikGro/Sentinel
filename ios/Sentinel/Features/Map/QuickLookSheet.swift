@@ -166,7 +166,13 @@ struct MapObjectInfo: View {
     @State private var editing: EditorContext?
 
     private var isCell: Bool { object.wert != nil }
-    private var title: String { object.titel.isEmpty ? (isCell ? "Prognosezelle" : object.typ.title) : object.titel }
+    private var title: String {
+        // ÖPNV: Das Liniensymbol steht daneben, im Titel nur noch die Richtung (sofern nicht umbenannt).
+        if let line = object.linie, object.typ.isTransit, object.titel.isEmpty || object.titel == "\(line.ref) → \(line.richtung)" {
+            return line.richtung
+        }
+        return object.titel.isEmpty ? (isCell ? "Prognosezelle" : object.typ.title) : object.titel
+    }
     private var layer: Versioned<Layer>? { lage.layers[object.layerId] }
     private var editable: Bool { !isCell && layer?.data.art != "argus" && settings.canEdit(layerId: object.layerId) }
 
@@ -223,10 +229,6 @@ struct MapObjectInfo: View {
 
             if object.typ.isTransit, let line = object.linie {
                 Section {
-                    HStack(spacing: 10) {
-                        LineBadge(line: line.badge, size: 15)
-                        Text("Richtung \(line.richtung)")
-                    }
                     if let names = object.haltNamen, let first = names.first, let last = names.last {
                         LabeledContent("Abschnitt", value: "\(first) → \(last) (\(names.count) Halte)")
                     }
@@ -252,7 +254,7 @@ struct MapObjectInfo: View {
                     }
 
                 } header: {
-                    Text("Linie")
+                    Text("Fahrt")
                 } footer: {
                     Text(object.fahrt == nil ? "Positionen nach typischem Tempo geschätzt, keine Echtzeitdaten." : "Daten: Transitous (DELFI u. a.), Echtzeit wo verfügbar.")
                 }
@@ -311,7 +313,10 @@ struct MapObjectInfo: View {
 
     @ViewBuilder private var symbol: some View {
         let color = Color(hex: object.farbe)
-        if object.typ == .marker || object.typ == .text || object.typ == .haltestellen {
+        if object.typ.isTransit, let badge = object.transitBadge {
+            LineBadge(line: badge, size: 20)
+                .frame(minWidth: 44, minHeight: 44)
+        } else if object.typ == .marker || object.typ == .text || object.typ == .haltestellen {
             Image(systemName: object.typ == .marker ? (object.symbol.isEmpty ? "mappin" : object.symbol) : object.typ.symbolName)
                 .font(.system(size: 20, weight: .semibold))
                 .foregroundStyle(.white)
