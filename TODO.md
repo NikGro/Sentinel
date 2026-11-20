@@ -7,6 +7,10 @@ statt jede Änderung sofort einzubauen. Erledigtes wandert mit Version ins CHANG
 
 ### Nächste Runde
 
+- **„Hinführen“ im Profil eines anderen Fahnders:** Das Symbol ist nicht zu sehen, vermutlich Blau auf Blau.
+  - Dort beheben.
+  - App-weit alle Knöpfe und Symbole auf zu wenig Kontrast prüfen (Symbol in Tönungsfarbe auf gleichfarbigem Grund).
+
 - **Doppeltes Profil nach Ab- und Wiederanmelden:**
   - Beim erneuten Anmelden entsteht ein neues Konto, das alte bleibt als Karteileiche stehen und lässt sich in der App nirgends löschen.
   - Gewünscht: altes Profil übernehmen statt neu anlegen, oder zumindest alte Profile und Geräte löschen können.
