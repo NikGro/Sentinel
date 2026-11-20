@@ -142,11 +142,6 @@ struct TrackerDetailScreen: View {
             if let email = tracker.data.kontoEmail, !email.isEmpty {
                 LabeledContent("PAJ-Konto", value: email)
             }
-            Toggle("Verlauf aufzeichnen", isOn: Binding(
-                get: { tracker.data.records },
-                set: { on in save { $0.aufzeichnung = on } }
-            ))
-            HistoryButton(subject: SpurSubject(art: .tracker, id: tracker.id))
             if name != tracker.data.name {
                 Button("Änderungen sichern", systemImage: "checkmark") {
                     save { $0.name = String(name.trimmingCharacters(in: .whitespaces).prefix(60)) }

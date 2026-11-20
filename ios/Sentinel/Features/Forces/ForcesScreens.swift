@@ -213,15 +213,6 @@ struct VehicleDetail: View {
                     get: { lage.isInUse(vehicle) },
                     set: { lage.setVehicleInUse(vehicle.id, $0) }
                 ))
-                Toggle("Verlauf aufzeichnen", isOn: Binding(
-                    get: { vehicle.data.aufzeichnung },
-                    set: { on in
-                        var next = vehicle.data
-                        next.aufzeichnung = on
-                        lage.put(next, id: vehicle.id)
-                    }
-                ))
-                HistoryButton(subject: SpurSubject(art: .vehicle, id: vehicle.id))
             }
 
             Section("Fahrzeug") {

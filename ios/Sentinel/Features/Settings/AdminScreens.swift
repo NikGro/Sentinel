@@ -257,7 +257,6 @@ struct TrackersAdminScreen: View {
     @State private var addPassword = ""
     @State private var statuses: [String: TrackerStatus] = [:]
     @State private var editing: String?
-    @State private var retentionDays: Int?
 
     private var canAdd: Bool {
         guard !addName.trimmingCharacters(in: .whitespaces).isEmpty else { return false }
@@ -315,7 +314,6 @@ struct TrackersAdminScreen: View {
                             Spacer()
                             Menu {
                                 Button("Bearbeiten", systemImage: "slider.horizontal.3") { editing = tracker.id }
-                                HistoryButton(subject: SpurSubject(art: .tracker, id: tracker.id))
                                 Button("Umbenennen", systemImage: "pencil") {
                                     newName = tracker.data.name
                                     renaming = tracker
@@ -334,23 +332,6 @@ struct TrackersAdminScreen: View {
                 Text("Tracker")
             } footer: {
                 Text("Antippen oder „Bearbeiten“ zeigt Zustand, Einstellungen und Befehle. Zugeordnet werden Tracker beim Ziel, beim Fahrzeug oder bei einem Marker.")
-            }
-
-            Section {
-                Picker("Aufbewahren", selection: Binding(
-                    get: { retentionDays ?? 30 },
-                    set: { days in
-                        retentionDays = days
-                        Task { await state.run(model.client) { try await $0.setSpurRetentionDays(days) } }
-                    }
-                )) {
-                    ForEach([7, 14, 30, 60, 90, 180, 365], id: \.self) { Text("\($0) Tage").tag($0) }
-                }
-                .disabled(retentionDays == nil)
-            } header: {
-                Text("Standortverläufe")
-            } footer: {
-                Text("Wie lange die aufgezeichneten Verläufe von Trackern, Zielen, Fahrzeugen und Fahndern auf dem Server bleiben. Aufzeichnen lässt es sich je Tracker, Ziel, Fahrzeug und für sich selbst unter „Mehr“ ein- und ausschalten.")
             }
 
             Section {
@@ -477,7 +458,6 @@ struct TrackersAdminScreen: View {
         .navigationBarTitleDisplayMode(.inline)
         .task { await state.reload(model.client) }
         .task {
-            retentionDays = try? await model.client?.spurRetentionDays()
             // Zustand der Tracker (Akku, Verbindung) laufend aktualisieren.
             while !Task.isCancelled {
                 if let result = try? await model.client?.trackerStatuses() { statuses = result }

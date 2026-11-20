@@ -111,6 +111,8 @@ extension MapScreen {
                     switch action {
                     case .transitMap:
                         showsTransitMap = true
+                    case .history:
+                        showsHistoryPicker = true
                     case .shape(let shape) where shape.isTransit:
                         // ÖPNV: kein Antippen nötig, Linien werden rund um den Kartenausschnitt vorgeschlagen.
                         editor = EditorContext(id: LageStore.newId(), object: draft(shape, [GeoPoint(cameraState.center)]), isNew: true)

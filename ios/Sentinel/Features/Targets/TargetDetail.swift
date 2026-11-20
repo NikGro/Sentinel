@@ -40,18 +40,6 @@ struct TargetDetail: View {
             }
             TargetMovementSection(entity: entity, placeOnMap: placeOnMap)
             Section {
-                HistoryButton(subject: SpurSubject(art: .target, id: entity.id))
-                // Ausgeschaltet: nichts Neues wird aufgezeichnet, Bisheriges bleibt bis zum Ablauf erhalten.
-                Toggle("Verlauf aufzeichnen", isOn: Binding(
-                    get: { target.aufzeichnung },
-                    set: { on in
-                        var next = target
-                        next.aufzeichnung = on
-                        lage.put(next, id: entity.id)
-                    }
-                ))
-            }
-            Section {
                 HStack(alignment: .top, spacing: 16) {
                     RemoteImage(blobId: target.fotoBlob) {
                         ZStack {

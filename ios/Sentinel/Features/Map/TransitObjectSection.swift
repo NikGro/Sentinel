@@ -19,14 +19,17 @@ struct TransitObjectSection: View {
 
     private var isVehicle: Bool { object.typ == .oepnvfahrzeug }
 
-    /// Eine Ebene der Strecke ein- oder ausschalten; mindestens eine bleibt an.
-    private func layer(_ keyPath: WritableKeyPath<TransitLayerChoice, Bool>) -> Binding<Bool> {
+    /// Ebenen der Strecke als Auswahl für die Pillen; mindestens eine bleibt an.
+    private var layers: Binding<Set<TransitLayerPart>> {
         Binding(
-            get: { (object.ebenen ?? TransitLayerChoice())[keyPath: keyPath] },
-            set: { on in
-                var choice = object.ebenen ?? TransitLayerChoice()
-                choice[keyPath: keyPath] = on
-                guard choice.fahrzeug || choice.strecke || choice.halte else { return }
+            get: {
+                let choice = object.ebenen ?? TransitLayerChoice()
+                return Set(TransitLayerPart.allCases.filter { choice[keyPath: $0.keyPath] })
+            },
+            set: { parts in
+                guard !parts.isEmpty else { return }
+                var choice = TransitLayerChoice()
+                for part in TransitLayerPart.allCases { choice[keyPath: part.keyPath] = parts.contains(part) }
                 object.ebenen = choice
                 // Mit Strecke oder Haltestellen bleibt sie stehen; nur das Fahrzeug verschwindet nach der Ankunft.
                 if choice.strecke || choice.halte { object.ablauf = nil }
@@ -49,9 +52,9 @@ struct TransitObjectSection: View {
                 }
                 // Ebenen der Strecke, jederzeit änderbar.
                 if object.typ == .oepnvlinie {
-                    Toggle("Fahrzeug", systemImage: "bus.fill", isOn: layer(\.fahrzeug))
-                    Toggle("Strecke", systemImage: "point.bottomleft.forward.to.point.topright.scurvepath", isOn: layer(\.strecke))
-                    Toggle("Haltestellen", systemImage: "h.circle.fill", isOn: layer(\.halte))
+                    PillPicker(items: TransitLayerPart.allCases, selection: layers, title: \.title, symbol: \.symbol, minimum: 1)
+                        .listRowBackground(Color.clear)
+                        .listRowInsets(EdgeInsets(top: 4, leading: 0, bottom: 4, trailing: 0))
                 }
                 Text("Zeiten und Verspätungen führt der Server laufend nach (Transitous).")
                     .font(.caption)
@@ -289,6 +292,37 @@ struct TransitObjectSection: View {
             } footer: {
                 Text("Eingeblendete Fahrzeuge sind nach Takt und typischem Tempo geschätzt (keine Echtzeitdaten). Antippen legt eines als ÖPNV-Fahrzeug an.")
             }
+        }
+    }
+}
+
+/// Ebene einer ÖPNV-Strecke, für die Pillen-Auswahl.
+enum TransitLayerPart: String, CaseIterable, Identifiable {
+    case fahrzeug, strecke, halte
+
+    var id: String { rawValue }
+
+    var title: String {
+        switch self {
+        case .fahrzeug: "Fahrzeug"
+        case .strecke: "Strecke"
+        case .halte: "Haltestellen"
+        }
+    }
+
+    var symbol: String {
+        switch self {
+        case .fahrzeug: "bus.fill"
+        case .strecke: "point.bottomleft.forward.to.point.topright.scurvepath"
+        case .halte: "h.circle.fill"
+        }
+    }
+
+    var keyPath: WritableKeyPath<TransitLayerChoice, Bool> {
+        switch self {
+        case .fahrzeug: \.fahrzeug
+        case .strecke: \.strecke
+        case .halte: \.halte
         }
     }
 }

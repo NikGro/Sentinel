@@ -11,6 +11,8 @@ struct AddMenu: View {
         case target(ZielArt)
         /// Deutschlandweite ÖPNV-Karte zum Auswählen und Übernehmen.
         case transitMap
+        /// Aufgezeichnete Verläufe auf der Karte zeigen.
+        case history
     }
 
     /// Was angeboten wird: im Einsatz alles, beim Paket ohne Fahndungswerkzeuge, bei dauerhaften Orten nur Markierungen.
@@ -48,6 +50,8 @@ struct AddMenu: View {
 /// Großes Auswahlmenü zum Anlegen: Kacheln nach Gruppen, statt einer kleinen Aufklappliste.
 struct AddChooser: View {
     var scope: AddMenu.Scope = .all
+    /// Verläufe gibt es nur im Plus-Menü der Karte, nicht beim Anlegen an einem Suchtreffer.
+    var includesHistory = true
     let select: (AddMenu.Action) -> Void
     @Environment(\.dismiss) private var dismiss
 
@@ -68,6 +72,9 @@ struct AddChooser: View {
                         group("Ziele", ZielArt.allCases.map { .target($0) })
                     }
                     group("Markierung", [.shape(.marker), .shape(.text), .shape(.linie), .shape(.pfeil), .shape(.flaeche), .shape(.kreis)])
+                    if scope == .all, includesHistory {
+                        group("Auswertung", [.history])
+                    }
                 }
                 .padding(16)
             }
@@ -133,6 +140,7 @@ extension AddMenu.Action {
         case .shape(let shape): shape.title
         case .target(let art): art.title
         case .transitMap: "ÖPNV"
+        case .history: "Verlauf"
         }
     }
 
@@ -141,6 +149,7 @@ extension AddMenu.Action {
         case .shape(let shape): shape.symbolName
         case .target(let art): art.symbolName
         case .transitMap: "tram.fill"
+        case .history: "point.bottomleft.forward.to.point.topright.scurvepath"
         }
     }
 }
@@ -195,12 +204,12 @@ struct SearchPinCard: View {
         .padding(14)
         .glassEffect(.regular, in: .rect(cornerRadius: 22))
         .sheet(isPresented: $showsChooser) {
-            AddChooser(scope: scope) { action in
+            AddChooser(scope: scope, includesHistory: false) { action in
                 showsChooser = false
                 let kind: PlaceableKind = switch action {
                 case .shape(let shape): .shape(shape)
                 case .target(let art): .target(art)
-                case .transitMap: .shape(.haltestelle)
+                case .transitMap, .history: .shape(.haltestelle)
                 }
                 Task {
                     try? await Task.sleep(for: .milliseconds(350))

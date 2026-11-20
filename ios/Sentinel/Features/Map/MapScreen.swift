@@ -57,6 +57,7 @@ struct MapScreen: View {
     @State var virtualVehicle: TransitVehiclePin?
     /// Verlaufsmodus: gezeigte Spuren, Zeitraum und Zeitleiste.
     @State var history = HistoryState()
+    @State var showsHistoryPicker = false
     var showsHistory: Bool { !model.historySubjects.isEmpty }
 
     var body: some View {
@@ -101,6 +102,7 @@ struct MapScreen: View {
         .sheet(item: $targetEditor) { context in
             TargetEditor(context: context)
         }
+        .sheet(isPresented: $showsHistoryPicker) { HistoryPickerSheet() }
         .sheet(isPresented: $showsLayers) {
             LayerSheet()
                 .presentationDetents([.medium, .large])

@@ -188,17 +188,6 @@ struct HistoryPanel: View {
             VStack(alignment: .leading, spacing: 10) {
                 subjectsRow
                 rangeRow
-                if state.range == .custom {
-                    HStack {
-                        DatePicker("Von", selection: $state.customFrom, in: ...Date.now)
-                            .labelsHidden()
-                        Text("bis")
-                            .foregroundStyle(.secondary)
-                        DatePicker("Bis", selection: $state.customTo, in: ...Date.now)
-                            .labelsHidden()
-                    }
-                    .font(.subheadline)
-                }
                 scrubber
                 if state.isEmpty, !state.loading {
                     Text(state.failure ?? "Keine Aufzeichnung in diesem Zeitraum.")
@@ -300,20 +289,54 @@ struct HistoryPanel: View {
         .accessibilityLabel("Weitere Spur anzeigen")
     }
 
+    /// Von und Bis immer sichtbar; die Vorgaben füllen nur beide Felder. Eigene Eingaben machen daraus einen festen
+    /// Zeitraum, Vorgaben bis „jetzt“ laufen mit.
     private var rangeRow: some View {
-        HStack {
-            Picker("Zeitraum", selection: $state.range) {
-                ForEach(HistoryRange.allCases) { Text($0.title).tag($0) }
+        VStack(spacing: 4) {
+            HStack {
+                Text("Von")
+                    .foregroundStyle(.secondary)
+                Spacer(minLength: 8)
+                DatePicker("Von", selection: Binding(
+                    get: { state.interval.lowerBound },
+                    set: { from in
+                        state.customTo = state.interval.upperBound
+                        state.customFrom = from
+                        state.range = .custom
+                    }
+                ), in: ...Date.now)
+                .labelsHidden()
+                Menu {
+                    ForEach(HistoryRange.allCases.filter { $0 != .custom }) { range in
+                        Button(range.title) { state.range = range }
+                    }
+                } label: {
+                    Image(systemName: "clock.arrow.circlepath")
+                        .font(.subheadline.weight(.bold))
+                        .frame(width: 32, height: 32)
+                        .contentShape(.circle)
+                }
+                .glassEffect(.regular.interactive(), in: .circle)
+                .accessibilityLabel("Schnellwahl Zeitraum")
             }
-            .pickerStyle(.menu)
-            .labelsHidden()
-            Spacer()
-            Text("\(Format.dateTime(state.interval.lowerBound)) – \(Format.time(state.interval.upperBound))")
-                .font(.caption.monospacedDigit())
-                .foregroundStyle(.secondary)
-                .lineLimit(1)
-                .minimumScaleFactor(0.8)
+            HStack {
+                Text("Bis")
+                    .foregroundStyle(.secondary)
+                Spacer(minLength: 8)
+                DatePicker("Bis", selection: Binding(
+                    get: { state.interval.upperBound },
+                    set: { to in
+                        state.customFrom = state.interval.lowerBound
+                        state.customTo = to
+                        state.range = .custom
+                    }
+                ), in: ...Date.now)
+                .labelsHidden()
+                // Platzhalter in Breite des Schnellwahl-Knopfs, damit beide Felder bündig stehen.
+                Color.clear.frame(width: 32, height: 1)
+            }
         }
+        .font(.subheadline)
     }
 
     /// Zeitleiste: Ziehen zeigt, wo jede Spur zu diesem Zeitpunkt war.

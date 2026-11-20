@@ -436,25 +436,10 @@ struct TransitExplorer: View {
         .accessibilityLabel("Auswahl aufheben")
     }
 
-    /// Was übernommen wird, einzeln zuschaltbar: Fahrzeug, Strecke, Haltestellen. Es entsteht eine ÖPNV-Strecke mit
-    /// genau diesen Ebenen; sie lassen sich später in der Strecke ändern.
+    /// Was übernommen wird, als Pillen wie im Verlauf: Fahrzeug, Strecke, Haltestellen. Es entsteht eine ÖPNV-Strecke
+    /// mit genau diesen Ebenen; sie lassen sich später in der Strecke ändern.
     private var partsPicker: some View {
-        HStack(spacing: 8) {
-            ForEach(Part.allCases) { part in
-                Toggle(isOn: Binding(
-                    get: { parts.contains(part) },
-                    set: { on in if on { parts.insert(part) } else { parts.remove(part) } }
-                )) {
-                    Label(part.title, systemImage: part.symbol)
-                        .lineLimit(1)
-                        .minimumScaleFactor(0.8)
-                        .frame(maxWidth: .infinity)
-                }
-                .toggleStyle(.button)
-                .buttonBorderShape(.capsule)
-                .font(.subheadline.weight(.semibold))
-            }
-        }
+        PillPicker(items: Part.allCases, selection: $parts, title: \.title, symbol: \.symbol)
     }
 
     private func delayText(_ delay: Int?) -> String {
