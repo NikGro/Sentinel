@@ -56,6 +56,7 @@ statt jede Änderung sofort einzubauen. Erledigtes wandert mit Version ins CHANG
   Fahrzeug und Tracker einzeln. Das soll weg. Stattdessen:
   1. Im Plus-Menü der Karte als hinzufügbares Kartenobjekt „Verlauf“. Dort wählt man aus, wessen Verlauf gezeigt wird.
   2. Gesammelt unter „Mehr“ als eigener Bereich „Verläufe“: alle Spuren, Aufbewahrung, eigene Aufzeichnung.
+  Die Einstellung „Aufbewahren“ (heute unter Mehr › GPS-Tracker) wandert dorthin.
   Die Schalter „Verlauf aufzeichnen“ bei den einzelnen Objekten neu bewerten: dort lassen oder auch dorthin verlegen.
 - **Lagename = Instanzname:** In der Infoleiste unten auf der Karte (Lageübersicht) soll als Name der Lage einfach der
   Name der Instanz stehen; kein eigener Lagetitel mehr.
