@@ -38,6 +38,7 @@ struct MapScreen: View {
     /// Zeitpunkt der letzten Nachführung: Die nächste Fahrt dauert so lange wie der Abstand der Standortmeldungen,
     /// damit die Kamera gleichmäßig mitläuft statt ruckweise.
     @State var lastFollowAt = Date.distantPast
+    @State var ownMarkerOptions = OwnMarkerOptions()
     /// Tempolimit der Straße am eigenen Standort (OpenStreetMap), auch ohne Navigation.
     @State var roadSpeedLimit: Int?
     /// Rasterzelle (~100 m) des eigenen Standorts; ein Wechsel fragt das Tempolimit neu ab.
@@ -187,7 +188,8 @@ struct MapScreen: View {
             Map(position: $camera, scope: mapScope) {
                 // Im Fahrmodus ohne Navigation bleibt der normale Standortpunkt; nur in der Navigation ersetzt ihn der Navi-Pfeil.
                 if true {
-                    MyLocationLayer(lage: lage, route: route, locationService: location, cameraState: cameraState)
+                    MyLocationLayer(lage: lage, route: route, locationService: location, cameraState: cameraState,
+                                    locationContext: locationContext, options: ownMarkerOptions)
                 }
                 if let pendingPoint { PlacementPreview(point: pendingPoint, look: previewLook(at: pendingPoint)) }
                 if let searchPin {
@@ -255,19 +257,7 @@ struct MapScreen: View {
                 // Im Stand dreht der Gerätekompass die Karte; in Fahrt der Kurs (kommt mit dem Standort).
                 if pin == .heading, (location.current?.speed ?? 0) < 1 { followTick() }
             }
-            .overlay {
-                if followsMe {
-                    FollowPuckOverlay(
-                        showsArrow: false,
-                        proxy: proxy,
-                        state: cameraState,
-                        inVehicle: { if case .vehicle = myLocationStyle { true } else { false } }(),
-                        holdsA: lage.holdsA,
-                        label: locationContext.summary,
-                        course: myCourse
-                    )
-                }
-            }
+            .onChange(of: pin, initial: true) { _, new in ownMarkerOptions.showsStreet = new != nil }
             // Langes Drücken auf einen Ort: wie ein Suchtreffer „Navigieren“ oder „Hier anlegen“ anbieten.
             .simultaneousGesture(
                 LongPressGesture(minimumDuration: 0.5)

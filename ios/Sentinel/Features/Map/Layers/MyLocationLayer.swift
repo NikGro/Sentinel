@@ -28,13 +28,16 @@ struct MyLocationLayer: MapContent {
     let route: RouteFollower
     let locationService: LocationService
     let cameraState: MapCameraState
+    let locationContext: LocationContext
+    let options: OwnMarkerOptions
 
     var body: some MapContent {
         // Eine einzige, vom System geführte Standortanzeige (bewegt sich flüssig). Ihr Inhalt liest den Zustand
         // selbst: Apple Karten baut den Inhalt nicht neu, wenn sich nur die übergebenen Werte ändern; so wechselt
         // das Symbol beim Aussteigen zuverlässig vom Fahrzeug zurück zum Punkt.
         UserAnnotation(anchor: .center) { _ in
-            LiveMyLocationMarker(lage: lage, route: route, locationService: locationService, cameraState: cameraState)
+            LiveMyLocationMarker(lage: lage, route: route, locationService: locationService, cameraState: cameraState,
+                                 locationContext: locationContext, options: options)
         }
         .annotationTitles(.hidden)
     }
@@ -46,15 +49,29 @@ private struct LiveMyLocationMarker: View {
     let route: RouteFollower
     let locationService: LocationService
     let cameraState: MapCameraState
+    let locationContext: LocationContext
+    let options: OwnMarkerOptions
 
     var body: some View {
-        MyLocationMarker(
-            style: style,
-            caption: lage.me.map { lage.label(of: $0.data) } ?? "",
-            holdsA: lage.holdsA,
-            course: locationService.current?.course ?? -1,
-            cameraState: cameraState
-        )
+        VStack(spacing: 4) {
+            MyLocationMarker(
+                style: style,
+                caption: lage.me.map { lage.label(of: $0.data) } ?? "",
+                holdsA: lage.holdsA,
+                course: locationService.current?.course ?? -1,
+                cameraState: cameraState
+            )
+            // Angeheftet: Straße und Fahrtrichtung direkt am eigenen Standort, nicht in der Bildschirmmitte.
+            if options.showsStreet, let street = locationContext.summary {
+                Text(street)
+                    .font(.footnote.weight(.semibold))
+                    .lineLimit(1)
+                    .padding(.horizontal, 10)
+                    .padding(.vertical, 5)
+                    .glassEffect(.regular, in: .capsule)
+                    .fixedSize()
+            }
+        }
     }
 
     private var style: MyLocationLayer.Style { .of(lage, navigating: route.isActive) }
@@ -170,4 +187,13 @@ struct FlatNavigationArrow: View {
             .rotation3DEffect(.degrees(pitch), axis: (x: 1, y: 0, z: 0), perspective: 0.4)
             .frame(width: 64, height: 64)
     }
+}
+
+/// Wie der eigene Standort gezeigt wird; als beobachtbares Objekt, weil Apple Karten den Inhalt der Standortanzeige
+/// nicht neu aufbaut, wenn sich nur übergebene Werte ändern.
+@MainActor
+@Observable
+final class OwnMarkerOptions {
+    /// Straße und Fahrtrichtung unter dem eigenen Standort (beim Anheften).
+    var showsStreet = false
 }
