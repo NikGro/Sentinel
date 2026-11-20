@@ -5,6 +5,12 @@ statt jede Änderung sofort einzubauen. Erledigtes wandert mit Version ins CHANG
 
 ## Geplant
 
+### Nächste Runde
+
+- **Navigation:**
+  - Der eigene Pfeil sitzt jetzt fast zu weit über der unteren Leiste (Beenden-Knopf). Ein Mittelding zwischen vorher und jetzt wäre gut.
+  - Beim Start der Navigation ist die Karte viel zu weit herausgezoomt. Vermutlich derselbe Zoom-Sprung wie beim Anheften.
+
 ### Karte, Kompass und Navigation
 
 - **Zoom beim Folgen auf dem Gerät prüfen (0.11: Zoom-Knöpfe, nähere Standard-Zoomstufe):** Die Toleranz für Zwei-Finger-Gesten legt MapKit selbst fest. Auf dem Gerät prüfen, ob die Zoom-Knöpfe reichen.
