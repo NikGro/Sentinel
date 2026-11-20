@@ -7,6 +7,8 @@ statt jede Änderung sofort einzubauen. Erledigtes wandert mit Version ins CHANG
 
 ### Nächste Runde
 
+- **Live-Kennzeichen in „Zu Objekten navigieren“:** Ziele mit dynamischer Quelle zeigen das Live-Kennzeichen. Das gilt bei A-Position, Tracker, ÖPNV-Fahrzeug und bei einem Zielfahrzeug mit Live-Standort.
+
 - **Dreier-Umschalter der Zielperson:** Symbole statt Text (zu Fuß, Fahrzeug, ÖPNV), genau wie bei den Fahndern.
 
 - **Eigene Fortbewegung auf ÖPNV:** Der Dreier-Umschalter soll statt der alten Liniensuche die ÖPNV-Karte öffnen. Dort Fahrzeug auf der Karte antippen oder über die Suche finden und einsteigen. Die Karte öffnet wie überall am aktuellen Kartenausschnitt.
