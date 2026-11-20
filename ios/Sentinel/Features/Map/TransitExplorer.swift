@@ -65,7 +65,7 @@ struct TransitExplorer: View {
                             .stroke(Color(hex: tripColor), style: StrokeStyle(lineWidth: 5, lineCap: .round, lineJoin: .round))
                         ForEach(Array(trip.stops.enumerated()), id: \.offset) { _, stop in
                             Annotation(stop.name, coordinate: stop.point.coordinate, anchor: .center) {
-                                StationSymbol(lines: [NearbyStop.Line(ref: trip.name, typ: LiveSegment.osmType(trip.mode, name: trip.name), farbe: trip.color)], size: 14)
+                                StationSymbol(lines: [NearbyStop.Line(ref: trip.name, typ: LiveSegment.osmType(trip.mode, name: trip.name), farbe: nil)], size: 14)
                             }
                         }
                     }
@@ -180,8 +180,9 @@ struct TransitExplorer: View {
         .prefix(12).map { $0 }
     }
 
+    /// Dieselbe Farbe wie die Fahrzeugschilder in der Karte (nach Verkehrsart), damit ein übernommenes Fahrzeug
+    /// so aussieht wie vorher; die Fahrzeuge der Live-Karte kommen ohne eigene Linienfarbe.
     private var tripColor: String {
-        if let color = trip?.color { return color }
         guard let trip else { return "#0A84FF" }
         return LineBadge.routeHex(NearbyStop.Line(ref: trip.name, typ: LiveSegment.osmType(trip.mode, name: trip.name), farbe: nil))
     }
@@ -390,7 +391,7 @@ struct TransitExplorer: View {
                             select(.vehicle(tripId: departure.tripId))
                         } label: {
                             HStack(spacing: 8) {
-                                LineBadge(line: NearbyStop.Line(ref: departure.name, typ: LiveSegment.osmType(departure.mode, name: departure.name), farbe: departure.color))
+                                LineBadge(line: NearbyStop.Line(ref: departure.name, typ: LiveSegment.osmType(departure.mode, name: departure.name), farbe: nil))
                                 Text(departure.headsign).lineLimit(1)
                                 Spacer()
                                 Text(Format.time(Date(timeIntervalSince1970: departure.time / 1000)))
@@ -474,7 +475,7 @@ struct TransitExplorer: View {
         let names = trip.stops.map(\.name)
         let typ = LiveSegment.osmType(trip.mode, name: trip.name)
         let color = tripColor
-        let ref = TransitRef(id: trip.tripId, ref: trip.name, typ: typ, richtung: trip.headsign, farbe: trip.color)
+        let ref = TransitRef(id: trip.tripId, ref: trip.name, typ: typ, richtung: trip.headsign, farbe: nil)
         let times = trip.stops.map { $0.dep ?? $0.arr }
         // Eine ÖPNV-Strecke mit den gewählten Ebenen; mit Fahrzeug fährt es nach echtem Fahrplan (Server führt nach).
         var line = MapObject(layerId: Layer.lageId, typ: .oepnvlinie, titel: "\(trip.name) → \(trip.headsign)", farbe: color, punkte: points, zeit: times.compactMap { $0 }.first)
