@@ -38,9 +38,10 @@ export class StreetIndex {
     private readonly dataDir: string,
     private readonly bbox: [number, number, number, number],
     private readonly overpass: OverpassClient | null,
+    enabled = true,
   ) {
     const file = this.file;
-    if (existsSync(file)) {
+    if (enabled && existsSync(file)) {
       try {
         this.adopt(JSON.parse(readFileSync(file, 'utf8')) as StoredIndex);
         this.loadedAt = statSync(file).mtimeMs;

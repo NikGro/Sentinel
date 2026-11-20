@@ -77,7 +77,8 @@ export async function createServices(config: Config, database?: Database): Promi
     unknownTrackers: new Map(),
     trackerStatus,
     trackerLink: new TrackerLink(),
-    streets: new StreetIndex(config.dataDir, config.oepnvBbox, overpass),
+    // Vorerst nur auf Wunsch: Das Verzeichnis des ganzen Einsatzraums sprengte die Speichergrenze des Servers.
+    streets: new StreetIndex(config.dataDir, config.oepnvBbox, process.env.SENTINEL_STRASSENVERZEICHNIS === 'an' ? overpass : null, process.env.SENTINEL_STRASSENVERZEICHNIS === 'an'),
   };
 }
 
