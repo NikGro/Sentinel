@@ -14,7 +14,8 @@ statt jede Änderung sofort einzubauen. Erledigtes wandert mit Version ins CHANG
 - **Verlauf, Zeitleiste entfernen:** Der Schieberegler hat keine Funktion mehr und ist ohnehin ungenauer. Er kommt
   raus; Punkte werden über Antippen der Spur angesehen.
 - **Neuer Objekttyp „Geofence-Alarm“ (Plus-Menü):** Man setzt einen Bereich und wählt Ziele. Verlässt eines davon den
-  Bereich, gibt es einen Alarm für alle in der Instanz, ausgewertet auf dem Server.
+  Bereich, gibt es einen Alarm für alle in der Instanz, ausgewertet auf dem Server. Je Geofence wählbar: Alarm beim
+  Verlassen oder beim Betreten.
 - **Neuer Objekttyp „Standortverlauf“ (Plus-Menü):**
   - Der Verlaufsdialog wie bisher, zusätzlich mit einem Knopf, um die gewählten Spuren dauerhaft als Objekt auf die
     Karte zu legen, für alle sichtbar.
