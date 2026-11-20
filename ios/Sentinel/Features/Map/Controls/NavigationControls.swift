@@ -1,154 +1,8 @@
+import MapKit
+import Observation
 import SwiftUI
 
-/// A-Position übernehmen und abgeben. Gleicher Wortlaut in allen Zuständen:
-/// „übernehmen“, nach dem ersten Druck „übernehmen?“, solange man sie hält „abgeben“.
-struct APositionControl: View {
-    @Environment(LageStore.self) private var lage
-
-    /// Erster Druck schärft den Knopf, erst der zweite übernimmt die A-Position.
-    @State private var isArmed = false
-    @State private var disarm: Task<Void, Never>?
-
-    var body: some View {
-        Button(action: press) {
-            HStack(spacing: 7) {
-                // Natives Symbol, einfarbig: weiß auf dem blauen Knopf, rot, solange man die A hält.
-                Image(systemName: "a.circle.fill")
-                    .font(.system(size: 22, weight: .semibold))
-                    .symbolRenderingMode(.monochrome)
-                    .foregroundStyle(lage.holdsA ? Theme.aPosition : .white)
-                Text(title)
-                    .font(.subheadline.weight(.semibold))
-                    .lineLimit(1)
-                    .minimumScaleFactor(0.8)
-            }
-            .foregroundStyle(lage.holdsA ? Theme.aPosition : .white)
-            .padding(.horizontal, 12)
-            .frame(maxWidth: .infinity)
-            .frame(height: Theme.barHeight)
-            .contentShape(.capsule)
-        }
-        .buttonStyle(.plain)
-        .glassEffect(glass, in: .capsule)
-        .sensoryFeedback(.warning, trigger: isArmed) { _, armed in armed }
-        .accessibilityLabel(lage.holdsA ? "A abgeben" : (isArmed ? "A wirklich übernehmen?" : "A übernehmen"))
-        .accessibilityHint(lage.holdsA || isArmed ? "" : "Zweimal drücken zum Übernehmen")
-        .animation(.snappy, value: isArmed)
-        .animation(.snappy, value: lage.holdsA)
-        .onChange(of: lage.holdsA) { _, _ in isArmed = false }
-        .onDisappear { disarm?.cancel() }
-    }
-
-    private var title: String {
-        if lage.holdsA { return "abgeben" }
-        return isArmed ? "übernehmen?" : "übernehmen"
-    }
-
-    private var glass: Glass {
-        if lage.holdsA { return .regular.interactive() }
-        return .regular.tint(isArmed ? Theme.aPosition : Theme.accent).interactive()
-    }
-
-    private func press() {
-        disarm?.cancel()
-        if lage.holdsA {
-            lage.releaseA()
-            return
-        }
-        if isArmed {
-            isArmed = false
-            lage.claimA()
-            return
-        }
-        isArmed = true
-        disarm = Task {
-            try? await Task.sleep(for: .seconds(4))
-            if !Task.isCancelled { isArmed = false }
-        }
-    }
-}
-
-/// Runder Knopf „Zur A“, erscheint neben dem A-Knopf, wenn jemand anderes die A hält.
-struct ToAButton: View {
-    @Environment(AppModel.self) private var model
-    @Environment(LageStore.self) private var lage
-
-    var body: some View {
-        if let holder = lage.aHolder, !lage.holdsA {
-            Button {
-                model.navigate(to: .aPosition)
-            } label: {
-                Image(systemName: "arrow.triangle.turn.up.right.diamond.fill")
-                    .font(.system(size: 18, weight: .semibold))
-                    .frame(width: Theme.barHeight, height: Theme.barHeight)
-                    .contentShape(.circle)
-            }
-            .buttonStyle(.plain)
-            .glassEffect(.regular.interactive(), in: .circle)
-            .accessibilityLabel("Zur A-Position von \(lage.label(of: holder.data)) führen")
-        }
-    }
-}
-
-/// Das rote „A“ als Symbol, überall gleich.
-struct ASymbol: View {
-    var size: CGFloat = 24
-    /// Weiß auf transparentem Grund (für farbige Knöpfe) statt Weiß auf Rot.
-    var inverted = false
-
-    var body: some View {
-        Text("A")
-            .font(.system(size: size * 0.6, weight: .heavy, design: .rounded))
-            .foregroundStyle(inverted ? Theme.aPosition : .white)
-            .frame(width: size, height: size)
-            .background(inverted ? Color.white : Theme.aPosition, in: .circle)
-            .accessibilityHidden(true)
-    }
-}
-
-/// Fortbewegung direkt auf der Karte wählen: zu Fuß sofort, Fahrzeug und ÖPNV öffnen die Auswahl.
-/// Natives Segment-Steuerelement im Liquid-Glass-Stil (gedrückt halten und ziehen).
-struct MobilityControl: View {
-    /// Öffnet die Auswahl für Fahrzeug oder ÖPNV.
-    let choose: (Fortbewegung) -> Void
-
-    @Environment(LageStore.self) private var lage
-
-    var body: some View {
-        if let me = lage.me {
-            GlassSegmentedControl(
-                items: Fortbewegung.allCases.map { ($0, $0.symbolName, $0.title) },
-                selection: me.data.fortbewegung
-            ) { mode in
-                if mode == .fuss { lage.setMobility(.fuss) } else { choose(mode) }
-            }
-            .disabled(!me.data.aktiv)
-        }
-    }
-}
-
-/// Auswahl im Stil der Tab-Leiste: Glas-Kapsel, die gewählte Option als hellere Kapsel darin.
-struct GlassSegmentedControl<Value: Hashable>: View {
-    let items: [(value: Value, symbol: String, title: String)]
-    let selection: Value
-    let select: (Value) -> Void
-
-    var body: some View {
-        // Natives Segment mit gleitendem Auswahlindikator, Höhe wie „A übernehmen“.
-        Picker("Fortbewegung", selection: Binding(get: { selection }, set: { select($0) })) {
-            ForEach(items, id: \.value) { item in
-                Image(systemName: item.symbol)
-                    .accessibilityLabel(item.title)
-                    .tag(item.value)
-            }
-        }
-        .pickerStyle(.segmented)
-        .controlSize(.extraLarge)
-        .frame(maxWidth: .infinity)
-        .frame(height: Theme.barHeight)
-        .sensoryFeedback(.selection, trigger: selection)
-    }
-}
+// Navigation: Banner mit Manöver und Querstraße, untere Leiste, Fahrspuren, Tempo und der Navi-Pfeil.
 
 /// Oberer Teil der Navi-Ansicht: nächstes Manöver mit Entfernung, wie in einer Navi-App.
 struct NavigationBanner: View {
@@ -326,120 +180,22 @@ struct SpeedLimitSign: View {
     }
 }
 
-/// Feld unten zu einem Suchtreffer, wie in Apple Karten: Name, Hierhin navigieren, Hier anlegen.
-struct SearchPinCard: View {
-    let pin: SearchPin
-    var scope: AddMenu.Scope = .all
-    let navigate: () -> Void
-    let create: (PlaceableKind) -> Void
-    let close: () -> Void
-
-    @State private var showsChooser = false
+/// Aktuelle Geschwindigkeit, rund wie in einer Navi-App.
+struct SpeedBadge: View {
+    let metersPerSecond: Double
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 10) {
-            HStack {
-                Text(pin.title)
-                    .font(.headline)
-                    .lineLimit(2)
-                Spacer(minLength: 0)
-                Button(action: close) {
-                    Image(systemName: "xmark")
-                        .font(.subheadline.weight(.bold))
-                        .frame(width: 36, height: 36)
-                        .contentShape(.circle)
-                }
-                .buttonStyle(.plain)
-                .glassEffect(.regular.interactive(), in: .circle)
-                .accessibilityLabel("Schließen")
-            }
-            // Zwei gleich gestaltete Knöpfe; „Hier anlegen“ öffnet dasselbe große Auswahlmenü wie das Plus.
-            HStack(spacing: Theme.barSpacing) {
-                if scope == .all {
-                    Button(action: navigate) {
-                        Label("Navigieren", systemImage: "arrow.triangle.turn.up.right.diamond.fill")
-                            .font(.subheadline.weight(.semibold))
-                            .frame(maxWidth: .infinity)
-                    }
-                    .buttonStyle(.glassProminent)
-                }
-                Button { showsChooser = true } label: {
-                    Label("Hier anlegen", systemImage: "plus")
-                        .font(.subheadline.weight(.semibold))
-                        .frame(maxWidth: .infinity)
-                }
-                .buttonStyle(.glassProminent)
-                .tint(.secondary)
-            }
-            .controlSize(.large)
-        }
-        .padding(14)
-        .glassEffect(.regular, in: .rect(cornerRadius: 22))
-        .sheet(isPresented: $showsChooser) {
-            AddChooser(scope: scope) { action in
-                showsChooser = false
-                let kind: PlaceableKind = switch action {
-                case .shape(let shape): .shape(shape)
-                case .target(let art): .target(art)
-                case .transitMap: .shape(.haltestelle)
-                }
-                Task {
-                    try? await Task.sleep(for: .milliseconds(350))
-                    create(kind)
-                }
-            }
-            .presentationDetents([.medium, .large])
-        }
-    }
-}
-
-/// Leiste für die Mehrfachauswahl: gruppieren, Gruppe auflösen, löschen, fertig.
-struct GroupToolbar: View {
-    let count: Int
-    let hasGroup: Bool
-    let group: () -> Void
-    let ungroup: () -> Void
-    let delete: () -> Void
-    let done: () -> Void
-
-    var body: some View {
-        VStack(alignment: .leading, spacing: 10) {
-            HStack {
-                Text(count == 1 ? "1 Objekt ausgewählt" : "\(count) Objekte ausgewählt")
-                    .font(.headline)
-                Spacer()
-                Button("Fertig", action: done)
-                    .fontWeight(.semibold)
-            }
-            Text("Weitere Objekte antippen oder lange drücken.")
-                .font(.caption)
+        VStack(spacing: -2) {
+            Text("\(Int((metersPerSecond * 3.6).rounded()))")
+                .font(.system(size: 20, weight: .bold, design: .rounded).monospacedDigit())
+            Text("km/h")
+                .font(.system(size: 9, weight: .semibold))
                 .foregroundStyle(.secondary)
-            HStack(spacing: Theme.barSpacing) {
-                Button(action: group) {
-                    Label("Gruppieren", systemImage: "square.on.square")
-                        .frame(maxWidth: .infinity)
-                }
-                .buttonStyle(.glassProminent)
-                .disabled(count < 2)
-                if hasGroup {
-                    Button(action: ungroup) {
-                        Label("Auflösen", systemImage: "square.slash")
-                            .frame(maxWidth: .infinity)
-                    }
-                    .buttonStyle(.glass)
-                }
-                Button(role: .destructive, action: delete) {
-                    Label("Löschen", systemImage: "trash")
-                        .frame(maxWidth: .infinity)
-                }
-                .buttonStyle(.glass)
-                .tint(.red)
-            }
-            .controlSize(.large)
-            .labelStyle(.titleAndIcon)
         }
-        .padding(14)
-        .glassEffect(.regular, in: .rect(cornerRadius: 22))
+        .frame(width: Theme.roundButton, height: Theme.roundButton)
+        .glassEffect(.regular, in: .circle)
+        .accessibilityElement(children: .combine)
+        .accessibilityLabel("\(Int((metersPerSecond * 3.6).rounded())) Kilometer pro Stunde")
     }
 }
 
@@ -494,6 +250,81 @@ struct TransitPlanCard: View {
             defer { loading = false }
             guard let client = model.client, let from = model.myPoint, let to = route.destination else { return }
             plan = (try? await client.transitPlans(from: from, to: to))?.first
+        }
+    }
+}
+
+/// Eigener Standort im Fahrmodus: Navi-Pfeil fest an der Kameramitte, darunter Straße und Fahrtrichtung.
+/// Weil die Kamera gleichmäßig gleitet, bewegt sich der Pfeil ohne Sprünge.
+struct FollowPuckOverlay: View {
+    /// Navi-Pfeil nur in der Navigation; sonst nur das Straßenbanner (der Standortpunkt kommt von der Karte).
+    var showsArrow = true
+    let proxy: MapProxy
+    let state: MapCameraState
+    let inVehicle: Bool
+    let holdsA: Bool
+    let label: String?
+    var course: CLLocationDirection?
+
+    var body: some View {
+        GeometryReader { geometry in
+            // Fällt die Umrechnung kurz aus (z. B. während MapKit die Kamera setzt), bleibt der Pfeil in der Mitte statt zu verschwinden.
+            let point = proxy.convert(state.center, to: .local) ?? CGPoint(x: geometry.size.width / 2, y: geometry.size.height / 2)
+            ZStack {
+                if showsArrow {
+                NavigationArrow()
+                    // Flach auf der Karte: in Fahrtrichtung gedreht und mit der Kartenneigung gekippt.
+                    .rotationEffect(.degrees((course ?? state.heading) - state.heading))
+                    .rotation3DEffect(.degrees(state.pitch), axis: (x: 1, y: 0, z: 0), perspective: 0.4)
+                    .overlay(alignment: .topTrailing) {
+                        if holdsA {
+                            ASymbol(size: 18)
+                                .overlay(Circle().stroke(.white, lineWidth: 1.5))
+                                .offset(x: 6, y: -6)
+                        } else if inVehicle {
+                            Image(systemName: "car.fill")
+                                .font(.system(size: 9, weight: .bold))
+                                .foregroundStyle(.white)
+                                .frame(width: 20, height: 20)
+                                .background(Color.indigo, in: .circle)
+                                .overlay(Circle().stroke(.white, lineWidth: 1.5))
+                                .offset(x: 6, y: -6)
+                        }
+                    }
+                    .position(point)
+                }
+                if let label {
+                    Text(label)
+                        .font(.footnote.weight(.semibold))
+                        .lineLimit(1)
+                        .padding(.horizontal, 10)
+                        .padding(.vertical, 5)
+                        .glassEffect(.regular, in: .capsule)
+                        .fixedSize()
+                        .position(x: point.x, y: point.y + 46)
+                }
+            }
+            .allowsHitTesting(false)
+            .accessibilityElement(children: .combine)
+            .accessibilityLabel("Eigener Standort\(label.map { ": \($0)" } ?? "")")
+        }
+    }
+}
+
+/// Navi-Pfeil: zeigt nach oben, weil sich die Karte im Fahrmodus in Fahrtrichtung dreht.
+struct NavigationArrow: View {
+    var body: some View {
+        ZStack {
+            Circle()
+                .fill(.white)
+                .frame(width: 46, height: 46)
+                .shadow(color: .black.opacity(0.3), radius: 4, y: 2)
+            Circle()
+                .fill(Theme.accent)
+                .frame(width: 38, height: 38)
+            Image(systemName: "location.north.fill")
+                .font(.system(size: 20, weight: .bold))
+                .foregroundStyle(.white)
         }
     }
 }
