@@ -39,6 +39,10 @@ statt jede Änderung sofort einzubauen. Erledigtes wandert mit Version ins CHANG
 - **Verlauf, Zeitraum von–bis direkt wählbar:** Von und Bis immer sichtbar im Verlauf. Heute stecken sie hinter
   „Zeitraum › Eigener Zeitraum“; die Vorgaben werden zu Schnellwahlen. Die Zeitleiste läuft genau über den gewählten
   Zeitraum. Prüfen, ob sie dabei auch nur die Punkte darin zeigt.
+- **„Im Dienst“-Schalter entfernen:** Ob man im Dienst ist, ergibt sich künftig aus Betreten und Verlassen der
+  Instanzen. Zu klären: Heute steuert der Schalter den Ruhemodus (kein Standort teilen, keine A, kein Verlauf), und
+  die Hauptlage lässt sich nicht verlassen. Vorschlag: einen Zustand „keine Instanz“ (außer Dienst) einführen; wer die
+  letzte Instanz verlässt, ist im Ruhemodus.
 - **Punkte auf der Karte clustern:** Beim Herauszoomen nah beieinander liegende Punkte zu einem Cluster
   zusammenfassen. Auseinanderrücken nur, wenn man nah herangezoomt ist.
 - **Offene Rückfrage:** Soll der Schalter „Auf der Karte“ in der Zielliste für alle in der Instanz gelten statt nur
