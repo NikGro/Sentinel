@@ -423,3 +423,64 @@ async function intersectionPoints(overpass: OverpassClient, as: string[], bs: st
   for (const p of points) if (!merged.some((m) => distanceMeters(m, p) < 60)) merged.push(p);
   return merged.sort((x, y) => distanceMeters(x, near) - distanceMeters(y, near));
 }
+
+/** Querstraße einer Straße: Name und Kreuzungspunkte. */
+export interface CrossingStreet {
+  name: string;
+  punkte: GeoPoint[];
+}
+
+const crossingStreetsCache = new Map<string, { at: number; result: { a: string; strassen: CrossingStreet[] } }>();
+
+/**
+ * Alle Straßen, die eine Straße kreuzen oder in sie münden, mit den Kreuzungspunkten, nächstgelegene zuerst. Damit
+ * schlägt die Suche schon nach „Heegbarg /“ die Querstraßen vor. Tipp- und Hörfehler im Namen werden wie bei der
+ * Kreuzungssuche der ähnlichsten Straße der Umgebung zugeordnet.
+ */
+export async function findCrossingStreets(overpass: OverpassClient, a: string, near: GeoPoint): Promise<{ a: string; strassen: CrossingStreet[] }> {
+  const key = `${a.trim().toLowerCase()}|${near.lat.toFixed(2)},${near.lon.toFixed(2)}`;
+  const hit = crossingStreetsCache.get(key);
+  if (hit && Date.now() - hit.at < 3600_000) return hit.result;
+  let name = a;
+  let strassen = await crossingStreetsOf(overpass, [pattern(a)], near);
+  if (strassen.length === 0) {
+    const [best] = bestStreetMatches(a, await streetNamesNear(overpass, near), 1);
+    if (best) {
+      name = best;
+      strassen = await crossingStreetsOf(overpass, [`^${escapeName(best)}$`], near);
+    }
+  }
+  const result = { a: name, strassen };
+  if (crossingStreetsCache.size > 500) crossingStreetsCache.clear();
+  crossingStreetsCache.set(key, { at: Date.now(), result });
+  return result;
+}
+
+async function crossingStreetsOf(overpass: OverpassClient, patterns: string[], near: GeoPoint): Promise<CrossingStreet[]> {
+  const d = 0.08;
+  const bbox = `${near.lat - d},${near.lon - d * 1.7},${near.lat + d},${near.lon + d * 1.7}`;
+  const ql =
+    `[out:json][timeout:25];(${patterns.map((p) => `way["highway"]["name"~"${p}",i](${bbox});`).join('')})->.a;` +
+    `node(w.a)->.n;way(bn.n)["highway"]["name"]->.x;(.x; - .a;)->.x;.n out skel qt;.x out body qt;.a out tags qt;`;
+  const body = (await overpass.query(ql, 25)) as { elements?: (OsmElement & { nodes?: number[]; tags?: { name?: string } })[] };
+  const elements = body.elements ?? [];
+  const coords = new Map<number, GeoPoint>();
+  for (const e of elements) if (e.type === 'node' && e.lat !== undefined) coords.set(e.id, { lat: e.lat, lon: e.lon! });
+  const own = new Set(elements.filter((e) => e.type === 'way' && !e.nodes).map((e) => e.tags?.name));
+  const byName = new Map<string, GeoPoint[]>();
+  for (const way of elements) {
+    const wayName = way.tags?.name;
+    if (way.type !== 'way' || !way.nodes || !wayName || own.has(wayName)) continue;
+    const list = byName.get(wayName) ?? [];
+    for (const id of way.nodes) {
+      const p = coords.get(id);
+      if (p && !list.some((q) => distanceMeters(q, p) < 60)) list.push(p);
+    }
+    byName.set(wayName, list);
+  }
+  return [...byName]
+    .filter(([, punkte]) => punkte.length > 0)
+    .map(([streetName, punkte]) => ({ name: streetName, punkte: punkte.sort((x, y) => distanceMeters(x, near) - distanceMeters(y, near)) }))
+    .sort((x, y) => distanceMeters(x.punkte[0]!, near) - distanceMeters(y.punkte[0]!, near))
+    .slice(0, 60);
+}

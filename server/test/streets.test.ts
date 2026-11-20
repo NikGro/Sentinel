@@ -33,3 +33,25 @@ test('Kreuzung: genauer Name zuerst, sonst die ähnlichsten Straßen der Umgebun
   assert.equal(result.a, 'Heegbarg');
   assert.equal(result.b, 'Wentzelplatz');
 });
+
+test('Querstraßen einer Straße mit Kreuzungspunkten, nächste zuerst', async () => {
+  const { findCrossingStreets } = await import('../src/oepnv.js');
+  const overpass = {
+    async query(ql: string) {
+      if (!ql.includes('Heegbarg')) return { elements: [] };
+      return {
+        elements: [
+          { type: 'node', id: 1, lat: 53.65, lon: 10.09 },
+          { type: 'node', id: 2, lat: 53.652, lon: 10.095 },
+          { type: 'way', id: 10, nodes: [1, 99], tags: { name: 'Wentzelplatz' } },
+          { type: 'way', id: 11, nodes: [2, 98], tags: { name: 'Saseler Damm' } },
+          { type: 'way', id: 12, tags: { name: 'Heegbarg' } },
+        ],
+      };
+    },
+  };
+  const result = await findCrossingStreets(overpass, 'Heegbarg', { lat: 53.6501, lon: 10.0901 });
+  assert.equal(result.a, 'Heegbarg');
+  assert.deepEqual(result.strassen.map((s) => s.name), ['Wentzelplatz', 'Saseler Damm']);
+  assert.equal(result.strassen[0]!.punkte.length, 1);
+});

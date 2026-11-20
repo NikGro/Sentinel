@@ -1,6 +1,6 @@
 import type { FastifyInstance } from 'fastify';
 import { z } from 'zod';
-import { findIntersections } from '../oepnv.js';
+import { findCrossingStreets, findIntersections } from '../oepnv.js';
 import { findCrossStreets } from '../reach/crossings.js';
 import { speedLimitAt } from '../reach/speedlimit.js';
 import { REACH_MODES } from '../reach/reach.js';
@@ -35,6 +35,12 @@ const naviBody = z
 const crossingQuery = z.object({
   a: z.string().trim().min(2).max(80),
   b: z.string().trim().min(2).max(80),
+  lat: z.coerce.number().min(-90).max(90),
+  lon: z.coerce.number().min(-180).max(180),
+});
+
+const crossingStreetsQuery = z.object({
+  a: z.string().trim().min(2).max(80),
   lat: z.coerce.number().min(-90).max(90),
   lon: z.coerce.number().min(-180).max(180),
 });
@@ -105,6 +111,14 @@ export function registerNavigationRoutes(app: FastifyInstance, services: Service
     const { a, b, lat, lon } = parse(crossingQuery, request.query, 'Zwei Straßennamen angeben, z. B. "Mönckebergstraße / Steinstraße".');
     // Antwort: Kreuzungspunkte und die tatsächlichen Straßennamen (bei Tippfehlern korrigiert).
     return overpassCall('Kreuzungssuche', (client) => findIntersections(client, a, b, { lat, lon }));
+  });
+
+  /** Alle Querstraßen einer Straße, für Vorschläge schon während der Eingabe („Heegbarg /“). */
+  app.get('/api/v1/kreuzung/strassen', async (request) => {
+    guards.actor(request);
+    guards.limit(crossingLimiter, request);
+    const { a, lat, lon } = parse(crossingStreetsQuery, request.query, 'Straßenname angeben.');
+    return overpassCall('Kreuzungssuche', (client) => findCrossingStreets(client, a, { lat, lon }));
   });
 
   /** Querstraßen entlang einer Navigationsroute (OpenStreetMap). */
