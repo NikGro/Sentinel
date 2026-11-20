@@ -69,6 +69,16 @@ statt jede Änderung sofort einzubauen. Erledigtes wandert mit Version ins CHANG
      keine Verspätung verloren geht.
   3. Ist die letzte Echtzeitmeldung älter, die Verspätung bis zur nächsten Meldung fortschreiben.
   4. Beim Fahrzeug anzeigen, wie verlässlich die Position ist: „Echtzeit“, „Fahrplan“ oder „im Takt geschätzt“.
+- **Kameraführung verbessern:**
+  - **3D-Ansicht:** Der Kompassknopf erreicht nicht immer zuverlässig denselben Standard-Abstand bzw. Zoom.
+  - **Snap löst sich nicht:** Manchmal kommt man aus dem Anheften nicht heraus. Beim Wegwischen zittert die Kamera;
+    vermutlich kämpft die eigene Nachführung gegen die Geste.
+  - **Navi-Ansicht** (nur dort):
+    - Wieder ein flach auf der Karte liegender, etwas größerer Navi-Pfeil.
+    - Zoomstufe, Kamerawinkel und Neigung wie bei üblichen Navis, eventuell etwas höher als sonst für mehr Überblick,
+      aber nicht viel.
+  - **Abbiegehinweis mit Fahrspuren:** Bei mehreren Spuren anzeigen, welche zu nehmen sind. Die Spurdaten gibt es
+    bereits (`LaneRow`); prüfen, warum sie nicht zuverlässig erscheinen.
 - **Punkte auf der Karte clustern:** Beim Herauszoomen nah beieinander liegende Punkte zu einem Cluster
   zusammenfassen. Auseinanderrücken nur, wenn man nah herangezoomt ist.
 - **Offene Rückfrage:** Soll der Schalter „Auf der Karte“ in der Zielliste für alle in der Instanz gelten statt nur
