@@ -16,17 +16,20 @@ struct InstancesScreen: View {
                     InstanceRow(instance: instance, isOpen: instance.id == lage.instanz && !model.editsPermanentLayer) {
                         model.openInstance(instance.id)
                     }
+                    // Verlassen geht überall, auch bei der Standardinstanz; wer keine Instanz mehr hat, ist außer Dienst.
                     .swipeActions(edge: .trailing) {
                         if instance.id != Instance.mainId {
                             Button("Löschen", systemImage: "trash", role: .destructive) { deleting = instance }
-                            Button("Verlassen", systemImage: "rectangle.portrait.and.arrow.right") { lage.leaveInstance(instance.id) }
-                                .tint(.orange)
                         }
+                        Button("Verlassen", systemImage: "rectangle.portrait.and.arrow.right") { lage.leaveInstance(instance.id) }
+                            .tint(.orange)
                     }
                     .contextMenu {
                         if instance.id != Instance.mainId {
                             Button("Umbenennen", systemImage: "pencil") { editing = instance }
-                            Button("Verlassen", systemImage: "rectangle.portrait.and.arrow.right") { lage.leaveInstance(instance.id) }
+                        }
+                        Button("Verlassen", systemImage: "rectangle.portrait.and.arrow.right") { lage.leaveInstance(instance.id) }
+                        if instance.id != Instance.mainId {
                             Button("Löschen", systemImage: "trash", role: .destructive) { deleting = instance }
                         }
                     }

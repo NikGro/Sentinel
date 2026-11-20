@@ -112,6 +112,16 @@ export class Lage extends EventEmitter<{ event: [LageEvent] }> {
     // 0.18: Die Standardinstanz heißt „KSOD“ (einmalig umbenennen, falls sie noch den alten Namen trägt).
     const haupt = this.get('instance', INSTANZ_HAUPT, '');
     if (haupt && haupt.data.name === 'Hauptlage') this.write('instance', '', INSTANZ_HAUPT, { ...haupt.data, name: STANDARD_INSTANZ_NAME }, 'system');
+    // 0.18: Auch die Standardinstanz hat eine Mitgliederliste (man kann sie verlassen und ist dann außer Dienst).
+    // Bisher war jeder dort Mitglied; das wird einmalig übernommen.
+    if (!db.getKv('hauptMitglieder')) {
+      const current = this.get('instance', INSTANZ_HAUPT, '');
+      if (current) {
+        const all = [...new Set([...current.data.mitglieder, ...this.list('member').map((m) => m.id)])];
+        this.write('instance', '', INSTANZ_HAUPT, { ...current.data, mitglieder: all }, 'system');
+      }
+      db.setKv('hauptMitglieder', '1');
+    }
     this.ensure('layer', '', LAYER_DAUERHAFT, { name: 'Dauerhafte Orte', art: 'dauerhaft', status: 'live', beschreibung: 'In allen Instanzen sichtbar' });
     for (const instance of this.list('instance')) this.ensureInstance(instance.id);
     this.pruneTrack();
@@ -168,9 +178,8 @@ export class Lage extends EventEmitter<{ event: [LageEvent] }> {
     return this.get('instance', inst) ? inst : INSTANZ_HAUPT;
   }
 
-  /** Ob ein Fahnder Mitglied einer Instanz ist; in der Hauptinstanz ist es jeder. */
+  /** Ob ein Fahnder Mitglied einer Instanz ist (Pakete stehen allen offen). */
   isMember(inst: string, memberId: string): boolean {
-    if (inst === INSTANZ_HAUPT) return true;
     const instance = this.get('instance', inst);
     return !!instance && (instance.data.art === 'paket' || instance.data.mitglieder.includes(memberId));
   }
@@ -268,6 +277,11 @@ export class Lage extends EventEmitter<{ event: [LageEvent] }> {
 
     const entity = this.write(kind, scope, id, data, actor.id);
     if (kind === 'message') this.trimMessages(inst, (data as EntityData<'message'>).roomId);
+    // Neue Fahnder beginnen in der Standardinstanz (und damit im Dienst).
+    if (kind === 'member' && !existing) {
+      const haupt = this.get('instance', INSTANZ_HAUPT, '');
+      if (haupt && !haupt.data.mitglieder.includes(id)) this.write('instance', '', INSTANZ_HAUPT, { ...haupt.data, mitglieder: [...haupt.data.mitglieder, id] }, 'system');
+    }
     return entity;
   }
 
@@ -582,27 +596,37 @@ export class Lage extends EventEmitter<{ event: [LageEvent] }> {
       case 'instanz.beitreten': {
         const instance = this.requireInstance(args.id as string);
         if (actor.role !== 'fahnder') break;
-        if (instance.data.art === 'einsatz' && !instance.data.mitglieder.includes(actor.id) && instance.id !== INSTANZ_HAUPT) {
+        if (instance.data.art === 'einsatz' && !instance.data.mitglieder.includes(actor.id)) {
           this.write('instance', '', instance.id, { ...instance.data, mitglieder: [...instance.data.mitglieder, actor.id] }, actor.id);
         }
+        // Wer eine Instanz betritt, ist im Dienst.
+        if (instance.data.art === 'einsatz') this.setActive(actor, true);
         break;
       }
       case 'instanz.verlassen': {
         const instance = this.requireInstance(args.id as string);
-        if (instance.id === INSTANZ_HAUPT) throw new LageError('verboten', 'Die Hauptlage kann nicht verlassen werden.');
         if (actor.role !== 'fahnder') break;
         this.write('instance', '', instance.id, { ...instance.data, mitglieder: instance.data.mitglieder.filter((m) => m !== actor.id) }, actor.id);
-        if (this.activeInstance(actor.id) === instance.id) this.switchInstance(actor.id, INSTANZ_HAUPT);
+        // In eine verbleibende Instanz wechseln (die Standardinstanz zuerst); ohne Instanz ist man außer Dienst.
+        const remaining = this.list('instance')
+          .filter((i) => i.data.art === 'einsatz' && i.id !== instance.id && i.data.mitglieder.includes(actor.id))
+          .sort((x, y) => Number(y.id === INSTANZ_HAUPT) - Number(x.id === INSTANZ_HAUPT));
+        if (remaining.length === 0) {
+          this.setActive(actor, false);
+        } else if (this.activeInstance(actor.id) === instance.id) {
+          this.switchInstance(actor.id, remaining[0]!.id);
+        }
         break;
       }
       case 'instanz.wechseln': {
         const instance = this.requireInstance(args.id as string);
         if (actor.role !== 'fahnder') break;
-        // Wechseln heißt beitreten, wenn man noch nicht Mitglied ist.
-        if (instance.data.art === 'einsatz' && instance.id !== INSTANZ_HAUPT && !instance.data.mitglieder.includes(actor.id)) {
+        // Wechseln heißt beitreten, wenn man noch nicht Mitglied ist; und im Dienst sein.
+        if (instance.data.art === 'einsatz' && !instance.data.mitglieder.includes(actor.id)) {
           this.write('instance', '', instance.id, { ...instance.data, mitglieder: [...instance.data.mitglieder, actor.id] }, actor.id);
         }
         this.switchInstance(actor.id, instance.id);
+        if (instance.data.art === 'einsatz') this.setActive(actor, true);
         break;
       }
       case 'paket.importieren':

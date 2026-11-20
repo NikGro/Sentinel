@@ -102,10 +102,10 @@ final class LageStore {
     /// In einem Paket wird nur vorbereitet: kein Einsatzbetrieb (A, Notruf, Navigation, Fortbewegung).
     var isPackageArea: Bool { currentInstance?.data.isPackage ?? false }
 
-    /// Einsatz-Instanzen, in denen man Mitglied ist (die Hauptlage immer), Hauptlage zuerst.
+    /// Einsatz-Instanzen, in denen man Mitglied ist, die Standardinstanz zuerst.
     var myInstances: [Versioned<Instance>] {
         instances.values
-            .filter { !$0.data.isPackage && ($0.id == Instance.mainId || $0.data.mitglieder.contains(selfId ?? "")) }
+            .filter { !$0.data.isPackage && $0.data.mitglieder.contains(selfId ?? "") }
             .sorted { a, b in
                 if a.id == Instance.mainId { return b.id != Instance.mainId }
                 if b.id == Instance.mainId { return false }

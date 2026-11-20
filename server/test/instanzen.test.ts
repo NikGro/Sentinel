@@ -54,7 +54,13 @@ test('Instanzen: beitreten, wechseln, verlassen; A wird beim Wechsel abgegeben',
   lage.command(fahnder('b'), 'instanz.verlassen', { id: 'nord' });
   assert.equal(lage.activeInstance('b'), 'haupt');
   assert.equal(lage.isMember('nord', 'b'), false);
-  assert.throws(() => lage.command(fahnder('b'), 'instanz.verlassen', { id: 'haupt' }), LageError);
+  // Die Standardinstanz lässt sich verlassen; ohne Instanz ist man außer Dienst, mit dem Betreten wieder im Dienst.
+  lage.command(fahnder('b'), 'instanz.verlassen', { id: 'haupt' });
+  assert.equal(lage.get('member', 'b')?.data.aktiv, false);
+  assert.equal(lage.isMember('haupt', 'b'), false);
+  lage.command(fahnder('b'), 'instanz.wechseln', { id: 'haupt' });
+  assert.equal(lage.get('member', 'b')?.data.aktiv, true);
+  assert.equal(lage.isMember('haupt', 'b'), true);
 });
 
 test('Instanzen: löschen räumt alles ab, die Hauptlage bleibt', () => {

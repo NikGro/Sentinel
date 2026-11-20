@@ -38,8 +38,13 @@ struct SettingsScreen: View {
                     }
 
                     Section {
-                        Toggle(isOn: Binding(get: { me.data.aktiv }, set: { lage.setActive($0) })) {
-                            Label("Im Dienst", systemImage: "person.badge.shield.checkmark.fill")
+                        // Im Dienst ist, wer in einer Instanz ist; verlassen bzw. betreten unter „Instanzen“.
+                        NavigationLink { InstancesScreen() } label: {
+                            LabeledContent {
+                                Text(me.data.aktiv ? (lage.currentInstance?.data.name ?? "") : "Instanz betreten")
+                            } label: {
+                                Label(me.data.aktiv ? "Im Dienst" : "Außer Dienst", systemImage: me.data.aktiv ? "person.badge.shield.checkmark.fill" : "moon.zzz.fill")
+                            }
                         }
 
                         if location.isDenied {
@@ -51,7 +56,7 @@ struct SettingsScreen: View {
                     } footer: {
                         Text(me.data.aktiv
                             ? "Ihr Standort wird mit den eigenen Kräften geteilt, auch im Hintergrund, und nur an den eigenen Sentinel-Server übertragen."
-                            : "Ruhemodus: Es wird kein Standort geteilt und die A-Position ist nicht verfügbar.")
+                            : "Außer Dienst: Es wird kein Standort geteilt und die A-Position ist nicht verfügbar. Mit dem Betreten einer Instanz ist man wieder im Dienst.")
                     }
                 }
 
