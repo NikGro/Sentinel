@@ -7,6 +7,10 @@ statt jede Änderung sofort einzubauen. Erledigtes wandert mit Version ins CHANG
 
 ### Nächste Runde
 
+- **Entzerrte Symbole kennzeichnen:** Symbole, die zu dicht beieinanderliegen, werden auseinandergerückt und wechseln je nach Zoomstufe ihren Ort. Das verwirrt.
+  - Den echten Ort sichtbar machen, z. B. kleiner Punkt am wahren Ort mit dünner Linie zum verschobenen Symbol.
+  - Den Wechsel beim Zoomen weich animieren.
+
 - **Ziel bleibt am letzten Ort:** Wird die A abgegeben, steigt die Zielperson aus einem Fahrzeug aus oder fällt eine dynamische Quelle weg, bleibt das Ziel am letzten bekannten Ort. Es springt nicht zum alten, von Hand gesetzten Punkt zurück.
   - Am besten macht das der Server: Bei A-Wechsel oder Freigabe schreibt er die letzte Position als Standort.
 
