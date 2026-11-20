@@ -104,6 +104,17 @@ struct Target: LageEntity {
         aufzeichnung = (try? c.decodeIfPresent(Bool.self, forKey: .aufzeichnung)) ?? true
     }
 
+    /// Zweite Zeile unter dem Namen: beim Zielfahrzeug die Bezeichnung (der Name ist das Kennzeichen), sonst ein
+    /// Kennzeichen, falls eingetragen.
+    var secondaryName: String? {
+        switch art {
+        case .fahrzeug:
+            return !kennzeichen.isEmpty && !bezeichnung.isEmpty ? bezeichnung : nil
+        case .person, .objekt:
+            return kennzeichen.isEmpty ? nil : kennzeichen
+        }
+    }
+
     var displayName: String {
         switch art {
         case .person:

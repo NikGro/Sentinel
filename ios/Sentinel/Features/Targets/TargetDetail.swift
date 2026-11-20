@@ -67,6 +67,10 @@ struct TargetDetail: View {
                     VStack(alignment: .leading, spacing: 6) {
                         Text(target.displayName)
                             .font(.title3.weight(.bold))
+                        if target.art == .fahrzeug, let secondary = target.secondaryName {
+                            Text(secondary)
+                                .font(.subheadline)
+                        }
                         Text(target.art.title)
                             .font(.caption.weight(.semibold))
                             .foregroundStyle(Theme.target)
@@ -137,6 +141,8 @@ struct TargetDetail: View {
                     .foregroundStyle(.secondary)
             }
         }
+        // Hinführen, Unterwegs und Standortquelle eng beieinander statt mit großen Abschnittsabständen.
+        .listSectionSpacing(.compact)
         .navigationTitle(target.displayName)
         .navigationBarTitleDisplayMode(.inline)
         .toolbar {

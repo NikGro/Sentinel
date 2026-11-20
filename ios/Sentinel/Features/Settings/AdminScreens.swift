@@ -65,13 +65,14 @@ struct SituationAdminScreen: View {
                 .tint(.primary)
             }
             Section("Einsatzinformationen") {
-                TextField("Titel", text: $title)
                 TextField("Auftrag, Treffpunkt, Eigensicherung …", text: $notes, axis: .vertical)
                     .lineLimit(4...12)
                 Button("Für alle übernehmen") {
                     lage.setSituation(title: String(title.prefix(80)), notes: String(notes.prefix(4000)))
                 }
-                .disabled(title == lage.operation.titel && notes == lage.operation.hinweise)
+                .disabled(notes == lage.operation.hinweise)
+            } footer: {
+                Text("Der Name der Lage ist der Name der Instanz; umbenennen unter Instanzen.")
             }
         }
         .navigationTitle("Einsatz")
@@ -93,7 +94,7 @@ struct LayersAdminScreen: View {
     @Environment(AppModel.self) private var model
     @Environment(LageStore.self) private var lage
     @State private var state = AdminState()
-    @State private var newPackage = ""
+    @State private var importing: Versioned<Instance>?
     @State private var argusProject = ""
     @State private var argusDay = Date.now
     @State private var argusFrom = Calendar.current.component(.hour, from: .now)
@@ -140,19 +141,44 @@ struct LayersAdminScreen: View {
                 Text("Entwürfe sind vorbereitet, aber noch auf keiner Karte zu sehen. „Laden“ zeigt sie allen im Einsatz.")
             }
 
+            // Pakete entstehen über das Instanzenmenü; hier nur noch die Übernahme in den laufenden Einsatz.
             Section {
-                TextField("Name, z. B. Einsatz Dienstag", text: $newPackage)
-                Button("Paket anlegen") {
-                    let name = newPackage.trimmingCharacters(in: .whitespaces)
-                    guard !name.isEmpty else { return }
-                    lage.put(Layer(name: String(name.prefix(60)), art: "paket", status: "entwurf"), id: "paket-\(LageStore.newId().prefix(10))")
-                    newPackage = ""
+                if lage.packages.isEmpty {
+                    Text("Noch keine Pakete in der Bibliothek.")
+                        .foregroundStyle(.secondary)
                 }
-                .disabled(newPackage.trimmingCharacters(in: .whitespaces).isEmpty)
+                ForEach(lage.packages) { package in
+                    Button {
+                        importing = package
+                    } label: {
+                        HStack {
+                            Label {
+                                VStack(alignment: .leading, spacing: 2) {
+                                    Text(package.data.name)
+                                    if !package.data.beschreibung.isEmpty {
+                                        Text(package.data.beschreibung)
+                                            .font(.caption)
+                                            .foregroundStyle(.secondary)
+                                            .lineLimit(2)
+                                    }
+                                }
+                            } icon: {
+                                Image(systemName: "shippingbox.fill")
+                            }
+                            Spacer()
+                            Image(systemName: "square.and.arrow.down")
+                                .foregroundStyle(.tint)
+                        }
+                    }
+                    .tint(.primary)
+                    .disabled(lage.isPackageArea)
+                }
             } header: {
-                Text("Paket vorbereiten")
+                Text("Paket aus der Bibliothek importieren")
             } footer: {
-                Text("In einem Paket gesetzte Markierungen bleiben verborgen, bis es geladen wird. Ebene beim Anlegen einer Markierung wählen.")
+                Text(lage.isPackageArea
+                    ? "Gerade ist ein Paket geöffnet. Zum Importieren zuerst eine Einsatz-Instanz öffnen."
+                    : "Kopiert alle Objekte des Pakets in „\(lage.currentInstance?.data.name ?? "diese Instanz")“. Pakete anlegen und bearbeiten über Instanzen › Pakete.")
             }
 
             Section {
@@ -186,6 +212,14 @@ struct LayersAdminScreen: View {
         }
         .navigationTitle("Ebenen und Pakete")
         .navigationBarTitleDisplayMode(.inline)
+        .alert("„\(importing?.data.name ?? "")“ importieren?", isPresented: Binding(get: { importing != nil }, set: { if !$0 { importing = nil } })) {
+            Button("Abbrechen", role: .cancel) {}
+            Button("Importieren") {
+                if let id = importing?.id { lage.importPackage(id) }
+            }
+        } message: {
+            Text("Alle Objekte des Pakets werden in „\(lage.currentInstance?.data.name ?? "")“ kopiert und sind danach eigenständige Objekte dieser Instanz. Das lässt sich nicht rückgängig machen.")
+        }
         .task {
             await state.reload(model.client)
             if argusProject.isEmpty { argusProject = state.status?.argus.projekte.first?.name ?? "" }
@@ -359,10 +393,7 @@ struct TrackersAdminScreen: View {
             if let status = state.status {
                 Section {
                     if status.tracker.h02Port > 0 {
-                        Text("SMS an die SIM des Trackers (Standardpasswort 0000):")
-                        Text("8040000 \(model.credentials?.serverURL.host() ?? "server") \(status.tracker.h02Port)\n8030000 <APN>\n8050000 20")
-                            .font(.callout.monospaced())
-                            .textSelection(.enabled)
+                        LabeledContent("Empfang", value: "\(model.credentials?.serverURL.host() ?? "Server"), Port \(status.tracker.h02Port)")
                         ForEach(status.tracker.unbekannt) { unknown in
                             HStack {
                                 VStack(alignment: .leading) {
@@ -454,7 +485,7 @@ struct TrackersAdminScreen: View {
             }
         }
         .navigationDestination(item: $editing) { id in
-            TrackerDetailScreen(trackerId: id, h02Port: state.status?.tracker.h02Port)
+            TrackerDetailScreen(trackerId: id)
         }
         .refreshable { await state.reload(model.client) }
         .modifier(FailureAlert(state: state))

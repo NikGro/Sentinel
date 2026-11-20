@@ -11,7 +11,7 @@ struct SettingsScreen: View {
 
     private var currentArea: String {
         if model.editsPermanentLayer { return "Dauerhafte Orte bearbeiten" }
-        let name = lage.currentInstance?.data.name ?? "Hauptlage"
+        let name = lage.currentInstance?.data.name ?? "KSOD"
         return lage.isPackageArea ? "Paket: \(name)" : "Geöffnet: \(name)"
     }
 

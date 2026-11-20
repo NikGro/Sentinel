@@ -1,22 +1,16 @@
 import SwiftUI
 
-/// Alles zu einem Tracker: Zustand (so weit er ihn meldet), Einstellungen, Befehle per Datenverbindung und SMS,
+/// Alles zu einem Tracker: Zustand (so weit er ihn meldet), Einstellungen, Befehle per Datenverbindung,
 /// Zuordnungen, Verlauf und die zuletzt empfangenen Nachrichten.
 struct TrackerDetailScreen: View {
     let trackerId: String
-    /// Port des Tracker-Empfangs auf dem Server (für den SMS-Befehl „Server setzen“).
-    var h02Port: Int?
 
     @Environment(AppModel.self) private var model
     @Environment(LageStore.self) private var lage
-    @Environment(\.openURL) private var openURL
     @Environment(\.dismiss) private var dismiss
     @State private var status: TrackerStatus?
     @State private var receiving = true
     @State private var name = ""
-    @State private var phone = ""
-    @State private var pin = ""
-    @State private var apn = ""
     @State private var customCommand = ""
     @State private var interval = 30
     @State private var busy = false
@@ -40,7 +34,6 @@ struct TrackerDetailScreen: View {
             usageSection
             if tracker.data.isSinoTrack {
                 commandSection(tracker.data)
-                smsSection(tracker.data)
             }
             messagesSection
             Section {
@@ -53,8 +46,6 @@ struct TrackerDetailScreen: View {
         .navigationBarTitleDisplayMode(.inline)
         .onAppear {
             name = tracker.data.name
-            phone = tracker.data.telefon ?? ""
-            pin = tracker.data.smsPin ?? ""
             interval = tracker.data.intervall ?? 30
         }
         .task {
@@ -151,26 +142,14 @@ struct TrackerDetailScreen: View {
             if let email = tracker.data.kontoEmail, !email.isEmpty {
                 LabeledContent("PAJ-Konto", value: email)
             }
-            if tracker.data.isSinoTrack {
-                TextField("Rufnummer der SIM-Karte", text: $phone)
-                    .keyboardType(.phonePad)
-                    .onSubmit { save { $0.telefon = phone.trimmingCharacters(in: .whitespaces) } }
-                TextField("SMS-PIN (ab Werk 0000)", text: $pin)
-                    .keyboardType(.numberPad)
-                    .onSubmit { save { $0.smsPin = pin.trimmingCharacters(in: .whitespaces) } }
-            }
             Toggle("Verlauf aufzeichnen", isOn: Binding(
                 get: { tracker.data.records },
                 set: { on in save { $0.aufzeichnung = on } }
             ))
             HistoryButton(subject: SpurSubject(art: .tracker, id: tracker.id))
-            if name != tracker.data.name || phone != (tracker.data.telefon ?? "") || pin != (tracker.data.smsPin ?? "") {
+            if name != tracker.data.name {
                 Button("Änderungen sichern", systemImage: "checkmark") {
-                    save {
-                        $0.name = String(name.trimmingCharacters(in: .whitespaces).prefix(60))
-                        $0.telefon = phone.trimmingCharacters(in: .whitespaces)
-                        $0.smsPin = pin.trimmingCharacters(in: .whitespaces)
-                    }
+                    save { $0.name = String(name.trimmingCharacters(in: .whitespaces).prefix(60)) }
                 }
                 .disabled(name.trimmingCharacters(in: .whitespaces).isEmpty)
             }
@@ -226,52 +205,9 @@ struct TrackerDetailScreen: View {
         } footer: {
             Text(receiving
                 ? "Geht sofort raus, wenn der Tracker verbunden ist, sonst mit seiner nächsten Meldung. Eigene Befehle im H02-Format, z. B. aus der Anleitung des Geräts. Die Motorsperre ist bewusst nicht enthalten."
-                : "Der Tracker-Empfang ist auf dem Server abgeschaltet; Befehle gehen nur per SMS.")
+                : "Der Tracker-Empfang ist auf dem Server abgeschaltet.")
         }
         .disabled(busy || !receiving)
-    }
-
-    /// SMS-Befehle der SinoTrack-Geräte (öffnen die Nachrichten-App mit vorbereitetem Text; vor dem Senden änderbar).
-    private func smsSection(_ tracker: Tracker) -> some View {
-        let devicePin = (tracker.smsPin ?? "").isEmpty ? "0000" : tracker.smsPin!
-        let host = model.credentials?.serverURL.host() ?? "server"
-        let number = (tracker.telefon ?? "").filter { $0.isNumber || $0 == "+" }
-        let commands: [(String, String)] = [
-            ("Server und Port setzen", "804\(devicePin) \(host) \(h02Port.map(String.init) ?? "<Port>")"),
-            ("Datenverbindung (GPRS) an", "710\(devicePin)"),
-            ("Sendeintervall \(interval) s", "805\(devicePin) \(interval)"),
-            ("Einstellungen abfragen", "RCONF"),
-        ]
-        return Section {
-            if number.isEmpty {
-                Text("Rufnummer der SIM-Karte oben eintragen, dann lassen sich SMS-Befehle direkt verschicken.")
-                    .foregroundStyle(.secondary)
-            } else {
-                ForEach(commands, id: \.1) { command in
-                    Button {
-                        sms(number, command.1)
-                    } label: {
-                        VStack(alignment: .leading, spacing: 2) {
-                            Text(command.0)
-                            Text(command.1)
-                                .font(.caption.monospaced())
-                                .foregroundStyle(.secondary)
-                        }
-                    }
-                }
-                HStack {
-                    TextField("APN des Mobilfunkanbieters", text: $apn)
-                        .autocorrectionDisabled()
-                        .textInputAutocapitalization(.never)
-                    Button("APN setzen") { sms(number, "803\(devicePin) \(apn)") }
-                        .disabled(apn.trimmingCharacters(in: .whitespaces).isEmpty)
-                }
-            }
-        } header: {
-            Text("Befehle per SMS")
-        } footer: {
-            Text("Übliche SinoTrack-Befehle (ST-901/903). Die Nachrichten-App öffnet sich mit dem fertigen Text; vor dem Senden lässt er sich noch ändern. Die Antwort kommt per SMS auf dieses Telefon.")
-        }
     }
 
     // MARK: Nachrichten
@@ -325,14 +261,5 @@ struct TrackerDetailScreen: View {
                 message = error.localizedDescription
             }
         }
-    }
-
-    private func sms(_ number: String, _ text: String) {
-        var components = URLComponents()
-        components.scheme = "sms"
-        components.path = number
-        components.queryItems = [URLQueryItem(name: "body", value: text)]
-        // iOS erwartet „sms:NUMMER&body=…“.
-        if let string = components.string?.replacingOccurrences(of: "?body=", with: "&body="), let url = URL(string: string) { openURL(url) }
     }
 }

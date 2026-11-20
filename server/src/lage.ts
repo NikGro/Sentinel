@@ -63,6 +63,8 @@ const TRACK_MAX_ACCURACY_M = 60;
 /** Ältere Bestreifung wird verworfen, damit die Datenbank nicht unbegrenzt wächst. */
 const TRACK_RETENTION_MS = 72 * 3600_000;
 const LEAPFROG_STOPS = 8;
+/** Name der Standardinstanz. */
+const STANDARD_INSTANZ_NAME = 'KSOD';
 const MAX_INSTANCES = 200;
 
 const DEFAULT_OPERATION: Operation = {
@@ -106,7 +108,10 @@ export class Lage extends EventEmitter<{ event: [LageEvent] }> {
     const trackerPos = db.getKv('trackerPositions');
     if (trackerPos) for (const [id, p] of Object.entries(JSON.parse(trackerPos) as Record<string, Position>)) this.trackerPositions.set(id, p);
     migrateEntities(db);
-    this.ensure('instance', '', INSTANZ_HAUPT, { name: 'Hauptlage', art: 'einsatz', beschreibung: '', mitglieder: [], erstelltVon: 'system' });
+    this.ensure('instance', '', INSTANZ_HAUPT, { name: STANDARD_INSTANZ_NAME, art: 'einsatz', beschreibung: '', mitglieder: [], erstelltVon: 'system' });
+    // 0.18: Die Standardinstanz heißt „KSOD“ (einmalig umbenennen, falls sie noch den alten Namen trägt).
+    const haupt = this.get('instance', INSTANZ_HAUPT, '');
+    if (haupt && haupt.data.name === 'Hauptlage') this.write('instance', '', INSTANZ_HAUPT, { ...haupt.data, name: STANDARD_INSTANZ_NAME }, 'system');
     this.ensure('layer', '', LAYER_DAUERHAFT, { name: 'Dauerhafte Orte', art: 'dauerhaft', status: 'live', beschreibung: 'In allen Instanzen sichtbar' });
     for (const instance of this.list('instance')) this.ensureInstance(instance.id);
     this.pruneTrack();
@@ -567,7 +572,7 @@ export class Lage extends EventEmitter<{ event: [LageEvent] }> {
       case 'instanz.bearbeiten': {
         const instance = this.requireInstance(args.id as string);
         this.requireMembership(actor, instance);
-        if (instance.id === INSTANZ_HAUPT && actor.role !== 'zentrale') throw new LageError('verboten', 'Die Hauptlage benennt nur die Kommandozentrale um.');
+        if (instance.id === INSTANZ_HAUPT && actor.role !== 'zentrale') throw new LageError('verboten', 'Die Standardinstanz benennt nur Sentinel Web um.');
         this.write('instance', '', instance.id, { ...instance.data, name: args.name as string, beschreibung: args.beschreibung as string }, actor.id);
         break;
       }
@@ -645,7 +650,7 @@ export class Lage extends EventEmitter<{ event: [LageEvent] }> {
 
   private deleteInstance(actor: Actor, id: string): void {
     const instance = this.requireInstance(id);
-    if (id === INSTANZ_HAUPT) throw new LageError('verboten', 'Die Hauptlage kann nicht gelöscht werden.');
+    if (id === INSTANZ_HAUPT) throw new LageError('verboten', 'Die Standardinstanz kann nicht gelöscht werden.');
     this.requireMembership(actor, instance);
     for (const m of this.list('member')) if (m.data.instanz === id) this.switchInstance(m.id, INSTANZ_HAUPT);
     for (const kind of SCOPED_KINDS) for (const entity of this.entities.listIn(kind, id)) this.remove(kind, id, entity.id);

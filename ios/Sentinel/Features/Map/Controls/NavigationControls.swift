@@ -103,7 +103,7 @@ struct NavigationBanner: View {
     }
 }
 
-/// Unterer Teil der Navi-Ansicht: Ankunft, Restzeit, Ziel, Sonderrechte und Beenden.
+/// Unterer Teil der Navi-Ansicht: Restzeit, Strecke und Ankunft, Ziel, Sonderrechte und Beenden.
 struct NavigationBottomBar: View {
     @Environment(AppModel.self) private var model
     @Environment(RouteFollower.self) private var route
@@ -115,9 +115,10 @@ struct NavigationBottomBar: View {
             HStack(alignment: .center, spacing: 14) {
                 VStack(alignment: .leading, spacing: 2) {
                     if let progress = route.progress {
-                        Text("\(Format.time(progress.arrival)) Ankunft")
-                            .font(.headline.monospacedDigit())
-                        Text("\(Format.duration(progress.remainingTime)), \(Format.distance(progress.remainingDistance))")
+                        // Restdauer groß; Ankunft und Strecke klein darunter.
+                        Text(Format.duration(progress.remainingTime))
+                            .font(.title3.weight(.bold).monospacedDigit())
+                        Text("\(Format.distance(progress.remainingDistance)) · Ankunft \(Format.time(progress.arrival))")
                             .font(.subheadline.monospacedDigit())
                             .foregroundStyle(.secondary)
                     } else {

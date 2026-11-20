@@ -196,7 +196,7 @@ function SituationBand() {
       <dl class="facts">
         <div>
           <dt>{currentInstance.value?.data.art === 'paket' ? 'Paket' : 'Instanz'}</dt>
-          <dd>{currentInstance.value?.data.name ?? 'Hauptlage'}</dd>
+          <dd>{currentInstance.value?.data.name ?? 'KSOD'}</dd>
         </div>
         <div>
           <dt>Funkkanal</dt>

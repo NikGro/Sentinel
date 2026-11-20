@@ -286,6 +286,7 @@ struct ObjectTargetList: View {
 
     @Environment(AppModel.self) private var model
     @Environment(LageStore.self) private var lage
+    @Environment(LocalSettings.self) private var settings
 
     private struct Entry: Identifiable {
         let id: String
@@ -426,7 +427,9 @@ struct ObjectTargetList: View {
 
     private var targetEntries: [Entry] {
         lage.sortedTargets.compactMap { target in
-            guard let position = lage.position(ofTarget: target) else { return nil }
+            // Nur, was auch auf der Karte zu sehen ist: ausgeblendete Ziele und Zielarten fehlen.
+            guard !settings.hiddenTargetKinds.contains(target.data.art.rawValue), !settings.hiddenTargets.contains(target.id),
+                  let position = lage.position(ofTarget: target) else { return nil }
             let live = lage.isLive(target)
             return Entry(id: "t-\(target.id)", title: target.data.displayName, subtitle: target.data.art.title, symbol: target.data.mapSymbol, target: .target(target.id), point: position.point, live: live)
         }
@@ -434,7 +437,8 @@ struct ObjectTargetList: View {
 
     private var objectEntries: [Entry] {
         lage.mapObjects.values.compactMap { object in
-            guard [.fahndungsraum, .marker, .oepnvfahrzeug].contains(object.data.typ), !object.data.isExpired(), lage.layers[object.data.layerId]?.data.isLive == true else { return nil }
+            guard [.fahndungsraum, .marker, .oepnvfahrzeug].contains(object.data.typ), !object.data.isExpired(), lage.layers[object.data.layerId]?.data.isLive == true,
+                  !settings.hiddenLayers.contains(object.data.layerId) else { return nil }
             let point = lage.position(ofObject: object.data)
             let title = object.data.titel.isEmpty ? object.data.typ.title : object.data.titel
             return Entry(

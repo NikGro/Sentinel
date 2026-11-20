@@ -6,11 +6,8 @@ struct SituationBar: View {
 
     @Environment(LageStore.self) private var lage
 
-    /// Einsatzname; ohne Namen in einer eigenen Instanz deren Name.
-    private var barTitle: String {
-        if !lage.operation.titel.isEmpty { return lage.operation.titel }
-        return lage.instanz == Instance.mainId ? "" : (lage.currentInstance?.data.name ?? "")
-    }
+    /// Name der Lage ist der Name der Instanz.
+    private var barTitle: String { lage.currentInstance?.data.name ?? "" }
 
     var body: some View {
         Button(action: onTap) {
@@ -87,7 +84,7 @@ struct SituationBar: View {
     private var accessibilitySummary: String {
         var parts = ["Funkkanal \(lage.operation.funkkanal ?? "nicht gesetzt")"]
         parts.append("A-Position \(lage.aHolder.map { "\(lage.label(of: $0.data)), \(lage.mobilityDescription(of: $0.data))" } ?? "frei")")
-        if !lage.operation.titel.isEmpty { parts.append("Einsatz \(lage.operation.titel)") }
+        if !barTitle.isEmpty { parts.append("Einsatz \(barTitle)") }
         parts.append(lage.connection == .verbunden ? "\(onlineCount) Kräfte verbunden" : lage.connection.title)
         return parts.joined(separator: ", ")
     }

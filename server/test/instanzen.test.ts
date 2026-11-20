@@ -70,7 +70,7 @@ test('Instanzen: löschen räumt alles ab, die Hauptlage bleibt', () => {
   assert.equal(lage.activeInstance('a'), 'haupt');
   assert.equal(lage.list('annotation', 'nord').length, 0);
   assert.equal(lage.coverage('nord').length, 0);
-  assert.throws(() => lage.command(zentrale, 'instanz.loeschen', { id: 'haupt' }), /Hauptlage/);
+  assert.throws(() => lage.command(zentrale, 'instanz.loeschen', { id: 'haupt' }), /Standardinstanz/);
 });
 
 test('Pakete: Inhalt wird als eigenständige Objekte in die Instanz übernommen', () => {
@@ -182,4 +182,14 @@ test('Ziel an der A bleibt nach Abgabe der A an ihrer letzten Position', () => {
   lage.reportPosition('a', pos(53.6, 10.1));
   lage.command(fahnder('a'), 'a.freigeben');
   assert.equal(lage.get('target', 'z')?.data.standort?.lat, 53.6);
+});
+
+test('Standardinstanz heißt KSOD, auch nach Umbenennung einer alten Hauptlage', () => {
+  const db = new Database(':memory:');
+  const first = new Lage(db);
+  assert.equal(first.get('instance', 'haupt', '')?.data.name, 'KSOD');
+  const old = first.get('instance', 'haupt', '')!;
+  db.sql.prepare("UPDATE entities SET data = ? WHERE kind = 'instance' AND id = 'haupt'").run(JSON.stringify({ ...old.data, name: 'Hauptlage' }));
+  const second = new Lage(db);
+  assert.equal(second.get('instance', 'haupt', '')?.data.name, 'KSOD');
 });

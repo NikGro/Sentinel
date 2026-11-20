@@ -116,9 +116,11 @@ private struct TargetRow: View {
                         .font(.subheadline)
                         .foregroundStyle(.secondary)
                 }
-                if !target.data.kennzeichen.isEmpty {
-                    Text(target.data.kennzeichen)
-                        .font(.caption.monospaced().weight(.semibold))
+                if let secondary = target.data.secondaryName {
+                    Text(secondary)
+                        .font(target.data.art == .fahrzeug ? .subheadline : .caption.monospaced().weight(.semibold))
+                        .foregroundStyle(target.data.art == .fahrzeug ? Color.secondary : Color.primary)
+                        .lineLimit(1)
                 }
 
             }

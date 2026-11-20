@@ -14,7 +14,7 @@ struct SituationSheet: View {
             List {
                 Section("Einsatz") {
                     LabeledContent("Lage") {
-                        Text(lage.operation.titel.isEmpty ? "Ohne Titel" : lage.operation.titel)
+                        Text(lage.currentInstance?.data.name ?? "–")
                     }
                     Button { showsChannelEditor = true } label: {
                         LabeledContent {
@@ -159,9 +159,6 @@ private struct SituationNotesEditor: View {
     var body: some View {
         NavigationStack {
             Form {
-                Section("Titel") {
-                    TextField("z. B. Observation Musterstraße", text: $title)
-                }
                 Section("Einsatzhinweise") {
                     TextField("Auftrag, Treffpunkt, Eigensicherung …", text: $notes, axis: .vertical)
                         .lineLimit(5...14)
