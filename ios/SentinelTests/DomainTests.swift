@@ -254,8 +254,9 @@ struct TransitSimulationTests {
         object.takt = 5
         let now = Date(timeIntervalSince1970: 2_000_000)
         object.zeit = (now.addingTimeInterval(-3600).timeIntervalSince1970 * 1000)
-        // 5,5 km mit 520 m/min ≈ 10,7 min Fahrt bei 5-Minuten-Takt: zwei oder drei Fahrzeuge gleichzeitig.
+        // 5,5 km mit 520 m/min ≈ 10,7 min Fahrt, dazu je fünf Minuten Stehen an den Endhalten: ≈ 20,7 min bei
+        // 5-Minuten-Takt, also vier oder fünf Fahrzeuge gleichzeitig.
         let count = TransitSimulation.vehicles(on: object, at: now).count
-        #expect((2...3).contains(count))
+        #expect((4...5).contains(count))
     }
 }
