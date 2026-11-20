@@ -7,6 +7,11 @@ statt jede Änderung sofort einzubauen. Erledigtes wandert mit Version ins CHANG
 
 ### Nächste Runde
 
+- **Straßenverzeichnis speichersparend neu bauen (vorerst abgeschaltet):** Das Verzeichnis des ganzen Einsatzraums
+  (23 MB als JSON) brachte den Server beim Einlesen über seine Speichergrenze von 256 MB. Die Folge war eine
+  Neustart-Schleife. Neu: Straßen und Knoten in SQLite statt im Speicher, nur die Umgebung der Suche abfragen;
+  Download in Kacheln. Bis dahin läuft die Kreuzungssuche wieder über Overpass (langsam). Einschalten nur über
+  `SENTINEL_STRASSENVERZEICHNIS=an`.
 - **Offene Rückfrage:** Soll der Schalter „Auf der Karte“ in der Zielliste für alle in der Instanz gelten statt nur
   auf dem eigenen Gerät?
 - **Fahrspuren beim Abbiegehinweis beobachten:** Die Anzeige gibt es; bei Gelegenheit prüfen, ob sie zuverlässig
