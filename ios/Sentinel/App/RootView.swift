@@ -18,6 +18,11 @@ struct RootView: View {
         .animation(.default, value: lock.isLocked)
     }
 
+    /// In einer Instanz (im Dienst) oder in einem Sonderbereich; außer Dienst bleibt nur das Hauptmenü.
+    private var insideInstance: Bool {
+        (model.lage.me?.data.aktiv ?? true) || model.editsPermanentLayer || model.lage.isPackageArea
+    }
+
     @ViewBuilder private var content: some View {
         switch model.phase {
         case .onboarding:
@@ -32,6 +37,9 @@ struct RootView: View {
             // Passen App und Server nicht zusammen, ist die App gesperrt, bis eine passende Version läuft.
             if let mismatch = model.lage.versionMismatch {
                 VersionLockView(message: mismatch)
+            } else if model.showsHome || !insideInstance {
+                // Übergeordnetes Hauptmenü: Karte, Ziele, Kräfte und Chat gibt es nur innerhalb einer Instanz.
+                NavigationStack { InstancesScreen(isHome: true) }
             } else {
                 MainView()
             }

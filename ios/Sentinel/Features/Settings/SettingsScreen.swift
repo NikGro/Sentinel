@@ -39,18 +39,20 @@ struct SettingsScreen: View {
 
                     Section {
                         // Ein Eintrag für Dienst und Instanzen: Im Dienst ist, wer in einer Instanz ist.
-                        NavigationLink { InstancesScreen() } label: {
+                        // Instanzen wechseln, verlassen und Pakete gibt es im übergeordneten Hauptmenü.
+                        Button { model.showsHome = true } label: {
                             HStack(spacing: 12) {
                                 Image(systemName: me.data.aktiv ? "square.stack.3d.up.fill" : "moon.zzz.fill")
                                     .foregroundStyle(me.data.aktiv ? Color.accentColor : Color.secondary)
                                 VStack(alignment: .leading, spacing: 2) {
-                                    Text("Instanzen")
+                                    Text("Instanzen (Hauptmenü)")
                                     Text(me.data.aktiv ? "Im Dienst · \(currentArea)" : "Außer Dienst · Instanz betreten")
                                         .font(.caption)
                                         .foregroundStyle(.secondary)
                                 }
                             }
                         }
+                        .tint(.primary)
 
                         if location.isDenied {
                             Button("Standortzugriff in den Einstellungen erlauben", systemImage: "exclamationmark.triangle.fill") {

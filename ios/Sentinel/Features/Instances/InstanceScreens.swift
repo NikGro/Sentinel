@@ -3,14 +3,40 @@ import SwiftUI
 /// Instanzenmenü: eigene Einsätze öffnen, anlegen, beitreten, verlassen und löschen. Darunter, deutlich abgesetzt,
 /// die beiden Sonderbereiche „Dauerhafte Orte bearbeiten“ und „Paket vorbereiten“.
 struct InstancesScreen: View {
+    /// Als übergeordnetes Hauptmenü (über den Instanzen) statt als Unterseite.
+    var isHome = false
+
     @Environment(AppModel.self) private var model
     @Environment(LageStore.self) private var lage
+    @Environment(LocalSettings.self) private var settings
+    @State private var showsSignOut = false
     @State private var creating = false
     @State private var editing: Versioned<Instance>?
     @State private var deleting: Versioned<Instance>?
 
+    private var onDuty: Bool { lage.me?.data.aktiv ?? false }
+
     var body: some View {
         List {
+            if isHome {
+                Section {
+                    if onDuty, !lage.isPackageArea {
+                        Button {
+                            model.openInstance(lage.instanz)
+                        } label: {
+                            Label("Zurück zu „\(lage.currentInstance?.data.name ?? "Lage")“", systemImage: "arrow.uturn.backward.circle.fill")
+                                .font(.headline)
+                        }
+                    } else {
+                        Label("Außer Dienst", systemImage: "moon.zzz.fill")
+                            .foregroundStyle(.secondary)
+                    }
+                } footer: {
+                    Text(onDuty
+                        ? "Im Dienst: Der Standort wird mit den Kräften der Instanz geteilt."
+                        : "Eine Instanz öffnen oder beitreten, um in den Dienst zu gehen. Lage, Ziele, Kräfte und Chat gibt es nur innerhalb einer Instanz.")
+                }
+            }
             Section {
                 ForEach(lage.myInstances) { instance in
                     InstanceRow(instance: instance, isOpen: instance.id == lage.instanz && !model.editsPermanentLayer, open: {
@@ -86,8 +112,24 @@ struct InstancesScreen: View {
                 Label("Sonderbereiche", systemImage: "wrench.and.screwdriver")
             }
             .listRowBackground(Theme.special.opacity(0.12))
+
+            if isHome {
+                Section("Profil und App") {
+                    NavigationLink { ProfileEditor(mode: .edit) } label: {
+                        Label("Profil", systemImage: "person.crop.circle")
+                    }
+                    Toggle("App-Sperre", systemImage: "faceid", isOn: Binding(get: { settings.appLockEnabled }, set: { settings.appLockEnabled = $0 }))
+                    Button("Gerät abmelden", systemImage: "rectangle.portrait.and.arrow.right", role: .destructive) { showsSignOut = true }
+                }
+            }
         }
-        .navigationTitle("Instanzen")
+        .alert("Dieses Gerät vom Server abmelden?", isPresented: $showsSignOut) {
+            Button("Abbrechen", role: .cancel) {}
+            Button("Abmelden", role: .destructive) { model.signOut() }
+        } message: {
+            Text("Für eine erneute Anmeldung wird der Zugangscode benötigt.")
+        }
+        .navigationTitle(isHome ? "Hauptmenü" : "Instanzen")
         .sheet(isPresented: $creating) {
             InstanceForm(title: "Neue Instanz") { name, description in
                 // Der Server öffnet die neue Instanz gleich.

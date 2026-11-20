@@ -164,17 +164,25 @@ final class AppModel {
     private(set) var returnInstance: String?
 
     /// Wechselt in eine Instanz; eine laufende Navigation gehört zur alten Lage und endet.
+    /// Hauptmenü statt der Instanz zeigen (Instanzen wechseln, verlassen, Pakete). Außer Dienst ist es immer zu sehen.
+    var showsHome = false
+
     func openInstance(_ id: String) {
+        showsHome = false
         editsPermanentLayer = false
         settings.permanentLayerUnlocked = false
         mapRequest += 1
-        guard id != lage.instanz else { return }
+        // Außer Dienst auch die zuletzt geöffnete Instanz neu betreten (der Server schaltet dabei in den Dienst).
+        guard id != lage.instanz || lage.me?.data.aktiv == false else { return }
         if lage.instances[id]?.data.isPackage == true, !lage.isPackageArea { returnInstance = lage.instanz }
         if route.isActive { stopNavigation() }
         lage.switchInstance(id)
     }
 
-    func showMap() { mapRequest += 1 }
+    func showMap() {
+        showsHome = false
+        mapRequest += 1
+    }
 
     // MARK: Verlauf
 
@@ -217,6 +225,7 @@ final class AppModel {
     }
 
     func editPermanentLayer(_ on: Bool) {
+        if on { showsHome = false }
         if on, route.isActive { stopNavigation() }
         // Dauerhafte Orte werden aus einem Einsatz heraus bearbeitet, nicht aus einem Paket.
         if on, lage.isPackageArea { openInstance(returnInstance ?? Instance.mainId) }
