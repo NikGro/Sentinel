@@ -270,6 +270,23 @@ struct APIClient: Sendable {
         let b: String?
     }
 
+    /// Alle Querstraßen einer Straße mit Kreuzungspunkten; `a` ist der richtige Name der Straße.
+    struct CrossingStreets: Decodable, Sendable {
+        struct Street: Decodable, Sendable {
+            let name: String
+            let punkte: [GeoPoint]
+        }
+        let a: String
+        let strassen: [Street]
+    }
+
+    func crossingStreets(_ a: String, near: GeoPoint) async throws -> CrossingStreets {
+        try await json(CrossingStreets.self, "GET", "api/v1/kreuzung/strassen", query: [
+            URLQueryItem(name: "a", value: a),
+            URLQueryItem(name: "lat", value: String(near.lat)), URLQueryItem(name: "lon", value: String(near.lon)),
+        ])
+    }
+
     func intersection(_ a: String, _ b: String, near: GeoPoint) async throws -> Crossing {
         try await json(
             Crossing.self,

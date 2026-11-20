@@ -44,7 +44,10 @@ final class SearchService: NSObject, MKLocalSearchCompleterDelegate {
         return value.filter { $0.isLetter || $0.isNumber }
     }
 
+    /// Anschriften: Straßen, Hausnummern, Kreuzungen.
     private(set) var suggestions: [Suggestion] = []
+    /// Örtlichkeiten: Geschäfte, Behörden, Plätze.
+    private(set) var placeSuggestions: [Suggestion] = []
     private(set) var isSearching = false
     /// Vorschläge werden gerade auf Existenz geprüft (Kreuzung, Hausnummer).
     private(set) var isValidating = false
@@ -114,24 +117,27 @@ final class SearchService: NSObject, MKLocalSearchCompleterDelegate {
 
     func update(query: String, near region: MKCoordinateRegion?) {
         failure = nil
-        validation?.cancel()
-        isValidating = false
         // Vorschläge nur aus der Nähe: Wer „Heg“ tippt, meint den Hegpark um die Ecke, nicht einen Ort weit weg.
         completer.region = region ?? Self.fallbackRegion
         completer.regionPriority = .required
         if let (a, b) = Self.intersectionParts(query) {
-            // Zweiten Straßennamen vervollständigen, den ersten voranstellen.
+            // Kreuzung: Querstraßen der ersten Straße einmal vom Server holen, die zweite filtert nur noch lokal.
             intersectionPrefix = a
             typedSecondStreet = b
-            completer.resultTypes = .address
-            if b.count >= 2 {
-                completer.queryFragment = b
-            } else {
-                suggestions = []
+            placeSuggestions = []
+            // Eine andere Straße als bisher: laufende Abfrage abbrechen; dieselbe Straße lädt einfach weiter.
+            if crossingRequest != nil, crossingRequest != a.lowercased() {
+                validation?.cancel()
+                crossingRequest = nil
             }
+            showCrossings(of: a)
             return
         }
+        validation?.cancel()
+        isValidating = false
         intersectionPrefix = nil
+        crossingRequest = nil
+        placeSuggestions = []
         placeResults = []
         if let (number, street) = Self.leadingNumber(query) {
             // Hausnummer vorn: nur die Straße vervollständigen und die Nummer wieder anhängen.
@@ -158,43 +164,15 @@ final class SearchService: NSObject, MKLocalSearchCompleterDelegate {
         let isPlaces = completer === placeCompleter
         Task { @MainActor in
             if isPlaces {
-                // Örtlichkeiten nur im freien Suchmodus, hinter den Straßen.
+                // Örtlichkeiten (Geschäfte, Behörden, Plätze) in einem eigenen Bereich; nur im freien Suchmodus.
                 guard self.intersectionPrefix == nil, self.leadingHouseNumber == nil else { return }
                 self.placeResults = results.prefix(8).map { Suggestion(title: $0.title, subtitle: $0.subtitle, completion: $0) }
                 self.mergeSuggestions()
                 return
             }
-            if let prefix = self.intersectionPrefix {
-                // Für Kreuzungen nur den Straßennamen ohne Ort übernehmen.
-                var seen = Set<String>()
-                // Die Eingabe selbst zuerst prüfen: Apple vervollständigt nicht jeden (auch falsch geschriebenen) Namen,
-                // der Server ordnet ihn trotzdem der richtigen Straße zu.
-                let typed = self.typedSecondStreet
-                if !typed.isEmpty { seen.insert(typed) }
-                let typedCandidate: [(String, Suggestion)] = typed.count >= 3 ? [(typed, Suggestion(title: "\(prefix) / \(typed)", subtitle: "Kreuzung", completion: nil))] : []
-                let candidates: [(String, Suggestion)] = typedCandidate + results.compactMap { result in
-                    let street = result.title.components(separatedBy: ",").first?.trimmingCharacters(in: .whitespaces) ?? result.title
-                    guard seen.insert(street).inserted else { return nil }
-                    return (street, Suggestion(title: "\(prefix) / \(street)", subtitle: "Kreuzung", completion: nil))
-                }
-                // Nur Kreuzungen zeigen, an denen beide Straßen wirklich aufeinandertreffen; Namen so, wie der Server sie
-                // gefunden hat (Tippfehler korrigiert). Gleiche Kreuzungen erscheinen nur einmal.
-                self.validate { client, near in
-                    var kept: [Suggestion] = []
-                    var found = Set<String>()
-                    for (street, suggestion) in candidates.prefix(7) {
-                        if Task.isCancelled { return kept }
-                        guard let crossing = try? await client?.intersection(prefix, street, near: near ?? GeoPoint(lat: 53.57, lon: 10)),
-                              let first = crossing.punkte.first else { continue }
-                        let title = "\(crossing.a ?? prefix) / \(crossing.b ?? street)"
-                        guard found.insert(title).inserted else { continue }
-                        var corrected = Suggestion(title: title, subtitle: suggestion.subtitle, completion: nil)
-                        corrected.point = first
-                        kept.append(corrected)
-                    }
-                    return kept
-                }
-            } else if let number = self.leadingHouseNumber {
+            // Kreuzungen kommen aus der Querstraßen-Liste des Servers, nicht aus der Vervollständigung.
+            if self.intersectionPrefix != nil { return }
+            if let number = self.leadingHouseNumber {
                 var seen = Set<String>()
                 self.suggestions = results.compactMap { result in
                     let street = result.title.components(separatedBy: ",").first?.trimmingCharacters(in: .whitespaces) ?? result.title
@@ -230,10 +208,75 @@ final class SearchService: NSObject, MKLocalSearchCompleterDelegate {
         }
     }
 
-    /// Straßen und Adressen zuerst, dann Örtlichkeiten; gleiche Titel nur einmal.
+    /// Anschriften und Örtlichkeiten getrennt; was in beiden vorkommt, nur bei den Anschriften.
     private func mergeSuggestions() {
-        var seen = Set<String>()
-        suggestions = (addressResults + placeResults).filter { seen.insert("\($0.title)|\($0.subtitle)").inserted }.prefix(14).map { $0 }
+        suggestions = addressResults
+        let addresses = Set(addressResults.map { "\($0.title)|\($0.subtitle)" })
+        placeSuggestions = placeResults.filter { !addresses.contains("\($0.title)|\($0.subtitle)") }
+    }
+
+    // MARK: Kreuzungen
+
+    /// Querstraßen je Straße (in Kleinschreibung), wie der Server sie geliefert hat.
+    @ObservationIgnored private var crossingCache: [String: APIClient.CrossingStreets] = [:]
+    /// Straße, deren Querstraßen gerade geladen werden.
+    @ObservationIgnored private var crossingRequest: String?
+
+    /// Querstraßen von `a`, gefiltert nach dem bisher getippten zweiten Namen. Nur der erste Aufruf je Straße geht an
+    /// den Server; jede weitere Eingabe filtert sofort.
+    private func showCrossings(of a: String) {
+        let key = a.lowercased()
+        if let cached = crossingCache[key] {
+            isValidating = false
+            suggestions = Self.crossingSuggestions(cached, filter: typedSecondStreet)
+            if suggestions.isEmpty, typedSecondStreet.count >= 3 { checkTypedCrossing(a, typedSecondStreet) }
+            return
+        }
+        // Läuft schon für diese Straße: Das Ergebnis filtert dann nach der aktuellen Eingabe.
+        if crossingRequest == key { return }
+        guard a.count >= 2, let client else {
+            suggestions = []
+            return
+        }
+        validation?.cancel()
+        crossingRequest = key
+        suggestions = []
+        isValidating = true
+        let near = near ?? GeoPoint(lat: 53.57, lon: 10)
+        validation = Task {
+            try? await Task.sleep(for: .milliseconds(300))
+            guard !Task.isCancelled else { return }
+            let result = try? await client.crossingStreets(a, near: near)
+            guard !Task.isCancelled, crossingRequest == key else { return }
+            crossingRequest = nil
+            isValidating = false
+            if let result { crossingCache[key] = result }
+            suggestions = result.map { Self.crossingSuggestions($0, filter: typedSecondStreet) } ?? []
+            if result == nil { failure = "Kreuzungssuche zurzeit nicht erreichbar." }
+        }
+    }
+
+    /// Querstraßen als Vorschläge, passend zur Eingabe; ohne Eingabe alle, nächstgelegene zuerst.
+    nonisolated static func crossingSuggestions(_ crossings: APIClient.CrossingStreets, filter: String) -> [Suggestion] {
+        crossings.strassen
+            .filter { filter.isEmpty || $0.name.matches(search: filter) || normalizedStreet($0.name).hasPrefix(normalizedStreet(filter)) }
+            .prefix(20)
+            .compactMap { street in
+                guard let point = street.punkte.first else { return nil }
+                var suggestion = Suggestion(title: "\(crossings.a) / \(street.name)", subtitle: "Kreuzung", completion: nil)
+                suggestion.point = point
+                return suggestion
+            }
+    }
+
+    /// Nichts in der Liste passt (z. B. Tippfehler im zweiten Namen): einmal unscharf beim Server nachfragen.
+    private func checkTypedCrossing(_ a: String, _ b: String) {
+        validate { client, near in
+            guard let crossing = try? await client?.intersection(a, b, near: near ?? GeoPoint(lat: 53.57, lon: 10)), let first = crossing.punkte.first else { return [] }
+            var suggestion = Suggestion(title: "\(crossing.a ?? a) / \(crossing.b ?? b)", subtitle: "Kreuzung", completion: nil)
+            suggestion.point = first
+            return [suggestion]
+        }
     }
 
     /// Prüft Vorschläge im Hintergrund; neue Eingaben brechen die laufende Prüfung ab.

@@ -45,30 +45,36 @@ final class NaviRequestLoader: URLRequestLoading, @unchecked Sendable {
         json["sentinel"] = ["sonderrechte": specialRights]
         if walking { json["costing"] = "pedestrian" }
 
-        // Ohne Sonderrechte und mit dem Auto: Apples verkehrsabhängigen Weg als Vorgabe übernehmen.
+        // Immer die direkt gerechnete Route; ohne Sonderrechte mit dem Auto zusätzlich Apples verkehrsabhängigen Weg
+        // als Vorgabe. Beides läuft gleichzeitig.
+        var plain = request
+        plain.httpBody = try JSONSerialization.data(withJSONObject: json)
+        async let direct = send(plain)
         var guide: TrafficGuide?
         if !specialRights, !walking, let locations = json["locations"] as? [[String: Any]], locations.count >= 2 {
             guide = await TrafficGuide.make(from: locations[0], to: locations[locations.count - 1])
-            if let guide, !guide.vias.isEmpty {
-                var guided = locations
-                guided.insert(contentsOf: guide.vias, at: 1)
-                var guidedJSON = json
-                guidedJSON["locations"] = guided
-                request.httpBody = try JSONSerialization.data(withJSONObject: guidedJSON)
-                let (data, response) = try await send(request)
-                // Führt die Vorgabe zu einem deutlich längeren Weg (z. B. weil Apple eine Straße nutzt, die im eigenen
-                // Wegenetz fehlt), lieber ohne Vorgabe rechnen.
-                if let distance = Self.distance(data), distance <= guide.distance * 1.25 + 300 {
-                    record(response, data: data, guide: guide)
-                    return (data, response)
-                }
+        }
+        let (data, response) = try await direct
+        if let guide, !guide.vias.isEmpty, var locations = json["locations"] as? [[String: Any]] {
+            locations.insert(contentsOf: guide.vias, at: 1)
+            var guidedJSON = json
+            guidedJSON["locations"] = locations
+            var guided = request
+            guided.httpBody = try JSONSerialization.data(withJSONObject: guidedJSON)
+            if let result = try? await send(guided), Self.isPlausible(result.0, comparedTo: data, guide: guide) {
+                record(result.1, data: result.0, guide: guide)
+                return result
             }
         }
-
-        request.httpBody = try JSONSerialization.data(withJSONObject: json)
-        let (data, response) = try await send(request)
         record(response, data: data, guide: guide)
         return (data, response)
+    }
+
+    /// Die Route mit Apples Vorgabe gilt nur, wenn sie nicht spürbar länger ist als ohne Vorgabe und als Apples eigene
+    /// Route. Ein Durchfahrtspunkt auf der falschen Fahrbahn führt sonst zu Schleifen und Wenden.
+    static func isPlausible(_ guided: Data, comparedTo direct: Data, guide: TrafficGuide) -> Bool {
+        guard let guidedDistance = distance(guided), let directDistance = distance(direct) else { return false }
+        return guidedDistance <= directDistance * 1.15 + 200 && guidedDistance <= guide.distance * 1.15 + 200
     }
 
     private func send(_ request: URLRequest) async throws -> (Data, URLResponse) {
@@ -161,7 +167,7 @@ struct TrafficGuide {
                 "lon": coordinates[i].longitude,
                 "type": "through",
                 "heading": Int(bearing(coordinates[i - 1], coordinates[i]).rounded()) % 360,
-                "heading_tolerance": 45,
+                "heading_tolerance": 60,
             ])
             if result.count >= 20 { break }
         }

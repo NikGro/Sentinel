@@ -154,9 +154,10 @@ struct SearchSheet: View {
                     .tint(.primary)
                 }
             }
-        } else if !search.suggestions.isEmpty || !stops.isEmpty {
+        } else if !search.suggestions.isEmpty || !search.placeSuggestions.isEmpty || !stops.isEmpty {
+            // Drei getrennte Bereiche: Anschriften (Straßen, Hausnummern, Kreuzungen), Örtlichkeiten, Haltestellen.
             if !search.suggestions.isEmpty {
-            Section("Vorschläge") {
+            Section("Anschriften") {
                 ForEach(search.suggestions) { suggestion in
                     Button {
                         Task { await choose(suggestion) }
@@ -166,6 +167,18 @@ struct SearchSheet: View {
                     .tint(.primary)
                 }
             }
+            }
+            if !search.placeSuggestions.isEmpty {
+                Section("Örtlichkeiten") {
+                    ForEach(search.placeSuggestions) { suggestion in
+                        Button {
+                            Task { await choose(suggestion) }
+                        } label: {
+                            row(title: suggestion.title, subtitle: suggestion.subtitle, symbol: "building.2", distance: nil)
+                        }
+                        .tint(.primary)
+                    }
+                }
             }
             if !stops.isEmpty {
                 Section("Haltestellen") {

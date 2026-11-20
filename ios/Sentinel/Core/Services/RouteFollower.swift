@@ -162,7 +162,8 @@ final class RouteFollower {
                 annotation: annotations,
                 spokenInstructionObserver: .initAVSpeechSynthesizer(isMuted: true)
             )
-            core.minimumTimeBeforeRecalculation = 3
+            // Kurz nach dem Start schwankt der Standort noch; nicht bei jedem Ausreißer neu rechnen.
+            core.minimumTimeBeforeRecalculation = 8
             core.minimumMovementBeforeRecalculation = 30
             core.delegate = coreDelegate
             cancellables = []
