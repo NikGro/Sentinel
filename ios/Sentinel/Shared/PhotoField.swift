@@ -49,11 +49,7 @@ struct PhotoField: View {
         .accessibilityHint(blobId == nil ? "Foto hinzufügen" : "Foto ersetzen oder entfernen")
         // Auswahlblatt statt Sprechblase; Kamera bzw. Mediathek erst, wenn es ganz geschlossen ist.
         .sheet(isPresented: $showsOptions, onDismiss: {
-            switch followup {
-            case "kamera": showsCamera = true
-            case "mediathek": showsLibrary = true
-            default: break
-            }
+            if followup == "kamera" { showsCamera = true } else if followup == "mediathek" { showsLibrary = true }
             followup = nil
         }) {
             MediaActionSheet(title: title, actions: options) { action in

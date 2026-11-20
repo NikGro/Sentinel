@@ -64,13 +64,15 @@ struct SituationAdminScreen: View {
                 }
                 .tint(.primary)
             }
-            Section("Einsatzinformationen") {
+            Section {
                 TextField("Auftrag, Treffpunkt, Eigensicherung …", text: $notes, axis: .vertical)
                     .lineLimit(4...12)
                 Button("Für alle übernehmen") {
                     lage.setSituation(title: String(title.prefix(80)), notes: String(notes.prefix(4000)))
                 }
                 .disabled(notes == lage.operation.hinweise)
+            } header: {
+                Text("Einsatzinformationen")
             } footer: {
                 Text("Der Name der Lage ist der Name der Instanz; umbenennen unter Instanzen.")
             }
