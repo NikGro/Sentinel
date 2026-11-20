@@ -28,6 +28,11 @@ struct MapScreen: View {
     @State var pin: CameraPin?
     /// Die App bewegt die Kamera gerade selbst; solange zählt eine Kamerabewegung nicht als Verschieben.
     @State var cameraAnimating = false
+    /// Bis wann Kamerabewegungen von der App selbst stammen (Anheften, Nachführen); danach ist es der Finger.
+    @State var programmaticUntil = Date.distantPast
+    /// Zoomstufe und Neigung beim Anheften; das Nachführen hält sie, bis man selbst zoomt oder kippt.
+    @State var followDistance: CLLocationDistance?
+    @State var followPitch: Double?
     /// Tempolimit der Straße am eigenen Standort (OpenStreetMap), auch ohne Navigation.
     @State var roadSpeedLimit: Int?
     /// Rasterzelle (~100 m) des eigenen Standorts; ein Wechsel fragt das Tempolimit neu ab.
@@ -171,7 +176,9 @@ struct MapScreen: View {
     }
 
     var mainBody: some View {
-        MapReader { proxy in
+        // Einmal je Darstellung: welche Punkte gebündelt bzw. auseinandergerückt werden.
+        let layout = clusterLayout
+        return MapReader { proxy in
             Map(position: $camera, scope: mapScope) {
                 // Im Fahrmodus ohne Navigation bleibt der normale Standortpunkt; nur in der Navigation ersetzt ihn der Navi-Pfeil.
                 if true {
@@ -184,7 +191,7 @@ struct MapScreen: View {
                 }
                 CoverageLayer(runs: CoverageRun.cached(coverageSegments))
                 ReachLayer(rings: reachRings)
-                MapObjectsLayer(lines: objects(.linie) + objects(.pfeil), areas: objects(.flaeche), circles: objects(.kreis) + objects(.haltestellen), handles: handles, offsets: clutterOffsets) { id in
+                MapObjectsLayer(lines: objects(.linie) + objects(.pfeil), areas: objects(.flaeche), circles: objects(.kreis) + objects(.haltestellen), handles: handles.filter { !layout.hidden.contains($0.id) }, offsets: layout.offsets) { id in
                     openEditor(for: id)
                 }
                 TransitLayer(sections: objects(.oepnvlinie), vehicles: transitPins, showsStopNames: cameraState.distance < 5000) { pin in
@@ -197,8 +204,9 @@ struct MapScreen: View {
                     HistoryLayer(state: history) { model.title(of: $0) }
                 }
                 StopsLayer(stops: lage.operation.ueberschlagen.naechste, mine: lage.myLeapfrogStop, line: lage.aHolder?.data.oepnv.map { NearbyStop.Line(ref: $0.linie, typ: "", farbe: nil) })
-                SymbolLayer(pins: vehiclePins + targetPins, offsets: clutterOffsets) { selection = $0 }
-                ForcesLayer(pins: forcePins, offsets: clutterOffsets) { selection = $0 }
+                SymbolLayer(pins: (vehiclePins + targetPins).filter { !layout.hidden.contains($0.id) }, offsets: layout.offsets) { selection = $0 }
+                ForcesLayer(pins: forcePins.filter { !layout.hidden.contains($0.id) }, offsets: layout.offsets) { selection = $0 }
+                ClusterLayer(clusters: layout.clusters) { zoom(into: $0) }
                 DraftLayer(points: draftPoints, outline: draftOutline)
             }
             .mapStyle(mapStyle)
@@ -212,7 +220,12 @@ struct MapScreen: View {
             // Apples Rechtshinweis sitzt unten links; etwas Abstand zu den runden Bildschirmecken, damit er nicht abschneidet.
             .safeAreaPadding(.horizontal, 14)
             .ignoresSafeArea(.container, edges: .bottom)
-            .onMapCameraChange(frequency: .continuous) { context in cameraState.update(context.camera) }
+            .onMapCameraChange(frequency: .continuous) { context in
+                cameraState.update(context.camera)
+                // Angeheftet bewegt sich die Kamera außerhalb der eigenen Fahrten nur durch den Finger: dann sofort
+                // nicht mehr nachführen, sonst kämpfen Geste und Nachführung (Zittern).
+                if pin != nil, !cameraAnimating, Date.now > programmaticUntil, !userMovedCamera { userMovedCamera = true }
+            }
             .simultaneousGesture(DragGesture(minimumDistance: 12).onChanged { _ in
                 userMovedCamera = true
             })

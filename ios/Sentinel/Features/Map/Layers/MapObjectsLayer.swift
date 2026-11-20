@@ -208,11 +208,72 @@ struct AreaLabelLayout {
     }
 }
 
+/// Herausgezoomt fasst die Karte nah beieinanderliegende Punkte zu einem Cluster mit Anzahl zusammen; nah
+/// herangezoomt rückt sie sie stattdessen auseinander (`Declutter`).
+struct MapCluster: Identifiable {
+    let id: String
+    let coordinate: CLLocationCoordinate2D
+    let memberIds: [String]
+    let members: [CLLocationCoordinate2D]
+}
+
+struct ClusterLayout {
+    var offsets: [String: CGSize] = [:]
+    var clusters: [MapCluster] = []
+    /// Punkte, die in einem Cluster stecken und deshalb nicht einzeln gezeichnet werden.
+    var hidden: Set<String> = []
+
+    /// Ab dieser Kamerahöhe (Meter je Bildpunkt) wird geclustert statt auseinandergerückt.
+    static let clusterFromMetersPerPoint = 2.5
+
+    init() {}
+
+    init(_ items: [(id: String, coordinate: CLLocationCoordinate2D)], metersPerPoint: Double) {
+        guard metersPerPoint >= Self.clusterFromMetersPerPoint else {
+            offsets = Declutter.offsets(items, metersPerPoint: metersPerPoint)
+            return
+        }
+        for group in Declutter.groups(items, metersPerPoint: metersPerPoint, points: 36) where group.count > 1 {
+            let lat = group.map(\.coordinate.latitude).reduce(0, +) / Double(group.count)
+            let lon = group.map(\.coordinate.longitude).reduce(0, +) / Double(group.count)
+            let ids = group.map(\.id).sorted()
+            clusters.append(MapCluster(id: ids.joined(separator: "|"), coordinate: CLLocationCoordinate2D(latitude: lat, longitude: lon),
+                                       memberIds: ids, members: group.map(\.coordinate)))
+            hidden.formUnion(ids)
+        }
+    }
+}
+
+/// Cluster als Glaskreis mit Anzahl; Antippen zoomt hinein, bis die Punkte einzeln zu sehen sind.
+struct ClusterLayer: MapContent {
+    let clusters: [MapCluster]
+    let onSelect: (MapCluster) -> Void
+
+    var body: some MapContent {
+        ForEach(clusters) { cluster in
+            Annotation("", coordinate: cluster.coordinate, anchor: .center) {
+                Text("\(cluster.memberIds.count)")
+                    .font(.system(size: 15, weight: .heavy, design: .rounded))
+                    .foregroundStyle(.white)
+                    .frame(width: 38, height: 38)
+                    .background(Theme.force.gradient, in: .circle)
+                    .overlay(Circle().stroke(.white, lineWidth: 2.5))
+                    .shadow(color: .black.opacity(0.3), radius: 3, y: 1)
+                    .onTapGesture { onSelect(cluster) }
+                    .accessibilityLabel("\(cluster.memberIds.count) Objekte, antippen zum Hineinzoomen")
+                    .accessibilityAddTraits(.isButton)
+            }
+            .annotationTitles(.hidden)
+        }
+    }
+}
+
 /// Liegen Punkte (fast) übereinander, werden sie im Kreis auseinandergerückt, damit jeder einzeln sichtbar
 /// und antippbar ist. Bezug ist die Bildschirmentfernung: unter 30 Bildpunkten gilt ein Punkt als verdeckt.
 enum Declutter {
-    static func offsets(_ items: [(id: String, coordinate: CLLocationCoordinate2D)], metersPerPoint: Double) -> [String: CGSize] {
-        let threshold = max(metersPerPoint, 0.05) * 30
+    /// Punkte, die auf dem Bildschirm näher als `points` beieinanderliegen, in Gruppen.
+    static func groups(_ items: [(id: String, coordinate: CLLocationCoordinate2D)], metersPerPoint: Double, points: Double = 30) -> [[(id: String, coordinate: CLLocationCoordinate2D)]] {
+        let threshold = max(metersPerPoint, 0.05) * points
         var groups: [[(id: String, coordinate: CLLocationCoordinate2D)]] = []
         for item in items {
             let point = GeoPoint(item.coordinate)
@@ -222,6 +283,11 @@ enum Declutter {
                 groups.append([item])
             }
         }
+        return groups
+    }
+
+    static func offsets(_ items: [(id: String, coordinate: CLLocationCoordinate2D)], metersPerPoint: Double) -> [String: CGSize] {
+        let groups = groups(items, metersPerPoint: metersPerPoint)
         var result: [String: CGSize] = [:]
         for group in groups where group.count > 1 {
             let radius = 24.0 + Double(group.count) * 3

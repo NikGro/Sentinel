@@ -70,6 +70,17 @@ private struct MyLocationMarker: View {
     let cameraState: MapCameraState
 
     var body: some View {
+        if style == .navigation {
+            // Navigation: großer Pfeil, flach auf der Karte liegend (mit der Kameraneigung gekippt), ohne Beschriftung.
+            FlatNavigationArrow(rotation: course >= 0 ? course - cameraState.heading : 0, pitch: cameraState.pitch)
+                .accessibilityElement()
+                .accessibilityLabel(accessibilityText)
+        } else {
+            marker
+        }
+    }
+
+    private var marker: some View {
         VStack(spacing: 0) {
             disc
                 .overlay(alignment: .topTrailing) {
@@ -114,9 +125,7 @@ private struct MyLocationMarker: View {
     @ViewBuilder private var symbol: some View {
         switch style {
         case .navigation:
-            // Pfeil in Fahrtrichtung, relativ zur gedrehten Karte.
             Image(systemName: "location.north.fill")
-                .rotationEffect(.degrees(course >= 0 ? course - cameraState.heading : 0))
         case .vehicle:
             Image(systemName: Fortbewegung.fahrzeug.symbolName)
         case .transit:
@@ -140,4 +149,25 @@ private struct MyLocationMarker: View {
 enum OwnLocationDisc {
     static let size: CGFloat = 32
     static let halo: CGFloat = 50
+}
+
+/// Navi-Pfeil, der flach auf der Karte liegt: in Fahrtrichtung gedreht und um die Kameraneigung nach hinten gekippt.
+struct FlatNavigationArrow: View {
+    let rotation: Double
+    let pitch: Double
+
+    var body: some View {
+        Image(systemName: "location.north.fill")
+            .font(.system(size: 44, weight: .bold))
+            .foregroundStyle(Theme.accent)
+            .overlay {
+                Image(systemName: "location.north")
+                    .font(.system(size: 44, weight: .bold))
+                    .foregroundStyle(.white)
+            }
+            .shadow(color: .black.opacity(0.35), radius: 3, y: 2)
+            .rotationEffect(.degrees(rotation))
+            .rotation3DEffect(.degrees(pitch), axis: (x: 1, y: 0, z: 0), perspective: 0.4)
+            .frame(width: 64, height: 64)
+    }
 }

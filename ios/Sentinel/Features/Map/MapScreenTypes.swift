@@ -98,4 +98,8 @@ enum CameraPin: Equatable {
 
     var distance: CLLocationDistance { self == .heading ? 280 : 1500 }
     var pitch: Double { self == .heading ? 40 : 0 }
+
+    /// Navigation: etwas höher als beim Anheften für mehr Überblick, gekippt wie in üblichen Navis.
+    static let navigationDistance: CLLocationDistance = 420
+    static let navigationPitch: Double = 52
 }

@@ -153,14 +153,19 @@ extension MapScreen {
     /// Erst fährt die Kamera dorthin, dann führt `followTick` sie mit jeder Standortmeldung nach.
     func pinCamera(_ mode: CameraPin) {
         pin = mode
+        // In der Navigation wie in üblichen Navis: etwas höher für mehr Überblick, deutlich gekippt.
+        let navigating = route.isActive && mode == .heading
+        followDistance = navigating ? CameraPin.navigationDistance : mode.distance
+        followPitch = navigating ? CameraPin.navigationPitch : mode.pitch
         guard let current = location.current else { return }
         let heading = mode == .heading ? (myCourse ?? cameraState.heading) : 0
-        animateCamera(MapCamera(centerCoordinate: current.coordinate, distance: mode.distance, heading: heading, pitch: mode.pitch))
+        animateCamera(MapCamera(centerCoordinate: current.coordinate, distance: followDistance ?? mode.distance, heading: heading, pitch: followPitch ?? mode.pitch))
     }
 
     /// Bewegt die Kamera. Angeheftet führt die App sie danach selbst nach (siehe `followTick`).
     func animateCamera(_ target: MapCamera) {
         cameraAnimating = true
+        programmaticUntil = .now.addingTimeInterval(0.8)
         withAnimation(.easeInOut(duration: 0.5)) { camera = .camera(target) }
         Task {
             try? await Task.sleep(for: .milliseconds(560))
@@ -174,7 +179,11 @@ extension MapScreen {
     func followTick() {
         guard let mode = pin, !cameraAnimating, !userMovedCamera, let current = location.current else { return }
         let heading = mode == .heading ? (myCourse ?? cameraState.heading) : cameraState.heading
-        let target = MapCamera(centerCoordinate: current.coordinate, distance: cameraState.distance, heading: heading, pitch: cameraState.pitch)
+        // Gespeicherte Zoomstufe und Neigung statt der gerade gemeldeten: Während einer Kamerafahrt meldet die Karte
+        // Zwischenwerte, die sonst als neue Zoomstufe hängen blieben.
+        let target = MapCamera(centerCoordinate: current.coordinate, distance: followDistance ?? cameraState.distance, heading: heading,
+                               pitch: followPitch ?? cameraState.pitch)
+        programmaticUntil = .now.addingTimeInterval(1.0)
         withAnimation(.linear(duration: 0.9)) { camera = .camera(target) }
     }
 
@@ -184,6 +193,9 @@ extension MapScreen {
         guard pin != nil, !cameraAnimating, let here = location.current?.coordinate else { return }
         let offset = GeoPoint(current.centerCoordinate).distance(to: GeoPoint(here))
         if offset < max(current.distance * 0.06, 12) {
+            // Gezoomt oder gekippt: diese Werte gelten ab jetzt für das Nachführen.
+            followDistance = current.distance
+            followPitch = current.pitch
             followTick()
         } else {
             pin = nil

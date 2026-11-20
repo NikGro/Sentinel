@@ -52,9 +52,20 @@ extension MapScreen {
     }
 
     /// Versatz für übereinanderliegende Symbole (Kräfte, Fahrzeuge, Ziele, Marker).
-    var clutterOffsets: [String: CGSize] {
+    /// Herausgezoomt Cluster, nah dran auseinandergerückte Punkte.
+    var clusterLayout: ClusterLayout {
         let items = forcePins.map { ($0.id, $0.coordinate) } + (vehiclePins + targetPins).map { ($0.id, $0.coordinate) } + handles.map { ($0.id, $0.coordinate) }
-        return Declutter.offsets(items.map { (id: $0.0, coordinate: $0.1) }, metersPerPoint: cameraState.distance / 700)
+        return ClusterLayout(items.map { (id: $0.0, coordinate: $0.1) }, metersPerPoint: cameraState.distance / 700)
+    }
+
+    /// Cluster angetippt: so weit hineinzoomen, dass alle Punkte darin zu sehen sind.
+    func zoom(into cluster: MapCluster) {
+        let lats = cluster.members.map(\.latitude), lons = cluster.members.map(\.longitude)
+        guard let minLat = lats.min(), let maxLat = lats.max(), let minLon = lons.min(), let maxLon = lons.max() else { return }
+        let center = CLLocationCoordinate2D(latitude: (minLat + maxLat) / 2, longitude: (minLon + maxLon) / 2)
+        let span = MKCoordinateSpan(latitudeDelta: max((maxLat - minLat) * 2.5, 0.003), longitudeDelta: max((maxLon - minLon) * 2.5, 0.003))
+        pin = nil
+        withAnimation(.easeInOut(duration: 0.5)) { camera = .region(MKCoordinateRegion(center: center, span: span)) }
     }
 
     var hasTransit: Bool { visibleObjects.contains { $0.data.typ.isTransit } }
