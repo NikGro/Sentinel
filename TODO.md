@@ -7,6 +7,29 @@ statt jede Änderung sofort einzubauen. Erledigtes wandert mit Version ins CHANG
 
 ### Nächste Runde
 
+- **Tab-Kopfzeilen (Ziele, Kräfte, Chat, Mehr):** Den Plus-Knopf oben auf die Höhe des großen Titels setzen. Die
+  feste Leiste oben beim Scrollen mit einem Verlauf ins Transparente auslaufen lassen statt mit harter Kante.
+- **ÖPNV-Ansicht, „Hierhin navigieren“:** Der Knopf ist in den Einstellungen (Bearbeiten) gelandet, gehört aber in die
+  Übersicht (Ansicht des Objekts).
+- **ÖPNV-Fahrzeuge ruckeln wieder:** Sie gleiten nicht, sondern springen in kleinen Schritten. Ursache gründlich
+  suchen (Takt 0,5 s, Kamera-Nachführung, Neuberechnung der Position) und dauerhaft beheben.
+- **Navigation findet keine Route:** Das Routing (Valhalla) deckt Hamburg, Schleswig-Holstein und Niedersachsen ab.
+  Der Valhalla-Log zeigt „No suitable edges near location“, also keine Straße nah genug am Start- oder Zielpunkt
+  (z. B. mitten auf einem Platz). Lösung: Suchradius für das Einrasten auf die Straße vergrößern (`radius`/
+  `search_cutoff` je Punkt) und, falls nötig, auf Fußwege ausweichen, statt die Route zu verwerfen. Liegt der Ort
+  außerhalb dieser drei Länder, die Abdeckung erweitern.
+- **Kamera angeheftet (3D): Winkel und Zoom von Hand gründlich lösen.** Neigen und Zoomen mit zwei Fingern
+  funktionieren beim Anheften wieder nicht richtig. Diesmal in Ruhe und vollständig umsetzen. Anforderungen:
+  - Angeheftet folgt die Kamera dem eigenen Standort (und in 3D der Fahrtrichtung) ohne Zittern und ohne ständige
+    Kamerafahrten im Stand.
+  - Zoomen (Zwei-Finger-Zusammenziehen) und Neigen (zwei Finger senkrecht wischen) ändern Abstand bzw. Winkel, ohne
+    dass die Kopplung gelöst wird. Die gewählten Werte bleiben beim weiteren Folgen erhalten und springen nicht
+    zurück.
+  - Erst bewusstes Verschieben mit einem Finger löst die Kopplung.
+  - Standard beim Anheften: 3D mit Kompass 400 m, Norden oben 1500 m; Navigation wie bisher.
+  - Vor der Umsetzung das Zusammenspiel von Nachführen (`followTick`), Gestenerkennung (`isUserCameraChange`) und
+    MapKit-Kamerapositionen sauber neu entwerfen, statt weitere Schwellen nachzuschieben; mit dem
+    Kamerawerte-Overlay (Mehr › Entwickler) auf dem Gerät prüfen.
 - **Straßenverzeichnis beobachten:** Läuft seit 0.18 mit 2 GB Container-Speicher, Node.js darf bis 1,5 GB nutzen;
   nach dem Start belegt der Server etwa 380 MB. Den Speicher beim wöchentlichen Neuladen über Overpass im Blick
   behalten. Wird es knapp, die Straßen in SQLite statt im Arbeitsspeicher halten und in Kacheln laden.
