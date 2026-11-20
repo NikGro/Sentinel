@@ -74,7 +74,22 @@ final class NaviRequestLoader: URLRequestLoading, @unchecked Sendable {
     /// Route. Ein Durchfahrtspunkt auf der falschen Fahrbahn führt sonst zu Schleifen und Wenden.
     static func isPlausible(_ guided: Data, comparedTo direct: Data, guide: TrafficGuide) -> Bool {
         guard let guidedDistance = distance(guided), let directDistance = distance(direct) else { return false }
-        return guidedDistance <= directDistance * 1.15 + 200 && guidedDistance <= guide.distance * 1.15 + 200
+        // Wendet die Route mit Vorgabe öfter als die direkte, ist ein Durchfahrtspunkt in einer Neben- oder Sackgasse
+        // gelandet (hinein und wieder heraus): dann lieber die direkte Route.
+        if uTurns(guided) > uTurns(direct) { return false }
+        return guidedDistance <= directDistance * 1.10 + 120 && guidedDistance <= guide.distance * 1.10 + 120
+    }
+
+    /// Anzahl der Wendemanöver in einer Route (OSRM-Format: Richtung „uturn“).
+    static func uTurns(_ data: Data) -> Int {
+        guard let legs = routeObject(data)?["legs"] as? [[String: Any]] else { return 0 }
+        return legs.reduce(0) { count, leg in
+            let steps = leg["steps"] as? [[String: Any]] ?? []
+            return count + steps.filter { step in
+                let maneuver = step["maneuver"] as? [String: Any]
+                return (maneuver?["modifier"] as? String) == "uturn" || ((maneuver?["type"] as? String)?.contains("uturn") ?? false)
+            }.count
+        }
     }
 
     private func send(_ request: URLRequest) async throws -> (Data, URLResponse) {
@@ -167,7 +182,9 @@ struct TrafficGuide {
                 "lon": coordinates[i].longitude,
                 "type": "through",
                 "heading": Int(bearing(coordinates[i - 1], coordinates[i]).rounded()) % 360,
-                "heading_tolerance": 60,
+                "heading_tolerance": 45,
+                // Nur Straßen direkt am Punkt: sonst rastet er auf einer parallelen Neben- oder Sackgasse ein.
+                "radius": 20,
             ])
             if result.count >= 20 { break }
         }

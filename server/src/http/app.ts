@@ -19,6 +19,7 @@ import type { ReleaseStore } from '../release.js';
 import { RateLimiter, type Vault } from '../security.js';
 import type { PajPoller } from '../trackers/paj.js';
 import type { TrackerLink, TrackerStatusStore } from '../trackers/status.js';
+import type { StreetIndex } from '../streetindex.js';
 import { registerAdminRoutes } from './admin.js';
 import { registerFileRoutes } from './files.js';
 import { registerNavigationRoutes } from './navigation.js';
@@ -54,6 +55,8 @@ export interface Services {
   trackerStatus: TrackerStatusStore;
   /** Befehle an SinoTrack-Geräte über die bestehende Datenverbindung. */
   trackerLink: TrackerLink;
+  /** Lokales Straßenverzeichnis für schnelle Kreuzungssuche. */
+  streets: StreetIndex;
 }
 
 export class HttpError extends Error {

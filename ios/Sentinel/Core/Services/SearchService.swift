@@ -244,7 +244,8 @@ final class SearchService: NSObject, MKLocalSearchCompleterDelegate {
         isValidating = true
         let near = near ?? GeoPoint(lat: 53.57, lon: 10)
         validation = Task {
-            try? await Task.sleep(for: .milliseconds(300))
+            // Der Server beantwortet das aus seinem Straßenverzeichnis in Millisekunden; kurz entprellen genügt.
+            try? await Task.sleep(for: .milliseconds(120))
             guard !Task.isCancelled else { return }
             let result = try? await client.crossingStreets(a, near: near)
             guard !Task.isCancelled, crossingRequest == key else { return }

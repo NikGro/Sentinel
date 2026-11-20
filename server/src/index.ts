@@ -7,6 +7,7 @@ import { buildApp, type Services } from './http/app.js';
 import { Hub } from './hub.js';
 import { Lage } from './lage.js';
 import { spurDays } from './spur.js';
+import { StreetIndex } from './streetindex.js';
 import { TransitousClient } from './transit/transitous.js';
 import { MapKitTokens } from './mapkit.js';
 import { createOverpassClient, OepnvStore } from './oepnv.js';
@@ -76,6 +77,7 @@ export async function createServices(config: Config, database?: Database): Promi
     unknownTrackers: new Map(),
     trackerStatus,
     trackerLink: new TrackerLink(),
+    streets: new StreetIndex(config.dataDir, config.oepnvBbox, overpass),
   };
 }
 
@@ -115,8 +117,12 @@ async function main(): Promise<void> {
   const app = await buildApp(services);
   const trackerListener = startTrackerListener(services);
   services.oepnv.refreshIfStale();
+  services.streets.refreshIfStale();
   // Viertelstündlich prüfen: frische Daten werden nicht neu geladen, ein Fehler (z. B. Overpass überlastet) aber bald wiederholt.
-  setInterval(() => services.oepnv.refreshIfStale(), 15 * 60_000).unref();
+  setInterval(() => {
+    services.oepnv.refreshIfStale();
+    services.streets.refreshIfStale();
+  }, 15 * 60_000).unref();
   // Verwaiste Dateien (gelöschte Nachrichten, Ziele, Markierungen) belegen sonst dauerhaft Platz.
   const pruneBlobs = () => {
     try {
