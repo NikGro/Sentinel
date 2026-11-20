@@ -467,7 +467,7 @@ struct TransitExplorer: View {
         line.linie = ref
         line.haltNamen = names
         line.weg = trip.points.isEmpty ? nil : trip.points
-        line.fahrt = TransitTrip(id: trip.tripId, zeiten: times, haltIds: trip.stops.map(\.stopId), echtzeit: trip.realTime, stand: Date.now.timeIntervalSince1970 * 1000)
+        line.fahrt = TransitTrip(id: trip.tripId, zeiten: times, haltIds: trip.stops.map(\.stopId), echtzeit: trip.realTime, stand: (Date.now.timeIntervalSince1970 * 1000).rounded())
         line.ebenen = TransitLayerChoice(fahrzeug: parts.contains(.fahrzeug), strecke: parts.contains(.strecke), halte: parts.contains(.haltestellen))
         // Nur das Fahrzeug: verschwindet nach der Ankunft von selbst.
         if parts == [.fahrzeug], let end = times.compactMap({ $0 }).last { line.ablauf = end + 300_000 }

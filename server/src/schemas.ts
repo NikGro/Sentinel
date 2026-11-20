@@ -149,7 +149,8 @@ const annotation = z
         haltIds: z.array(z.string().max(200)).max(400).optional(),
         /** Liegen Echtzeitdaten vor, und wann wurden die Zeiten zuletzt erfolgreich aufgefrischt (ms)? */
         echtzeit: z.boolean().optional(),
-        stand: timestamp.optional(),
+        // Zeitpunkt in ms; ganzzahlig gerundet, damit auch Kommazahlen (z. B. aus der App) angenommen werden.
+        stand: z.number().min(0).max(4_102_444_800_000).transform(Math.round).optional(),
       })
       .nullish()
       .transform((v) => v ?? null),

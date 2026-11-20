@@ -147,7 +147,7 @@ struct MapScreen: View {
     /// Rückfragen zu Suchtreffern und ÖPNV-Fahrzeugen, getrennt vom Rest, damit der Compiler die Ansicht schafft.
     func dialogs(_ content: some View) -> some View {
         content
-        // Takt für die ÖPNV-Fahrzeuge: alle zwei Sekunden, gleitend, solange welche sichtbar sind.
+        // Takt für die ÖPNV-Fahrzeuge: alle halbe Sekunde, gleitend, solange welche sichtbar sind.
         // Verlauf: bei jeder Änderung von Spuren oder Zeitraum neu laden, solange er offen ist alle 30 Sekunden.
         .task(id: history.loadKey(model.historySubjects)) {
             guard showsHistory else { return }
@@ -161,9 +161,10 @@ struct MapScreen: View {
             }
         }
         .task(id: hasTransit) {
+            // Kurze Schritte: Andere Kamerabewegungen (Nachführen) unterbrechen das Gleiten sonst sichtbar.
             while hasTransit, !Task.isCancelled {
-                try? await Task.sleep(for: .seconds(2))
-                withAnimation(.linear(duration: 2)) { transitNow = .now }
+                try? await Task.sleep(for: .milliseconds(500))
+                withAnimation(.linear(duration: 0.5)) { transitNow = .now }
             }
         }
         .confirmationDialog(
