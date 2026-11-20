@@ -148,18 +148,29 @@ extension MapScreen {
         Task {
             try? await Task.sleep(for: .milliseconds(560))
             cameraAnimating = false
-            if let pin { camera = .userLocation(followsHeading: pin == .heading, fallback: .automatic) }
+            if let pin { follow(pin, distance: target.distance) }
+        }
+    }
+
+    /// Übergibt an die flüssige Nachführung von Apple Karten. Die setzt sonst ihre eigene Zoomstufe; deshalb wird die
+    /// gewünschte Entfernung für einen Moment festgehalten und danach wieder freigegeben (Zoomen mit zwei Fingern).
+    func follow(_ mode: CameraPin, distance: CLLocationDistance) {
+        cameraBounds = MapCameraBounds(minimumDistance: distance * 0.97, maximumDistance: distance * 1.03)
+        camera = .userLocation(followsHeading: mode == .heading, fallback: .automatic)
+        Task {
+            try? await Task.sleep(for: .milliseconds(900))
+            cameraBounds = nil
         }
     }
 
     /// Nach einer Geste: Ist die Karte nur gezoomt, gedreht oder leicht verrutscht (Mitte nah am eigenen Standort),
-    /// bleibt sie angeheftet. Erst wer sie bewusst wegschiebt, löst die Kopplung; die Karte bleibt dann, wie sie ist.
+    /// bleibt sie angeheftet. Wer sie spürbar wegschiebt, löst die Kopplung; die Karte bleibt dann, wie sie ist.
     func keepPinAfterGesture(_ current: MapCamera) {
         guard let mode = pin, !cameraAnimating, !camera.followsUserLocation else { return }
         guard let here = location.current?.coordinate else { return }
         let offset = GeoPoint(current.centerCoordinate).distance(to: GeoPoint(here))
-        if offset < max(current.distance * 0.18, 25) {
-            camera = .userLocation(followsHeading: mode == .heading, fallback: .automatic)
+        if offset < max(current.distance * 0.06, 12) {
+            follow(mode, distance: current.distance)
         } else {
             pin = nil
         }
@@ -177,16 +188,7 @@ extension MapScreen {
                     create(kind, at: pin.point, title: pin.title, delayed: false)
                 }, close: { searchPin = nil })
             }
-            if !selectedObjects.isEmpty {
-                GroupToolbar(
-                    count: selectedObjects.count,
-                    hasGroup: selectedObjects.contains { lage.mapObjects[$0]?.data.gruppe != nil },
-                    group: groupSelection,
-                    ungroup: ungroupSelection,
-                    delete: { confirmsGroupDelete = true },
-                    done: { selectedObjects = [] }
-                )
-            } else if route.isActive {
+            if route.isActive {
                 NavigationBottomBar()
             } else if searchPin == nil, reducedTools {
                 SpecialAreaBar()

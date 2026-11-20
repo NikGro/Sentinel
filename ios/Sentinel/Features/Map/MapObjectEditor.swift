@@ -222,19 +222,6 @@ struct MapObjectEditor: View {
                     }
                 }
 
-                if object.typ == .marker {
-                    Section {
-                        Picker("Standort", selection: $object.trackerId) {
-                            Text("Von Hand gesetzt").tag(String?.none)
-                            ForEach(lage.trackers.values.sorted { $0.data.name < $1.data.name }) { tracker in
-                                Text("Tracker \(tracker.data.name)").tag(String?.some(tracker.id))
-                            }
-                        }
-                    } footer: {
-                        Text("Mit Tracker folgt der Marker dem Gerät.")
-                    }
-                }
-
                 Section {
                     Picker("Ebene", selection: $object.layerId) {
                         ForEach(availableLayers) { layer in

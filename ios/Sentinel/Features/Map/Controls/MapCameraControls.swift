@@ -105,16 +105,17 @@ struct LocationCompassButton: View {
     var body: some View {
         Button(action: action) {
             ZStack {
-                CompassRose(heading: state.heading)
+                CompassRose(heading: state.heading, onTint: pin != nil)
                 Image(systemName: pin == nil ? "location.north" : "location.north.fill")
                     .font(.system(size: 13, weight: .bold))
-                    .foregroundStyle(pin == nil ? Color.primary : Color.accentColor)
+                    .foregroundStyle(pin == nil ? Color.primary : Color.white)
             }
             .frame(width: Theme.roundButton, height: Theme.roundButton)
             .contentShape(.circle)
         }
         .buttonStyle(.plain)
-        .glassEffect(.regular.interactive(), in: .circle)
+        // Angeheftet: blaues Glas, darauf der weiß gefüllte Pfeil.
+        .glassEffect(pin == nil ? .regular.interactive() : .regular.tint(Theme.accent).interactive(), in: .circle)
         .accessibilityLabel("Auf eigenen Standort anheften")
         .accessibilityValue(pin == .heading ? "angeheftet, in Fahrtrichtung" : pin == .north ? "angeheftet, Norden oben" : "frei")
         .accessibilityHint(pin == .heading ? "Wechselt zu Norden oben" : "Heftet in Fahrtrichtung an")
@@ -125,6 +126,8 @@ struct LocationCompassButton: View {
 /// aufrecht lesbar und wandern nur um den Pfeil herum.
 private struct CompassRose: View {
     let heading: CLLocationDirection
+    /// Auf blauem Glas (angeheftet): helle Teilstriche und Buchstaben.
+    var onTint = false
 
     private static let letters: [(text: String, angle: Double)] = [("N", 0), ("O", 90), ("S", 180), ("W", 270)]
 
@@ -134,7 +137,7 @@ private struct CompassRose: View {
                 // Teilstriche alle 30°, ausgenommen die Stellen der Buchstaben.
                 if index % 3 != 0 {
                     Capsule()
-                        .fill(.secondary)
+                        .fill(onTint ? AnyShapeStyle(.white.opacity(0.7)) : AnyShapeStyle(.secondary))
                         .frame(width: 1.2, height: 3)
                         .offset(y: -17)
                         .rotationEffect(.degrees(Double(index) * 30 - heading))
@@ -145,7 +148,7 @@ private struct CompassRose: View {
                 let angle = (letter.angle - heading) * .pi / 180
                 Text(letter.text)
                     .font(.system(size: 8, weight: .heavy, design: .rounded))
-                    .foregroundStyle(letter.text == "N" ? Color.red : Color.secondary)
+                    .foregroundStyle(letter.text == "N" ? (onTint ? Color.white : Color.red) : (onTint ? Color.white.opacity(0.75) : Color.secondary))
                     .offset(x: sin(angle) * 16, y: -cos(angle) * 16)
             }
         }

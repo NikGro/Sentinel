@@ -17,25 +17,22 @@ struct MapObjectsLayer: MapContent {
     let circles: [Versioned<MapObject>]
     let handles: [ObjectHandle]
     var offsets: [String: CGSize] = [:]
-    /// Mehrfachauswahl (Gruppen): ausgewählte Objekte sind hervorgehoben.
-    var selected: Set<String> = []
     let onSelect: (String) -> Void
-    var onLongPress: (String) -> Void = { _ in }
 
     var body: some MapContent {
         ForEach(areas) { object in
             MapPolygon(coordinates: object.data.punkte.map(\.coordinate))
                 .foregroundStyle(Color(hex: object.data.farbe).opacity(object.data.wert == nil ? 0.18 : 0.32))
-                .stroke(selected.contains(object.id) ? Color.accentColor : Color(hex: object.data.farbe), lineWidth: selected.contains(object.id) ? 4 : (object.data.wert == nil ? 2 : 1))
+                .stroke(Color(hex: object.data.farbe), lineWidth: object.data.wert == nil ? 2 : 1)
         }
         ForEach(circles) { object in
             MapCircle(center: object.data.anchor.coordinate, radius: object.data.radius ?? 100)
                 .foregroundStyle(Color(hex: object.data.farbe).opacity(0.15))
-                .stroke(selected.contains(object.id) ? Color.accentColor : Color(hex: object.data.farbe), lineWidth: selected.contains(object.id) ? 4 : 2)
+                .stroke(Color(hex: object.data.farbe), lineWidth: 2)
         }
         ForEach(lines) { object in
             MapPolyline(coordinates: object.data.punkte.map(\.coordinate))
-                .stroke(selected.contains(object.id) ? Color.accentColor : Color(hex: object.data.farbe), style: StrokeStyle(lineWidth: selected.contains(object.id) ? 6 : 4, lineCap: .round, lineJoin: .round))
+                .stroke(Color(hex: object.data.farbe), style: StrokeStyle(lineWidth: 4, lineCap: .round, lineJoin: .round))
             if object.data.typ == .pfeil, let head = ArrowHead.coordinates(object.data.punkte) {
                 MapPolyline(coordinates: head)
                     .stroke(Color(hex: object.data.farbe), style: StrokeStyle(lineWidth: 4, lineCap: .round, lineJoin: .round))
@@ -44,21 +41,16 @@ struct MapObjectsLayer: MapContent {
         ForEach(handles) { handle in
             Annotation(handle.object.titel, coordinate: handle.coordinate, anchor: .center) {
                 MapObjectHandle(object: handle.object, locked: handle.locked)
-                    .overlay {
-                        if selected.contains(handle.id) {
-                            Circle().stroke(Color.accentColor, lineWidth: 3).frame(width: 42, height: 42)
-                        }
-                    }
                     .offset(offsets[handle.id] ?? .zero)
                     .onTapGesture { onSelect(handle.id) }
-                    .onLongPressGesture(minimumDuration: 0.45) { onLongPress(handle.id) }
             }
             .annotationTitles(.hidden)
         }
     }
 }
 
-private struct MapObjectHandle: View {
+/// Griff bzw. Symbol einer Markierung auf der Karte; auch als Vorschau beim Setzen.
+struct MapObjectHandle: View {
     let object: MapObject
     let locked: Bool
 

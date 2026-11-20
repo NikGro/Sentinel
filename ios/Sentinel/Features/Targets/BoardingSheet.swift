@@ -123,3 +123,42 @@ struct BoardingSheet: View {
         .tint(.primary)
     }
 }
+
+extension LageStore {
+    /// Fahrzeuge bzw. Gebäude, in die eine Zielperson einsteigen kann, nächstgelegene zuerst.
+    func boardingCandidates(for art: TargetBinding.Art, excluding targetId: String, near reference: GeoPoint?) -> [BoardingCandidate] {
+        var list: [(candidate: BoardingCandidate, point: GeoPoint?)] = []
+        switch art {
+        case .fuss:
+            return []
+        case .oepnv:
+            list = mapObjects.values.filter { ($0.data.typ == .oepnvfahrzeug || $0.data.hasRealVehicle) && !$0.data.isExpired() }.map { object in
+                let line = object.data.linie
+                return (BoardingCandidate(
+                    id: object.id,
+                    title: object.data.titel.isEmpty ? (line?.ref ?? "ÖPNV-Fahrzeug") : object.data.titel,
+                    subtitle: line.map { "Richtung \($0.richtung)" } ?? "ÖPNV-Fahrzeug",
+                    badge: line?.badge
+                ), position(ofObject: object.data))
+            }
+        case .fahrzeug, .objekt:
+            let wanted: ZielArt = art == .fahrzeug ? .fahrzeug : .objekt
+            list = sortedTargets.filter { $0.data.art == wanted && $0.id != targetId }.map { other in
+                let inside = passengers(of: other.id).filter { $0.id != targetId }.map(\.data.displayName)
+                return (BoardingCandidate(
+                    id: other.id,
+                    title: other.data.displayName,
+                    subtitle: inside.isEmpty ? (other.data.kennzeichen.isEmpty ? other.data.art.title : other.data.kennzeichen) : "Darin: \(inside.joined(separator: ", "))",
+                    badge: nil
+                ), position(ofTarget: other)?.point)
+            }
+        }
+        return list
+            .map { item in
+                var candidate = item.candidate
+                if let r = reference, let p = item.point { candidate.distance = r.distance(to: p) }
+                return candidate
+            }
+            .sorted { ($0.distance ?? .greatestFiniteMagnitude) < ($1.distance ?? .greatestFiniteMagnitude) }
+    }
+}

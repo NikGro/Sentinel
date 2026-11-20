@@ -26,6 +26,15 @@ struct MapScreen: View {
     @State var pin: CameraPin?
     /// Die App bewegt die Kamera gerade selbst; solange zählt eine Kamerabewegung nicht als Verschieben.
     @State var cameraAnimating = false
+    /// Hält die Zoomstufe kurz fest, während die Nachführung von Apple Karten übernimmt (sonst springt sie heraus).
+    @State var cameraBounds: MapCameraBounds?
+    /// Tempolimit der Straße am eigenen Standort (OpenStreetMap), auch ohne Navigation.
+    @State var roadSpeedLimit: Int?
+    /// Rasterzelle (~100 m) des eigenen Standorts; ein Wechsel fragt das Tempolimit neu ab.
+    var speedLimitCell: String {
+        guard let c = location.current?.coordinate else { return "" }
+        return "\((c.latitude * 1000).rounded()),\((c.longitude * 600).rounded())"
+    }
     var followsMe: Bool { pin != nil }
     /// Die letzte Kamerabewegung kam vom Finger (nicht von der App): Neigung danach als 2D/3D-Einstellung übernehmen.
     @State var userMovedCamera = false
@@ -40,9 +49,6 @@ struct MapScreen: View {
     @State var pickingBySearch = false
     /// Deutschlandweite ÖPNV-Karte.
     @State var showsTransitMap = false
-    /// Mehrfachauswahl für Gruppen (per langem Drücken); leer = keine Auswahl.
-    @State var selectedObjects: Set<String> = []
-    @State var confirmsGroupDelete = false
     /// Vorschau des neuen Orts: erst „Übernehmen“ setzt ihn endgültig; erneutes Tippen verschiebt die Vorschau.
     @State var pendingPoint: GeoPoint?
     /// Takt für die geschätzten ÖPNV-Fahrzeuge (alle 2 Sekunden, solange welche sichtbar sind).
@@ -57,13 +63,6 @@ struct MapScreen: View {
     /// Alle Fenster über der Karte.
     func sheets(_ content: some View) -> some View {
         content
-        .alert("\(selectedObjects.count) Objekte für alle löschen?", isPresented: $confirmsGroupDelete) {
-            Button("Abbrechen", role: .cancel) {}
-            Button("Löschen", role: .destructive) {
-                for id in selectedObjects { lage.deleteMapObject(id: id) }
-                selectedObjects = []
-            }
-        }
         .fullScreenCover(isPresented: $showsTransitMap) {
             TransitExplorer(start: GeoPoint(cameraState.center))
         }
@@ -151,24 +150,22 @@ struct MapScreen: View {
 
     var mainBody: some View {
         MapReader { proxy in
-            Map(position: $camera, scope: mapScope) {
+            Map(position: $camera, bounds: cameraBounds, scope: mapScope) {
                 // Im Fahrmodus ohne Navigation bleibt der normale Standortpunkt; nur in der Navigation ersetzt ihn der Navi-Pfeil.
                 if true {
                     MyLocationLayer(lage: lage, route: route, locationService: location, cameraState: cameraState)
                 }
-                if let pendingPoint { PlacementPreview(point: pendingPoint) }
+                if let pendingPoint { PlacementPreview(point: pendingPoint, look: previewLook(at: pendingPoint)) }
                 if let searchPin {
                     Marker(searchPin.title, systemImage: "magnifyingglass", coordinate: searchPin.point.coordinate)
                         .tint(.red)
                 }
                 CoverageLayer(runs: CoverageRun.cached(coverageSegments))
                 ReachLayer(rings: reachRings)
-                MapObjectsLayer(lines: objects(.linie) + objects(.pfeil), areas: objects(.flaeche), circles: objects(.kreis) + objects(.haltestellen), handles: handles, offsets: clutterOffsets, selected: selectedObjects) { id in
+                MapObjectsLayer(lines: objects(.linie) + objects(.pfeil), areas: objects(.flaeche), circles: objects(.kreis) + objects(.haltestellen), handles: handles, offsets: clutterOffsets) { id in
                     openEditor(for: id)
-                } onLongPress: { id in
-                    toggleSelection(id)
                 }
-                TransitLayer(sections: objects(.oepnvlinie), vehicles: transitPins, showsStopNames: cameraState.distance < 5000, groupsWithStops: Set(objects(.haltestelle).compactMap(\.data.gruppe))) { pin in
+                TransitLayer(sections: objects(.oepnvlinie), vehicles: transitPins, showsStopNames: cameraState.distance < 5000) { pin in
                     if let id = pin.objectId { openEditor(for: id) } else { virtualVehicle = pin }
                 }
                 AreaLabelLayer(objects: objects(.flaeche) + objects(.kreis), metersPerPoint: cameraState.distance / 700)
@@ -219,8 +216,8 @@ struct MapScreen: View {
                     .onEnded { value in
                         guard tapMode == .none, case .second(true, let drag?) = value,
                               let coordinate = proxy.convert(drag.location, from: .local) else { return }
-                        // Auf einer Form: zur Mehrfachauswahl; sonst Ort für Navigieren oder Anlegen.
-                        if let id = shape(at: GeoPoint(coordinate)) { toggleSelection(id) } else { pressed(at: GeoPoint(coordinate)) }
+                        // Ort für Navigieren oder Anlegen.
+                        pressed(at: GeoPoint(coordinate))
                     }
             )
             .onTapGesture { point in
@@ -251,18 +248,22 @@ struct MapScreen: View {
                 .onGeometryChange(for: CGFloat.self) { $0.size.height } action: { bottomAreaHeight = $0 }
         }
         .overlay(alignment: .bottomLeading) {
-            if followsMe || route.isActive {
-                HStack(spacing: Theme.barSpacing) {
-                    if let speed = location.current?.speed, speed >= 0 {
-                        SpeedBadge(metersPerSecond: speed)
-                    }
-                    if route.isActive, let limit = route.speedLimit {
-                        SpeedLimitSign(kmh: limit)
-                    }
+            // Tempo beim Anheften bzw. in der Navigation; das Tempolimit immer, sobald es für die Straße bekannt ist.
+            HStack(spacing: Theme.barSpacing) {
+                if followsMe || route.isActive, let speed = location.current?.speed, speed >= 0 {
+                    SpeedBadge(metersPerSecond: speed)
                 }
-                .padding(.leading, Theme.barInset)
-                .padding(.bottom, bottomAreaHeight + Theme.barSpacing)
+                if let limit = route.speedLimit ?? roadSpeedLimit {
+                    SpeedLimitSign(kmh: limit)
+                }
             }
+            .padding(.leading, Theme.barInset)
+            .padding(.bottom, bottomAreaHeight + Theme.barSpacing)
+        }
+        .task(id: speedLimitCell) {
+            // Je etwa 100 m neu nachfragen; der Server speichert zwischen.
+            guard !route.isActive, let point = location.current.map({ GeoPoint($0.coordinate) }), let client = model.client else { return }
+            if let limit = try? await client.speedLimit(at: point) { roadSpeedLimit = limit } else if !Task.isCancelled { roadSpeedLimit = nil }
         }
         .overlay(alignment: .topTrailing) { if tapMode == .none, searchPin == nil { sideButtons } }
         .mapScope(mapScope)

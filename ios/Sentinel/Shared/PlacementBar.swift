@@ -39,12 +39,32 @@ extension PlacementBar where Extra == EmptyView {
     }
 }
 
-/// Vorschau des gewählten Orts auf der Karte, überall gleich.
+/// Vorschau des gewählten Orts auf der Karte. Sie zeigt schon das Symbol, das nach „Übernehmen“ entsteht
+/// (Marker, Ziel); wo es keines gibt (z. B. beim Verschieben), die neutrale Nadel.
 struct PlacementPreview: MapContent {
+    enum Look {
+        case pin
+        case object(MapObject)
+        case target(Target)
+    }
+
     let point: GeoPoint
+    var look: Look = .pin
 
     var body: some MapContent {
-        Marker("Neuer Ort", systemImage: "mappin", coordinate: point.coordinate)
-            .tint(.orange)
+        if case .object(let object) = look {
+            Annotation("", coordinate: point.coordinate, anchor: .center) {
+                MapObjectHandle(object: object, locked: false)
+            }
+            .annotationTitles(.hidden)
+        } else if case .target(let target) = look {
+            Annotation("", coordinate: point.coordinate, anchor: .center) {
+                MapSymbolMarker(symbol: target.mapSymbol, color: Theme.target, label: target.art.title)
+            }
+            .annotationTitles(.hidden)
+        } else {
+            Marker("Neuer Ort", systemImage: "mappin", coordinate: point.coordinate)
+                .tint(.orange)
+        }
     }
 }

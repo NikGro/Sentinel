@@ -59,6 +59,8 @@ struct Target: LageEntity {
     var anhaenge: [ChatAttachment] = []
     /// Zielperson unterwegs: zu Fuß oder gebunden an ÖPNV-Fahrzeug, Zielfahrzeug oder Zielobjekt.
     var bindung: TargetBinding?
+    /// Woher der Standort kommt, solange das Ziel nicht in etwas eingestiegen ist.
+    var quelle: LocationSource?
 
     init(art: ZielArt = .person, bezeichnung: String = "", vorname: String = "", nachname: String = "") {
         self.art = art
@@ -70,7 +72,7 @@ struct Target: LageEntity {
     private enum CodingKeys: String, CodingKey {
         case art, bezeichnung, vorname, nachname, geburtsdatum, geburtsort, staatsangehoerigkeit, anschrift, merkmale, fotoBlob
         case kennzeichen, fahrzeugBeschreibung, fahrzeugFotoBlob, sachverhalt, hinweise, massnahmen, trackerId, standort, anhaenge
-        case bindung
+        case bindung, quelle
     }
 
     init(from decoder: Decoder) throws {
@@ -96,6 +98,7 @@ struct Target: LageEntity {
         standort = try c.decodeIfPresent(TimedPoint.self, forKey: .standort)
         anhaenge = (try? c.decodeIfPresent([ChatAttachment].self, forKey: .anhaenge)) ?? []
         bindung = try? c.decodeIfPresent(TargetBinding.self, forKey: .bindung)
+        quelle = try? c.decodeIfPresent(LocationSource.self, forKey: .quelle)
     }
 
     var displayName: String {
@@ -243,4 +246,40 @@ extension Target {
         case .fuss: return Fortbewegung.fuss.symbolName
         }
     }
+}
+
+/// Standortquelle eines Ziels (Zielperson oder Zielfahrzeug), solange es nicht in etwas eingestiegen ist.
+enum LocationSource: String, Codable, CaseIterable, Identifiable, Sendable {
+    /// Von Hand gesetzt.
+    case hand
+    /// Vom verbundenen Tracker.
+    case tracker
+    /// Folgt der A-Position: wer die A hat, hat das Ziel im Blick.
+    case a
+
+    var id: String { rawValue }
+
+    var title: String {
+        switch self {
+        case .hand: "Von Hand"
+        case .tracker: "Tracker"
+        case .a: "A-Position"
+        }
+    }
+
+    var symbolName: String {
+        switch self {
+        case .hand: "hand.tap.fill"
+        case .tracker: "dot.radiowaves.left.and.right"
+        case .a: "a.circle.fill"
+        }
+    }
+}
+
+extension Target {
+    /// Gilt die gewählte Quelle? Ohne ausdrückliche Wahl zählt ein verbundener Tracker, sonst der gesetzte Standort.
+    var effectiveSource: LocationSource { quelle ?? (trackerId != nil ? .tracker : .hand) }
+
+    /// Kann dieses Ziel eine dynamische Standortquelle haben (Tracker, A-Position)? Zielpersonen und Zielfahrzeuge.
+    var supportsDynamicSource: Bool { art != .objekt }
 }

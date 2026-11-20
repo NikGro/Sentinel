@@ -120,11 +120,7 @@ private struct TargetRow: View {
                     Text(target.data.kennzeichen)
                         .font(.caption.monospaced().weight(.semibold))
                 }
-                if let position = lage.position(ofTarget: target) {
-                    Label(position.fromTracker ? "Tracker aktiv" : "Standort gesetzt", systemImage: position.fromTracker ? "dot.radiowaves.left.and.right" : "mappin")
-                        .font(.caption)
-                        .foregroundStyle(.green)
-                }
+
             }
         }
     }

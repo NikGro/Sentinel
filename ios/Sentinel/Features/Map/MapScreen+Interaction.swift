@@ -1,7 +1,7 @@
 import MapKit
 import SwiftUI
 
-// Tippen, Zeichnen, Anlegen und Mehrfachauswahl auf der Karte.
+// Tippen, Zeichnen und Anlegen auf der Karte.
 
 extension MapScreen {
     // MARK: Tippen und Zeichnen
@@ -13,6 +13,7 @@ extension MapScreen {
         case .placingTarget(let id):
             if var target = lage.targets[id]?.data {
                 target.standort = TimedPoint(point)
+                target.quelle = .hand
                 lage.put(target, id: id)
             }
             tapMode = .none
@@ -61,7 +62,8 @@ extension MapScreen {
     /// Angelegte ÖPNV-Fahrzeuge und die im Takt eingeblendeten auf ÖPNV-Linien.
     var transitPins: [TransitVehiclePin] {
         var pins: [TransitVehiclePin] = []
-        for object in objects(.oepnvfahrzeug) {
+        // Fahrzeuge nach echtem Fahrplan: eigene ÖPNV-Fahrzeuge und Strecken mit eingeschalteter Fahrzeug-Ebene.
+        for object in objects(.oepnvfahrzeug) + objects(.oepnvlinie).filter(\.data.hasRealVehicle) {
             guard let line = object.data.linie else { continue }
             pins.append(TransitVehiclePin(
                 id: object.id, objectId: object.id, lineObjectId: nil,
@@ -232,39 +234,18 @@ extension MapScreen {
     /// Bestehende Markierungen öffnen erst die Ansicht; bearbeitet wird über deren Bearbeiten-Knopf.
     func openEditor(for id: String) {
         guard tapMode == .none, lage.mapObjects[id] != nil else { return }
-        if !selectedObjects.isEmpty {
-            toggleSelection(id)
-            return
-        }
         selection = .object(id)
     }
 
-    func toggleSelection(_ id: String) {
-        guard tapMode == .none, let object = lage.mapObjects[id], settings.canEdit(layerId: object.data.layerId) else { return }
-        withAnimation(.snappy) {
-            if selectedObjects.contains(id) { selectedObjects.remove(id) } else { selectedObjects.insert(id) }
+    /// Wie die Vorschau beim Setzen aussieht: schon wie das spätere Symbol.
+    func previewLook(at point: GeoPoint) -> PlacementPreview.Look {
+        switch tapMode {
+        case .newTarget(let art):
+            return .target(Target(art: art))
+        case .drawing(let shape, _) where shape == .marker || shape == .fahndungsraum || shape == .haltestellen || shape == .haltestelle:
+            return .object(draft(shape, [point]))
+        default:
+            return .pin
         }
-    }
-
-    /// Ausgewählte Objekte zu einer neuen Gruppe zusammenfassen (keine Verschachtelung: alte Zugehörigkeit entfällt).
-    func groupSelection() {
-        let group = LageStore.newId()
-        for id in selectedObjects {
-            guard var object = lage.mapObjects[id]?.data else { continue }
-            object.gruppe = group
-            lage.saveMapObject(object, id: id)
-        }
-        selectedObjects = []
-    }
-
-    /// Gruppen der ausgewählten Objekte auflösen: alle Mitglieder werden wieder eigenständig.
-    func ungroupSelection() {
-        let groups = Set(selectedObjects.compactMap { lage.mapObjects[$0]?.data.gruppe })
-        for object in lage.mapObjects.values where object.data.gruppe.map(groups.contains) == true {
-            var data = object.data
-            data.gruppe = nil
-            lage.saveMapObject(data, id: object.id)
-        }
-        selectedObjects = []
     }
 }

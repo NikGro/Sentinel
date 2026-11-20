@@ -123,9 +123,10 @@ const annotation = z
     /** ÖPNV-Linie und -Fahrzeug: befahrene Linie; `punkte` sind die Halte des Abschnitts. */
     linie: z
       .object({
-        id: z.string().max(20),
-        ref: optionalText(20),
-        typ: z.string().max(20),
+        // Kennungen von Transitous sind lang (z. B. „de-DELFI_…“), OSM-Kennungen kurz.
+        id: z.string().max(200),
+        ref: optionalText(40),
+        typ: z.string().max(40),
         richtung: optionalText(120),
         farbe: z.string().regex(/^#[0-9A-Fa-f]{6}$/).nullish().transform((v) => v ?? null),
       })
@@ -138,7 +139,12 @@ const annotation = z
       .object({ id: z.string().min(1).max(200), zeiten: z.array(timestamp.nullable()).max(400) })
       .nullish()
       .transform((v) => v ?? null),
-    /** Gemeinsame Gruppe, z. B. eine übernommene Linie mit ihren Haltestellen. Gruppen sind nicht verschachtelt. */
+    /** ÖPNV-Strecke: welche Ebenen gezeigt werden; `null` heißt alle. */
+    ebenen: z
+      .object({ fahrzeug: z.boolean(), strecke: z.boolean(), halte: z.boolean() })
+      .nullish()
+      .transform((v) => v ?? null),
+    /** Veraltet (bis 0.14): Gruppen gibt es nicht mehr. */
     gruppe: z.string().regex(/^[A-Za-z0-9_-]{1,40}$/).nullish().transform((v) => v ?? null),
     /** Namen der Halte zu `punkte`. */
     haltNamen: z.array(z.string().max(120)).max(400).default([]),
@@ -201,6 +207,11 @@ const target = z.object({
     .object({ art: z.enum(['fuss', 'oepnv', 'fahrzeug', 'objekt']), zielId: optionalId })
     .nullish()
     .transform((v) => v ?? null),
+  /**
+   * Woher der Standort kommt, wenn das Ziel nicht in einem Fahrzeug, ÖPNV-Fahrzeug oder Gebäude steckt:
+   * von Hand gesetzt, vom verbundenen Tracker oder der A-Position folgend (wer die A hat, sieht das Ziel).
+   */
+  quelle: z.enum(['hand', 'tracker', 'a']).nullish().transform((v) => v ?? null),
   /** Von Hand gesetzter Standort; ein verbundener Tracker hat Vorrang. */
   standort: geoPoint.extend({ ts: timestamp }).nullish().transform((v) => v ?? null),
 });

@@ -2,7 +2,7 @@ import MapKit
 import Observation
 import SwiftUI
 
-// Anlegen und Auswählen: Plus-Menü, Suchtreffer-Karte und die Leiste der Mehrfachauswahl.
+// Anlegen: Plus-Menü und Suchtreffer-Karte.
 
 /// Hervorgehobener Plus-Knopf: Markierungen, Fahndungsräume und Ziele hinzufügen.
 struct AddMenu: View {
@@ -57,11 +57,12 @@ struct AddChooser: View {
         NavigationStack {
             ScrollView {
                 VStack(alignment: .leading, spacing: 18) {
-                    // Ein Eintrag für alles aus dem ÖPNV: Fahrzeuge, Linien und Haltestellen kommen über die ÖPNV-Karte.
                     if scope == .all {
-                        group("Fahndung", [.shape(.fahndungsraum), .shape(.haltestellen), .transitMap])
-                    } else if scope == .package {
-                        group("Fahndung", [.transitMap])
+                        group("Fahndung", [.shape(.fahndungsraum), .shape(.haltestellen)])
+                    }
+                    // Ein Eintrag für alles aus dem ÖPNV: Fahrzeuge, Strecken und Haltestellen kommen über die ÖPNV-Karte.
+                    if scope != .places {
+                        group("ÖPNV", [.transitMap])
                     }
                     if scope != .places {
                         group("Ziele", ZielArt.allCases.map { .target($0) })
@@ -95,11 +96,22 @@ struct AddChooser: View {
                                 .frame(height: 30)
                             Text(action.title)
                                 .font(.caption.weight(.semibold))
-                                .lineLimit(1)
-                                .minimumScaleFactor(0.8)
+                                .multilineTextAlignment(.center)
+                                .lineLimit(2)
+                                .minimumScaleFactor(0.85)
                         }
                         .frame(maxWidth: .infinity, minHeight: 86)
                         .contentShape(.rect(cornerRadius: 18))
+                        // Ziele mit dynamischer Standortquelle (Tracker, A-Position) gekennzeichnet.
+                        .overlay(alignment: .topTrailing) {
+                            if action.supportsDynamicSource {
+                                Image(systemName: "dot.radiowaves.left.and.right")
+                                    .font(.caption2.weight(.bold))
+                                    .foregroundStyle(.secondary)
+                                    .padding(8)
+                                    .accessibilityLabel("mit dynamischem Standort")
+                            }
+                        }
                     }
                     .buttonStyle(.plain)
                     .glassEffect(.regular.interactive(), in: .rect(cornerRadius: 18))
@@ -110,6 +122,12 @@ struct AddChooser: View {
 }
 
 extension AddMenu.Action {
+    /// Zielperson und Zielfahrzeug können einem Tracker oder der A-Position folgen.
+    var supportsDynamicSource: Bool {
+        if case .target(let art) = self { return art != .objekt }
+        return false
+    }
+
     var title: String {
         switch self {
         case .shape(let shape): shape.title
@@ -191,55 +209,5 @@ struct SearchPinCard: View {
             }
             .presentationDetents([.medium, .large])
         }
-    }
-}
-
-/// Leiste für die Mehrfachauswahl: gruppieren, Gruppe auflösen, löschen, fertig.
-struct GroupToolbar: View {
-    let count: Int
-    let hasGroup: Bool
-    let group: () -> Void
-    let ungroup: () -> Void
-    let delete: () -> Void
-    let done: () -> Void
-
-    var body: some View {
-        VStack(alignment: .leading, spacing: 10) {
-            HStack {
-                Text(count == 1 ? "1 Objekt ausgewählt" : "\(count) Objekte ausgewählt")
-                    .font(.headline)
-                Spacer()
-                Button("Fertig", action: done)
-                    .fontWeight(.semibold)
-            }
-            Text("Weitere Objekte antippen oder lange drücken.")
-                .font(.caption)
-                .foregroundStyle(.secondary)
-            HStack(spacing: Theme.barSpacing) {
-                Button(action: group) {
-                    Label("Gruppieren", systemImage: "square.on.square")
-                        .frame(maxWidth: .infinity)
-                }
-                .buttonStyle(.glassProminent)
-                .disabled(count < 2)
-                if hasGroup {
-                    Button(action: ungroup) {
-                        Label("Auflösen", systemImage: "square.slash")
-                            .frame(maxWidth: .infinity)
-                    }
-                    .buttonStyle(.glass)
-                }
-                Button(role: .destructive, action: delete) {
-                    Label("Löschen", systemImage: "trash")
-                        .frame(maxWidth: .infinity)
-                }
-                .buttonStyle(.glass)
-                .tint(.red)
-            }
-            .controlSize(.large)
-            .labelStyle(.titleAndIcon)
-        }
-        .padding(14)
-        .glassEffect(.regular, in: .rect(cornerRadius: 22))
     }
 }

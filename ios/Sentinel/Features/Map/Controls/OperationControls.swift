@@ -132,25 +132,6 @@ struct MobilityControl: View {
 }
 
 /// Tortenstück von oben im Uhrzeigersinn, für den Haltefortschritt.
-struct PieSlice: Shape {
-    var progress: Double
-
-    var animatableData: Double {
-        get { progress }
-        set { progress = newValue }
-    }
-
-    func path(in rect: CGRect) -> Path {
-        var path = Path()
-        guard progress > 0 else { return path }
-        let center = CGPoint(x: rect.midX, y: rect.midY)
-        path.move(to: center)
-        path.addArc(center: center, radius: min(rect.width, rect.height) / 2, startAngle: .degrees(-90), endAngle: .degrees(-90 + 360 * min(progress, 1)), clockwise: false)
-        path.closeSubpath()
-        return path
-    }
-}
-
 /// Notrufknopf: 1,5 Sekunden gedrückt halten (Ring füllt sich), damit er nicht versehentlich auslöst.
 /// Läuft der eigene Notruf, beendet ein Tipp ihn nach Rückfrage.
 struct SOSButton: View {
@@ -170,25 +151,19 @@ struct SOSButton: View {
             .font(.system(size: 13, weight: .heavy, design: .rounded))
             .foregroundStyle(.white)
             .frame(width: Theme.roundButton, height: Theme.roundButton)
-            // Volles Rot statt Glas: In der gemeinsamen Glasfläche der Seitenknöpfe würde das Glas über Text und
-            // Füllung gezeichnet. Darauf füllt sich beim Halten eine weiße Torte, außen läuft ein Ring.
-            .background {
+            // Rotes Liquid Glass direkt am Inhalt (nicht als Hintergrundform), damit es die Schrift nicht überdeckt;
+            // ohne eigenes Drückverhalten, damit das Gedrückthalten bei der Geste ankommt.
+            .glassEffect(.regular.tint(lage.ownSOS ? .red : .red.opacity(0.8)), in: .circle)
+            // Darüber nur der äußere Ring, der sich beim Halten weiß füllt; so groß wie der gedrückte Knopf.
+            .overlay {
                 ZStack {
-                    Circle().fill(Color.red.gradient)
-                    PieSlice(progress: progress)
-                        .fill(.white.opacity(0.55))
+                    Circle().stroke(.white.opacity(lage.ownSOS ? 0.9 : 0.25), lineWidth: 3)
+                    Circle()
+                        .trim(from: 0, to: progress)
+                        .stroke(.white, style: StrokeStyle(lineWidth: 3, lineCap: .round))
+                        .rotationEffect(.degrees(-90))
                 }
-                .shadow(color: .black.opacity(0.25), radius: 4, y: 2)
-            }
-            .overlay {
-                Circle()
-                    .trim(from: 0, to: progress)
-                    .stroke(.white, style: StrokeStyle(lineWidth: 3, lineCap: .round))
-                    .rotationEffect(.degrees(-90))
-                    .padding(1.5)
-            }
-            .overlay {
-                if lage.ownSOS { Circle().strokeBorder(.white, lineWidth: 2) }
+                .padding(-1.5)
             }
             .scaleEffect(holding ? 1.08 : 1)
             .animation(.snappy, value: holding)

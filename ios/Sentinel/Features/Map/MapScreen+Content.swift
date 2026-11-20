@@ -71,7 +71,8 @@ extension MapScreen {
             let point = lage.position(ofVehicle: vehicle)?.point ?? crew.position.point
             pins.append(ForcePin(
                 id: "fz-\(vehicleId)",
-                label: vehicle.data.funkrufname,
+                // Funkrufname und wer drinsitzt, z. B. „P 35/24 (Falke, Adler)“.
+                label: "\(vehicle.data.funkrufname) (\(crew.names.joined(separator: ", ")))",
                 coordinate: point.coordinate,
                 isA: crew.isA,
                 isStale: crew.stale,
@@ -90,23 +91,28 @@ extension MapScreen {
         }
     }
 
-    /// Ziele als rote Symbole. Eine Zielperson in einem Zielfahrzeug, ÖPNV-Fahrzeug oder Zielobjekt hat kein eigenes
-    /// Symbol: Sie steckt im Fahrzeug bzw. Objekt, dessen Beschriftung ihren Namen trägt (wie bei den Kräften).
+    /// Ziele als rote Symbole. Eine Zielperson in einem Zielfahrzeug oder Gebäude hat kein eigenes Symbol: Sie steckt
+    /// darin, dessen Beschriftung ihren Namen trägt (wie bei den Kräften: „HH-AB 123 (Max)“). Im ÖPNV steht sie mit
+    /// Bahnsymbol am Fahrzeug, beschriftet mit Name und Linie („Max (S1)“).
     var targetPins: [SymbolPin] {
         guard !model.editsPermanentLayer else { return [] }
-        var passengers: [String: [String]] = [:]
-        for target in lage.sortedTargets {
-            if let binding = target.data.bindung, binding.art != .fuss, let id = binding.zielId, lage.targets[id] != nil || lage.mapObjects[id] != nil {
-                passengers[id, default: []].append(target.data.displayName)
-            }
-        }
         return lage.sortedTargets.compactMap { target in
             guard !settings.hiddenTargetKinds.contains(target.data.art.rawValue), !settings.hiddenTargets.contains(target.id) else { return nil }
-            if let binding = target.data.bindung, binding.art != .fuss, let id = binding.zielId, lage.targets[id] != nil || lage.mapObjects[id] != nil { return nil }
+            if let binding = target.data.bindung, binding.art == .fahrzeug || binding.art == .objekt, let id = binding.zielId, lage.targets[id] != nil { return nil }
             guard let position = lage.position(ofTarget: target) else { return nil }
-            let inside = passengers[target.id].map { " (\($0.joined(separator: ", ")))" } ?? ""
-            return SymbolPin(id: target.id, title: target.data.displayName + inside, symbol: target.data.mapSymbol, color: Theme.target, coordinate: position.point.coordinate, selection: .target(target.id))
+            return SymbolPin(id: target.id, title: targetLabel(target), symbol: target.data.mapSymbol, color: Theme.target, coordinate: position.point.coordinate, selection: .target(target.id))
         }
+    }
+
+    /// Beschriftung eines Ziels auf der Karte.
+    func targetLabel(_ target: Versioned<Target>) -> String {
+        let data = target.data
+        if data.bindung?.art == .oepnv, let id = data.bindung?.zielId, let line = lage.mapObjects[id]?.data.linie {
+            return "\(data.displayName) (\(line.ref))"
+        }
+        let inside = lage.passengers(of: target.id).map(\.data.displayName)
+        let name = data.art == .fahrzeug && !data.kennzeichen.isEmpty ? data.kennzeichen : data.displayName
+        return inside.isEmpty ? name : "\(name) (\(inside.joined(separator: ", ")))"
     }
 
     var stopCircles: [(point: GeoPoint, radius: Double)] {

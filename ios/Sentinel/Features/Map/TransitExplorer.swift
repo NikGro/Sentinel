@@ -69,10 +69,8 @@ struct TransitExplorer: View {
                     }
                     ForEach(visibleStops) { stop in
                         Annotation(stop.name, coordinate: stop.point.coordinate, anchor: .center) {
-                            Circle()
-                                .fill(.white)
-                                .stroke(Color.secondary, lineWidth: 2)
-                                .frame(width: selection == .stop(stop) ? 16 : 9, height: selection == .stop(stop) ? 16 : 9)
+                            // Dasselbe Haltestellensymbol wie auf der Lagekarte.
+                            StationSymbol(lines: [], size: selection == .stop(stop) ? 22 : 14)
                                 .onTapGesture { select(.stop(stop)) }
                         }
                         .annotationTitles(showsStopNames ? .visible : .hidden)
@@ -322,10 +320,11 @@ struct TransitExplorer: View {
 
     @ViewBuilder private func vehicleCard(_ tripId: String) -> some View {
         let segment = segments.first { $0.tripId == tripId }
+        // Linienschild (wie überall), daneben nur die Richtung.
         HStack(spacing: 10) {
-            if let segment { LineBadge(line: segment.badge) }
+            if let segment { LineBadge(line: segment.badge, size: 15) }
             VStack(alignment: .leading, spacing: 2) {
-                Text(trip.map { "\($0.name) → \($0.headsign)" } ?? segment?.name ?? "Fahrt")
+                Text(trip?.headsign ?? segment?.to.name ?? "Fahrt")
                     .font(.headline)
                     .lineLimit(1)
                 if let segment {
@@ -341,28 +340,16 @@ struct TransitExplorer: View {
             ProgressView().frame(maxWidth: .infinity)
         }
         partsPicker
-        HStack(spacing: Theme.barSpacing) {
-            if let segment {
-                Button {
-                    lineFilter = lineFilter == nil ? segment.name : nil
-                } label: {
-                    Label(lineFilter == nil ? "Nur die Linie" : "Alle Linien", systemImage: "line.3.horizontal.decrease.circle")
-                        .lineLimit(1)
-                        .frame(maxWidth: .infinity)
-                }
-                .buttonStyle(.glass)
-            }
-            Button {
-                if let trip { adopt(trip) }
-            } label: {
-                Label("Übernehmen", systemImage: "checkmark")
-                    .lineLimit(1)
-                    .frame(maxWidth: .infinity)
-            }
-            .buttonStyle(.glassProminent)
-            .disabled(trip == nil || parts.isEmpty)
+        Button {
+            if let trip { adopt(trip) }
+        } label: {
+            Label("Übernehmen", systemImage: "checkmark")
+                .lineLimit(1)
+                .frame(maxWidth: .infinity)
         }
+        .buttonStyle(.glassProminent)
         .controlSize(.large)
+        .disabled(trip == nil || parts.isEmpty)
     }
 
     @ViewBuilder private func stopCard(_ stop: LiveStop) -> some View {
@@ -425,22 +412,25 @@ struct TransitExplorer: View {
         .accessibilityLabel("Auswahl aufheben")
     }
 
-    /// Was übernommen wird, als Umschalter statt Häkchen: nur das Fahrzeug, die Strecke mit ihren Haltestellen oder beides.
+    /// Was übernommen wird, einzeln zuschaltbar: Fahrzeug, Strecke, Haltestellen. Es entsteht eine ÖPNV-Strecke mit
+    /// genau diesen Ebenen; sie lassen sich später in der Strecke ändern.
     private var partsPicker: some View {
-        let choices: [(title: String, parts: Set<Part>)] = [
-            ("Fahrzeug", [.fahrzeug]),
-            ("Strecke", [.strecke, .haltestellen]),
-            ("Beides", [.fahrzeug, .strecke, .haltestellen]),
-        ]
-        return Picker("Übernehmen", selection: Binding(
-            get: { choices.firstIndex { $0.parts == parts } ?? 0 },
-            set: { parts = choices[$0].parts }
-        )) {
-            ForEach(choices.indices, id: \.self) { index in
-                Text(choices[index].title).tag(index)
+        HStack(spacing: 8) {
+            ForEach(Part.allCases) { part in
+                Toggle(isOn: Binding(
+                    get: { parts.contains(part) },
+                    set: { on in if on { parts.insert(part) } else { parts.remove(part) } }
+                )) {
+                    Label(part.title, systemImage: part.symbol)
+                        .lineLimit(1)
+                        .minimumScaleFactor(0.8)
+                        .frame(maxWidth: .infinity)
+                }
+                .toggleStyle(.button)
+                .buttonBorderShape(.capsule)
+                .font(.subheadline.weight(.semibold))
             }
         }
-        .pickerStyle(.segmented)
     }
 
     private func delayText(_ delay: Int?) -> String {
@@ -457,34 +447,17 @@ struct TransitExplorer: View {
         let typ = LiveSegment.osmType(trip.mode, name: trip.name)
         let color = tripColor
         let ref = TransitRef(id: trip.tripId, ref: trip.name, typ: typ, richtung: trip.headsign, farbe: trip.color)
-        let group = parts.count > 1 || parts.contains(.haltestellen) ? LageStore.newId() : nil
         let times = trip.stops.map { $0.dep ?? $0.arr }
-        if parts.contains(.fahrzeug) {
-            var vehicle = MapObject(layerId: Layer.lageId, typ: .oepnvfahrzeug, titel: "\(trip.name) → \(trip.headsign)", farbe: color, punkte: points, zeit: times.compactMap { $0 }.first)
-            vehicle.linie = ref
-            vehicle.haltNamen = names
-            vehicle.weg = trip.points.isEmpty ? nil : trip.points
-            vehicle.fahrt = TransitTrip(id: trip.tripId, zeiten: times)
-            vehicle.gruppe = group
-            if let end = times.compactMap({ $0 }).last { vehicle.ablauf = end + 300_000 }
-            lage.saveMapObject(vehicle, id: LageStore.newId())
-        }
-        if parts.contains(.strecke) {
-            var section = MapObject(layerId: Layer.lageId, typ: .oepnvlinie, titel: "\(trip.name) → \(trip.headsign)", farbe: color, punkte: points)
-            section.linie = ref
-            section.haltNamen = names
-            section.weg = trip.points.isEmpty ? nil : trip.points
-            section.gruppe = group
-            lage.saveMapObject(section, id: LageStore.newId())
-        }
-        if parts.contains(.haltestellen) {
-            for stop in trip.stops {
-                var pin = MapObject(layerId: Layer.lageId, typ: .haltestelle, titel: stop.name, farbe: color, punkte: [stop.point])
-                pin.linie = ref
-                pin.gruppe = group
-                lage.saveMapObject(pin, id: LageStore.newId())
-            }
-        }
+        // Eine ÖPNV-Strecke mit den gewählten Ebenen; mit Fahrzeug fährt es nach echtem Fahrplan (Server führt nach).
+        var line = MapObject(layerId: Layer.lageId, typ: .oepnvlinie, titel: "\(trip.name) → \(trip.headsign)", farbe: color, punkte: points, zeit: times.compactMap { $0 }.first)
+        line.linie = ref
+        line.haltNamen = names
+        line.weg = trip.points.isEmpty ? nil : trip.points
+        line.fahrt = TransitTrip(id: trip.tripId, zeiten: times)
+        line.ebenen = TransitLayerChoice(fahrzeug: parts.contains(.fahrzeug), strecke: parts.contains(.strecke), halte: parts.contains(.haltestellen))
+        // Nur das Fahrzeug: verschwindet nach der Ankunft von selbst.
+        if parts == [.fahrzeug], let end = times.compactMap({ $0 }).last { line.ablauf = end + 300_000 }
+        lage.saveMapObject(line, id: LageStore.newId())
         dismiss()
     }
 

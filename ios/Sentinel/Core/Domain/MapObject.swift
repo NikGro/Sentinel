@@ -31,7 +31,7 @@ struct MapObject: LageEntity {
             case .flaeche: "Fläche"
             case .kreis: "Kreis"
             case .fahndungsraum: "Fahndungsraum"
-            case .haltestellen: "Haltestellen-Umkreis"
+            case .haltestellen: "Haltestellen im Umkreis"
             case .oepnvlinie: "ÖPNV-Linie"
             case .oepnvfahrzeug: "ÖPNV-Fahrzeug"
             case .pfeil: "Pfeil"
@@ -95,8 +95,8 @@ struct MapObject: LageEntity {
     var weg: [GeoPoint]?
     /// Echte Fahrt (Transitous) mit Zeit an jedem Halt; der Server führt Verspätungen nach.
     var fahrt: TransitTrip?
-    /// Gemeinsame Gruppe, z. B. eine übernommene Linie mit ihren Haltestellen.
-    var gruppe: String?
+    /// ÖPNV-Strecke: welche Ebenen gezeigt werden (Fahrzeug, Strecke, Haltestellen); `nil` heißt alle.
+    var ebenen: TransitLayerChoice?
     /// ÖPNV-Linie: Fahrzeuge im Takt (Minuten) ab der Abfahrt `zeit` am ersten Halt; `nil` aus.
     var takt: Int?
 
@@ -123,4 +123,22 @@ struct MapObject: LageEntity {
     var expiry: Date? { ablauf.map { Date(timeIntervalSince1970: $0 / 1000) } }
 
     func isExpired(at date: Date = .now) -> Bool { expiry.map { $0 <= date } ?? false }
+}
+
+/// Ebenen einer übernommenen ÖPNV-Strecke, jede einzeln zuschaltbar.
+struct TransitLayerChoice: Codable, Equatable, Hashable, Sendable {
+    var fahrzeug = true
+    var strecke = true
+    var halte = true
+}
+
+extension MapObject {
+    var showsVehicle: Bool { ebenen?.fahrzeug ?? true }
+    var showsPath: Bool { ebenen?.strecke ?? true }
+    var showsStops: Bool { ebenen?.halte ?? true }
+
+    /// Fährt hier ein Fahrzeug nach echtem Fahrplan (ÖPNV-Fahrzeug oder Strecke mit eingeschaltetem Fahrzeug)?
+    var hasRealVehicle: Bool {
+        fahrt != nil && (typ == .oepnvfahrzeug || (typ == .oepnvlinie && showsVehicle))
+    }
 }

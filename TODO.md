@@ -32,3 +32,5 @@ statt jede Änderung sofort einzubauen. Erledigtes wandert mit Version ins CHANG
   - PAJ-Tracker mit eigenem Konto
   - 0.14: Standortknopf (Anheften, Toleranz beim Zoomen, Kompassrose), SOS-Füllung, flacher eigener Standort,
     Einsteigen der Zielperson, Kreuzungssuche mit Tippfehlern
+  - 0.15: Zoom ohne Sprung beim Anheften, Kopplungsschwelle, Tempolimit ohne Navigation, Standortquelle der Ziele,
+    ÖPNV-Strecke mit Ebenen

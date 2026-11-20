@@ -105,6 +105,8 @@ export interface Target {
   hinweise: string;
   massnahmen: string;
   trackerId: string | null;
+  /** Standortquelle: von Hand, Tracker oder der A-Position folgend. */
+  quelle?: 'hand' | 'tracker' | 'a' | null;
 }
 
 export interface Tracker {

@@ -38,6 +38,7 @@ struct TargetDetail: View {
                     dismiss()
                 }
             }
+            TargetMovementSection(entity: entity, placeOnMap: placeOnMap)
             Section {
                 HStack(alignment: .top, spacing: 16) {
                     RemoteImage(blobId: target.fotoBlob) {
@@ -76,19 +77,22 @@ struct TargetDetail: View {
                 .listRowBackground(Color.clear)
             }
 
+            // Zielobjekte haben keine dynamische Quelle; ihr Standort wird nur von Hand gesetzt.
+            if !target.supportsDynamicSource {
             Section("Standort") {
                 if let position = lage.position(ofTarget: entity) {
-                    LabeledContent(position.fromTracker ? "Tracker" : "Von Hand gesetzt", value: Format.ago(position.date))
+                    LabeledContent("Von Hand gesetzt", value: Format.ago(position.date))
                 } else {
                     Text("Kein Standort bekannt.")
                         .foregroundStyle(.secondary)
                 }
-                if let placeOnMap, target.trackerId == nil {
+                if let placeOnMap {
                     Button(target.standort == nil ? "Standort auf Karte setzen" : "Standort neu setzen", systemImage: "hand.tap") {
                         placeOnMap(entity.id)
                         dismiss()
                     }
                 }
+            }
             }
 
             if !target.anschrift.isEmpty || target.art == .objekt {

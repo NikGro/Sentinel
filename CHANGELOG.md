@@ -1,5 +1,36 @@
 # Änderungen
 
+## 0.15.0
+
+**Karte**
+- Standortknopf: angeheftet blaues Glas mit weiß gefülltem Pfeil; Wegschieben löst die Kopplung schon bei
+  deutlich kleinerer Bewegung; in Fahrtrichtung flacher gekippt (40°); kein Herauszoomen mehr nach der
+  Animation – in Fahrtrichtung bleibt es nah, Norden oben mit mehr Überblick
+- Eigener Standort wieder zum Bildschirm ausgerichtet (nicht mehr flach), mit Symbol zu Fuß/Auto/Bahn und
+  darunter der eigenen Beschriftung (Spitzname, Funkrufname, Spitzname mit Linie)
+- Fahrzeuge der Kräfte mit Insassen beschriftet, z. B. „P 35/24 (Falke, Adler)“
+- SOS wieder als Liquid Glass mit Schrift; beim Halten füllt sich nur der äußere weiße Ring
+- Tempolimit immer sichtbar, sobald es für die Straße bekannt ist (OpenStreetMap über den eigenen Server), in
+  derselben Größe wie die Knöpfe
+- Plus-Menü: ÖPNV als eigene Kategorie; Zielperson und Zielfahrzeug als „mit dynamischem Standort“ gekennzeichnet
+- Vorschau beim Setzen sieht schon aus wie das spätere Symbol (Marker, Zielperson, Zielfahrzeug)
+
+**Ziele**
+- Unter „Hinführen“: Umschalter zu Fuß / Fahrzeug / ÖPNV wie bei den Kräften und der Knopf „Standortquelle“
+  (von Hand setzen, an Tracker binden, der A-Position folgen) – je Ziel einzeln
+- Zielfahrzeug zeigt seine Insassen (mit „Hinführen“), beschriftet mit Kennzeichen und Namen
+- Zielperson im ÖPNV: rotes Symbol mit Bahn am Fahrzeug, beschriftet mit Name und Linie
+- Zielliste ohne grünen „Standort gesetzt“-Hinweis
+- Markierungen (Marker, Beschriftung, Linie, Pfeil, Fläche, Kreis) sind nur noch statisch, ohne Tracker
+
+**ÖPNV**
+- Übernehmen aus der ÖPNV-Karte ergibt eine ÖPNV-Strecke mit einzeln zuschaltbaren Ebenen Fahrzeug, Strecke,
+  Haltestellen (später in der Strecke änderbar); nur das Fahrzeug verschwindet nach der Ankunft
+- Fehler „Too big: expected string to have <=20 characters“ beim Übernehmen behoben
+- Fahrzeugkarte mit Linienschild und Richtung; Haltestellen mit Haltestellensymbol; „Nur die Linie“ entfällt
+- Gruppen und Mehrfachauswahl entfallen
+
+
 ## 0.14.0
 
 **Karte**

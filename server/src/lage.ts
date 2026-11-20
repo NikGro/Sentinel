@@ -546,13 +546,6 @@ export class Lage extends EventEmitter<{ event: [LageEvent] }> {
         return next;
       };
     })();
-    const groups = new Map<string, string>();
-    const group = (g: string | null) => {
-      if (!g) return null;
-      let next = groups.get(g);
-      if (!next) groups.set(g, (next = randomId(16)));
-      return next;
-    };
     this.db.transaction(() => {
       for (const row of this.entities.listIn('target', paketId)) {
         const { data } = row;
@@ -561,7 +554,7 @@ export class Lage extends EventEmitter<{ event: [LageEvent] }> {
       }
       for (const row of this.entities.listIn('annotation', paketId)) {
         const { data } = row;
-        this.write('annotation', inst, newId(row.id), { ...data, layerId: LAYER_LAGE, gruppe: group(data.gruppe) }, actor.id);
+        this.write('annotation', inst, newId(row.id), { ...data, layerId: LAYER_LAGE, gruppe: null }, actor.id);
       }
     });
     this.db.audit(actor.id, 'paket.uebernommen', `${paket.data.name} → ${target.data.name}`);
@@ -677,7 +670,7 @@ export class Lage extends EventEmitter<{ event: [LageEvent] }> {
     const now = Date.now();
     for (const { inst, entity: a } of this.entities.listAll('annotation')) {
       const fahrt = a.data.fahrt;
-      if (!fahrt || a.data.typ !== 'oepnvfahrzeug') continue;
+      if (!fahrt || (a.data.typ !== 'oepnvfahrzeug' && a.data.typ !== 'oepnvlinie')) continue;
       const last = fahrt.zeiten.at(-1);
       if (last && last < now - 600_000) continue;
       try {

@@ -128,6 +128,7 @@ struct TargetEditor: View {
             .sheet(isPresented: $showsPicker) {
                 LocationPickerSheet(title: "Standort wählen", initial: target.standort?.point ?? lage.targets[context.id].flatMap { lage.position(ofTarget: $0)?.point }) { point in
                     target.standort = TimedPoint(point)
+                    target.quelle = .hand
                 }
             }
         }
@@ -148,42 +149,8 @@ struct TargetEditor: View {
     /// Bezugspunkt für die Sortierung: Standort der Person, sonst der eigene.
     private var personPoint: GeoPoint? { target.standort?.point ?? lage.targets[context.id].flatMap { lage.position(ofTarget: $0)?.point } ?? model.myPoint }
 
-    /// Mögliche Fahrzeuge bzw. Objekte zur Art, nächstgelegene zuerst.
     private func candidates(for art: TargetBinding.Art) -> [BoardingCandidate] {
-        var list: [(candidate: BoardingCandidate, point: GeoPoint?)] = []
-        switch art {
-        case .fuss:
-            return []
-        case .oepnv:
-            list = lage.mapObjects.values.filter { $0.data.typ == .oepnvfahrzeug && !$0.data.isExpired() }.map { object in
-                let line = object.data.linie
-                return (BoardingCandidate(
-                    id: object.id,
-                    title: object.data.titel.isEmpty ? (line?.ref ?? "ÖPNV-Fahrzeug") : object.data.titel,
-                    subtitle: line.map { "Richtung \($0.richtung)" } ?? "ÖPNV-Fahrzeug",
-                    badge: line?.badge
-                ), lage.position(ofObject: object.data))
-            }
-        case .fahrzeug, .objekt:
-            let wanted: ZielArt = art == .fahrzeug ? .fahrzeug : .objekt
-            list = lage.sortedTargets.filter { $0.data.art == wanted && $0.id != context.id }.map { other in
-                let passengers = lage.sortedTargets.filter { $0.data.bindung?.zielId == other.id && $0.id != context.id }.map(\.data.displayName)
-                return (BoardingCandidate(
-                    id: other.id,
-                    title: other.data.displayName,
-                    subtitle: passengers.isEmpty ? (other.data.kennzeichen.isEmpty ? other.data.art.title : other.data.kennzeichen) : "Darin: \(passengers.joined(separator: ", "))",
-                    badge: nil
-                ), lage.position(ofTarget: other)?.point)
-            }
-        }
-        let reference = personPoint
-        return list
-            .map { item in
-                var candidate = item.candidate
-                if let r = reference, let p = item.point { candidate.distance = r.distance(to: p) }
-                return candidate
-            }
-            .sorted { ($0.distance ?? .greatestFiniteMagnitude) < ($1.distance ?? .greatestFiniteMagnitude) }
+        lage.boardingCandidates(for: art, excluding: context.id, near: personPoint)
     }
 
     /// Wohin die Person gerade eingestiegen ist, als lesbare Zeile.
@@ -296,9 +263,19 @@ struct TargetEditor: View {
                     Button("Anschrift als Standort", systemImage: "house") { Task { await geocodeAddress() } }
                 }
                 if let mine = model.myPoint {
-                    Button("Mein Standort", systemImage: "location.fill") { target.standort = TimedPoint(mine) }
+                    Button("Mein Standort", systemImage: "location.fill") {
+                        target.standort = TimedPoint(mine)
+                        target.quelle = .hand
+                    }
                 }
-                Picker(selection: $target.trackerId) {
+                if target.supportsDynamicSource {
+                Picker(selection: Binding(
+                    get: { target.trackerId },
+                    set: { id in
+                        target.trackerId = id
+                        target.quelle = id == nil ? .hand : .tracker
+                    }
+                )) {
                     Text("Kein Tracker").tag(String?.none)
                     ForEach(lage.trackers.values.sorted { $0.data.name < $1.data.name }) { tracker in
                         Text("\(tracker.data.name) (\(tracker.data.providerTitle))").tag(String?.some(tracker.id))
@@ -307,6 +284,7 @@ struct TargetEditor: View {
                     Label("GPS-Tracker", systemImage: "antenna.radiowaves.left.and.right")
                 }
                 .pickerStyle(.menu)
+                }
                 if target.standort != nil {
                     Divider()
                     Button("Von Hand gesetzten Standort entfernen", systemImage: "trash", role: .destructive) { target.standort = nil }

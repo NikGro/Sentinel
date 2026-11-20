@@ -172,7 +172,7 @@ struct SpeedLimitSign: View {
         Text("\(kmh)")
             .font(.system(size: kmh >= 100 ? 15 : 18, weight: .heavy, design: .rounded).monospacedDigit())
             .foregroundStyle(.black)
-            .frame(width: Theme.roundButton - 6, height: Theme.roundButton - 6)
+            .frame(width: Theme.roundButton, height: Theme.roundButton)
             .background(.white, in: .circle)
             .overlay(Circle().strokeBorder(Color.red, lineWidth: 5))
             .shadow(color: .black.opacity(0.25), radius: 3, y: 1)
@@ -301,7 +301,7 @@ struct FollowPuckOverlay: View {
                         .padding(.vertical, 5)
                         .glassEffect(.regular, in: .capsule)
                         .fixedSize()
-                        .position(x: point.x, y: point.y + 46)
+                        .position(x: point.x, y: point.y + 62)
                 }
             }
             .allowsHitTesting(false)

@@ -87,8 +87,6 @@ test('Pakete: Inhalt wird als eigenständige Objekte in die Instanz übernommen'
   const imported = lage.list('annotation', 'haupt');
   assert.equal(imported.length, 2);
   assert.ok(imported.every((a) => a.id !== 'x1' && a.id !== 'x2'), 'Neue Kennungen');
-  assert.equal(new Set(imported.map((a) => a.data.gruppe)).size, 1, 'Gruppe bleibt zusammen');
-  assert.notEqual(imported[0]!.data.gruppe, 'g1');
   const targets = lage.list('target', 'haupt');
   const auto = targets.find((t) => t.data.art === 'fahrzeug')!;
   assert.equal(targets.find((t) => t.data.vorname === 'Max')?.data.bindung?.zielId, auto.id, 'Bindung zeigt auf die Kopie');

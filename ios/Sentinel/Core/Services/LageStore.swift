@@ -208,10 +208,9 @@ final class LageStore {
         return nil
     }
 
-    /// Standort eines Ziels: Tracker vor von Hand gesetztem Standort.
+    /// Standort eines Ziels. Eingestiegen (Zielfahrzeug, ÖPNV-Fahrzeug, Gebäude): dessen Standort (Ketten nur zwei Stufen
+    /// tief). Sonst nach Standortquelle: der A-Position folgend, vom Tracker oder von Hand gesetzt.
     func position(ofTarget target: Versioned<Target>, depth: Int = 0) -> (point: GeoPoint, date: Date, fromTracker: Bool)? {
-        if let tracker = target.data.trackerId.flatMap({ trackerPositions[$0] }) { return (tracker.point, tracker.date, true) }
-        // Gebunden an ÖPNV-Fahrzeug, Zielfahrzeug oder Zielobjekt: dessen Standort (Ketten nur zwei Stufen tief).
         if let binding = target.data.bindung, binding.art != .fuss, let id = binding.zielId, depth < 2 {
             switch binding.art {
             case .oepnv:
@@ -222,13 +221,26 @@ final class LageStore {
                 break
             }
         }
+        switch target.data.effectiveSource {
+        case .a:
+            if let a = aPosition { return (a.point, a.date, false) }
+        case .tracker:
+            if let tracker = target.data.trackerId.flatMap({ trackerPositions[$0] }) { return (tracker.point, tracker.date, true) }
+        case .hand:
+            break
+        }
         if let standort = target.data.standort { return (standort.point, standort.date, false) }
         return nil
     }
 
+    /// Zielpersonen, die in einem Zielfahrzeug, Gebäude oder ÖPNV-Fahrzeug sitzen.
+    func passengers(of id: String) -> [Versioned<Target>] {
+        sortedTargets.filter { $0.data.bindung?.zielId == id && $0.data.bindung?.art != .fuss }
+    }
+
     /// Standort einer Markierung: bei verbundenem Tracker dessen Position, sonst der gesetzte Punkt.
     func position(ofObject object: MapObject, at now: Date = .now) -> GeoPoint {
-        if object.typ == .oepnvfahrzeug, let fahrt = object.fahrt {
+        if object.typ == .oepnvfahrzeug || object.typ == .oepnvlinie, let fahrt = object.fahrt {
             if let state = TransitSimulation.state(object.punkte, path: object.weg ?? [], times: fahrt.zeiten, at: now) { return state.point }
             let first = fahrt.zeiten.compactMap { $0 }.first.map { Date(timeIntervalSince1970: $0 / 1000) } ?? now
             return now < first ? (object.punkte.first ?? object.anchor) : (object.punkte.last ?? object.anchor)

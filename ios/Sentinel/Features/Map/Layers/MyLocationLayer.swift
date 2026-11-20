@@ -50,6 +50,7 @@ private struct LiveMyLocationMarker: View {
     var body: some View {
         MyLocationMarker(
             style: style,
+            caption: lage.me.map { lage.label(of: $0.data) } ?? "",
             holdsA: lage.holdsA,
             course: locationService.current?.course ?? -1,
             cameraState: cameraState
@@ -59,27 +60,39 @@ private struct LiveMyLocationMarker: View {
     private var style: MyLocationLayer.Style { .of(lage, navigating: route.isActive) }
 }
 
-/// Darstellung des eigenen Standorts: ein flach auf der Karte liegender Kreis (kippt mit der Karte), immer gleich
-/// groß, mit dem Symbol der Fortbewegung wie im Dreier-Umschalter; in der Navigation mit Fahrtrichtungspfeil.
+/// Darstellung des eigenen Standorts: ein zum Bildschirm ausgerichteter Kreis, immer gleich groß, mit dem Symbol der
+/// Fortbewegung wie im Dreier-Umschalter (in der Navigation mit Fahrtrichtungspfeil), darunter die eigene Beschriftung.
 private struct MyLocationMarker: View {
     let style: MyLocationLayer.Style
+    var caption = ""
     let holdsA: Bool
     let course: CLLocationDirection
     let cameraState: MapCameraState
 
     var body: some View {
-        disc
-            // Flach auf dem Boden: mit der Kartenneigung gekippt.
-            .rotation3DEffect(.degrees(cameraState.pitch), axis: (x: 1, y: 0, z: 0), perspective: 0)
-            .overlay(alignment: .topTrailing) {
-                if holdsA {
-                    ASymbol(size: 18)
-                        .overlay(Circle().stroke(.white, lineWidth: 1.5))
-                        .offset(x: 2, y: -2)
+        VStack(spacing: 0) {
+            disc
+                .overlay(alignment: .topTrailing) {
+                    if holdsA {
+                        ASymbol(size: 18)
+                            .overlay(Circle().stroke(.white, lineWidth: 1.5))
+                            .offset(x: 2, y: -2)
+                    }
                 }
+            // Wie die anderen einen sehen: Spitzname, im Fahrzeug der Funkrufname, im ÖPNV mit Linie.
+            if !caption.isEmpty {
+                Text(caption)
+                    .font(.caption2.weight(.bold))
+                    .lineLimit(1)
+                    .padding(.horizontal, 5)
+                    .padding(.vertical, 1)
+                    .background(.thinMaterial, in: .capsule)
+                    .fixedSize()
+                    .offset(y: -6)
             }
-            .accessibilityElement()
-            .accessibilityLabel(accessibilityText)
+        }
+        .accessibilityElement()
+        .accessibilityLabel(accessibilityText)
     }
 
     private var disc: some View {

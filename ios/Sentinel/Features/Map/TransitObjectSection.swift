@@ -19,6 +19,21 @@ struct TransitObjectSection: View {
 
     private var isVehicle: Bool { object.typ == .oepnvfahrzeug }
 
+    /// Eine Ebene der Strecke ein- oder ausschalten; mindestens eine bleibt an.
+    private func layer(_ keyPath: WritableKeyPath<TransitLayerChoice, Bool>) -> Binding<Bool> {
+        Binding(
+            get: { (object.ebenen ?? TransitLayerChoice())[keyPath: keyPath] },
+            set: { on in
+                var choice = object.ebenen ?? TransitLayerChoice()
+                choice[keyPath: keyPath] = on
+                guard choice.fahrzeug || choice.strecke || choice.halte else { return }
+                object.ebenen = choice
+                // Mit Strecke oder Haltestellen bleibt sie stehen; nur das Fahrzeug verschwindet nach der Ankunft.
+                if choice.strecke || choice.halte { object.ablauf = nil }
+            }
+        )
+    }
+
     var body: some View {
         if object.fahrt != nil || (object.linie != nil && object.linie?.id.allSatisfy(\.isNumber) == false) {
             // Aus der ÖPNV-Karte übernommen: Halte und Zeiten kommen aus dem Fahrplan, nichts von Hand einzustellen.
@@ -31,6 +46,12 @@ struct TransitObjectSection: View {
                 }
                 if let names = object.haltNamen, let first = names.first, let last = names.last {
                     LabeledContent("Strecke", value: "\(first) → \(last)")
+                }
+                // Ebenen der Strecke, jederzeit änderbar.
+                if object.typ == .oepnvlinie {
+                    Toggle("Fahrzeug", systemImage: "bus.fill", isOn: layer(\.fahrzeug))
+                    Toggle("Strecke", systemImage: "point.bottomleft.forward.to.point.topright.scurvepath", isOn: layer(\.strecke))
+                    Toggle("Haltestellen", systemImage: "h.circle.fill", isOn: layer(\.halte))
                 }
                 Text("Zeiten und Verspätungen führt der Server laufend nach (Transitous).")
                     .font(.caption)

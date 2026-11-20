@@ -2,6 +2,7 @@ import type { FastifyInstance } from 'fastify';
 import { z } from 'zod';
 import { findIntersections } from '../oepnv.js';
 import { findCrossStreets } from '../reach/crossings.js';
+import { speedLimitAt } from '../reach/speedlimit.js';
 import { REACH_MODES } from '../reach/reach.js';
 import { geoPoint, INSTANZ_HAUPT } from '../schemas.js';
 import { RateLimiter } from '../security.js';
@@ -40,12 +41,14 @@ const crossingQuery = z.object({
 
 const crossStreetsBody = z.object({ punkte: z.array(geoPoint).min(2).max(600) });
 const coverageQuery = z.object({ instanz: z.string().max(64).optional() });
+const pointQuery = z.object({ lat: z.coerce.number().min(-90).max(90), lon: z.coerce.number().min(-180).max(180) });
 
 /** Bestreifung, Weg-Zeit-Flächen, Routen, Navigation, Kreuzungen und Querstraßen. */
 export function registerNavigationRoutes(app: FastifyInstance, services: Services, guards: Guards): void {
   const { lage, reach, routes, overpass } = services;
   const reachLimiter = new RateLimiter(120, 60_000);
   const crossingLimiter = new RateLimiter(90, 60_000);
+  const speedLimiter = new RateLimiter(30, 60_000);
 
   const requireRouting = () => {
     if (!routes.available) throw new HttpError(503, 'Auf diesem Server ist kein Wegenetz eingerichtet.');
@@ -110,5 +113,13 @@ export function registerNavigationRoutes(app: FastifyInstance, services: Service
     guards.limit(crossingLimiter, request);
     const { punkte } = parse(crossStreetsBody, request.body, 'Routenpunkte fehlen.');
     return { strassen: await overpassCall('Querstraßen', (client) => findCrossStreets(client, punkte)) };
+  });
+
+  /** Tempolimit der Straße am eigenen Standort, für die Anzeige auch ohne Navigation. */
+  app.get('/api/v1/tempolimit', async (request) => {
+    guards.actor(request);
+    guards.limit(speedLimiter, request);
+    const { lat, lon } = parse(pointQuery, request.query, 'Ort fehlt.');
+    return { kmh: await overpassCall('Tempolimit', (client) => speedLimitAt(client, { lat, lon })) };
   });
 }

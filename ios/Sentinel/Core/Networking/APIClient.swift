@@ -365,6 +365,15 @@ struct APIClient: Sendable {
         _ = try await request("DELETE", "api/v1/admin/paj")
     }
 
+    private struct SpeedLimit: Decodable { let kmh: Int? }
+
+    /// Tempolimit der Straße an einem Ort (OpenStreetMap über den eigenen Server); `nil` unbekannt oder unbegrenzt.
+    func speedLimit(at point: GeoPoint) async throws -> Int? {
+        try await json(SpeedLimit.self, "GET", "api/v1/tempolimit", query: [
+            URLQueryItem(name: "lat", value: String(point.lat)), URLQueryItem(name: "lon", value: String(point.lon)),
+        ]).kmh
+    }
+
     private struct CrossStreetsRequest: Encodable { let punkte: [GeoPoint] }
     private struct CrossStreetsResult: Decodable { let strassen: [CrossStreet] }
 

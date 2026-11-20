@@ -168,35 +168,8 @@ struct MapObjectInfo: View {
     private var layer: Versioned<Layer>? { lage.layers[object.layerId] }
     private var editable: Bool { !isCell && layer?.data.art != "argus" && settings.canEdit(layerId: object.layerId) }
 
-    /// Teilt eine ÖPNV-Strecke in einzelne Abschnitte von Halt zu Halt, damit sich Teile löschen lassen.
-    /// Die Abschnitte bleiben in einer gemeinsamen Gruppe.
-    private func splitIntoSections() {
-        let points = object.punkte
-        let path = object.weg ?? []
-        let indices = TransitSimulation.stopIndices(points, on: path)
-        let names = object.haltNamen ?? []
-        let group = object.gruppe ?? String(LageStore.newId().prefix(16))
-        for i in 1..<points.count {
-            var section = object
-            section.punkte = [points[i - 1], points[i]]
-            section.haltNamen = names.count == points.count ? [names[i - 1], names[i]] : nil
-            if let indices, indices[i - 1] < indices[i] { section.weg = Array(path[indices[i - 1]...indices[i]]) } else { section.weg = nil }
-            section.takt = nil
-            section.gruppe = group
-            if let from = section.haltNamen?.first, let to = section.haltNamen?.last, let line = object.linie {
-                section.titel = "\(line.ref): \(from) → \(to)"
-            }
-            lage.saveMapObject(section, id: LageStore.newId())
-        }
-        // Die ganze Strecke wird durch die Abschnitte ersetzt; zugehörige Halte bleiben in der Gruppe.
-        lage.deleteMapObject(id: id)
-    }
-
     var body: some View {
         List {
-            if let group = object.gruppe, editable {
-                GroupSection(group: group, objectId: id) { dismiss() }
-            }
             // Eine ÖPNV-Linie ist kein einzelner Zielort.
             if object.typ != .oepnvlinie {
                 NavigateHereSection {
@@ -255,7 +228,7 @@ struct MapObjectInfo: View {
                     if let names = object.haltNamen, let first = names.first, let last = names.last {
                         LabeledContent("Abschnitt", value: "\(first) → \(last) (\(names.count) Halte)")
                     }
-                    if object.typ == .oepnvfahrzeug, let departure = object.since {
+                    if object.typ == .oepnvfahrzeug || object.hasRealVehicle, let departure = object.since {
                         let state = object.fahrt.flatMap { TransitSimulation.state(object.punkte, path: object.weg ?? [], times: $0.zeiten) }
                             ?? TransitSimulation.state(object.punkte, typ: line.typ, path: object.weg ?? [], departure: departure)
                         if let state, let name = object.haltNamen?[safe: state.nextIndex] {
@@ -275,22 +248,7 @@ struct MapObjectInfo: View {
                     if object.typ == .oepnvlinie, let takt = object.takt {
                         LabeledContent("Fahrzeuge im Takt", value: "alle \(takt) Min.")
                     }
-                    if object.typ == .oepnvlinie, editable, object.punkte.count >= 3 {
-                        Button("In Abschnitte zwischen den Halten teilen", systemImage: "scissors") {
-                            splitIntoSections()
-                            dismiss()
-                        }
-                    }
-                    if object.typ == .oepnvfahrzeug, editable {
-                        Button("Strecke als ÖPNV-Linie anlegen", systemImage: MapObject.Shape.oepnvlinie.symbolName) {
-                            var section = MapObject(layerId: object.layerId, typ: .oepnvlinie, titel: "\(line.ref) → \(line.richtung)", farbe: object.farbe, punkte: object.punkte)
-                            section.linie = line
-                            section.haltNamen = object.haltNamen
-                            section.weg = object.weg
-                            lage.saveMapObject(section, id: LageStore.newId())
-                            dismiss()
-                        }
-                    }
+
                 } header: {
                     Text("Linie")
                 } footer: {
@@ -362,50 +320,6 @@ struct MapObjectInfo: View {
                 .fill(color.opacity(0.6))
                 .overlay(RoundedRectangle(cornerRadius: 6).stroke(color, lineWidth: 2))
                 .frame(width: 44, height: 44)
-        }
-    }
-}
-
-/// Schmale Gruppenleiste über dem Detailfenster: Gruppe auflösen oder ganz löschen.
-private struct GroupSection: View {
-    let group: String
-    let objectId: String
-    let close: () -> Void
-
-    @Environment(LageStore.self) private var lage
-    @State private var confirmsDelete = false
-
-    private var members: [Versioned<MapObject>] { lage.mapObjects.values.filter { $0.data.gruppe == group } }
-
-    var body: some View {
-        Section {
-            HStack(spacing: 10) {
-                Label("Gruppe · \(members.count) Objekte", systemImage: "square.on.square")
-                    .font(.subheadline.weight(.semibold))
-                Spacer()
-                Button("Auflösen") {
-                    for member in members {
-                        var data = member.data
-                        data.gruppe = nil
-                        lage.saveMapObject(data, id: member.id)
-                    }
-                }
-                .buttonStyle(.bordered)
-                .buttonBorderShape(.capsule)
-                Button("Alle löschen", role: .destructive) { confirmsDelete = true }
-                    .buttonStyle(.bordered)
-                    .buttonBorderShape(.capsule)
-            }
-            .controlSize(.small)
-        }
-        .alert("Ganze Gruppe für alle löschen?", isPresented: $confirmsDelete) {
-            Button("Abbrechen", role: .cancel) {}
-            Button("Löschen", role: .destructive) {
-                for member in members { lage.deleteMapObject(id: member.id) }
-                close()
-            }
-        } message: {
-            Text("\(members.count) Objekte werden gelöscht.")
         }
     }
 }

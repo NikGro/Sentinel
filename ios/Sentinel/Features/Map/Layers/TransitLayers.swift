@@ -247,19 +247,18 @@ struct TransitLayer: MapContent {
     let sections: [Versioned<MapObject>]
     let vehicles: [TransitVehiclePin]
     let showsStopNames: Bool
-    /// Gruppen mit eigenen Haltestellen-Markierungen: deren Halte zeichnet die Linie nicht noch einmal.
-    var groupsWithStops: Set<String> = []
     let onSelect: (TransitVehiclePin) -> Void
 
     var body: some MapContent {
-        ForEach(sections) { object in
+        // Jede Strecke zeigt nur die eingeschalteten Ebenen: Linienverlauf und Haltestellen (Fahrzeuge siehe unten).
+        ForEach(sections.filter(\.data.showsPath)) { object in
             let path = (object.data.weg?.count ?? 0) >= 2 ? object.data.weg! : object.data.punkte
             MapPolyline(coordinates: path.map(\.coordinate))
                 .stroke(.white, style: StrokeStyle(lineWidth: 9, lineCap: .round, lineJoin: .round))
             MapPolyline(coordinates: path.map(\.coordinate))
                 .stroke(Color(hex: object.data.farbe), style: StrokeStyle(lineWidth: 5, lineCap: .round, lineJoin: .round))
         }
-        ForEach(sections.filter { $0.data.gruppe.map(groupsWithStops.contains) != true }) { object in
+        ForEach(sections.filter(\.data.showsStops)) { object in
             ForEach(Array(object.data.punkte.enumerated()), id: \.offset) { index, point in
                 let name = object.data.haltNamen?[safe: index] ?? ""
                 Annotation(name, coordinate: point.coordinate, anchor: .center) {
