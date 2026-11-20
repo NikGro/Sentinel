@@ -16,6 +16,20 @@ enum NavigationTarget: Equatable, Hashable, Sendable {
     case target(String)
     case object(String)
     case point(GeoPoint, title: String)
+    /// Nicht zum Fahrzeug selbst, sondern `stops` Halte vor dem ÖPNV-Fahrzeug, in dem das Ziel sitzt; rückt mit dem
+    /// Fahrzeug mit.
+    indirect case ahead(NavigationTarget, stops: Int)
+
+    /// Das eigentliche Ziel, ohne „Halte voraus“.
+    var base: NavigationTarget {
+        if case .ahead(let base, _) = self { return base.base }
+        return self
+    }
+
+    var stopsAhead: Int {
+        if case .ahead(_, let stops) = self { return stops }
+        return 0
+    }
 }
 
 /// Die aktuell gefahrene Route.

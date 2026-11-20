@@ -207,8 +207,12 @@ final class AppModel {
 
     var myPoint: GeoPoint? { location.current.map { GeoPoint($0.coordinate) } }
 
+    /// Fahrten von Fahndern im ÖPNV (nach Fahrt-ID), für „Halte voraus“; nur geladen, wenn man zu ihnen navigiert.
+    private(set) var memberTrips: [String: TripDetail] = [:]
+
     /// Startet die dynamische Routenführung zu einem (auch bewegten) Ziel.
     func navigate(to target: NavigationTarget) {
+        loadTripIfNeeded(for: target.base)
         if target == .leapfrog, !lage.joinedLeapfrog { lage.joinLeapfrog() }
         if case .leapfrog = route.target, target != .leapfrog { lage.leaveLeapfrog() }
         route.start(
@@ -216,6 +220,43 @@ final class AppModel {
             origin: { [weak self] in self?.myPoint },
             resolve: { [weak self] target in self?.resolve(target) }
         )
+    }
+
+    /// Die ÖPNV-Fahrt, in der ein Ziel gerade sitzt: das Fahrzeug selbst, eine Zielperson darin (auch über ein
+    /// Zielfahrzeug) oder ein Fahnder, der ÖPNV als Fortbewegung gewählt hat.
+    func transitCourse(of target: NavigationTarget) -> TransitCourse? {
+        switch target {
+        case .object(let id):
+            return lage.mapObjects[id].flatMap { TransitCourse($0.data) }
+        case .target(let id):
+            var current = lage.targets[id]
+            for _ in 0..<3 {
+                guard let binding = current?.data.bindung, let next = binding.zielId else { return nil }
+                switch binding.art {
+                case .oepnv: return lage.mapObjects[next].flatMap { TransitCourse($0.data) }
+                case .fahrzeug: current = lage.targets[next]
+                case .fuss, .objekt: return nil
+                }
+            }
+            return nil
+        case .member(let id):
+            guard let member = lage.members[id]?.data, member.fortbewegung == .oepnv, let trip = member.oepnv else { return nil }
+            if let object = lage.mapObjects.values.first(where: { $0.data.fahrt?.id == trip.linienId }), let course = TransitCourse(object.data) {
+                return course
+            }
+            return memberTrips[trip.linienId].flatMap { TransitCourse($0) }
+        default:
+            return nil
+        }
+    }
+
+    private func loadTripIfNeeded(for target: NavigationTarget) {
+        guard case .member(let id) = target, let member = lage.members[id]?.data, member.fortbewegung == .oepnv,
+              let tripId = member.oepnv?.linienId, memberTrips[tripId] == nil,
+              !lage.mapObjects.values.contains(where: { $0.data.fahrt?.id == tripId }), let client else { return }
+        Task { [weak self] in
+            if let trip = try? await client.trip(id: tripId) { self?.memberTrips[tripId] = trip }
+        }
     }
 
     func stopNavigation() {
@@ -245,6 +286,10 @@ final class AppModel {
             return (lage.position(ofObject: object), object.titel.isEmpty ? object.typ.title : object.titel)
         case .point(let point, let title):
             return (point, title)
+        case .ahead(let base, let stops):
+            // Fahrzeug schon angekommen oder Fahrt unbekannt: dann zum Ziel selbst.
+            guard let stop = transitCourse(of: base)?.stop(ahead: stops) else { return resolve(base) }
+            return (stop.point, "Haltestelle \(stop.name)")
         }
     }
 }

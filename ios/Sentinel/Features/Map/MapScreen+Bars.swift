@@ -23,6 +23,7 @@ extension MapScreen {
         VStack(spacing: 8) {
             if route.isActive {
                 NavigationBanner()
+                TransitAheadPicker()
             } else {
                 HStack(spacing: Theme.barSpacing) {
                     // Beim Setzen eines Orts sucht die Leiste den Ort für das Werkzeug.

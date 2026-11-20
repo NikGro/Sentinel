@@ -4,6 +4,41 @@ import SwiftUI
 
 // Navigation: Banner mit Manöver und Querstraße, untere Leiste, Fahrspuren, Tempo und der Navi-Pfeil.
 
+/// Sitzt das Ziel in Bus oder Bahn: direkt zum Fahrzeug oder ein bis drei Halte voraus (rückt mit dem Fahrzeug mit).
+/// Erscheint gleich mit dem Navigationsstart und bleibt umschaltbar.
+struct TransitAheadPicker: View {
+    @Environment(AppModel.self) private var model
+    @Environment(RouteFollower.self) private var route
+
+    var body: some View {
+        if let base = route.target?.base, let course = model.transitCourse(of: base) {
+            VStack(alignment: .leading, spacing: 8) {
+                Label("Ziel fährt mit \(course.line). Wohin?", systemImage: "tram.fill")
+                    .font(.footnote.weight(.semibold))
+                    .foregroundStyle(.secondary)
+                    .lineLimit(1)
+                Picker("Navigationsziel", selection: Binding(
+                    get: { route.target?.stopsAhead ?? 0 },
+                    set: { stops in
+                        // Nur das Ziel wechselt; Sonderrechte bleiben, wie sie waren.
+                        let special = route.specialRights
+                        model.navigate(to: stops == 0 ? base : .ahead(base, stops: stops))
+                        route.specialRights = special
+                    }
+                )) {
+                    Text("Fahrzeug").tag(0)
+                    ForEach(1...3, id: \.self) { stops in
+                        Text(stops == 1 ? "1 Halt vor" : "\(stops) Halte vor").tag(stops)
+                    }
+                }
+                .pickerStyle(.segmented)
+            }
+            .padding(12)
+            .glassEffect(.regular, in: .rect(cornerRadius: 22))
+        }
+    }
+}
+
 /// Oberer Teil der Navi-Ansicht: nächstes Manöver mit Entfernung, wie in einer Navi-App.
 struct NavigationBanner: View {
     @Environment(RouteFollower.self) private var route

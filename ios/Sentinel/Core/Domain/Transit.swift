@@ -192,3 +192,57 @@ struct LineHit: Codable, Identifiable, Hashable, Sendable {
         }
     }
 }
+
+/// Halte und Zeiten einer ÖPNV-Fahrt, um „n Halte voraus“ zu bestimmen.
+struct TransitCourse: Equatable {
+    var line: String
+    var points: [GeoPoint]
+    var names: [String]
+    var path: [GeoPoint]
+    /// Abfahrt bzw. Ankunft je Halt in Millisekunden.
+    var times: [Double?]
+
+    init?(_ object: MapObject) {
+        guard object.typ.isTransit, object.punkte.count >= 2 else { return nil }
+        line = object.linie?.ref ?? object.titel
+        points = object.punkte
+        names = object.haltNamen ?? []
+        path = object.weg ?? []
+        if let fahrt = object.fahrt, fahrt.zeiten.count == points.count {
+            times = fahrt.zeiten
+        } else if object.typ == .oepnvfahrzeug, let typ = object.linie?.typ, let departure = object.since {
+            // Ohne echten Fahrplan: geschätzte Zeiten ab der Abfahrt.
+            let start = departure.timeIntervalSince1970 * 1000
+            times = TransitSimulation.arrivals(points, typ: typ, path: path).map { start + $0 * 1000 }
+        } else {
+            return nil
+        }
+    }
+
+    init?(_ trip: TripDetail) {
+        guard trip.stops.count >= 2 else { return nil }
+        line = trip.name
+        points = trip.stops.map(\.point)
+        names = trip.stops.map(\.name)
+        path = trip.points
+        times = trip.stops.map { $0.dep ?? $0.arr }
+    }
+
+    /// Der `count`-te noch anzufahrende Halt (1 = nächster), höchstens der Endhalt; `nil` nach der Ankunft.
+    func stop(ahead count: Int, at now: Date = .now) -> (point: GeoPoint, name: String)? {
+        let t = now.timeIntervalSince1970 * 1000
+        let known = times.compactMap { $0 }
+        guard let first = known.first, let last = known.last, t <= last else { return nil }
+        let next: Int
+        if t < first {
+            next = 1
+        } else if let state = TransitSimulation.state(points, path: path, times: times, at: now) {
+            next = state.atStop ? state.nextIndex + 1 : state.nextIndex
+        } else {
+            return nil
+        }
+        let index = min(next + max(count, 1) - 1, points.count - 1)
+        let name = names.indices.contains(index) && !names[index].isEmpty ? names[index] : "Halt \(index + 1)"
+        return (points[index], name)
+    }
+}

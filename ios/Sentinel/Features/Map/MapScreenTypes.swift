@@ -96,6 +96,6 @@ enum CameraPin: Equatable {
     /// Norden oben, senkrecht von oben.
     case north
 
-    var distance: CLLocationDistance { self == .heading ? 280 : 900 }
+    var distance: CLLocationDistance { self == .heading ? 280 : 1500 }
     var pitch: Double { self == .heading ? 40 : 0 }
 }

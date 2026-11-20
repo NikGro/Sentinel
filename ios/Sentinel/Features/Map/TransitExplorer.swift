@@ -342,8 +342,11 @@ struct TransitExplorer: View {
             ProgressView().frame(maxWidth: .infinity)
         }
         if let board {
+            // Wie beim Übernehmen: was zusätzlich auf die Lagekarte kommt (nichts gewählt = nur einsteigen).
+            partsPicker
             Button {
                 if let trip {
+                    if !parts.isEmpty { saveLine(trip) }
                     board(trip)
                     dismiss()
                 }
@@ -459,8 +462,13 @@ struct TransitExplorer: View {
         return minutes <= 0 ? "pünktlich (Echtzeit)" : "+\(minutes) Min. (Echtzeit)"
     }
 
-    /// Übernimmt die gewählten Teile einer Fahrt als Markierungen; mehrere Teile bilden eine Gruppe.
+    /// Übernimmt die gewählten Teile einer Fahrt als eine ÖPNV-Strecke.
     private func adopt(_ trip: TripDetail) {
+        saveLine(trip)
+        dismiss()
+    }
+
+    private func saveLine(_ trip: TripDetail) {
         let points = trip.stops.map(\.point)
         guard points.count >= 2 else { return }
         let names = trip.stops.map(\.name)
@@ -478,7 +486,6 @@ struct TransitExplorer: View {
         // Nur das Fahrzeug: verschwindet nach der Ankunft von selbst.
         if parts == [.fahrzeug], let end = times.compactMap({ $0 }).last { line.ablauf = end + 300_000 }
         lage.saveMapObject(line, id: LageStore.newId())
-        dismiss()
     }
 
     private func adopt(stop: LiveStop) {
