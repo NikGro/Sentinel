@@ -139,6 +139,16 @@ enum TransitSimulation {
         return State(point: points[points.count - 1], nextIndex: points.count - 1, atStop: true)
     }
 
+    /// Anteil des Wegs nach Anteil der Fahrzeit zwischen zwei Halten: Trapezprofil mit je einem Fünftel der Zeit zum
+    /// Beschleunigen und Bremsen (wie auf dem Server).
+    static func travelFraction(_ t: Double, ramp: Double = 0.2) -> Double {
+        let x = min(max(t, 0), 1)
+        let vmax = 1 / (1 - ramp)
+        if x < ramp { return vmax * x * x / (2 * ramp) }
+        if x > 1 - ramp { return 1 - vmax * (1 - x) * (1 - x) / (2 * ramp) }
+        return vmax * (x - ramp / 2)
+    }
+
     /// Position nach echten Zeiten (Fahrplan mit Echtzeit) an jedem Halt; fehlende Zeiten werden übersprungen.
     static func state(_ points: [GeoPoint], path: [GeoPoint], times: [Double?], at now: Date = .now) -> State? {
         guard points.count >= 2, times.count == points.count else { return nil }
@@ -149,8 +159,8 @@ enum TransitSimulation {
         for pair in zip(known, known.dropFirst()) {
             let (i, ti) = pair.0, (j, tj) = pair.1
             guard t <= tj else { continue }
-            // Kurz am Halt stehen, dann gleichmäßig bis zum nächsten bekannten Halt.
-            let fraction = tj > ti ? (t - ti) / (tj - ti) : 1
+            // Anfahren, fahren, bremsen bis zum nächsten bekannten Halt (Anteil des Wegs nach Anteil der Zeit).
+            let fraction = travelFraction(tj > ti ? (t - ti) / (tj - ti) : 1)
             if let indices, let along = point(along: path[indices[i]...indices[j]], fraction: fraction) {
                 return State(point: along, nextIndex: j, atStop: fraction <= 0)
             }

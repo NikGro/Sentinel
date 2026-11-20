@@ -199,7 +199,13 @@ struct MapScreen: View {
                 }
                 AreaLabelLayer(objects: objects(.flaeche) + objects(.kreis), metersPerPoint: cameraState.distance / 700)
                 NearbyStopsLayer(stops: nearbyStops)
-                RouteLayer(lines: routeLines)
+                // ÖPNV: die Verbindung Schritt für Schritt statt der Fußroute zum Ziel.
+                if route.transit, let plan = route.transitPlan {
+                    TransitPlanLayer(plan: plan)
+                }
+                if !route.transit || route.transitPlan == nil {
+                    RouteLayer(lines: routeLines)
+                }
                 if showsHistory {
                     HistoryLayer(state: history) { model.title(of: $0) }
                 }

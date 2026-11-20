@@ -239,33 +239,50 @@ struct SpeedBadge: View {
 struct TransitPlanCard: View {
     @Environment(AppModel.self) private var model
     @Environment(RouteFollower.self) private var route
-    @State private var plan: TransitPlan?
     @State private var loading = true
+    @State private var expanded = false
 
     var body: some View {
         VStack(alignment: .leading, spacing: 6) {
-            if let plan {
-                HStack {
-                    Text("\(Format.time(Date(timeIntervalSince1970: plan.start / 1000))) – \(Format.time(Date(timeIntervalSince1970: plan.end / 1000)))")
-                        .font(.subheadline.weight(.semibold).monospacedDigit())
-                    Text(plan.transfers == 0 ? "ohne Umstieg" : "\(plan.transfers)× umsteigen")
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-                    Spacer()
+            if let plan = route.transitPlan {
+                Button {
+                    withAnimation(.snappy) { expanded.toggle() }
+                } label: {
+                    HStack {
+                        Text("\(Format.time(Date(timeIntervalSince1970: plan.start / 1000))) – \(Format.time(Date(timeIntervalSince1970: plan.end / 1000)))")
+                            .font(.subheadline.weight(.semibold).monospacedDigit())
+                        Text(plan.transfers == 0 ? "ohne Umstieg" : "\(plan.transfers)× umsteigen")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                        Spacer()
+                        Label(expanded ? "Weniger" : "Schritte", systemImage: expanded ? "chevron.up" : "chevron.down")
+                            .font(.caption.weight(.semibold))
+                    }
+                    .contentShape(.rect)
                 }
-                ScrollView(.horizontal, showsIndicators: false) {
-                    HStack(spacing: 6) {
+                .buttonStyle(.plain)
+                if expanded {
+                    VStack(alignment: .leading, spacing: 10) {
                         ForEach(Array(plan.legs.enumerated()), id: \.offset) { index, leg in
-                            if index > 0 { Image(systemName: "chevron.right").font(.caption2).foregroundStyle(.secondary) }
-                            if leg.mode == "WALK" {
-                                Label("\(max(1, Int((leg.to.time - leg.from.time) / 60_000))) Min.", systemImage: "figure.walk")
-                                    .font(.caption)
-                            } else {
-                                HStack(spacing: 4) {
-                                    LineBadge(line: NearbyStop.Line(ref: leg.name, typ: LiveSegment.osmType(leg.mode, name: leg.name), farbe: nil))
-                                    Text("\(Format.time(Date(timeIntervalSince1970: leg.from.time / 1000))) \(leg.from.name)")
+                            TransitStepRow(leg: leg, isLast: index == plan.legs.count - 1)
+                        }
+                    }
+                    .padding(.top, 4)
+                } else {
+                    ScrollView(.horizontal, showsIndicators: false) {
+                        HStack(spacing: 6) {
+                            ForEach(Array(plan.legs.enumerated()), id: \.offset) { index, leg in
+                                if index > 0 { Image(systemName: "chevron.right").font(.caption2).foregroundStyle(.secondary) }
+                                if leg.isWalk {
+                                    Label("\(leg.minutes) Min.", systemImage: "figure.walk")
                                         .font(.caption)
-                                        .lineLimit(1)
+                                } else {
+                                    HStack(spacing: 4) {
+                                        LineBadge(line: leg.badge)
+                                        Text("\(Format.time(Date(timeIntervalSince1970: leg.from.time / 1000))) \(leg.from.name)")
+                                            .font(.caption)
+                                            .lineLimit(1)
+                                    }
                                 }
                             }
                         }
@@ -285,7 +302,50 @@ struct TransitPlanCard: View {
             loading = true
             defer { loading = false }
             guard let client = model.client, let from = model.myPoint, let to = route.destination else { return }
-            plan = (try? await client.transitPlans(from: from, to: to))?.first
+            route.transitPlan = (try? await client.transitPlans(from: from, to: to))?.first
+        }
+        .onDisappear { route.transitPlan = nil }
+    }
+}
+
+/// Ein Schritt der ÖPNV-Verbindung: Fußweg oder Fahrt mit Linie, Ein- und Ausstieg, Zeiten und Halte.
+struct TransitStepRow: View {
+    let leg: TransitPlan.Leg
+    let isLast: Bool
+
+    var body: some View {
+        HStack(alignment: .top, spacing: 10) {
+            Group {
+                if leg.isWalk {
+                    Image(systemName: "figure.walk")
+                        .font(.subheadline.weight(.semibold))
+                        .frame(width: 28)
+                } else {
+                    LineBadge(line: leg.badge, size: 12)
+                        .frame(minWidth: 28)
+                }
+            }
+            VStack(alignment: .leading, spacing: 2) {
+                if leg.isWalk {
+                    Text("\(leg.minutes) Min. zu Fuß" + (isLast ? " zum Ziel" : " bis \(leg.to.name)"))
+                        .font(.subheadline)
+                } else {
+                    Text("Richtung \(leg.headsign)")
+                        .font(.subheadline.weight(.semibold))
+                        .lineLimit(1)
+                    Text("\(Format.time(Date(timeIntervalSince1970: leg.from.time / 1000))) ab \(leg.from.name)")
+                        .font(.caption.monospacedDigit())
+                    Text("\(Format.time(Date(timeIntervalSince1970: leg.to.time / 1000))) an \(leg.to.name) · \(leg.stops) \(leg.stops == 1 ? "Halt" : "Halte")")
+                        .font(.caption.monospacedDigit())
+                        .foregroundStyle(.secondary)
+                    if leg.realTime {
+                        Label("Echtzeit", systemImage: "dot.radiowaves.left.and.right")
+                            .font(.caption2)
+                            .foregroundStyle(.green)
+                    }
+                }
+            }
+            Spacer(minLength: 0)
         }
     }
 }

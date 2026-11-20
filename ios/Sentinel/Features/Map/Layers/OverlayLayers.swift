@@ -133,3 +133,64 @@ struct DraftLayer: MapContent {
         }
     }
 }
+
+/// ÖPNV-Verbindung auf der Karte: Fußwege gestrichelt, Fahrten in Linienfarbe, Ein- und Ausstieg mit Linie und Zeit.
+struct TransitPlanLayer: MapContent {
+    let plan: TransitPlan
+
+    private var legs: [(index: Int, leg: TransitPlan.Leg)] { plan.legs.enumerated().map { ($0.offset, $0.element) } }
+
+    var body: some MapContent {
+        ForEach(legs, id: \.index) { item in
+            if item.leg.isWalk {
+                MapPolyline(coordinates: item.leg.coordinates)
+                    .stroke(Color(hex: "#0A84FF"), style: StrokeStyle(lineWidth: 5, lineCap: .round, dash: [1, 9]))
+            }
+            if !item.leg.isWalk {
+                MapPolyline(coordinates: item.leg.coordinates)
+                    .stroke(.white, style: StrokeStyle(lineWidth: 10, lineCap: .round, lineJoin: .round))
+                MapPolyline(coordinates: item.leg.coordinates)
+                    .stroke(Color(hex: LineBadge.routeHex(item.leg.badge)), style: StrokeStyle(lineWidth: 6, lineCap: .round, lineJoin: .round))
+                Annotation("", coordinate: CLLocationCoordinate2D(latitude: item.leg.from.lat, longitude: item.leg.from.lon), anchor: .bottom) {
+                    TransitStepPin(badge: item.leg.badge, text: "\(Format.time(Date(timeIntervalSince1970: item.leg.from.time / 1000))) einsteigen", symbol: "arrow.up.right")
+                }
+                .annotationTitles(.hidden)
+                Annotation("", coordinate: CLLocationCoordinate2D(latitude: item.leg.to.lat, longitude: item.leg.to.lon), anchor: .bottom) {
+                    TransitStepPin(badge: item.leg.badge, text: "\(Format.time(Date(timeIntervalSince1970: item.leg.to.time / 1000))) aussteigen", symbol: "arrow.down.right")
+                }
+                .annotationTitles(.hidden)
+            }
+        }
+    }
+}
+
+/// Fähnchen am Ein- bzw. Ausstieg: Linie, Zeit und Richtung des Schritts.
+struct TransitStepPin: View {
+    let badge: NearbyStop.Line
+    let text: String
+    let symbol: String
+
+    var body: some View {
+        VStack(spacing: 0) {
+            HStack(spacing: 5) {
+                LineBadge(line: badge, size: 11)
+                Image(systemName: symbol)
+                    .font(.caption2.weight(.bold))
+                Text(text)
+                    .font(.caption2.weight(.semibold).monospacedDigit())
+                    .lineLimit(1)
+            }
+            .padding(.horizontal, 7)
+            .padding(.vertical, 4)
+            .background(.thinMaterial, in: .capsule)
+            .overlay(Capsule().stroke(.white.opacity(0.6)))
+            Circle()
+                .fill(.white)
+                .frame(width: 9, height: 9)
+                .overlay(Circle().stroke(Color(hex: LineBadge.routeHex(badge)), lineWidth: 3))
+                .padding(.top, 2)
+        }
+        .fixedSize()
+        .allowsHitTesting(false)
+    }
+}

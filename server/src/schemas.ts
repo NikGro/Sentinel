@@ -142,7 +142,15 @@ const annotation = z
     weg: z.array(geoPoint).max(5000).default([]),
     /** Echte Fahrt (Transitous): Fahrt-ID und Zeit (ms) an jedem Halt zu `punkte`; der Server frischt sie auf. */
     fahrt: z
-      .object({ id: z.string().min(1).max(200), zeiten: z.array(timestamp.nullable()).max(400) })
+      .object({
+        id: z.string().min(1).max(200),
+        zeiten: z.array(timestamp.nullable()).max(400),
+        /** Halte-IDs zu `punkte`, damit die Echtzeit sicher dem richtigen Halt zugeordnet wird. */
+        haltIds: z.array(z.string().max(200)).max(400).optional(),
+        /** Liegen Echtzeitdaten vor, und wann wurden die Zeiten zuletzt erfolgreich aufgefrischt (ms)? */
+        echtzeit: z.boolean().optional(),
+        stand: timestamp.optional(),
+      })
       .nullish()
       .transform((v) => v ?? null),
     /** ÖPNV-Strecke: welche Ebenen gezeigt werden; `null` heißt alle. */

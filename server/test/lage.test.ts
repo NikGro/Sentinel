@@ -262,3 +262,23 @@ test('Echte ÖPNV-Fahrten: Zeiten an den Halten werden nachgeführt', async () =
   assert.equal(updated, 1);
   assert.deepEqual(lage.get('annotation', 'bus')?.data.fahrt?.zeiten, [now + 60_000, now + 180_000]);
 });
+
+test('Echte ÖPNV-Fahrten: Zuordnung über Halte-ID, Lebensdauer folgt der Verspätung', async () => {
+  const lage = newLage();
+  const now = Date.now();
+  // Zwei Halte fast am selben Ort: über die Lage nicht zu unterscheiden, über die ID schon.
+  const punkte = [{ lat: 53.55, lon: 10 }, { lat: 53.5501, lon: 10.0001 }];
+  lage.put(fahnder('a'), 'annotation', 'bus', {
+    layerId: LAYER_LAGE, typ: 'oepnvfahrzeug', punkte, zeit: now, ablauf: now + 420_000,
+    linie: { id: 'x', ref: '4', typ: 'bus', richtung: 'B' }, fahrt: { id: 't1', zeiten: [now, now + 120_000], haltIds: ['A', 'B'] },
+  });
+  await lage.refreshTrips(async () => ({ realTime: true, stops: [
+    { stopId: 'B', lat: 53.5501, lon: 10.0001, arr: now + 300_000, dep: null },
+    { stopId: 'A', lat: 53.55, lon: 10, arr: null, dep: now + 30_000 },
+  ] }), now);
+  const data = lage.get('annotation', 'bus')?.data;
+  assert.deepEqual(data?.fahrt?.zeiten, [now + 30_000, now + 300_000]);
+  assert.equal(data?.ablauf, now + 600_000);
+  assert.equal(data?.fahrt?.echtzeit, true);
+  assert.equal(data?.fahrt?.stand, now);
+});

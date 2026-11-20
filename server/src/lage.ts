@@ -820,10 +820,16 @@ export class Lage extends EventEmitter<{ event: [LageEvent] }> {
     this.emit('event', { type: 'bestreifungReset', inst });
   }
 
-  /** Übernommene echte Fahrten: Zeiten an den Halten aus der Echtzeit nachführen. */
-  async refreshTrips(load: (tripId: string) => Promise<{ stops: { lat: number; lon: number; arr: number | null; dep: number | null }[] }>): Promise<number> {
+  /**
+   * Übernommene echte Fahrten: Zeiten an den Halten aus der Echtzeit nachführen. Zugeordnet wird über die Halte-ID,
+   * bei älteren Markierungen ohne IDs über die Lage. Hat die Markierung eine Lebensdauer (nur Fahrzeug), wandert sie
+   * mit der Ankunft am Endhalt mit: Das Fahrzeug verschwindet fünf Minuten nach der tatsächlichen Ankunft.
+   */
+  async refreshTrips(
+    load: (tripId: string) => Promise<{ realTime?: boolean; stops: { stopId?: string; lat: number; lon: number; arr: number | null; dep: number | null }[] }>,
+    now = Date.now(),
+  ): Promise<number> {
     let updated = 0;
-    const now = Date.now();
     for (const { inst, entity: a } of this.entities.listAll('annotation')) {
       const fahrt = a.data.fahrt;
       if (!fahrt || (a.data.typ !== 'oepnvfahrzeug' && a.data.typ !== 'oepnvlinie')) continue;
@@ -831,15 +837,21 @@ export class Lage extends EventEmitter<{ event: [LageEvent] }> {
       if (last && last < now - 600_000) continue;
       try {
         const trip = await load(fahrt.id);
-        const zeiten = a.data.punkte.map((p) => {
-          const match = trip.stops.find((s) => Math.abs(s.lat - p.lat) < 0.0015 && Math.abs(s.lon - p.lon) < 0.0025);
-          return match ? (match.dep ?? match.arr) : null;
+        const zeiten = a.data.punkte.map((p, i) => {
+          const id = fahrt.haltIds?.[i];
+          const match = (id ? trip.stops.find((s) => s.stopId === id) : undefined)
+            ?? trip.stops.find((s) => Math.abs(s.lat - p.lat) < 0.0015 && Math.abs(s.lon - p.lon) < 0.0025);
+          return match ? (match.dep ?? match.arr) : (fahrt.zeiten[i] ?? null);
         });
-        if (JSON.stringify(zeiten) !== JSON.stringify(fahrt.zeiten) && zeiten.some((z) => z !== null)) {
-          const current = this.get('annotation', a.id, inst || INSTANZ_HAUPT);
-          if (current) this.write('annotation', inst, a.id, { ...current.data, fahrt: { id: fahrt.id, zeiten } }, 'system');
-          updated++;
-        }
+        if (!zeiten.some((z) => z !== null)) continue;
+        const end = zeiten.filter((z): z is number => z !== null).at(-1);
+        const ablauf = a.data.ablauf !== null && a.data.ablauf !== undefined && end ? end + 300_000 : a.data.ablauf;
+        const current = this.get('annotation', a.id, inst || INSTANZ_HAUPT);
+        if (!current) continue;
+        const changed = JSON.stringify(zeiten) !== JSON.stringify(fahrt.zeiten) || ablauf !== a.data.ablauf || (trip.realTime ?? false) !== (fahrt.echtzeit ?? false);
+        // Stand auch ohne Änderung festhalten, damit die App weiß, dass die Echtzeit frisch ist (höchstens minütlich).
+        this.write('annotation', inst, a.id, { ...current.data, ablauf, fahrt: { ...fahrt, zeiten, echtzeit: trip.realTime ?? false, stand: now } }, 'system');
+        if (changed) updated++;
       } catch {
         // Nicht erreichbar: beim nächsten Mal erneut.
       }

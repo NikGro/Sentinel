@@ -118,6 +118,8 @@ final class RouteFollower {
         }
     }
     private(set) var transitArrival: Date?
+    /// Gewählte Verbindung mit Bus und Bahn (Transitous), für die Schritte auf der Karte und in der Liste.
+    var transitPlan: TransitPlan?
 
     private func loadTransitArrival() async {
         guard let destination, let origin = snappedLocation.map({ GeoPoint($0.coordinate) }) ?? origin() else { return }

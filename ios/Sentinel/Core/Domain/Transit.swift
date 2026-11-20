@@ -131,6 +131,16 @@ struct TransitPlan: Codable, Hashable, Sendable {
         var to: Place
         var stops: Int
         var realTime: Bool
+        /// Weg des Abschnitts als [Breite, Länge].
+        var path: [[Double]]?
+
+        var isWalk: Bool { mode == "WALK" }
+        var coordinates: [CLLocationCoordinate2D] {
+            let points = (path ?? []).compactMap { $0.count == 2 ? CLLocationCoordinate2D(latitude: $0[0], longitude: $0[1]) : nil }
+            return points.count >= 2 ? points : [CLLocationCoordinate2D(latitude: from.lat, longitude: from.lon), CLLocationCoordinate2D(latitude: to.lat, longitude: to.lon)]
+        }
+        var badge: NearbyStop.Line { NearbyStop.Line(ref: name, typ: LiveSegment.osmType(mode, name: name), farbe: nil) }
+        var minutes: Int { max(1, Int(((to.time - from.time) / 60_000).rounded())) }
     }
 
     var start: Double
@@ -143,6 +153,22 @@ struct TransitPlan: Codable, Hashable, Sendable {
 struct TransitTrip: Codable, Equatable, Hashable, Sendable {
     var id: String
     var zeiten: [Double?]
+    /// Halte-IDs zu den Punkten, für die sichere Zuordnung der Echtzeit auf dem Server.
+    var haltIds: [String]?
+    /// Echtzeitdaten vorhanden und wann zuletzt aufgefrischt (ms).
+    var echtzeit: Bool?
+    var stand: Double?
+
+    /// Wie verlässlich die Position ist.
+    enum Reliability {
+        case realtime, schedule
+    }
+
+    /// Echtzeit, wenn der Server sie in den letzten drei Minuten aufgefrischt hat, sonst Fahrplan.
+    func reliability(at now: Date = .now) -> Reliability {
+        guard echtzeit == true, let stand, now.timeIntervalSince1970 * 1000 - stand < 180_000 else { return .schedule }
+        return .realtime
+    }
 }
 
 /// Verweis auf eine ÖPNV-Linie in einer Markierung.

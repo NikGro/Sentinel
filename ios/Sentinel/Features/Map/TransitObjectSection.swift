@@ -31,8 +31,12 @@ struct TransitObjectSection: View {
                 var choice = TransitLayerChoice()
                 for part in TransitLayerPart.allCases { choice[keyPath: part.keyPath] = parts.contains(part) }
                 object.ebenen = choice
-                // Mit Strecke oder Haltestellen bleibt sie stehen; nur das Fahrzeug verschwindet nach der Ankunft.
-                if choice.strecke || choice.halte { object.ablauf = nil }
+                // Mit Strecke oder Haltestellen bleibt sie stehen; nur das Fahrzeug verschwindet fünf Minuten nach der Ankunft.
+                if choice.strecke || choice.halte {
+                    object.ablauf = nil
+                } else if let end = object.fahrt?.zeiten.compactMap({ $0 }).last {
+                    object.ablauf = end + 300_000
+                }
             }
         )
     }

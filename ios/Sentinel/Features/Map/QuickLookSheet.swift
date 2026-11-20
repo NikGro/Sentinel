@@ -154,6 +154,13 @@ struct MemberQuickLook: View {
 
 /// Ansicht einer Markierung, Form oder Prognosezelle. Bearbeiten (mit Verschieben und Löschen) über den Knopf oben rechts.
 struct MapObjectInfo: View {
+    /// Restzeit als „m:ss“ bzw. „h:mm:ss“.
+    static func countdown(until date: Date, now: Date) -> String {
+        let seconds = max(Int(date.timeIntervalSince(now)), 0)
+        let h = seconds / 3600, m = seconds / 60 % 60, s = seconds % 60
+        return h > 0 ? String(format: "%d:%02d:%02d", h, m, s) : String(format: "%d:%02d", m, s)
+    }
+
     let id: String
     let object: MapObject
     /// Startet das Verschieben per Tipp auf die Karte.
@@ -199,7 +206,7 @@ struct MapObjectInfo: View {
                 .listRowBackground(Color.clear)
             }
 
-            if object.typ == .fahndungsraum || object.radius != nil || object.trackerId != nil || object.expiry != nil {
+            if object.typ == .fahndungsraum || object.radius != nil || object.trackerId != nil || (object.expiry != nil && !object.typ.isTransit) {
                 Section {
                     if object.typ == .fahndungsraum, let since = object.since {
                         LabeledContent("Letzte Sichtung", value: "\(Format.time(since)), \(Format.ago(since))")
@@ -221,7 +228,7 @@ struct MapObjectInfo: View {
                     if let trackerId = object.trackerId {
                         LabeledContent("Standort", value: "Tracker \(lage.trackers[trackerId]?.data.name ?? "unbekannt")")
                     }
-                    if let expiry = object.expiry {
+                    if let expiry = object.expiry, !object.typ.isTransit {
                         LabeledContent("Löscht sich", value: Format.expiry(expiry))
                     }
                 }
@@ -243,14 +250,32 @@ struct MapObjectInfo: View {
                         if let end = TransitSimulation.endTime(of: object) {
                             LabeledContent("Ankunft Endhalt", value: Format.time(end))
                         }
-                        if object.fahrt != nil {
-                            Label("Echte Fahrt mit Fahrplan- und Echtzeitdaten", systemImage: "dot.radiowaves.left.and.right")
+                        // Wie verlässlich die Position ist: Echtzeit, Fahrplan oder im Takt bzw. nach Tempo geschätzt.
+                        if let fahrt = object.fahrt {
+                            if fahrt.reliability() == .realtime {
+                                Label("Position nach Echtzeit", systemImage: "dot.radiowaves.left.and.right")
+                                    .font(.caption)
+                                    .foregroundStyle(.green)
+                            } else {
+                                Label("Position nach Fahrplan, keine Echtzeit", systemImage: "calendar")
+                                    .font(.caption)
+                                    .foregroundStyle(.secondary)
+                            }
+                        } else {
+                            Label("Position geschätzt (typisches Tempo)", systemImage: "questionmark.circle")
                                 .font(.caption)
-                                .foregroundStyle(.green)
+                                .foregroundStyle(.orange)
                         }
                     }
                     if object.typ == .oepnvlinie, let takt = object.takt {
                         LabeledContent("Fahrzeuge im Takt", value: "alle \(takt) Min.")
+                    }
+                    // Wie lange das Fahrzeug noch da ist (verschwindet fünf Minuten nach der Ankunft).
+                    if let expiry = object.expiry {
+                        TimelineView(.periodic(from: .now, by: 1)) { context in
+                            LabeledContent("Verschwindet in", value: Self.countdown(until: expiry, now: context.date))
+                                .monospacedDigit()
+                        }
                     }
 
                 } header: {

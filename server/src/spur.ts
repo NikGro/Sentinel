@@ -111,12 +111,24 @@ export function transitPosition(a: Annotation, now: number): { lat: number; lon:
     const to = known[k]!;
     if (now > to.t) continue;
     const fraction = to.t > from.t ? (now - from.t) / (to.t - from.t) : 1;
-    return alongPath(a.weg ?? [], punkte[from.i]!, punkte[to.i]!, fraction);
+    return alongPath(a.weg ?? [], punkte[from.i]!, punkte[to.i]!, travelFraction(fraction));
   }
   return punkte[last.i]!;
 }
 
 type Point = { lat: number; lon: number };
+
+/**
+ * Anteil des Wegs nach einem Anteil der Fahrzeit zwischen zwei Halten: anfahren, gleichmäßig fahren, bremsen
+ * (Trapezprofil, je ein Fünftel der Zeit zum Beschleunigen und Bremsen), statt durchgehend gleich schnell.
+ */
+export function travelFraction(t: number, ramp = 0.2): number {
+  const x = Math.min(Math.max(t, 0), 1);
+  const vmax = 1 / (1 - ramp);
+  if (x < ramp) return (vmax * x * x) / (2 * ramp);
+  if (x > 1 - ramp) return 1 - (vmax * (1 - x) * (1 - x)) / (2 * ramp);
+  return vmax * (x - ramp / 2);
+}
 
 /** Punkt bei `fraction` zwischen zwei Halten, entlang des Wegs zwischen den ihnen nächsten Wegpunkten, sonst gerade. */
 function alongPath(path: Point[], a: Point, b: Point, fraction: number): Point {
