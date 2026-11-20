@@ -382,6 +382,20 @@ struct APIClient: Sendable {
         _ = try await request("DELETE", "api/v1/admin/paj")
     }
 
+    private struct Done: Decodable {}
+
+    /// Abmelden: Der Server sperrt dieses Gerät und entfernt das eigene Profil (kein doppeltes Profil beim Wiederanmelden).
+    func signOutDevice() async throws {
+        _ = try await request("POST", "api/v1/abmelden")
+    }
+
+    private struct AdoptRequest: Encodable { let id: String }
+
+    /// Ein bestehendes Profil (eines nicht verbundenen Geräts) auf dieses Gerät übernehmen.
+    func adoptProfile(_ id: String) async throws {
+        _ = try await json(Done.self, "POST", "api/v1/profil/uebernehmen", body: AdoptRequest(id: id))
+    }
+
     private struct SpeedLimit: Decodable { let kmh: Int? }
 
     /// Tempolimit der Straße an einem Ort (OpenStreetMap über den eigenen Server); `nil` unbekannt oder unbegrenzt.

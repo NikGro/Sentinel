@@ -27,9 +27,10 @@ struct ForcesLayer: MapContent {
     var body: some MapContent {
         ForEach(pins) { pin in
             Annotation(pin.label, coordinate: pin.coordinate, anchor: .center) {
-                ForceMarker(pin: pin)
-                    .offset(offsets[pin.id] ?? .zero)
-                    .onTapGesture { onSelect(pin.target) }
+                Displaced(offset: offsets[pin.id] ?? .zero) {
+                    ForceMarker(pin: pin)
+                        .onTapGesture { onSelect(pin.target) }
+                }
             }
             .annotationTitles(.hidden)
         }
@@ -114,11 +115,54 @@ struct SymbolLayer: MapContent {
     var body: some MapContent {
         ForEach(pins) { pin in
             Annotation(pin.title, coordinate: pin.coordinate, anchor: .center) {
-                MapSymbolMarker(symbol: pin.symbol, color: pin.color, label: pin.title)
-                    .offset(offsets[pin.id] ?? .zero)
-                    .onTapGesture { onSelect(pin.selection) }
+                Displaced(offset: offsets[pin.id] ?? .zero) {
+                    MapSymbolMarker(symbol: pin.symbol, color: pin.color, label: pin.title)
+                        .onTapGesture { onSelect(pin.selection) }
+                }
             }
             .annotationTitles(.hidden)
         }
+    }
+}
+
+/// Ein wegen Platzmangels verschobenes Symbol: am echten Ort ein kleiner Punkt, eine dünne Linie zum Symbol.
+/// Das Verschieben gleitet, statt zu springen, damit beim Zoomen klar bleibt, was wohin gehört.
+struct Displaced<Content: View>: View {
+    let offset: CGSize
+    @ViewBuilder var content: () -> Content
+
+    var body: some View {
+        ZStack {
+            if offset != .zero {
+                LeaderLine(offset: offset)
+            }
+            content()
+                .offset(offset)
+        }
+        .animation(.snappy, value: offset)
+    }
+}
+
+private struct LeaderLine: View {
+    let offset: CGSize
+
+    var body: some View {
+        let width = abs(offset.width) * 2 + 8
+        let height = abs(offset.height) * 2 + 8
+        ZStack {
+            Path { path in
+                path.move(to: CGPoint(x: width / 2, y: height / 2))
+                path.addLine(to: CGPoint(x: width / 2 + offset.width, y: height / 2 + offset.height))
+            }
+            .stroke(.white.opacity(0.95), style: StrokeStyle(lineWidth: 1.5, lineCap: .round))
+            .shadow(color: .black.opacity(0.4), radius: 1)
+            Circle()
+                .fill(.white)
+                .overlay(Circle().stroke(.black.opacity(0.45), lineWidth: 1))
+                .frame(width: 6, height: 6)
+        }
+        .frame(width: width, height: height)
+        .allowsHitTesting(false)
+        .accessibilityHidden(true)
     }
 }

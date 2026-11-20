@@ -154,16 +154,14 @@ struct SOSButton: View {
             // Rotes Liquid Glass direkt am Inhalt (nicht als Hintergrundform), damit es die Schrift nicht überdeckt;
             // ohne eigenes Drückverhalten, damit das Gedrückthalten bei der Geste ankommt.
             .glassEffect(.regular.tint(lage.ownSOS ? .red : .red.opacity(0.8)), in: .circle)
-            // Darüber nur der äußere Ring, der sich beim Halten weiß füllt; so groß wie der gedrückte Knopf.
+            // Beim Halten füllt sich innen im Knopf ein weißer Ring; ohne Halten ist kein Ring zu sehen.
             .overlay {
-                ZStack {
-                    Circle().stroke(.white.opacity(lage.ownSOS ? 0.9 : 0.25), lineWidth: 3)
-                    Circle()
-                        .trim(from: 0, to: progress)
-                        .stroke(.white, style: StrokeStyle(lineWidth: 3, lineCap: .round))
-                        .rotationEffect(.degrees(-90))
-                }
-                .padding(-1.5)
+                Circle()
+                    .trim(from: 0, to: progress)
+                    .stroke(.white, style: StrokeStyle(lineWidth: 3, lineCap: .round))
+                    .rotationEffect(.degrees(-90))
+                    .padding(4)
+                    .opacity(progress > 0 ? 1 : 0)
             }
             .scaleEffect(holding ? 1.08 : 1)
             .animation(.snappy, value: holding)

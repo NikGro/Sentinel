@@ -164,3 +164,22 @@ test('Markierung zieht zwischen Lage und dauerhaften Orten um', () => {
   assert.equal(lage.list('annotation', 'haupt').length, 0);
   assert.equal(lage.list('annotation', 'nord').length, 1, 'Kein Doppel');
 });
+
+test('Profil übernehmen: Angaben und Mitgliedschaften wandern zum neuen Gerät', () => {
+  const lage = mitZwei();
+  lage.command(fahnder('a'), 'instanz.erstellen', { id: 'nord', name: 'Nord' });
+  const adopted = lage.adoptMember('neu', 'a');
+  assert.equal(adopted.data.spitzname, 'Falke');
+  assert.equal(lage.get('member', 'a'), null);
+  assert.ok(lage.isMember('nord', 'neu'));
+  assert.throws(() => lage.adoptMember('neu', 'b'), /schon ein Profil/);
+});
+
+test('Ziel an der A bleibt nach Abgabe der A an ihrer letzten Position', () => {
+  const lage = mitZwei();
+  lage.put(fahnder('a'), 'target', 'z', { vorname: 'Max', quelle: 'a', standort: { lat: 53.0, lon: 10.0, ts: 1 } });
+  lage.command(fahnder('a'), 'a.uebernehmen');
+  lage.reportPosition('a', pos(53.6, 10.1));
+  lage.command(fahnder('a'), 'a.freigeben');
+  assert.equal(lage.get('target', 'z')?.data.standort?.lat, 53.6);
+});

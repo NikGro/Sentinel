@@ -427,7 +427,8 @@ struct ObjectTargetList: View {
     private var targetEntries: [Entry] {
         lage.sortedTargets.compactMap { target in
             guard let position = lage.position(ofTarget: target) else { return nil }
-            return Entry(id: "t-\(target.id)", title: target.data.displayName, subtitle: "\(target.data.art.title)\(position.fromTracker ? ", Tracker" : "")", symbol: target.data.art.symbolName, target: .target(target.id), point: position.point, live: position.fromTracker)
+            let live = lage.isLive(target)
+            return Entry(id: "t-\(target.id)", title: target.data.displayName, subtitle: target.data.art.title, symbol: target.data.mapSymbol, target: .target(target.id), point: position.point, live: live)
         }
     }
 

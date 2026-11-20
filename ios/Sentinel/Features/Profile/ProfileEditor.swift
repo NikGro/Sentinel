@@ -20,6 +20,7 @@ struct ProfileEditor: View {
     @State private var showsContactPicker = false
     @State private var showsSignOut = false
     @State private var didLoad = false
+    @State private var adoptFailure: String?
 
     private var isValid: Bool {
         !name.trimmingCharacters(in: .whitespaces).isEmpty
@@ -27,8 +28,44 @@ struct ProfileEditor: View {
             && !nickname.trimmingCharacters(in: .whitespaces).isEmpty
     }
 
+    /// Profile ohne verbundenes Gerät, z. B. das eigene von vor dem Abmelden.
+    private var adoptable: [Versioned<Member>] {
+        lage.members.values.filter { $0.id != lage.selfId && !lage.isOnline($0.id) }
+            .sorted { $0.data.spitzname.localizedStandardCompare($1.data.spitzname) == .orderedAscending }
+    }
+
     var body: some View {
         Form {
+            if mode == .create, !adoptable.isEmpty {
+                Section {
+                    ForEach(adoptable) { member in
+                        Button {
+                            Task { await adopt(member.id) }
+                        } label: {
+                            HStack(spacing: 12) {
+                                Avatar(blobId: member.data.fotoBlob, fallbackText: member.data.spitzname, size: 36)
+                                VStack(alignment: .leading, spacing: 1) {
+                                    Text(member.data.spitzname).font(.headline)
+                                    Text("\(member.data.name), \(member.data.dienststelle)")
+                                        .font(.caption)
+                                        .foregroundStyle(.secondary)
+                                }
+                                Spacer()
+                                Text("Übernehmen").foregroundStyle(.tint)
+                            }
+                        }
+                        .tint(.primary)
+                    }
+                    if let adoptFailure {
+                        Label(adoptFailure, systemImage: "exclamationmark.triangle").foregroundStyle(.orange)
+                    }
+                } header: {
+                    Text("Schon ein Profil?")
+                } footer: {
+                    Text("Wer sich abgemeldet hat, übernimmt hier sein bisheriges Profil, statt ein zweites anzulegen.")
+                }
+            }
+
             Section {
                 TextField("Name", text: $name)
                     .textContentType(.name)
@@ -98,6 +135,16 @@ struct ProfileEditor: View {
         unit = me.dienststelle
         phone = me.telefon
         photo = me.fotoBlob
+    }
+
+    private func adopt(_ id: String) async {
+        guard let client = model.client else { return }
+        do {
+            try await client.adoptProfile(id)
+            adoptFailure = nil
+        } catch {
+            adoptFailure = error.localizedDescription
+        }
     }
 
     private func save() {

@@ -7,36 +7,8 @@ statt jede Änderung sofort einzubauen. Erledigtes wandert mit Version ins CHANG
 
 ### Nächste Runde
 
-- **Entzerrte Symbole kennzeichnen:** Symbole, die zu dicht beieinanderliegen, werden auseinandergerückt und wechseln je nach Zoomstufe ihren Ort. Das verwirrt.
-  - Den echten Ort sichtbar machen, z. B. kleiner Punkt am wahren Ort mit dünner Linie zum verschobenen Symbol.
-  - Den Wechsel beim Zoomen weich animieren.
-
-- **Ziel bleibt am letzten Ort:** Wird die A abgegeben, steigt die Zielperson aus einem Fahrzeug aus oder fällt eine dynamische Quelle weg, bleibt das Ziel am letzten bekannten Ort. Es springt nicht zum alten, von Hand gesetzten Punkt zurück.
-  - Am besten macht das der Server: Bei A-Wechsel oder Freigabe schreibt er die letzte Position als Standort.
-
-- **Live-Kennzeichen in „Zu Objekten navigieren“:** Ziele mit dynamischer Quelle zeigen das Live-Kennzeichen. Das gilt bei A-Position, Tracker, ÖPNV-Fahrzeug und bei einem Zielfahrzeug mit Live-Standort.
-
-- **Dreier-Umschalter der Zielperson:** Symbole statt Text (zu Fuß, Fahrzeug, ÖPNV), genau wie bei den Fahndern.
-
-- **Eigene Fortbewegung auf ÖPNV:** Der Dreier-Umschalter soll statt der alten Liniensuche die ÖPNV-Karte öffnen. Dort Fahrzeug auf der Karte antippen oder über die Suche finden und einsteigen. Die Karte öffnet wie überall am aktuellen Kartenausschnitt.
-
-- **Kreuzungssuche:** Nach dem Update (Querstraßen-Liste nach „Straße /“ bzw. „Straße Ecke“) prüfen, ob plausible Straßenecken jetzt zuverlässig kommen, auch nach dem ersten Buchstaben der zweiten Straße. Falls nicht: Beispiel nachstellen.
-
-- **„Hinführen“ im Profil eines anderen Fahnders:** Das Symbol ist nicht zu sehen, vermutlich Blau auf Blau.
-  - Dort beheben.
-  - App-weit alle Knöpfe und Symbole auf zu wenig Kontrast prüfen (Symbol in Tönungsfarbe auf gleichfarbigem Grund).
-
-- **Doppeltes Profil nach Ab- und Wiederanmelden:**
-  - Beim erneuten Anmelden entsteht ein neues Konto, das alte bleibt als Karteileiche stehen und lässt sich in der App nirgends löschen.
-  - Gewünscht: altes Profil übernehmen statt neu anlegen, oder zumindest alte Profile und Geräte löschen können.
-- **Anheften der Kamera:** Die Karte teleportiert beim Anheften wild durch die Gegend. Neu seit 0.15, vermutlich durch das kurze Festhalten der Zoomstufe.
-- **SOS-Knopf:**
-  - Den dauerhaften, transparenten weißen Ring außen entfernen.
-  - Der Ring, der sich beim Halten füllt, soll innerhalb des roten Liquid-Glass-Knopfs laufen, nicht außen herum.
-
-- **Navigation:**
-  - Der eigene Pfeil sitzt jetzt fast zu weit über der unteren Leiste (Beenden-Knopf). Ein Mittelding zwischen vorher und jetzt wäre gut.
-  - Beim Start der Navigation ist die Karte viel zu weit herausgezoomt. Vermutlich derselbe Zoom-Sprung wie beim Anheften.
+- **Kreuzungssuche nach dem Update prüfen:** Kommen plausible Straßenecken jetzt zuverlässig, auch nach dem ersten Buchstaben der zweiten Straße? Falls nicht: Beispiel nachstellen.
+- **Ziel bei wegfallendem Tracker:** Fällt der Tracker eines Ziels aus, gilt derzeit der letzte von Hand gesetzte Standort. Besser: die letzte Tracker-Position übernehmen.
 
 ### Karte, Kompass und Navigation
 

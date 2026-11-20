@@ -21,6 +21,7 @@ import type { PajPoller } from '../trackers/paj.js';
 import { registerAdminRoutes } from './admin.js';
 import { registerFileRoutes } from './files.js';
 import { registerNavigationRoutes } from './navigation.js';
+import { registerProfileRoutes } from './profile.js';
 import { registerTrackerRoutes } from './trackers.js';
 import { registerTransitRoutes } from './transit.js';
 import { registerPublicRoutes } from './public.js';
@@ -178,6 +179,7 @@ export async function buildApp(services: Services): Promise<FastifyInstance> {
   registerNavigationRoutes(app, services, guards);
   registerTransitRoutes(app, services, guards);
   registerTrackerRoutes(app, services, guards);
+  registerProfileRoutes(app, services, guards);
   registerAdminRoutes(app, services, guards);
 
   if (existsSync(config.webDir)) {

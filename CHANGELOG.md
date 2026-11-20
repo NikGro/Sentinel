@@ -1,5 +1,35 @@
 # Änderungen
 
+## 0.16.0
+
+**Karte und Navigation**
+- Anheften springt nicht mehr: Verliert die Nachführung kurz den Standort, bleibt die Karte stehen, statt auf
+  „alles zeigen“ zu springen
+- Navigation: eigener Pfeil etwas näher an der unteren Leiste (Mittelding)
+- SOS: der Ring füllt sich beim Halten innen im roten Glasknopf, kein dauerhafter Ring mehr außen
+- Entzerrte Symbole: kleiner Punkt am echten Ort mit dünner Linie zum verschobenen Symbol; der Wechsel beim
+  Zoomen gleitet
+- „Hinführen“ im Profil anderer Fahnder: Symbol weiß auf Blau (war Blau auf Blau)
+
+**Suche und Fortbewegung**
+- Querstraßen schon nach „Straße /“ bzw. „Straße Ecke“, Filter beim Weitertippen ohne Wartezeit; Anschriften,
+  Örtlichkeiten und Haltestellen getrennt
+- Erste Navigationsroute: Apples Vorgabe nur, wenn sie gegenüber der direkten Route plausibel ist; ruhigeres
+  Neuberechnen am Anfang
+- Eigene Fortbewegung „ÖPNV“ öffnet die ÖPNV-Karte: Fahrzeug antippen oder suchen und „Einsteigen“
+
+**Ziele**
+- Dreier-Umschalter der Zielperson mit Symbolen wie bei den Kräften
+- „Zu Objekten navigieren“: Live-Kennzeichen auch für Ziele an der A-Position, an einem Tracker, im ÖPNV oder in
+  einem Zielfahrzeug mit Live-Standort
+- Wird die A abgegeben oder wechselt sie, bleiben Ziele, die ihr gefolgt sind, an der letzten Position stehen
+
+**Profil**
+- Abmelden entfernt das eigene Profil auf dem Server; kein doppeltes Profil mehr beim Wiederanmelden
+- Beim Anlegen eines Profils lässt sich ein bestehendes (nicht verbundenes) Profil übernehmen, z. B. das eigene
+  von vor dem Abmelden
+
+
 ## 0.15.0
 
 **Karte**

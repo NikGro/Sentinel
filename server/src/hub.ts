@@ -191,7 +191,7 @@ export class Hub {
     return [...new Set([...this.connections].map((c) => c.actor.id))];
   }
 
-  private isOnline(actorId: string): boolean {
+  isOnline(actorId: string): boolean {
     for (const c of this.connections) if (c.actor.id === actorId) return true;
     return false;
   }

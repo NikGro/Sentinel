@@ -75,6 +75,8 @@ final class AppModel {
 
     /// Entfernt Anmeldung und alle Einsatzdaten von diesem Gerät.
     func signOut() {
+        // Beim Server abmelden (Gerät sperren, eigenes Profil entfernen); ohne Verbindung trotzdem lokal abmelden.
+        if let client { Task { try? await client.signOutDevice() } }
         route.stop()
         location.stop()
         fahndung.stopReach()

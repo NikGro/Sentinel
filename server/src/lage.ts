@@ -300,6 +300,24 @@ export class Lage extends EventEmitter<{ event: [LageEvent] }> {
     this.remove(kind, scope, id);
   }
 
+  /**
+   * Ein bestehendes Profil auf ein neu angemeldetes Gerät übernehmen (z. B. nach dem Abmelden): Die Angaben wandern
+   * zur neuen Kennung, das alte Profil verschwindet. So entsteht kein doppeltes Profil.
+   */
+  adoptMember(newId: string, oldId: string): Entity<'member'> {
+    const old = this.get('member', oldId);
+    if (!old) throw new LageError('unbekannt', 'Profil existiert nicht.');
+    if (this.get('member', newId)) throw new LageError('konflikt', 'Dieses Gerät hat schon ein Profil.');
+    const entity = this.write('member', '', newId, { ...old.data, fortbewegung: 'fuss', fahrzeugId: null, oepnv: null }, newId);
+    for (const instance of this.list('instance')) {
+      if (instance.data.mitglieder.includes(oldId)) {
+        this.write('instance', '', instance.id, { ...instance.data, mitglieder: [...instance.data.mitglieder.filter((m) => m !== oldId), newId] }, newId);
+      }
+    }
+    this.del({ id: 'zentrale', role: 'zentrale' }, 'member', oldId);
+    return entity;
+  }
+
   // ───────────────────────────── Positionen ─────────────────────────────
 
   reportPosition(memberId: string, p: Position): void {
@@ -736,12 +754,24 @@ export class Lage extends EventEmitter<{ event: [LageEvent] }> {
 
   private updateOperation(inst: string, patch: Partial<Operation>): void {
     const previous = this.operationOf(inst);
+    // Wechselt oder endet die A, bleiben Ziele, die ihr gefolgt sind, an ihrer letzten Position stehen.
+    if (previous.a && 'a' in patch && patch.a?.memberId !== previous.a.memberId) this.freezeTargetsAtA(inst, previous.a.memberId);
     const next = { ...previous, ...patch, rev: previous.rev + 1 };
     this.operations.set(inst, next);
     this.db.setKv(operationKey(inst), JSON.stringify(next));
     this.emit('event', { type: 'operation', operation: next, inst });
     if (next.a && next.a.memberId !== previous.a?.memberId) this.emit('event', { type: 'hinweis', inst, art: 'a', memberId: next.a.memberId });
     if (next.sos && next.sos.memberId !== previous.sos?.memberId) this.emit('event', { type: 'hinweis', inst, art: 'sos', memberId: next.sos.memberId });
+  }
+
+  /** Letzte A-Position als Standort aller Ziele speichern, die der A folgen (und nicht eingestiegen sind). */
+  private freezeTargetsAtA(inst: string, memberId: string): void {
+    const p = this.positions.get(memberId);
+    if (!p) return;
+    for (const t of this.entities.listIn('target', inst)) {
+      if (t.data.quelle !== 'a' || (t.data.bindung && t.data.bindung.art !== 'fuss' && t.data.bindung.zielId)) continue;
+      this.write('target', inst, t.id, { ...t.data, standort: { lat: p.lat, lon: p.lon, ts: p.ts } }, 'system');
+    }
   }
 
   private write<K extends Kind>(kind: K, inst: string, id: string, data: EntityData<K>, actorId: string): Entity<K> {

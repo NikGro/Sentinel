@@ -84,6 +84,8 @@ struct MemberQuickLook: View {
                                 dismiss()
                             } label: {
                                 Label("Hinführen", systemImage: "arrow.triangle.turn.up.right.diamond.fill")
+                                    // Weiß auf Blau: In Listen färbt sonst die Tönung das Symbol blau auf blauem Grund.
+                                    .foregroundStyle(.white)
                                     .frame(maxWidth: .infinity)
                             }
                             .buttonStyle(.glassProminent)

@@ -18,6 +18,8 @@ struct MapScreen: View {
     @State var targetEditor: TargetEditorContext?
     @State var showsLayers = false
     @State var mobilityChoice: Fortbewegung?
+    /// Eigene Fortbewegung ÖPNV: Fahrzeug auf der ÖPNV-Karte wählen und einsteigen.
+    @State var boardsTransit = false
     @State var searchMode: SearchSheet.Mode?
     @State var showsSituation = false
     @State var cameraState = MapCameraState()
@@ -114,6 +116,11 @@ struct MapScreen: View {
             // Knapp unter voller Höhe bleibt das Fenster im Glas-Stil wie die Detailfenster.
             .presentationDetents([.fraction(0.94)])
         }
+        .fullScreenCover(isPresented: $boardsTransit) {
+            TransitExplorer(start: GeoPoint(cameraState.center)) { trip in
+                lage.setMobility(.oepnv, transit: OepnvFahrt(linienId: trip.tripId, linie: trip.name, richtung: trip.headsign))
+            }
+        }
         .sheet(item: $mobilityChoice) { mode in
             MobilitySheet(initialMode: mode)
                 .presentationDetents([.medium, .large])
@@ -182,9 +189,9 @@ struct MapScreen: View {
             }
             // Karte bis an den unteren Rand: Apples Rechtshinweis sitzt dann klein unter der Tableiste
             // statt über den Bedienelementen.
-            // In der Navigation zählt die untere Leiste zum sicheren Bereich: MapKit setzt den eigenen Standort
-            // dann darüber, statt ihn verdecken zu lassen.
-            .ignoresSafeArea(.container, edges: route.isActive ? Edge.Set() : .bottom)
+            // In der Navigation sitzt der eigene Pfeil etwas über der unteren Leiste: halb so viel Abstand wie deren Höhe.
+            .safeAreaPadding(.bottom, route.isActive ? bottomAreaHeight * 0.5 : 0)
+            .ignoresSafeArea(.container, edges: .bottom)
             .onMapCameraChange(frequency: .continuous) { context in cameraState.update(context.camera) }
             .simultaneousGesture(DragGesture(minimumDistance: 12).onChanged { _ in
                 userMovedCamera = true

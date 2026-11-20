@@ -36,7 +36,8 @@ export type Fortbewegung = (typeof FORTBEWEGUNG)[number];
 
 const oepnvFahrt = z.object({
   /** Kennung der Linie in der ÖPNV-Datenbasis (Richtung einer Linie). */
-  linienId: z.string().regex(/^[0-9]{1,15}$/),
+  /** OSM-Linie (Ziffern) oder echte Fahrt aus der ÖPNV-Karte (Transitous-Kennung). */
+  linienId: z.string().min(1).max(200),
   linie: text(20).min(1),
   richtung: text(80),
 });

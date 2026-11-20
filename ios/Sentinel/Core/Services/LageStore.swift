@@ -233,6 +233,20 @@ final class LageStore {
         return nil
     }
 
+    /// Bewegt sich der Standort eines Ziels mit einer Live-Quelle mit (A-Position, Tracker, ÖPNV-Fahrzeug oder ein
+    /// Zielfahrzeug, das selbst live ist)?
+    func isLive(_ target: Versioned<Target>, depth: Int = 0) -> Bool {
+        if let binding = target.data.bindung, binding.art != .fuss, let id = binding.zielId, depth < 2 {
+            if binding.art == .oepnv { return mapObjects[id] != nil }
+            if let other = targets[id] { return isLive(other, depth: depth + 1) }
+        }
+        switch target.data.effectiveSource {
+        case .a: return aPosition != nil
+        case .tracker: return target.data.trackerId.flatMap { trackerPositions[$0] } != nil
+        case .hand: return false
+        }
+    }
+
     /// Zielpersonen, die in einem Zielfahrzeug, Gebäude oder ÖPNV-Fahrzeug sitzen.
     func passengers(of id: String) -> [Versioned<Target>] {
         sortedTargets.filter { $0.data.bindung?.zielId == id && $0.data.bindung?.art != .fuss }

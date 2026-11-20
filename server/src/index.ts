@@ -16,7 +16,7 @@ import { Vault } from './security.js';
 import { intervalCommand, startH02Listener, type H02Listener } from './trackers/h02.js';
 import { pajKey, PajPoller, type PajCredentials } from './trackers/paj.js';
 
-export const SERVER_VERSION = '0.15.0';
+export const SERVER_VERSION = '0.16.0';
 const MAX_UNKNOWN_TRACKERS = 50;
 
 /** Baut alle Dienste zusammen. Getrennt von `main`, damit Tests denselben Aufbau mit einer Speicher-Datenbank nutzen. */

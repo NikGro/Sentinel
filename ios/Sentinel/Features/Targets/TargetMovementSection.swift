@@ -28,11 +28,15 @@ struct TargetMovementSection: View {
         if target.art == .person {
             Section {
                 Picker("Unterwegs", selection: mobility) {
+                    // Symbole wie im Dreier-Umschalter der Kräfte.
                     ForEach([TargetBinding.Art.fuss, .fahrzeug, .oepnv]) { art in
-                        Label(art.title, systemImage: art.symbolName).tag(art)
+                        Image(systemName: art.symbolName)
+                            .accessibilityLabel(art.title)
+                            .tag(art)
                     }
                 }
                 .pickerStyle(.segmented)
+                .controlSize(.extraLarge)
                 .listRowBackground(Color.clear)
                 .listRowInsets(EdgeInsets())
                 .sheet(item: $boarding) { art in

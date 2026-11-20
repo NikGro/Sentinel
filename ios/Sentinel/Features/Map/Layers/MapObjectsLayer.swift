@@ -40,9 +40,10 @@ struct MapObjectsLayer: MapContent {
         }
         ForEach(handles) { handle in
             Annotation(handle.object.titel, coordinate: handle.coordinate, anchor: .center) {
-                MapObjectHandle(object: handle.object, locked: handle.locked)
-                    .offset(offsets[handle.id] ?? .zero)
-                    .onTapGesture { onSelect(handle.id) }
+                Displaced(offset: offsets[handle.id] ?? .zero) {
+                    MapObjectHandle(object: handle.object, locked: handle.locked)
+                        .onTapGesture { onSelect(handle.id) }
+                }
             }
             .annotationTitles(.hidden)
         }

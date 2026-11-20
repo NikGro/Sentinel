@@ -6,6 +6,8 @@ import SwiftUI
 /// Daten über den eigenen Server von Transitous (DELFI u. a.), Echtzeit wo verfügbar.
 struct TransitExplorer: View {
     let start: GeoPoint
+    /// Einsteigen statt Übernehmen: Die gewählte Fahrt wird die eigene Fortbewegung.
+    var board: ((TripDetail) -> Void)?
 
     @Environment(AppModel.self) private var model
     @Environment(LageStore.self) private var lage
@@ -90,7 +92,7 @@ struct TransitExplorer: View {
                 }
             .safeAreaInset(edge: .top, spacing: 0) { searchBar }
             .safeAreaInset(edge: .bottom, spacing: 0) { bottomCard }
-            .navigationTitle("ÖPNV-Karte")
+            .navigationTitle(board == nil ? "ÖPNV-Karte" : "Fahrzeug wählen")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
@@ -339,17 +341,33 @@ struct TransitExplorer: View {
         if trip == nil {
             ProgressView().frame(maxWidth: .infinity)
         }
-        partsPicker
-        Button {
-            if let trip { adopt(trip) }
-        } label: {
-            Label("Übernehmen", systemImage: "checkmark")
-                .lineLimit(1)
-                .frame(maxWidth: .infinity)
+        if let board {
+            Button {
+                if let trip {
+                    board(trip)
+                    dismiss()
+                }
+            } label: {
+                Label("Einsteigen", systemImage: Fortbewegung.oepnv.symbolName)
+                    .lineLimit(1)
+                    .frame(maxWidth: .infinity)
+            }
+            .buttonStyle(.glassProminent)
+            .controlSize(.large)
+            .disabled(trip == nil)
+        } else {
+            partsPicker
+            Button {
+                if let trip { adopt(trip) }
+            } label: {
+                Label("Übernehmen", systemImage: "checkmark")
+                    .lineLimit(1)
+                    .frame(maxWidth: .infinity)
+            }
+            .buttonStyle(.glassProminent)
+            .controlSize(.large)
+            .disabled(trip == nil || parts.isEmpty)
         }
-        .buttonStyle(.glassProminent)
-        .controlSize(.large)
-        .disabled(trip == nil || parts.isEmpty)
     }
 
     @ViewBuilder private func stopCard(_ stop: LiveStop) -> some View {
@@ -387,14 +405,16 @@ struct TransitExplorer: View {
             }
             .frame(maxHeight: 180)
         }
-        Button {
-            adopt(stop: stop)
-        } label: {
-            Label("Haltestelle übernehmen", systemImage: "checkmark")
-                .frame(maxWidth: .infinity)
+        if board == nil {
+            Button {
+                adopt(stop: stop)
+            } label: {
+                Label("Haltestelle übernehmen", systemImage: "checkmark")
+                    .frame(maxWidth: .infinity)
+            }
+            .buttonStyle(.glassProminent)
+            .controlSize(.large)
         }
-        .buttonStyle(.glassProminent)
-        .controlSize(.large)
     }
 
     private var closeButton: some View {

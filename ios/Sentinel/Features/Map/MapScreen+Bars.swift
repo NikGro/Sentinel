@@ -133,7 +133,7 @@ extension MapScreen {
     func pinCamera(_ mode: CameraPin) {
         pin = mode
         guard let current = location.current else {
-            camera = .userLocation(followsHeading: mode == .heading, fallback: .automatic)
+            camera = .userLocation(followsHeading: mode == .heading, fallback: .camera(cameraState.camera()))
             return
         }
         let heading = mode == .heading ? (myCourse ?? cameraState.heading) : 0
@@ -155,10 +155,11 @@ extension MapScreen {
     /// Übergibt an die flüssige Nachführung von Apple Karten. Die setzt sonst ihre eigene Zoomstufe; deshalb wird die
     /// gewünschte Entfernung für einen Moment festgehalten und danach wieder freigegeben (Zoomen mit zwei Fingern).
     func follow(_ mode: CameraPin, distance: CLLocationDistance) {
-        cameraBounds = MapCameraBounds(minimumDistance: distance * 0.97, maximumDistance: distance * 1.03)
-        camera = .userLocation(followsHeading: mode == .heading, fallback: .automatic)
+        // Ohne Standort bleibt die Karte, wo sie ist (statt auf „alles zeigen“ zu springen).
+        cameraBounds = MapCameraBounds(minimumDistance: distance * 0.9, maximumDistance: distance * 1.1)
+        camera = .userLocation(followsHeading: mode == .heading, fallback: .camera(cameraState.camera()))
         Task {
-            try? await Task.sleep(for: .milliseconds(900))
+            try? await Task.sleep(for: .milliseconds(700))
             cameraBounds = nil
         }
     }
@@ -194,7 +195,9 @@ extension MapScreen {
                 SpecialAreaBar()
             } else if searchPin == nil {
                 HStack(spacing: Theme.barSpacing) {
-                    MobilityControl { mobilityChoice = $0 }
+                    MobilityControl { mode in
+                        if mode == .oepnv { boardsTransit = true } else { mobilityChoice = mode }
+                    }
                     APositionControl()
                     ToAButton()
                 }
