@@ -103,7 +103,12 @@ export class StreetIndex {
   private adopt(stored: StoredIndex): void {
     this.names = stored.names;
     this.ways = stored.ways.map(([name, nodes]) => ({ name, nodes }));
-    this.nodes = new Map(Object.entries(stored.nodes).map(([id, [lat, lon]]) => [Number(id), { lat, lon }]));
+    // Ohne Zwischenkopie (Object.entries) einlesen: Bei vielen Knoten sonst doppelter Speicherbedarf.
+    this.nodes = new Map();
+    for (const id in stored.nodes) {
+      const [lat, lon] = stored.nodes[id]!;
+      this.nodes.set(Number(id), { lat, lon });
+    }
     this.waysAt = new Map();
     this.byName = new Map();
     this.ways.forEach((way, index) => {
