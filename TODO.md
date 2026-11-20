@@ -52,6 +52,11 @@ statt jede Änderung sofort einzubauen. Erledigtes wandert mit Version ins CHANG
 - **Kreuzungsvorschläge laden immer noch sehr lange:** Die Vorschläge plausibler Straßenecken brauchen weiterhin
   spürbar Zeit. Messen, wo die Zeit verloren geht (Server-Abfrage, Overpass, Abgleich), und beschleunigen, z. B.
   vorab laden oder zwischenspeichern.
+- **Verlauf an zwei zentrale Stellen verlegen:** „Verlauf auf der Karte“ steht heute bei jedem Fahnder, Ziel,
+  Fahrzeug und Tracker einzeln. Das soll weg. Stattdessen:
+  1. Im Plus-Menü der Karte als hinzufügbares Kartenobjekt „Verlauf“. Dort wählt man aus, wessen Verlauf gezeigt wird.
+  2. Gesammelt unter „Mehr“ als eigener Bereich „Verläufe“: alle Spuren, Aufbewahrung, eigene Aufzeichnung.
+  Die Schalter „Verlauf aufzeichnen“ bei den einzelnen Objekten neu bewerten: dort lassen oder auch dorthin verlegen.
 - **Punkte auf der Karte clustern:** Beim Herauszoomen nah beieinander liegende Punkte zu einem Cluster
   zusammenfassen. Auseinanderrücken nur, wenn man nah herangezoomt ist.
 - **Offene Rückfrage:** Soll der Schalter „Auf der Karte“ in der Zielliste für alle in der Instanz gelten statt nur
