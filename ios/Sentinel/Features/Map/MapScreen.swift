@@ -33,6 +33,8 @@ struct MapScreen: View {
     /// Zoomstufe und Neigung beim Anheften; das Nachführen hält sie, bis man selbst zoomt oder kippt.
     @State var followDistance: CLLocationDistance?
     @State var followPitch: Double?
+    /// Zuletzt angesteuerte Kamera beim Nachführen, um Wiederholungen ohne Bewegung auszulassen.
+    @State var lastFollowTarget: MapCamera?
     /// Tempolimit der Straße am eigenen Standort (OpenStreetMap), auch ohne Navigation.
     @State var roadSpeedLimit: Int?
     /// Rasterzelle (~100 m) des eigenen Standorts; ein Wechsel fragt das Tempolimit neu ab.

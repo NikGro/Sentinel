@@ -165,6 +165,7 @@ extension MapScreen {
     /// Bewegt die Kamera. Angeheftet führt die App sie danach selbst nach (siehe `followTick`).
     func animateCamera(_ target: MapCamera) {
         cameraAnimating = true
+        lastFollowTarget = target
         programmaticUntil = .now.addingTimeInterval(0.8)
         withAnimation(.easeInOut(duration: 0.5)) { camera = .camera(target) }
         Task {
@@ -183,6 +184,13 @@ extension MapScreen {
         // Zwischenwerte, die sonst als neue Zoomstufe hängen blieben.
         let target = MapCamera(centerCoordinate: current.coordinate, distance: followDistance ?? cameraState.distance, heading: heading,
                                pitch: followPitch ?? cameraState.pitch)
+        // Steht man still, nicht ständig neu animieren (sonst kommt die Karte nie zur Ruhe).
+        if let last = lastFollowTarget,
+           GeoPoint(last.centerCoordinate).distance(to: GeoPoint(target.centerCoordinate)) < 1,
+           abs(last.heading - target.heading) < 1.5, abs(last.distance - target.distance) < 1, abs(last.pitch - target.pitch) < 1 {
+            return
+        }
+        lastFollowTarget = target
         programmaticUntil = .now.addingTimeInterval(1.0)
         withAnimation(.linear(duration: 0.9)) { camera = .camera(target) }
     }
@@ -196,6 +204,8 @@ extension MapScreen {
             // Gezoomt oder gekippt: diese Werte gelten ab jetzt für das Nachführen.
             followDistance = current.distance
             followPitch = current.pitch
+            // Die Karte wurde bewegt: auf jeden Fall zurückführen, auch wenn das Ziel gleich geblieben ist.
+            lastFollowTarget = nil
             followTick()
         } else {
             pin = nil
