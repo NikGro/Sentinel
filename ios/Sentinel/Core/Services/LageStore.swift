@@ -491,6 +491,7 @@ final class LageStore {
         case .putRoom(let entity): rooms[entity.id] = entity
         case .putInstance(let entity): instances[entity.id] = entity
         case .notice(let notice): onEvent(.instanceNotice(notice))
+        case .geofence(let alarm): onEvent(.geofence(alarm))
         case .putMessage(let entity) where !messages.contains(where: { $0.id == entity.id }) && entity.updatedBy != selfId && hasSnapshot:
             messages.append(entity)
             onEvent(.message(entity))
@@ -560,4 +561,6 @@ enum LageEvent {
     case message(Versioned<ChatMessage>)
     /// A-Position oder Notruf in einer anderen eigenen Instanz.
     case instanceNotice(InstanceNotice)
+    /// Ein überwachtes Ziel hat einen Geofence verlassen oder betreten.
+    case geofence(GeofenceAlarm)
 }

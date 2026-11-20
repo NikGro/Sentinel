@@ -15,6 +15,7 @@ struct MapObjectsLayer: MapContent {
     let lines: [Versioned<MapObject>]
     let areas: [Versioned<MapObject>]
     let circles: [Versioned<MapObject>]
+    var geofences: [Versioned<MapObject>] = []
     let handles: [ObjectHandle]
     var offsets: [String: CGSize] = [:]
     let onSelect: (String) -> Void
@@ -29,6 +30,20 @@ struct MapObjectsLayer: MapContent {
             MapCircle(center: object.data.anchor.coordinate, radius: object.data.radius ?? 100)
                 .foregroundStyle(Color(hex: object.data.farbe).opacity(0.15))
                 .stroke(Color(hex: object.data.farbe), lineWidth: 2)
+        }
+        // Geofence: gestrichelter Rand als Alarmbereich, Kreis oder Fläche.
+        ForEach(geofences) { object in
+            let color = Color(hex: object.data.farbe)
+            let dash = StrokeStyle(lineWidth: 3, lineCap: .round, dash: [8, 6])
+            if let radius = object.data.radius, let center = object.data.punkte.first {
+                MapCircle(center: center.coordinate, radius: radius)
+                    .foregroundStyle(color.opacity(0.1))
+                    .stroke(color, style: dash)
+            } else if object.data.punkte.count >= 3 {
+                MapPolygon(coordinates: object.data.punkte.map(\.coordinate))
+                    .foregroundStyle(color.opacity(0.1))
+                    .stroke(color, style: dash)
+            }
         }
         ForEach(lines) { object in
             MapPolyline(coordinates: object.data.punkte.map(\.coordinate))
@@ -70,7 +85,7 @@ struct MapObjectHandle: View {
             if object.typ == .haltestelle {
                 // Dasselbe Haltestellensymbol wie überall (H-Schild bzw. S-/U-Logo).
                 StationSymbol(lines: object.linie.map { [$0.badge] } ?? [])
-            } else if object.typ == .marker || object.typ == .fahndungsraum || object.typ == .haltestellen {
+            } else if [.marker, .fahndungsraum, .haltestellen, .verlauf].contains(object.typ) {
                 Image(systemName: object.typ == .marker ? (object.symbol.isEmpty ? "mappin" : object.symbol) : object.typ.symbolName)
                     .font(.system(size: 14, weight: .bold))
                     .foregroundStyle(.white)
@@ -170,7 +185,7 @@ struct AreaLabelLayout {
 
     init(_ object: MapObject, metersPerPoint: Double) {
         let mpp = max(metersPerPoint, 0.05)
-        if object.typ == .kreis || object.typ == .haltestellen {
+        if object.typ == .kreis || object.typ == .haltestellen || (object.typ == .geofence && object.radius != nil) {
             let diameter = (object.radius ?? 100) * 2 / mpp
             center = object.anchor.coordinate
             // Waagerecht und gestaucht: das größte Rechteck im Kreis mit Seitenverhältnis 3:1.

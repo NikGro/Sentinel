@@ -68,6 +68,7 @@ struct MapScreen: View {
     @State var virtualVehicle: TransitVehiclePin?
     /// Verlaufsmodus: gezeigte Spuren, Zeitraum und Zeitleiste.
     @State var history = HistoryState()
+    @State var storedTracks = StoredTracks()
     @State var showsHistoryPicker = false
     var showsHistory: Bool { !model.historySubjects.isEmpty }
 
@@ -160,6 +161,24 @@ struct MapScreen: View {
                 await history.load(model.historySubjects, client: model.client)
             }
         }
+        // Dauerhaft gelegte Standortverläufe: bei Änderung neu laden, mitlaufende jede Minute.
+        .task(id: StoredTracks.key(objects(.verlauf))) {
+            let stored = objects(.verlauf)
+            await storedTracks.load(stored, client: model.client)
+            while stored.contains(where: { $0.data.zeitBis == nil }), !Task.isCancelled {
+                try? await Task.sleep(for: .seconds(60))
+                guard !Task.isCancelled else { return }
+                await storedTracks.load(objects(.verlauf), client: model.client)
+            }
+        }
+        .onChange(of: model.historyIntervalRequest) { _, interval in
+            guard let interval else { return }
+            history.customFrom = interval.lowerBound
+            history.customTo = interval.upperBound
+            history.range = .custom
+            history.selected = nil
+            model.historyIntervalRequest = nil
+        }
         .task(id: hasTransit) {
             // Kurze Schritte: Andere Kamerabewegungen (Nachführen) unterbrechen das Gleiten sonst sichtbar.
             while hasTransit, !Task.isCancelled {
@@ -199,13 +218,13 @@ struct MapScreen: View {
                 }
                 CoverageLayer(runs: CoverageRun.cached(coverageSegments))
                 ReachLayer(rings: reachRings)
-                MapObjectsLayer(lines: objects(.linie) + objects(.pfeil), areas: objects(.flaeche), circles: objects(.kreis) + objects(.haltestellen), handles: handles.filter { !layout.hidden.contains($0.id) }, offsets: layout.offsets) { id in
+                MapObjectsLayer(lines: objects(.linie) + objects(.pfeil), areas: objects(.flaeche), circles: objects(.kreis) + objects(.haltestellen), geofences: objects(.geofence), handles: handles.filter { !layout.hidden.contains($0.id) }, offsets: layout.offsets) { id in
                     openEditor(for: id)
                 }
                 TransitLayer(sections: objects(.oepnvlinie), vehicles: transitPins, showsStopNames: cameraState.distance < 5000) { pin in
                     if let id = pin.objectId { openEditor(for: id) } else { virtualVehicle = pin }
                 }
-                AreaLabelLayer(objects: objects(.flaeche) + objects(.kreis), metersPerPoint: cameraState.distance / 700)
+                AreaLabelLayer(objects: objects(.flaeche) + objects(.kreis) + objects(.geofence), metersPerPoint: cameraState.distance / 700)
                 NearbyStopsLayer(stops: nearbyStops)
                 // ÖPNV: die Verbindung Schritt für Schritt statt der Fußroute zum Ziel.
                 if route.transit, let plan = route.transitPlan {
@@ -214,6 +233,7 @@ struct MapScreen: View {
                 if !route.transit || route.transitPlan == nil {
                     RouteLayer(lines: routeLines)
                 }
+                StoredTracksLayer(state: storedTracks) { model.title(of: $0) }
                 if showsHistory {
                     HistoryLayer(state: history) { model.title(of: $0) }
                 }

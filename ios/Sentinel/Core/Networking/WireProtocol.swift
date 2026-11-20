@@ -72,6 +72,17 @@ struct InstanceNotice: Decodable, Equatable, Sendable {
     let spitzname: String
 }
 
+/// Geofence-Alarm vom Server: ein überwachtes Ziel hat den Bereich verlassen oder betreten.
+struct GeofenceAlarm: Decodable, Equatable, Sendable {
+    let annotationId: String
+    let titel: String
+    let zielId: String
+    let zielName: String
+    let art: String
+    let lat: Double
+    let lon: Double
+}
+
 enum ServerMessage: Sendable {
     case snapshot(Snapshot)
     case putMember(Versioned<Member>)
@@ -84,6 +95,7 @@ enum ServerMessage: Sendable {
     case putMessage(Versioned<ChatMessage>)
     case putInstance(Versioned<Instance>)
     case notice(InstanceNotice)
+    case geofence(GeofenceAlarm)
     case delete(kind: String, id: String)
     case operation(OperationState)
     case position(id: String, Position)
@@ -164,6 +176,8 @@ enum WireCodec {
             return .online(try decoder.decode(Online.self, from: data).ids)
         case "hinweis":
             return .notice(try decoder.decode(InstanceNotice.self, from: data))
+        case "geofence":
+            return .geofence(try decoder.decode(GeofenceAlarm.self, from: data))
         case "bestreifungReset":
             return .coverageReset
         case "ack":

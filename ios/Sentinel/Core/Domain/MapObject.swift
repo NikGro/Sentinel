@@ -20,6 +20,10 @@ struct MapObject: LageEntity {
         case pfeil
         /// Einzelne Haltestelle (von Hand gesetzt oder aus einer Linie übernommen).
         case haltestelle
+        /// Bereich mit Alarm, wenn gewählte Ziele ihn verlassen oder betreten (Auswertung auf dem Server).
+        case geofence
+        /// Dauerhaft auf die Karte gelegte Spuren aus dem Verlauf.
+        case verlauf
 
         var isTransit: Bool { self == .oepnvlinie || self == .oepnvfahrzeug }
 
@@ -36,6 +40,8 @@ struct MapObject: LageEntity {
             case .oepnvfahrzeug: "ÖPNV-Fahrzeug"
             case .pfeil: "Pfeil"
             case .haltestelle: "Haltestelle"
+            case .geofence: "Geofence-Alarm"
+            case .verlauf: "Standortverlauf"
             }
         }
 
@@ -52,6 +58,8 @@ struct MapObject: LageEntity {
             case .oepnvfahrzeug: "bus.doubledecker.fill"
             case .pfeil: "arrow.up.right"
             case .haltestelle: "h.circle.fill"
+            case .geofence: "bell.badge.circle"
+            case .verlauf: "point.bottomleft.forward.to.point.topright.scurvepath"
             }
         }
 
@@ -67,7 +75,7 @@ struct MapObject: LageEntity {
         var isMultiPoint: Bool { self == .linie || self == .flaeche || self == .pfeil }
 
         /// Flächen und Linien sind selbst antippbar und brauchen keinen Griff in der Mitte.
-        var hasHandle: Bool { [.marker, .text, .fahndungsraum, .haltestelle].contains(self) }
+        var hasHandle: Bool { [.marker, .text, .fahndungsraum, .haltestelle, .verlauf].contains(self) }
     }
 
     var layerId: String
@@ -99,6 +107,13 @@ struct MapObject: LageEntity {
     var ebenen: TransitLayerChoice?
     /// ÖPNV-Linie: Fahrzeuge im Takt (Minuten) ab der Abfahrt `zeit` am ersten Halt; `nil` aus.
     var takt: Int?
+    /// Geofence-Alarm: überwachte Ziele und wann er auslöst (`verlassen` oder `betreten`).
+    var ziele: [String]?
+    var ausloeser: String?
+    /// Standortverlauf: Spuren und Zeitraum (ms); ohne Ende läuft er bis jetzt mit.
+    var spuren: [SpurRef]?
+    var zeitVon: Double?
+    var zeitBis: Double?
 
     init(layerId: String, typ: Shape, titel: String = "", farbe: String = "#FF9F0A", punkte: [GeoPoint], radius: Double? = nil, zeit: Double? = nil) {
         self.layerId = layerId
@@ -125,6 +140,19 @@ struct MapObject: LageEntity {
     func isExpired(at date: Date = .now) -> Bool { expiry.map { $0 <= date } ?? false }
 }
 
+/// Verweis auf eine Spur im gespeicherten Standortverlauf.
+struct SpurRef: Codable, Equatable, Hashable, Sendable {
+    var art: String
+    var id: String
+
+    init(_ subject: SpurSubject) {
+        art = subject.art.rawValue
+        id = subject.id
+    }
+
+    var subject: SpurSubject? { SpurSubject.Art(rawValue: art).map { SpurSubject(art: $0, id: id) } }
+}
+
 /// Ebenen einer übernommenen ÖPNV-Strecke, jede einzeln zuschaltbar.
 struct TransitLayerChoice: Codable, Equatable, Hashable, Sendable {
     var fahrzeug = true
@@ -141,4 +169,19 @@ extension MapObject {
     var hasRealVehicle: Bool {
         fahrt != nil && (typ == .oepnvfahrzeug || (typ == .oepnvlinie && showsVehicle))
     }
+}
+
+extension MapObject {
+    /// Geofence: Alarm beim Betreten statt beim Verlassen.
+    var alarmsOnEntry: Bool { ausloeser == "betreten" }
+
+    /// Standortverlauf: gespeicherter Zeitraum; ohne Ende bis jetzt.
+    var historyInterval: ClosedRange<Date>? {
+        guard let zeitVon else { return nil }
+        let from = Date(timeIntervalSince1970: zeitVon / 1000)
+        let to = zeitBis.map { Date(timeIntervalSince1970: $0 / 1000) } ?? .now
+        return min(from, to)...max(from, to)
+    }
+
+    var historySubjects: [SpurSubject] { (spuren ?? []).compactMap(\.subject) }
 }

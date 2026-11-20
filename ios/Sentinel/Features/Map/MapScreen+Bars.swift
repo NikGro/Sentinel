@@ -24,6 +24,9 @@ extension MapScreen {
             if route.isActive {
                 NavigationBanner()
                 TransitAheadPicker()
+            } else if showsHistory, tapMode == .none {
+                // Verlauf: reduzierte Karte ohne Suche.
+                EmptyView()
             } else {
                 HStack(spacing: Theme.barSpacing) {
                     // Beim Setzen eines Orts sucht die Leiste den Ort für das Werkzeug.
@@ -91,6 +94,8 @@ extension MapScreen {
                 LocationCompassButton(state: cameraState, pin: pin) {
                     pinCamera(pin == .heading ? .north : .heading)
                 }
+                // Im Verlauf nur der Kompass, damit die Spuren frei bleiben.
+                if !showsHistory {
                 MapStyleButton { on in
                     animateCamera(cameraState.camera(pitch: on ? 55 : 0))
                 }
@@ -119,6 +124,7 @@ extension MapScreen {
                     case .shape(let shape): tapMode = .drawing(shape, points: [])
                     case .target(let art): tapMode = .newTarget(art)
                     }
+                }
                 }
             }
         }

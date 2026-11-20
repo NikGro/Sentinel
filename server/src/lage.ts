@@ -39,6 +39,8 @@ export type LageEvent =
   | { type: 'wechsel'; memberId: string; inst: string }
   /** Wichtiges Ereignis in einer Instanz (A-Position, Notruf) für Mitglieder, die gerade woanders sind. */
   | { type: 'hinweis'; inst: string; art: 'a' | 'sos'; memberId: string }
+  /** Geofence-Alarm: Ein Ziel hat den Bereich verlassen bzw. betreten. */
+  | { type: 'geofence'; inst: string; annotationId: string; titel: string; zielId: string; zielName: string; art: 'verlassen' | 'betreten'; lat: number; lon: number }
   /** Neues Sendeintervall für einen Tracker, das an das Gerät übertragen werden soll. */
   | { type: 'trackerIntervall'; anbieter: 'sinotrack' | 'paj'; kennung: string; sekunden: number };
 
@@ -93,6 +95,8 @@ export class Lage extends EventEmitter<{ event: [LageEvent] }> {
   private readonly positions = new Map<string, Position>();
   private readonly trackerPositions = new Map<string, Position>();
   private readonly lastTrackPoint = new Map<string, Position>();
+  /** Geofences: ob ein Ziel zuletzt drinnen war (Schlüssel Geofence|Ziel), um nur Wechsel zu melden. */
+  private readonly geofenceInside = new Map<string, boolean>();
   private readonly entities: EntityStore;
   private readonly tracks: TrackStore;
   /** Standortverlauf von Fahndern, Zielen, Fahrzeugen und Trackern. */
@@ -431,6 +435,7 @@ export class Lage extends EventEmitter<{ event: [LageEvent] }> {
       const p = this.resolveTarget(this.instanceOfTarget(t.id), t.data, now);
       if (p) this.spuren.add('target', t.id, '', p);
     }
+    this.checkGeofences(now);
     const inUse = new Set(this.list('instance').flatMap((i) => this.operationOf(i.id).fahrzeuge));
     for (const v of this.list('vehicle')) {
       if (v.data.aufzeichnung === false || !inUse.has(v.id)) continue;
@@ -499,6 +504,31 @@ export class Lage extends EventEmitter<{ event: [LageEvent] }> {
     if (tracker) return { lat: tracker.lat, lon: tracker.lon, ts: tracker.ts, spd: tracker.spd ?? null, quelle: 'tracker', info: this.get('tracker', v.data.trackerId!)?.data.name ?? null };
     if (v.data.abgestellt) return { lat: v.data.abgestellt.lat, lon: v.data.abgestellt.lon, ts: now, quelle: 'abgestellt' };
     return null;
+  }
+
+  /**
+   * Geofences prüfen: Für jedes überwachte Ziel, ob es drinnen ist; beim Wechsel in die gewählte Richtung ein Alarm
+   * an alle in der Instanz. Der erste Blick legt nur den Ausgangszustand fest.
+   */
+  checkGeofences(now = Date.now()): void {
+    for (const { inst, entity: g } of this.entities.listAll('annotation')) {
+      if (g.data.typ !== 'geofence' || !g.data.ausloeser) continue;
+      for (const zielId of g.data.ziele) {
+        const target = this.get('target', zielId);
+        if (!target) continue;
+        const p = this.resolveTarget(inst || INSTANZ_HAUPT, target.data, now);
+        if (!p) continue;
+        const inside = insideArea(p, g.data.punkte, g.data.radius);
+        const key = `${g.id}|${zielId}`;
+        const before = this.geofenceInside.get(key);
+        this.geofenceInside.set(key, inside);
+        if (before === undefined || before === inside) continue;
+        const art = inside ? 'betreten' : 'verlassen';
+        if (art !== g.data.ausloeser) continue;
+        this.emit('event', { type: 'geofence', inst: inst || INSTANZ_HAUPT, annotationId: g.id, titel: g.data.titel, zielId, zielName: targetName(target.data), art, lat: p.lat, lon: p.lon });
+        this.db.audit('system', 'geofence', `${targetName(target.data)} ${art} ${g.data.titel}`);
+      }
+    }
   }
 
   /** Spuren älter als `days` Tage verwerfen. */
@@ -1048,6 +1078,18 @@ export class Lage extends EventEmitter<{ event: [LageEvent] }> {
 /** Woher der Standort eines Ziels kommt; ohne ausdrückliche Wahl der Tracker, sofern verbunden. */
 function sourceOf(t: EntityData<'target'>): 'hand' | 'tracker' | 'a' {
   return t.quelle ?? (t.trackerId ? 'tracker' : 'hand');
+}
+
+/** Liegt ein Punkt im Bereich: Kreis um den ersten Punkt (mit Radius) oder Fläche (Strahlverfahren)? */
+export function insideArea(p: { lat: number; lon: number }, punkte: { lat: number; lon: number }[], radius: number | null): boolean {
+  if (radius !== null) return punkte[0] !== undefined && distanceMeters(p, punkte[0]) <= radius;
+  let inside = false;
+  for (let i = 0, j = punkte.length - 1; i < punkte.length; j = i++) {
+    const a = punkte[i]!;
+    const b = punkte[j]!;
+    if (a.lat > p.lat !== b.lat > p.lat && p.lon < ((b.lon - a.lon) * (p.lat - a.lat)) / (b.lat - a.lat) + a.lon) inside = !inside;
+  }
+  return inside;
 }
 
 function targetName(t: EntityData<'target'>): string {

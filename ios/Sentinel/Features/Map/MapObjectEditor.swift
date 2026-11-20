@@ -147,7 +147,7 @@ struct MapObjectEditor: View {
                         .lineLimit(1...5)
                 }
 
-                if ![.text, .haltestellen, .fahndungsraum].contains(object.typ) {
+                if ![.text, .haltestellen, .fahndungsraum, .geofence, .verlauf].contains(object.typ) {
                     AttachmentsSection(attachments: Binding(get: { object.anhaenge ?? [] }, set: { object.anhaenge = $0 }))
                 }
 
@@ -215,6 +215,10 @@ struct MapObjectEditor: View {
                     }
                 }
 
+                if object.typ == .geofence {
+                    GeofenceSection(object: $object, radiusText: $radiusText)
+                }
+
                 if object.typ == .kreis {
                     Section("Radius in Metern") {
                         TextField("Radius", text: $radiusText)
@@ -277,6 +281,7 @@ struct MapObjectEditor: View {
                         .disabled(
                             (object.typ == .text && object.titel.trimmingCharacters(in: .whitespaces).isEmpty)
                                 || (object.typ.isTransit && (object.linie == nil || object.punkte.count < 2))
+                                || (object.typ == .geofence && (object.ziele ?? []).isEmpty)
                         )
                 }
             }
@@ -290,7 +295,7 @@ struct MapObjectEditor: View {
         var result = object
         result.titel = String(result.titel.trimmingCharacters(in: .whitespaces).prefix(80))
         result.notiz = String(result.notiz.prefix(1000))
-        if result.typ == .kreis {
+        if result.typ == .kreis || (result.typ == .geofence && result.radius != nil) {
             result.radius = min(max(Double(radiusText) ?? 150, 5), 100_000)
         }
         if result.typ == .haltestellen {
@@ -308,6 +313,69 @@ struct MapObjectEditor: View {
             lage.saveMapObject(stops, id: LageStore.newId())
         }
         dismiss()
+    }
+}
+
+/// Geofence: Auslöser, überwachte Ziele und Radius.
+private struct GeofenceSection: View {
+    @Binding var object: MapObject
+    @Binding var radiusText: String
+    @Environment(LageStore.self) private var lage
+
+    private var selected: Set<String> { Set(object.ziele ?? []) }
+
+    var body: some View {
+        Section {
+            Picker("Alarm beim", selection: Binding(get: { object.ausloeser ?? "verlassen" }, set: { object.ausloeser = $0 })) {
+                Text("Verlassen").tag("verlassen")
+                Text("Betreten").tag("betreten")
+            }
+            .pickerStyle(.segmented)
+            if object.radius != nil {
+                HStack {
+                    Text("Radius")
+                    Spacer()
+                    TextField("Meter", text: $radiusText)
+                        .keyboardType(.numberPad)
+                        .multilineTextAlignment(.trailing)
+                        .frame(width: 80)
+                    Text("m").foregroundStyle(.secondary)
+                }
+            }
+        } header: {
+            Text("Alarm")
+        } footer: {
+            Text(object.alarmsOnEntry
+                 ? "Betritt eines der Ziele den Bereich, bekommen alle in der Instanz einen Alarm."
+                 : "Verlässt eines der Ziele den Bereich, bekommen alle in der Instanz einen Alarm.")
+        }
+        Section {
+            if lage.sortedTargets.isEmpty {
+                Text("Noch keine Ziele angelegt.").foregroundStyle(.secondary)
+            }
+            ForEach(lage.sortedTargets) { target in
+                Button {
+                    var next = selected
+                    if next.contains(target.id) { next.remove(target.id) } else { next.insert(target.id) }
+                    object.ziele = lage.sortedTargets.map(\.id).filter(next.contains)
+                } label: {
+                    HStack {
+                        Label(target.data.displayName, systemImage: target.data.art.symbolName)
+                            .foregroundStyle(.primary)
+                        Spacer()
+                        if selected.contains(target.id) {
+                            Image(systemName: "checkmark").foregroundStyle(Color.accentColor)
+                        }
+                    }
+                }
+                .accessibilityAddTraits(selected.contains(target.id) ? .isSelected : [])
+            }
+        } header: {
+            Text("Überwachte Ziele")
+        } footer: {
+            Text("Ausgewertet auf dem Server, der Alarm erreicht alle Verbundenen in der Instanz.")
+        }
+        .onAppear { if object.ausloeser == nil { object.ausloeser = "verlassen" } }
     }
 }
 

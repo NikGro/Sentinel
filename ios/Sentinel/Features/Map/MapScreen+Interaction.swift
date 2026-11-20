@@ -120,9 +120,9 @@ extension MapScreen {
         return MapObject(
             layerId: settings.defaultLayerId,
             typ: shape,
-            farbe: isRoom ? "#C97C7C" : shape == .haltestellen || shape.isTransit ? "#0A84FF" : "#FF9F0A",
+            farbe: isRoom ? "#C97C7C" : shape == .geofence ? "#FF453A" : shape == .haltestellen || shape.isTransit ? "#0A84FF" : "#FF9F0A",
             punkte: points,
-            radius: shape == .kreis ? 150 : shape == .haltestellen ? 500 : nil,
+            radius: shape == .kreis || shape == .geofence ? 150 : shape == .haltestellen ? 500 : nil,
             zeit: isRoom || shape.isTransit ? (Date.now.timeIntervalSince1970 * 1000).rounded() : nil
         )
     }
@@ -148,9 +148,9 @@ extension MapScreen {
             let data = object.data
             let size: Double?
             switch data.typ {
-            case .flaeche where data.punkte.count >= 3:
+            case .flaeche where data.punkte.count >= 3, .geofence where data.radius == nil && data.punkte.count >= 3:
                 size = Self.contains(data.punkte, point) ? Self.area(data.punkte) : nil
-            case .kreis, .haltestellen:
+            case .kreis, .haltestellen, .geofence:
                 guard let center = data.punkte.first else { continue }
                 let radius = data.radius ?? 100
                 size = center.distance(to: point) <= radius ? Double.pi * radius * radius : nil

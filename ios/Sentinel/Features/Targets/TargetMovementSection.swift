@@ -167,23 +167,54 @@ private struct SourceDialogs: ViewModifier {
     @Environment(\.dismiss) private var dismiss
     @State private var choosingTracker = false
     @State private var pickingLocation = false
+    @State private var followup: String?
+
+    private var sourceActions: [MediaAction] {
+        var actions: [MediaAction] = []
+        if lage.position(ofTarget: entity) != nil {
+            actions.append(MediaAction(id: "behalten", title: "Aktuellen Ort beibehalten", symbol: "pin.fill"))
+        }
+        actions.append(MediaAction(id: "hand", title: "Von Hand setzen", symbol: LocationSource.hand.symbolName))
+        actions.append(MediaAction(id: "tracker", title: "An Tracker binden …", symbol: LocationSource.tracker.symbolName))
+        actions.append(MediaAction(id: "a", title: "Der A-Position folgen", symbol: LocationSource.a.symbolName))
+        return actions
+    }
+
+    private func runFollowup() {
+        guard let next = followup else { return }
+        followup = nil
+        switch next {
+        case "hand":
+            if let placeOnMap {
+                save { $0.quelle = .hand }
+                placeOnMap(entity.id)
+                dismiss()
+            } else {
+                pickingLocation = true
+            }
+        case "tracker": choosingTracker = true
+        default: break
+        }
+    }
 
     func body(content: Content) -> some View {
         content
-            .confirmationDialog("Standortquelle", isPresented: $choosingSource, titleVisibility: .visible) {
-                Button("Von Hand setzen") {
-                    if let placeOnMap {
-                        save { $0.quelle = .hand }
-                        placeOnMap(entity.id)
-                        dismiss()
-                    } else {
-                        pickingLocation = true
+            // Auswahlblatt statt Sprechblase; Weiteres (Karte, Tracker, Ortswahl) erst nach dem Schließen.
+            .sheet(isPresented: $choosingSource, onDismiss: runFollowup) {
+                MediaActionSheet(title: "Standortquelle", actions: sourceActions) { action in
+                    switch action.id {
+                    case "behalten":
+                        // Wo das Ziel gerade ist, bleibt es stehen: als von Hand gesetzter Standort.
+                        if let here = lage.position(ofTarget: entity)?.point {
+                            save {
+                                $0.standort = TimedPoint(here)
+                                $0.quelle = .hand
+                            }
+                        }
+                    case "a": save { $0.quelle = .a }
+                    default: followup = action.id
                     }
                 }
-                Button("An Tracker binden …") { choosingTracker = true }
-                Button("Der A-Position folgen") { save { $0.quelle = .a } }
-            } message: {
-                Text("Der A-Position folgen heißt: Das Ziel steht dort, wo die A-Position gerade ist. Gilt nur für dieses Ziel.")
             }
             .sheet(isPresented: $choosingTracker) {
                 TrackerChoiceSheet(selected: entity.data.trackerId) { trackerId in

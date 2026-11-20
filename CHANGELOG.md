@@ -1,5 +1,22 @@
 # Änderungen
 
+## 0.20.0
+
+**Geofence-Alarm (neu im Plus-Menü unter Fahndung)**
+- Bereich setzen, Ziele wählen und festlegen, ob beim Verlassen oder beim Betreten Alarm kommt
+- Der Server prüft laufend die Standorte der Ziele; der Alarm geht an alle in der Instanz
+- Beim Anlegen zählt nur der Wechsel: Ist ein Ziel schon draußen, gibt es keinen Alarm, bis es einmal drin war
+
+**Standortverlauf (Plus-Menü, vorher „Verlauf“)**
+- Neuer Knopf „Auf die Karte legen“: Die gezeigten Spuren bleiben als Objekt auf der Karte, für alle sichtbar.
+  Vorgaben bis „jetzt“ laufen mit, ein fester Zeitraum bleibt fest. Aus dem Objekt heraus „Im Verlauf öffnen“
+- Reduzierte Karte im Verlauf: keine Suche, rechts nur der Kompassknopf (und SOS)
+- Das „+“ für weitere Spuren sitzt direkt neben den Pillen; die Zeitleiste ist entfernt, Punkte über Antippen der Spur
+
+**Ziele und ÖPNV**
+- Standortquelle „Aktuellen Ort beibehalten“: Das Ziel bleibt dort stehen, wo es gerade ist
+- ÖPNV-Karte mit Knopf zum eigenen Standort
+
 ## 0.19.0
 
 **Ziele instanzübergreifend**

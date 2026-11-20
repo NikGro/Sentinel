@@ -234,6 +234,30 @@ struct MapObjectInfo: View {
                 }
             }
 
+            if object.typ == .geofence {
+                Section("Alarm") {
+                    LabeledContent("Auslöser", value: object.alarmsOnEntry ? "Betreten" : "Verlassen")
+                    if let radius = object.radius { LabeledContent("Radius", value: Format.distance(radius)) }
+                    ForEach(object.ziele ?? [], id: \.self) { id in
+                        Label(lage.targets[id]?.data.displayName ?? "Gelöschtes Ziel", systemImage: lage.targets[id]?.data.art.symbolName ?? "questionmark")
+                    }
+                }
+            }
+            if object.typ == .verlauf, let interval = object.historyInterval {
+                Section {
+                    LabeledContent("Von", value: Format.dateTime(interval.lowerBound))
+                    LabeledContent("Bis", value: object.zeitBis == nil ? "jetzt (läuft mit)" : Format.dateTime(interval.upperBound))
+                    ForEach(object.historySubjects) { subject in
+                        Text(model.title(of: subject))
+                    }
+                    Button("Im Verlauf öffnen", systemImage: "point.bottomleft.forward.to.point.topright.scurvepath") {
+                        model.openHistory(of: object)
+                        dismiss()
+                    }
+                } header: {
+                    Text("Standortverlauf")
+                }
+            }
             if object.typ.isTransit, let line = object.linie {
                 Section {
                     if let names = object.haltNamen, let first = names.first, let last = names.last {

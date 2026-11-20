@@ -62,7 +62,7 @@ struct AddChooser: View {
             ScrollView {
                 VStack(alignment: .leading, spacing: 18) {
                     if scope == .all {
-                        group("Fahndung", [.shape(.fahndungsraum), .shape(.haltestellen)])
+                        group("Fahndung", [.shape(.fahndungsraum), .shape(.haltestellen), .shape(.geofence)])
                     }
                     // Ein Eintrag für alles aus dem ÖPNV: Fahrzeuge, Strecken und Haltestellen kommen über die ÖPNV-Karte.
                     if scope != .places {
@@ -140,7 +140,7 @@ extension AddMenu.Action {
         case .shape(let shape): shape.title
         case .target(let art): art.title
         case .transitMap: "ÖPNV"
-        case .history: "Verlauf"
+        case .history: "Standortverlauf"
         }
     }
 

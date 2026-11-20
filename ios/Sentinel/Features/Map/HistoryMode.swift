@@ -2,7 +2,8 @@ import MapKit
 import Observation
 import SwiftUI
 
-// Verlauf auf der Karte: Spuren in einem frei wählbaren Zeitraum, mit Zeitleiste, Standzeiten und Punktdetails.
+// Verlauf auf der Karte: Spuren in einem frei wählbaren Zeitraum, mit Standzeiten und Punktdetails; dauerhaft als
+// Objekt „Standortverlauf“ auf die Karte legbar.
 
 /// Zeitraum des Verlaufs: feste Vorgaben oder frei gewählt.
 enum HistoryRange: String, CaseIterable, Identifiable {
@@ -40,7 +41,7 @@ enum HistoryRange: String, CaseIterable, Identifiable {
     }
 }
 
-/// Zustand des Verlaufsmodus: geladene Spuren, Zeitraum, Zeitpunkt auf der Zeitleiste und angetippter Punkt.
+/// Zustand des Verlaufsmodus: geladene Spuren, Zeitraum und angetippter Punkt.
 @MainActor
 @Observable
 final class HistoryState {
@@ -50,8 +51,6 @@ final class HistoryState {
     var spuren: [String: Spur] = [:]
     var loading = false
     var failure: String?
-    /// Zeitpunkt auf der Zeitleiste; `nil` = keiner gewählt.
-    var scrub: Date?
     /// Angetippter Punkt: Spur und Index.
     var selected: (key: String, index: Int)?
 
@@ -82,7 +81,6 @@ final class HistoryState {
         }
         spuren = result
         if let selected, spuren[selected.key]?.punkte.indices.contains(selected.index) != true { self.selected = nil }
-        if let scrub, !interval.contains(scrub) { self.scrub = nil }
     }
 
     var allPoints: [GeoPoint] { spuren.values.flatMap { $0.punkte.map(\.point) } }
@@ -115,49 +113,7 @@ struct HistoryLayer: MapContent {
 
     var body: some MapContent {
         ForEach(Array(state.spuren.values)) { spur in
-            ForEach(spur.abschnitte) { abschnitt in
-                if abschnitt.gap {
-                    MapPolyline(coordinates: abschnitt.coordinates)
-                        .stroke(.gray.opacity(0.8), style: StrokeStyle(lineWidth: 3, lineCap: .round, dash: [2, 6]))
-                }
-                if !abschnitt.gap {
-                    MapPolyline(coordinates: abschnitt.coordinates)
-                        .stroke(.white, style: StrokeStyle(lineWidth: 7, lineCap: .round, lineJoin: .round))
-                    MapPolyline(coordinates: abschnitt.coordinates)
-                        .stroke(abschnitt.quelle.color, style: StrokeStyle(lineWidth: 4, lineCap: .round, lineJoin: .round))
-                }
-            }
-            ForEach(spur.standzeiten.filter { $0.dauer >= 5 * 60 }) { stop in
-                Annotation("", coordinate: stop.point.coordinate, anchor: .center) {
-                    Label(Format.duration(stop.dauer), systemImage: "pause.fill")
-                        .font(.caption2.weight(.bold))
-                        .labelStyle(.titleAndIcon)
-                        .padding(.horizontal, 6)
-                        .padding(.vertical, 3)
-                        .background(.thinMaterial, in: .capsule)
-                        .overlay(Capsule().stroke(.secondary.opacity(0.4)))
-                        .allowsHitTesting(false)
-                }
-                .annotationTitles(.hidden)
-            }
-            if let last = spur.punkte.last {
-                Annotation(title(spur.subject), coordinate: last.point.coordinate, anchor: .center) {
-                    Circle()
-                        .fill(last.quelle.color)
-                        .frame(width: 12, height: 12)
-                        .overlay(Circle().stroke(.white, lineWidth: 2))
-                        .allowsHitTesting(false)
-                }
-            }
-            if let scrub = state.scrub, let point = spur.position(at: scrub) {
-                Annotation(title(spur.subject), coordinate: point.coordinate, anchor: .center) {
-                    Image(systemName: "smallcircle.filled.circle.fill")
-                        .font(.system(size: 22, weight: .bold))
-                        .foregroundStyle(.white, Theme.target)
-                        .shadow(radius: 2)
-                        .allowsHitTesting(false)
-                }
-            }
+            SpurLines(spur: spur, title: title(spur.subject))
         }
         if let selected = state.selected, let punkt = state.spuren[selected.key]?.punkte[safe: selected.index] {
             Annotation("", coordinate: punkt.point.coordinate, anchor: .center) {
@@ -173,12 +129,98 @@ struct HistoryLayer: MapContent {
     }
 }
 
-/// Untere Leiste im Verlaufsmodus: angezeigte Spuren, Zeitraum, Zeitleiste und Legende.
+/// Eine Spur: Abschnitte nach Quelle gefärbt, Lücken gestrichelt, Standzeiten und letzter Punkt.
+struct SpurLines: MapContent {
+    let spur: Spur
+    let title: String
+
+    var body: some MapContent {
+        ForEach(spur.abschnitte) { abschnitt in
+            if abschnitt.gap {
+                MapPolyline(coordinates: abschnitt.coordinates)
+                    .stroke(.gray.opacity(0.8), style: StrokeStyle(lineWidth: 3, lineCap: .round, dash: [2, 6]))
+            }
+            if !abschnitt.gap {
+                MapPolyline(coordinates: abschnitt.coordinates)
+                    .stroke(.white, style: StrokeStyle(lineWidth: 7, lineCap: .round, lineJoin: .round))
+                MapPolyline(coordinates: abschnitt.coordinates)
+                    .stroke(abschnitt.quelle.color, style: StrokeStyle(lineWidth: 4, lineCap: .round, lineJoin: .round))
+            }
+        }
+        ForEach(spur.standzeiten.filter { $0.dauer >= 5 * 60 }) { stop in
+            Annotation("", coordinate: stop.point.coordinate, anchor: .center) {
+                Label(Format.duration(stop.dauer), systemImage: "pause.fill")
+                    .font(.caption2.weight(.bold))
+                    .labelStyle(.titleAndIcon)
+                    .padding(.horizontal, 6)
+                    .padding(.vertical, 3)
+                    .background(.thinMaterial, in: .capsule)
+                    .overlay(Capsule().stroke(.secondary.opacity(0.4)))
+                    .allowsHitTesting(false)
+            }
+            .annotationTitles(.hidden)
+        }
+        if let last = spur.punkte.last {
+            Annotation(title, coordinate: last.point.coordinate, anchor: .center) {
+                Circle()
+                    .fill(last.quelle.color)
+                    .frame(width: 12, height: 12)
+                    .overlay(Circle().stroke(.white, lineWidth: 2))
+                    .allowsHitTesting(false)
+            }
+        }
+    }
+}
+
+/// Dauerhaft auf die Karte gelegte Standortverläufe (Objekt „Standortverlauf“), für alle sichtbar.
+@MainActor
+@Observable
+final class StoredTracks {
+    struct Track: Identifiable {
+        let id: String
+        let spur: Spur
+    }
+
+    private(set) var tracks: [Track] = []
+
+    static func key(_ objects: [Versioned<MapObject>]) -> String {
+        objects.map { "\($0.id)#\($0.rev)" }.sorted().joined(separator: ",")
+    }
+
+    func load(_ objects: [Versioned<MapObject>], client: APIClient?) async {
+        guard let client else { return }
+        var result: [Track] = []
+        for object in objects {
+            guard let interval = object.data.historyInterval else { continue }
+            for subject in object.data.historySubjects {
+                if let spur = try? await client.spur(subject, from: interval.lowerBound, to: interval.upperBound) {
+                    result.append(Track(id: "\(object.id)|\(subject.key)", spur: spur))
+                }
+            }
+        }
+        tracks = result
+    }
+}
+
+struct StoredTracksLayer: MapContent {
+    let state: StoredTracks
+    let title: (SpurSubject) -> String
+
+    var body: some MapContent {
+        ForEach(state.tracks) { track in
+            SpurLines(spur: track.spur, title: title(track.spur.subject))
+        }
+    }
+}
+
+/// Untere Leiste im Verlaufsmodus: angezeigte Spuren, Zeitraum und Legende.
 struct HistoryPanel: View {
     @Bindable var state: HistoryState
     @Environment(AppModel.self) private var model
     @Environment(LageStore.self) private var lage
+    @Environment(LocalSettings.self) private var settings
     let fit: () -> Void
+    @State private var placed = false
 
     var body: some View {
         VStack(alignment: .leading, spacing: 10) {
@@ -188,7 +230,6 @@ struct HistoryPanel: View {
             VStack(alignment: .leading, spacing: 10) {
                 subjectsRow
                 rangeRow
-                scrubber
                 if state.isEmpty, !state.loading {
                     Text(state.failure ?? "Keine Aufzeichnung in diesem Zeitraum.")
                         .font(.footnote)
@@ -210,11 +251,9 @@ struct HistoryPanel: View {
                     .lineLimit(1)
                 if state.loading { ProgressView().controlSize(.small) }
                 Spacer(minLength: 4)
-                addMenu
                 Button {
                     model.historySubjects = []
                     state.selected = nil
-                    state.scrub = nil
                 } label: {
                     Image(systemName: "xmark")
                         .font(.subheadline.weight(.bold))
@@ -245,15 +284,43 @@ struct HistoryPanel: View {
                         .padding(.vertical, 5)
                         .glassEffect(.regular, in: .capsule)
                     }
+                    // Weitere Spur direkt neben den gewählten.
+                    addMenu
                     Button("Ganze Spur", systemImage: "arrow.up.left.and.arrow.down.right", action: fit)
                         .font(.subheadline.weight(.semibold))
                         .lineLimit(1)
                         .buttonStyle(.bordered)
                         .buttonBorderShape(.capsule)
                         .disabled(state.isEmpty)
+                    Button("Auf die Karte legen", systemImage: "pin", action: placeOnMap)
+                        .font(.subheadline.weight(.semibold))
+                        .lineLimit(1)
+                        .buttonStyle(.bordered)
+                        .buttonBorderShape(.capsule)
+                        .disabled(state.isEmpty || model.historySubjects.isEmpty)
                 }
             }
         }
+        .alert("Auf der Karte", isPresented: $placed) {
+            Button("OK", role: .cancel) {}
+        } message: {
+            Text("Der Standortverlauf liegt jetzt für alle in der Instanz auf der Karte. Löschen über das Objekt.")
+        }
+    }
+
+    /// Gezeigte Spuren als Objekt „Standortverlauf“ speichern. Vorgaben bis jetzt laufen mit, ein fester Zeitraum bleibt fest.
+    private func placeOnMap() {
+        let subjects = model.historySubjects
+        guard let anchor = subjects.lazy.compactMap({ state.spuren[$0.key]?.punkte.last?.point }).first else { return }
+        let interval = state.interval
+        let live = Date.now.timeIntervalSince(interval.upperBound) < 120
+        let names = subjects.map { model.title(of: $0) }.joined(separator: ", ")
+        var object = MapObject(layerId: settings.defaultLayerId, typ: .verlauf, titel: String("Verlauf \(names)".prefix(80)), farbe: "#5E5CE6", punkte: [anchor])
+        object.spuren = subjects.map(SpurRef.init)
+        object.zeitVon = (interval.lowerBound.timeIntervalSince1970 * 1000).rounded()
+        object.zeitBis = live ? nil : (interval.upperBound.timeIntervalSince1970 * 1000).rounded()
+        lage.saveMapObject(object, id: LageStore.newId())
+        placed = true
     }
 
     /// Weitere Spur hinzunehmen, z. B. eigene Kräfte und Zielperson im selben Zeitraum.
@@ -337,30 +404,6 @@ struct HistoryPanel: View {
             }
         }
         .font(.subheadline)
-    }
-
-    /// Zeitleiste: Ziehen zeigt, wo jede Spur zu diesem Zeitpunkt war.
-    private var scrubber: some View {
-        let interval = state.interval
-        let span = max(interval.upperBound.timeIntervalSince(interval.lowerBound), 60)
-        return VStack(alignment: .leading, spacing: 2) {
-            Slider(value: Binding(
-                get: { (state.scrub ?? interval.upperBound).timeIntervalSince(interval.lowerBound) / span },
-                set: { state.scrub = interval.lowerBound.addingTimeInterval($0 * span) }
-            ))
-            .tint(Theme.target)
-            HStack {
-                Text(state.scrub.map { "Zeitpunkt \(Format.dateTime($0))" } ?? "Zeitleiste ziehen, um Positionen zu sehen")
-                    .font(.caption.monospacedDigit())
-                    .foregroundStyle(.secondary)
-                    .lineLimit(1)
-                Spacer()
-                if state.scrub != nil {
-                    Button("Zurücksetzen") { state.scrub = nil }
-                        .font(.caption.weight(.semibold))
-                }
-            }
-        }
     }
 
     private var legend: some View {

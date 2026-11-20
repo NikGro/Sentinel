@@ -151,6 +151,9 @@ export class Hub {
       case 'hinweis':
         this.notifyElsewhere(event.inst, event.art, event.memberId);
         break;
+      case 'geofence':
+        this.broadcast({ t: 'geofence', annotationId: event.annotationId, titel: event.titel, zielId: event.zielId, zielName: event.zielName, art: event.art, lat: event.lat, lon: event.lon }, event.inst);
+        break;
       case 'trackerIntervall':
         // Wird vom Tracker-Empfang an das Gerät weitergegeben, nicht an die Clients.
         break;

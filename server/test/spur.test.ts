@@ -128,3 +128,23 @@ test('H02 V8: Satelliten, Empfang, Akkuspannung und Akku aus den Zusatzfeldern',
   const fix = parseH02Text('*HQ,7026222172,V8,044429,A,5336.0119,N,01002.6891,E,000.00,082,201126,FFFFFBFF,262,03,11002,3180331,8,15,41,100#');
   assert.ok(fix && Math.abs(fix.position.lat - (53 + 36.0119 / 60)) < 1e-9);
 });
+
+test('Geofence: Alarm nur beim gewählten Wechsel (Verlassen), erster Blick setzt nur den Ausgangszustand', () => {
+  const lage = newLage();
+  const actor = fahnder('a');
+  lage.put(actor, 'member', 'a', profil());
+  lage.put(actor, 'target', 'z', { vorname: 'Max', standort: { lat: 53.55, lon: 10, ts: 1 } });
+  lage.put(actor, 'annotation', 'g', { layerId: 'lage', typ: 'geofence', titel: 'Wohnung', punkte: [{ lat: 53.55, lon: 10 }], radius: 100, ziele: ['z'], ausloeser: 'verlassen' });
+  const alarms: unknown[] = [];
+  lage.on('event', (e) => { if (e.type === 'geofence') alarms.push(e); });
+  lage.checkGeofences();
+  assert.equal(alarms.length, 0, 'drinnen beim ersten Blick: kein Alarm');
+  lage.put(actor, 'target', 'z', { vorname: 'Max', standort: { lat: 53.56, lon: 10, ts: 2 } });
+  lage.checkGeofences();
+  assert.equal(alarms.length, 1);
+  assert.equal((alarms[0] as { art: string }).art, 'verlassen');
+  // Zurück hinein: kein Alarm, weil nur Verlassen gewählt ist.
+  lage.put(actor, 'target', 'z', { vorname: 'Max', standort: { lat: 53.55, lon: 10, ts: 3 } });
+  lage.checkGeofences();
+  assert.equal(alarms.length, 1);
+});

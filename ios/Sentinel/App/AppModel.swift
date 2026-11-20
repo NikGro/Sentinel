@@ -151,6 +151,9 @@ final class AppModel {
             } else {
                 alerts.post(.warning, "A in \(notice.name)", "\(notice.spitzname) hat die A-Position.", instance: notice.instanz)
             }
+        case .geofence(let alarm):
+            let area = alarm.titel.isEmpty ? "den Bereich" : "„\(alarm.titel)“"
+            alerts.post(.critical, "Geofence: \(alarm.zielName)", "\(alarm.zielName) hat \(area) \(alarm.art == "betreten" ? "betreten" : "verlassen").")
         }
     }
 
@@ -190,6 +193,19 @@ final class AppModel {
     var historySubjects: [SpurSubject] = []
 
     /// Spur auf der Karte zeigen und zur Karte wechseln.
+    /// Zeitraum, den die Karte beim nächsten Öffnen des Verlaufs übernimmt (z. B. aus einem Standortverlauf-Objekt).
+    var historyIntervalRequest: ClosedRange<Date>?
+
+    /// Gespeicherten Standortverlauf im Verlaufsmodus öffnen: dieselben Spuren im selben Zeitraum.
+    func openHistory(of object: MapObject) {
+        guard let interval = object.historyInterval else { return }
+        historySubjects = object.historySubjects
+        historyIntervalRequest = interval
+        if route.isActive { stopNavigation() }
+        showsHome = false
+        mapRequest += 1
+    }
+
     func showHistory(_ subject: SpurSubject) {
         if !historySubjects.contains(subject) { historySubjects.append(subject) }
         if route.isActive { stopNavigation() }

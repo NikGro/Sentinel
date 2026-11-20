@@ -90,7 +90,7 @@ const vehicle = z.object({
 });
 
 /** "haltestellen": Umkreis, in dem alle ÖPNV-Haltestellen angezeigt werden. */
-export const SHAPES = ['marker', 'text', 'linie', 'flaeche', 'kreis', 'fahndungsraum', 'haltestellen', 'oepnvlinie', 'oepnvfahrzeug', 'pfeil', 'haltestelle'] as const;
+export const SHAPES = ['marker', 'text', 'linie', 'flaeche', 'kreis', 'fahndungsraum', 'haltestellen', 'oepnvlinie', 'oepnvfahrzeug', 'pfeil', 'haltestelle', 'geofence', 'verlauf'] as const;
 
 export const ANHANG_ARTEN = ['bild', 'audio', 'datei'] as const;
 
@@ -167,12 +167,21 @@ const annotation = z
     takt: z.number().int().min(1).max(120).nullish().transform((v) => v ?? null),
     /** Lebensdauer: Zeitpunkt, zu dem sich die Markierung selbst löscht; `null` für unbegrenzt. */
     ablauf: timestamp.nullish().transform((v) => v ?? null),
+    /** Geofence: überwachte Ziele und wann es Alarm gibt (beim Verlassen oder Betreten). Bereich: Kreis (`radius`) oder Fläche. */
+    ziele: z.array(id).max(50).default([]),
+    ausloeser: z.enum(['verlassen', 'betreten']).nullish().transform((v) => v ?? null),
+    /** Standortverlauf auf der Karte: wessen Spuren in welchem Zeitraum; ohne Ende läuft er bis jetzt mit. */
+    spuren: z.array(z.object({ art: z.enum(['member', 'target', 'vehicle', 'tracker']), id })).max(20).default([]),
+    zeitVon: timestamp.nullish().transform((v) => v ?? null),
+    zeitBis: timestamp.nullish().transform((v) => v ?? null),
   })
   .superRefine((a, ctx) => {
     const min = a.typ === 'linie' || a.typ === 'pfeil' ? 2 : a.typ === 'flaeche' ? 3 : 1;
     if (a.punkte.length < min) ctx.addIssue({ code: 'custom', message: `Mindestens ${min} Punkte nötig` });
     if ((a.typ === 'kreis' || a.typ === 'haltestellen') && a.radius === null) ctx.addIssue({ code: 'custom', message: 'Radius fehlt' });
     if (a.typ === 'fahndungsraum' && a.zeit === null) ctx.addIssue({ code: 'custom', message: 'Zeitpunkt fehlt' });
+    if (a.typ === 'geofence' && a.radius === null && a.punkte.length < 3) ctx.addIssue({ code: 'custom', message: 'Geofence: Kreis oder Fläche nötig' });
+    if (a.typ === 'verlauf' && (a.spuren.length === 0 || a.zeitVon === null)) ctx.addIssue({ code: 'custom', message: 'Verlauf: Spuren und Beginn nötig' });
     if ((a.typ === 'oepnvlinie' || a.typ === 'oepnvfahrzeug') && (a.linie === null || a.punkte.length < 2)) {
       ctx.addIssue({ code: 'custom', message: 'Linie und mindestens zwei Halte nötig' });
     }

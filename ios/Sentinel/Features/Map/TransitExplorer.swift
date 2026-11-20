@@ -90,6 +90,16 @@ struct TransitExplorer: View {
                 .onMapCameraChange(frequency: .onEnd) { context in
                     region = context.region
                 }
+                // Schnell zurück zum eigenen Standort, wie auf der Lagekarte.
+                .overlay(alignment: .bottomTrailing) {
+                    if let me = model.myPoint {
+                        MapRoundButton(title: "Eigener Standort", symbol: "location.fill") {
+                            withAnimation { camera = .region(MKCoordinateRegion(center: me.coordinate, latitudinalMeters: 1500, longitudinalMeters: 1500)) }
+                        }
+                        .padding(.trailing, Theme.barInset)
+                        .padding(.bottom, Theme.barSpacing)
+                    }
+                }
             .safeAreaInset(edge: .top, spacing: 0) { searchBar }
             .safeAreaInset(edge: .bottom, spacing: 0) { bottomCard }
             .navigationTitle(board == nil ? "ÖPNV-Karte" : "Fahrzeug wählen")
