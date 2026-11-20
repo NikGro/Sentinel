@@ -7,6 +7,20 @@ statt jede Änderung sofort einzubauen. Erledigtes wandert mit Version ins CHANG
 
 ### Nächste Runde
 
+- **Standortquelle „Aktuellen Ort beibehalten“:** Bei Zielen (und überall, wo es die Standortquelle gibt) als weitere
+  Option. Das Ziel bleibt dann an seinem jetzigen Ort stehen, egal woher der Standort bisher kam.
+- **Verlauf, Plus-Knopf:** Das „+“ zum Hinzufügen weiterer Spuren sitzt oben rechts neben „Schließen“. Es soll direkt
+  neben die schon hinzugefügten Pillen.
+- **Verlauf, Zeitleiste entfernen:** Der Schieberegler hat keine Funktion mehr und ist ohnehin ungenauer. Er kommt
+  raus; Punkte werden über Antippen der Spur angesehen.
+- **Neuer Objekttyp „Geofence-Alarm“ (Plus-Menü):** Man setzt einen Bereich und wählt Ziele. Verlässt eines davon den
+  Bereich, gibt es einen Alarm für alle in der Instanz, ausgewertet auf dem Server.
+- **Neuer Objekttyp „Standortverlauf“ (Plus-Menü):**
+  - Der Verlaufsdialog wie bisher, zusätzlich mit einem Knopf, um die gewählten Spuren dauerhaft als Objekt auf die
+    Karte zu legen, für alle sichtbar.
+  - Der Verlaufsdialog zeigt eine reduzierte Karte: überflüssige Knöpfe ausblenden.
+  - Der Kompassknopf bleibt sichtbar, um schnell zum eigenen Standort zu springen. Gleiches gilt für die ÖPNV-Auswahl
+    (ÖPNV-Karte).
 - **Straßenverzeichnis beobachten:** Läuft seit 0.18 mit 2 GB Container-Speicher, Node.js darf bis 1,5 GB nutzen;
   nach dem Start belegt der Server etwa 380 MB. Den Speicher beim wöchentlichen Neuladen über Overpass im Blick
   behalten. Wird es knapp, die Straßen in SQLite statt im Arbeitsspeicher halten und in Kacheln laden.
