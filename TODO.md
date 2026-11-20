@@ -7,6 +7,8 @@ statt jede Änderung sofort einzubauen. Erledigtes wandert mit Version ins CHANG
 
 ### Nächste Runde
 
+- **Kreuzungssuche:** Nach dem Update (Querstraßen-Liste nach „Straße /“ bzw. „Straße Ecke“) prüfen, ob plausible Straßenecken jetzt zuverlässig kommen, auch nach dem ersten Buchstaben der zweiten Straße. Falls nicht: Beispiel nachstellen.
+
 - **„Hinführen“ im Profil eines anderen Fahnders:** Das Symbol ist nicht zu sehen, vermutlich Blau auf Blau.
   - Dort beheben.
   - App-weit alle Knöpfe und Symbole auf zu wenig Kontrast prüfen (Symbol in Tönungsfarbe auf gleichfarbigem Grund).
