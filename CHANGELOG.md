@@ -1,5 +1,49 @@
 # Änderungen
 
+## 0.14.0
+
+**Karte**
+- SOS-Knopf: wieder mit Aufschrift; beim Halten füllt er sich weiß, außen läuft ein Ring
+- Standortknopf neu, aufgebaut wie im Tesla:
+  - In der Mitte zeigt der Pfeil immer nach oben, darum dreht sich die Kompassrose mit den Himmelsrichtungen so,
+    wie die Karte ausgerichtet ist.
+  - Angeheftet ist der Pfeil gefüllt, frei ist er hohl.
+  - Der erste Druck heftet immer an: in Fahrtrichtung, nah und flach wie eine Navi-App. Der nächste wechselt zu
+    Norden oben, senkrecht von oben, und zurück.
+  - Zoomen und Drehen gehen mit zwei Fingern; kleine seitliche Bewegungen lösen die Kopplung nicht, erst
+    bewusstes Wegschieben. Die Plus/Minus-Knöpfe entfallen.
+- Eigener Standort als flach auf der Karte liegender Kreis (kippt mit der Karte), immer gleich groß, mit Symbol
+  zu Fuß, Auto oder Bahn
+- Einheitliche Symbole: Kräfte und eigene Fahrzeuge blau-lila, Ziele rot, jeweils als abgerundetes Quadrat mit
+  dem Symbol der Fortbewegung bzw. Zielart (Haus für Objekte)
+- Eine Zielperson in einem Zielfahrzeug, Gebäude oder ÖPNV-Fahrzeug erscheint nicht mehr als eigenes Symbol;
+  ihr Name steht am Fahrzeug
+- A-Knopf, Dreier-Umschalter und Lageleiste so hoch wie die runden Knöpfe und die Suchleiste
+- Plus-Menü: ÖPNV ist ein einziger Eintrag (die ÖPNV-Karte), darüber Fahrzeuge, Strecken und Haltestellen;
+  Kacheln einzeilig; beim Übernehmen ein Umschalter (Fahrzeug, Strecke, Beides) statt Häkchen
+- Ort setzen sieht überall gleich aus: Antippen, Vorschau-Nadel, Leiste mit „Übernehmen“ – auf der Lagekarte und
+  bei der Standortwahl eines Ziels
+
+**Ziele und Kräfte**
+- Ziele-Tab wie der Kräfte-Tab: getrennte Abschnitte für Zielfahrzeuge, Zielpersonen und Zielobjekte, je Ziel ein
+  Schalter zum Ein- und Ausblenden auf der Karte
+- Suche in Kräfte (Spitzname, Funkrufname, Kennzeichen) und Ziele (Name, Kennzeichen, Anschrift), Treffer bleiben
+  nach Abschnitten getrennt
+- Zielperson steigt ein wie eine Kraft: „Fahrzeug“, „ÖPNV“ oder „Gebäude“ öffnet dieselbe Auswahl wie die
+  Fahrzeugwahl der Kräfte, mit „Anderes Fahrzeug“ und „Neues Zielfahrzeug“
+- Kräfte-Tab mit Plus zum Anlegen von Fahrzeugen; Fahrzeug- und Zielbilder quadratisch
+- Kräfte, Ziele, Chat und Mehr mit gleichem Kopf: großer Titel, Plus auf gleicher Höhe, Suchfeld darunter
+
+**Server**
+- Verwaiste Dateien (gelöschte Nachrichten, Ziele, Markierungen) werden nach einem Tag aufgeräumt
+- ÖPNV-Zwischenspeicher fest begrenzt
+
+**Technik**
+- Codebasis aufgeräumt: Routen, Datenablage und Migrationen des Servers getrennt; Lagekarte, Kartenebenen,
+  Bedienelemente, Datenmodell und Zielansichten der App in thematische Dateien aufgeteilt; ungenutzter Code entfernt;
+  strengere Compiler-Prüfung; neue Tests
+
+
 ## 0.13.0
 
 **Instanzen**
