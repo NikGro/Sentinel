@@ -17,12 +17,15 @@ struct AttachmentsSection: View {
 
     @Environment(AppModel.self) private var model
     @State private var pickerItems: [PhotosPickerItem] = []
-    @State private var showsSources = false
     @State private var showsLibrary = false
     @State private var showsCamera = false
     @State private var showsFiles = false
-    /// Angetipptes Foto bzw. angetippte Datei, für das Aktionsmenü.
-    @State private var selected: ChatAttachment?
+    /// Offenes Auswahlblatt: Hinzufügen oder Aktionen zu einem Foto bzw. einer Datei.
+    @State private var sheet: SheetKind?
+    /// Was nach dem Schließen des Auswahlblatts geöffnet wird (nie zwei Ansichten gleichzeitig).
+    @State private var followup: Followup?
+    /// Foto in der Vollbildansicht.
+    @State private var viewing: ChatAttachment?
     /// Wird gerade ein bestimmtes Foto ersetzt?
     @State private var replacing: String?
     @State private var uploads = 0
@@ -30,6 +33,21 @@ struct AttachmentsSection: View {
     @State private var previewURL: URL?
 
     private let columns = [GridItem(.adaptive(minimum: 84), spacing: 8)]
+
+    private enum SheetKind: Identifiable {
+        case sources
+        case actions(ChatAttachment)
+        var id: String {
+            switch self {
+            case .sources: "quellen"
+            case .actions(let attachment): attachment.blobId
+            }
+        }
+    }
+
+    private enum Followup {
+        case camera, library, files, view(ChatAttachment), replace(String)
+    }
 
     var body: some View {
         Section {
@@ -41,7 +59,7 @@ struct AttachmentsSection: View {
                     if editable, attachments.count < Self.limit {
                         Button {
                             replacing = nil
-                            showsSources = true
+                            sheet = .sources
                         } label: {
                             PhotoPlaceholder(label: uploads > 0 ? nil : "Hinzufügen")
                                 .overlay { if uploads > 0 { ProgressView() } }
@@ -54,6 +72,7 @@ struct AttachmentsSection: View {
                     }
                 }
                 .padding(.vertical, 4)
+                .modifier(presentations)
             }
             if let failure {
                 Label(failure, systemImage: "exclamationmark.triangle")
@@ -66,66 +85,97 @@ struct AttachmentsSection: View {
                 Text("Das erste Foto ist das Titelbild. Foto antippen zum Ansehen, Ersetzen oder Entfernen.")
             }
         }
-        .confirmationDialog(replacing == nil ? "Hinzufügen" : "Foto ersetzen", isPresented: $showsSources, titleVisibility: .visible) {
-            if UIImagePickerController.isSourceTypeAvailable(.camera) {
-                Button("Foto aufnehmen") { showsCamera = true }
-            }
-            Button(replacing == nil ? "Fotos aus Mediathek" : "Foto aus Mediathek") { showsLibrary = true }
-            if replacing == nil {
-                Button("Datei") { showsFiles = true }
-            }
-        }
-        .confirmationDialog(
-            selected.map { label($0) } ?? "",
-            isPresented: Binding(get: { selected != nil }, set: { if !$0 { selected = nil } }),
-            titleVisibility: .visible,
-            presenting: selected
-        ) { attachment in
-            Button("Ansehen") { Task { await open(attachment) } }
-            if attachment.art == .bild {
-                if marksTitlePhoto, attachments.first(where: { $0.art == .bild })?.blobId != attachment.blobId {
-                    Button("Als Titelbild verwenden") {
-                        attachments.removeAll { $0.blobId == attachment.blobId }
-                        attachments.insert(attachment, at: 0)
+    }
+
+    /// Alle Ansichten, die von hier aus aufgehen; hängen an der Kachelfläche statt an der Sektion, damit sie einen
+    /// festen Anker haben.
+    private var presentations: some ViewModifier {
+        Presentations(
+            sheet: $sheet, viewing: $viewing, showsLibrary: $showsLibrary, showsCamera: $showsCamera, showsFiles: $showsFiles,
+            pickerItems: $pickerItems, previewURL: $previewURL, maxSelection: replacing == nil ? 30 : 1,
+            sheetContent: { sheetContent($0) },
+            onDismissSheet: runFollowup,
+            onPicked: { items in
+                Task {
+                    for item in items {
+                        if let data = try? await item.loadTransferable(type: Data.self), let image = UIImage(data: data) {
+                            await uploadImage(image)
+                        }
                     }
+                    pickerItems = []
                 }
-                Button("Ersetzen") {
-                    replacing = attachment.blobId
-                    Task {
-                        try? await Task.sleep(for: .milliseconds(350))
-                        showsSources = true
-                    }
-                }
-            }
-            Button("Entfernen", role: .destructive) {
-                attachments.removeAll { $0.blobId == attachment.blobId }
-            }
-        }
-        .photosPicker(isPresented: $showsLibrary, selection: $pickerItems, maxSelectionCount: replacing == nil ? 30 : 1, matching: .images)
-        .onChange(of: pickerItems) { _, items in
-            guard !items.isEmpty else { return }
-            Task {
-                for item in items {
-                    if let data = try? await item.loadTransferable(type: Data.self), let image = UIImage(data: data) {
-                        await uploadImage(image)
-                    }
-                }
-                pickerItems = []
-            }
-        }
-        .fullScreenCover(isPresented: $showsCamera) {
-            CameraPicker { image in
+            },
+            onCamera: { image in
                 showsCamera = false
                 if let image { Task { await uploadImage(image) } }
+            },
+            onFiles: { urls in Task { for url in urls { await uploadFile(url) } } }
+        )
+    }
+
+    @ViewBuilder private func sheetContent(_ kind: SheetKind) -> some View {
+        switch kind {
+        case .sources:
+            MediaActionSheet(title: replacing == nil ? "Hinzufügen" : "Foto ersetzen", actions: sourceActions) { action in
+                switch action.id {
+                case "kamera": followup = .camera
+                case "mediathek": followup = .library
+                default: followup = .files
+                }
             }
-            .ignoresSafeArea()
-        }
-        .fileImporter(isPresented: $showsFiles, allowedContentTypes: [.item], allowsMultipleSelection: true) { result in
-            if case .success(let urls) = result {
-                Task { for url in urls { await uploadFile(url) } }
+        case .actions(let attachment):
+            MediaActionSheet(title: label(attachment), actions: actions(for: attachment)) { action in
+                switch action.id {
+                case "ansehen": followup = .view(attachment)
+                case "titel":
+                    attachments.removeAll { $0.blobId == attachment.blobId }
+                    attachments.insert(attachment, at: 0)
+                case "ersetzen": followup = .replace(attachment.blobId)
+                case "entfernen": attachments.removeAll { $0.blobId == attachment.blobId }
+                default: break
+                }
             }
         }
-        .quickLookPreview($previewURL)
+    }
+
+    private var sourceActions: [MediaAction] {
+        var actions: [MediaAction] = []
+        if UIImagePickerController.isSourceTypeAvailable(.camera) { actions.append(MediaAction(id: "kamera", title: "Foto aufnehmen", symbol: "camera")) }
+        actions.append(MediaAction(id: "mediathek", title: replacing == nil ? "Fotos aus Mediathek" : "Foto aus Mediathek", symbol: "photo.on.rectangle"))
+        if replacing == nil { actions.append(MediaAction(id: "datei", title: "Datei", symbol: "doc")) }
+        return actions
+    }
+
+    private func actions(for attachment: ChatAttachment) -> [MediaAction] {
+        var actions = [MediaAction(id: "ansehen", title: "Ansehen", symbol: "eye")]
+        if attachment.art == .bild {
+            if marksTitlePhoto, attachments.first(where: { $0.art == .bild })?.blobId != attachment.blobId {
+                actions.append(MediaAction(id: "titel", title: "Als Titelbild verwenden", symbol: "star"))
+            }
+            actions.append(MediaAction(id: "ersetzen", title: "Ersetzen", symbol: "arrow.triangle.2.circlepath"))
+        }
+        actions.append(MediaAction(id: "entfernen", title: "Entfernen", symbol: "trash", role: .destructive))
+        return actions
+    }
+
+    /// Erst nach dem Schließen des Auswahlblatts: die gewählte Ansicht öffnen.
+    private func runFollowup() {
+        guard let next = followup else { return }
+        followup = nil
+        switch next {
+        case .camera: showsCamera = true
+        case .library: showsLibrary = true
+        case .files: showsFiles = true
+        case .view(let attachment): show(attachment)
+        case .replace(let blobId):
+            replacing = blobId
+            sheet = .sources
+        }
+    }
+
+    /// Fotos in der eigenen Vollbildansicht, andere Dateien in der Systemvorschau.
+    private func show(_ attachment: ChatAttachment) {
+        if attachment.art == .bild { viewing = attachment } else { Task { await open(attachment) } }
     }
 
     private func label(_ attachment: ChatAttachment) -> String {
@@ -135,7 +185,7 @@ struct AttachmentsSection: View {
     @ViewBuilder private func tile(_ attachment: ChatAttachment) -> some View {
         let isTitle = marksTitlePhoto && attachments.first(where: { $0.art == .bild })?.blobId == attachment.blobId
         Button {
-            if editable { selected = attachment } else { Task { await open(attachment) } }
+            if editable { sheet = .actions(attachment) } else { show(attachment) }
         } label: {
             ZStack(alignment: .bottomLeading) {
                 if attachment.art == .bild {
@@ -228,5 +278,42 @@ struct AttachmentsSection: View {
         } catch {
             previewURL = nil
         }
+    }
+}
+
+/// Die Ansichten des Foto- und Dateibereichs gebündelt (Auswahlblatt, Vollbild, Mediathek, Kamera, Dateien, Vorschau).
+private struct Presentations<Kind: Identifiable, SheetContent: View>: ViewModifier {
+    @Binding var sheet: Kind?
+    @Binding var viewing: ChatAttachment?
+    @Binding var showsLibrary: Bool
+    @Binding var showsCamera: Bool
+    @Binding var showsFiles: Bool
+    @Binding var pickerItems: [PhotosPickerItem]
+    @Binding var previewURL: URL?
+    let maxSelection: Int
+    let sheetContent: (Kind) -> SheetContent
+    let onDismissSheet: () -> Void
+    let onPicked: ([PhotosPickerItem]) -> Void
+    let onCamera: (UIImage?) -> Void
+    let onFiles: ([URL]) -> Void
+
+    func body(content: Content) -> some View {
+        content
+            .sheet(item: $sheet, onDismiss: onDismissSheet) { sheetContent($0) }
+            .fullScreenCover(item: $viewing) { attachment in
+                PhotoViewer(blobId: attachment.blobId, title: attachment.name.isEmpty ? "Foto" : attachment.name)
+            }
+            .photosPicker(isPresented: $showsLibrary, selection: $pickerItems, maxSelectionCount: maxSelection, matching: .images)
+            .onChange(of: pickerItems) { _, items in
+                if !items.isEmpty { onPicked(items) }
+            }
+            .fullScreenCover(isPresented: $showsCamera) {
+                CameraPicker(onFinish: onCamera)
+                    .ignoresSafeArea()
+            }
+            .fileImporter(isPresented: $showsFiles, allowedContentTypes: [.item], allowsMultipleSelection: true) { result in
+                if case .success(let urls) = result { onFiles(urls) }
+            }
+            .quickLookPreview($previewURL)
     }
 }

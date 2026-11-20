@@ -215,7 +215,7 @@ struct ChatRoom: LageEntity {
     var name: String
 }
 
-struct ChatAttachment: Codable, Equatable, Sendable {
+struct ChatAttachment: Codable, Equatable, Identifiable, Sendable {
     enum Art: String, Codable, Sendable {
         case bild, audio, datei
     }
@@ -228,6 +228,8 @@ struct ChatAttachment: Codable, Equatable, Sendable {
     var dauer: Double?
     /// Sprachnachricht: Lautstärkeverlauf (0 bis 1) für die Wellenform.
     var wellenform: [Double]?
+
+    var id: String { blobId }
 }
 
 struct ChatMessage: LageEntity {

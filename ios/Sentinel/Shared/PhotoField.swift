@@ -10,6 +10,8 @@ struct PhotoField: View {
     @Environment(PhotoStore.self) private var photos
     @State private var pickerItem: PhotosPickerItem?
     @State private var showsOptions = false
+    /// Was nach dem Schließen des Auswahlblatts geöffnet wird: "kamera" oder "mediathek".
+    @State private var followup: String?
     @State private var showsLibrary = false
     @State private var showsCamera = false
     @State private var isUploading = false
@@ -45,13 +47,17 @@ struct PhotoField: View {
         .disabled(isUploading)
         .accessibilityLabel(title)
         .accessibilityHint(blobId == nil ? "Foto hinzufügen" : "Foto ersetzen oder entfernen")
-        .confirmationDialog(title, isPresented: $showsOptions, titleVisibility: .visible) {
-            if UIImagePickerController.isSourceTypeAvailable(.camera) {
-                Button(blobId == nil ? "Foto aufnehmen" : "Neues Foto aufnehmen") { showsCamera = true }
+        // Auswahlblatt statt Sprechblase; Kamera bzw. Mediathek erst, wenn es ganz geschlossen ist.
+        .sheet(isPresented: $showsOptions, onDismiss: {
+            switch followup {
+            case "kamera": showsCamera = true
+            case "mediathek": showsLibrary = true
+            default: break
             }
-            Button(blobId == nil ? "Aus Mediathek wählen" : "Durch Foto aus Mediathek ersetzen") { showsLibrary = true }
-            if blobId != nil {
-                Button("Foto entfernen", role: .destructive) { blobId = nil }
+            followup = nil
+        }) {
+            MediaActionSheet(title: title, actions: options) { action in
+                if action.id == "entfernen" { blobId = nil } else { followup = action.id }
             }
         }
         .photosPicker(isPresented: $showsLibrary, selection: $pickerItem, matching: .images)
@@ -73,6 +79,16 @@ struct PhotoField: View {
             }
             .ignoresSafeArea()
         }
+    }
+
+    private var options: [MediaAction] {
+        var actions: [MediaAction] = []
+        if UIImagePickerController.isSourceTypeAvailable(.camera) {
+            actions.append(MediaAction(id: "kamera", title: blobId == nil ? "Foto aufnehmen" : "Neues Foto aufnehmen", symbol: "camera"))
+        }
+        actions.append(MediaAction(id: "mediathek", title: blobId == nil ? "Aus Mediathek wählen" : "Durch Foto aus Mediathek ersetzen", symbol: "photo.on.rectangle"))
+        if blobId != nil { actions.append(MediaAction(id: "entfernen", title: "Foto entfernen", symbol: "trash", role: .destructive)) }
+        return actions
     }
 
     private func upload(_ image: UIImage) async {
