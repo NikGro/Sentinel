@@ -32,6 +32,10 @@ statt jede Änderung sofort einzubauen. Erledigtes wandert mit Version ins CHANG
   - „Ansehen“ geht beim ersten Mal sofort wieder zu, erst beim zweiten Mal bleibt es offen.
   - In der Fotoansicht die Bedienelemente immer eingeblendet lassen. Bisher blendet ein Tipp sie aus und macht den
     Hintergrund schwarz, zum Schließen muss man nochmal tippen; das verwirrt.
+- **ÖPNV-Auswahl im Stil der Verlaufs-Pillen:** Die Auswahl „Fahrzeug, Strecke, Haltestellen“ (Übernehmen und
+  Einsteigen in der ÖPNV-Karte, Ebenen der ÖPNV-Strecke) soll aussehen wie die Pillen im Verlauf: Glaskapseln, die
+  man einzeln hinzufügen und entfernen kann. Sie ersetzen die bisherigen Umschaltknöpfe als zuständiges
+  Bedienelement.
 - **Punkte auf der Karte clustern:** Beim Herauszoomen nah beieinander liegende Punkte zu einem Cluster
   zusammenfassen. Auseinanderrücken nur, wenn man nah herangezoomt ist.
 - **Offene Rückfrage:** Soll der Schalter „Auf der Karte“ in der Zielliste für alle in der Instanz gelten statt nur
