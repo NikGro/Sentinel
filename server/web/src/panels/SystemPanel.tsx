@@ -1,14 +1,12 @@
 import { useSignal } from '@preact/signals';
 import { useEffect } from 'preact/hooks';
-import { adminStatus, api, attempt, authed, nameOf, refreshStatus, tables } from '../store';
-import { ago, dateTime, Field, Section, TextInput } from '../ui';
+import { adminStatus, api, attempt, nameOf, refreshStatus, tables } from '../store';
+import { ago, dateTime, Section } from '../ui';
 
 /** Zugang, Geräte, App-Verteilung und Protokoll. */
 export function SystemPanel() {
   const status = adminStatus.value;
   const showCode = useSignal(false);
-  const current = useSignal('');
-  const next = useSignal('');
   const audit = useSignal<{ ts: number; actor: string; action: string; detail: string }[]>([]);
 
   useEffect(() => {
@@ -83,27 +81,6 @@ export function SystemPanel() {
           ÖPNV-Linien: {status.oepnv.linien > 0 ? `${status.oepnv.linien} Fahrtrichtungen, Stand ${status.oepnv.stand ? new Date(status.oepnv.stand).toLocaleDateString('de-DE') : '–'}` : status.oepnv.fehler ? `nicht geladen (${status.oepnv.fehler})` : 'werden geladen'}
         </p>
         <p>Argus Predict: {status.argus.verfuegbar ? `${status.argus.projekte.length} Projekte` : 'nicht eingebunden'}</p>
-      </Section>
-
-      <Section title="Verwaltungspasswort ändern">
-        <Field label="Aktuelles Passwort">
-          <TextInput type="password" value={current.value} onInput={(v) => (current.value = v)} />
-        </Field>
-        <Field label="Neues Passwort (mindestens 12 Zeichen)">
-          <TextInput type="password" value={next.value} onInput={(v) => (next.value = v)} />
-        </Field>
-        <button
-          class="primary"
-          disabled={!current.value || next.value.length < 12}
-          onClick={() =>
-            attempt(async () => {
-              await api('/admin/passwort', { method: 'POST', body: { aktuell: current.value, neu: next.value } });
-              authed.value = false;
-            }, 'Passwort geändert. Bitte neu anmelden.')
-          }
-        >
-          Ändern
-        </button>
       </Section>
 
       <Section title="Protokoll">

@@ -53,9 +53,9 @@ function Login() {
       <form onSubmit={submit}>
         <img src="/icon.svg" alt="" width="64" height="64" />
         <h1>SENTINEL</h1>
-        <p>Kommandozentrale</p>
+        <p>Web</p>
         <label class="field">
-          <span>Verwaltungspasswort</span>
+          <span>Zugangscode</span>
           <input type="password" autocomplete="current-password" value={password.value} onInput={(e) => (password.value = e.currentTarget.value)} autofocus />
         </label>
         {error.value && (

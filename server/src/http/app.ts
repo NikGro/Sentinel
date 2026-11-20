@@ -160,7 +160,7 @@ export async function buildApp(services: Services): Promise<FastifyInstance> {
     },
     zentrale(request) {
       const actor = guards.actor(request);
-      if (actor.role !== 'zentrale') throw new HttpError(403, 'Nur für die Kommandozentrale.');
+      if (actor.role !== 'zentrale') throw new HttpError(403, 'Nur in Sentinel Web.');
       return actor;
     },
     limit(limiter, request) {

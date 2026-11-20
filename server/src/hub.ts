@@ -92,7 +92,7 @@ export class Hub {
         case 'cmd':
           if (!isCommand(message.name)) throw new LageError('ungueltig', 'Unbekanntes Kommando');
           if (message.name === 'lage.zuruecksetzen' && actor.role !== 'zentrale') {
-            throw new LageError('verboten', 'Die Lage setzt nur die Kommandozentrale zurück.');
+            throw new LageError('verboten', 'Die Lage setzt nur Sentinel Web zurück.');
           }
           if (message.name === 'instanz.wechseln' && actor.role === 'zentrale') {
             // Die Kommandozentrale schaut je Fenster in eine Instanz, ohne Mitgliedschaft.

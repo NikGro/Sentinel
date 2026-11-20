@@ -53,7 +53,7 @@ struct OnboardingView: View {
                 } header: {
                     Text("Anmeldung")
                 } footer: {
-                    Text("Den Zugangscode gibt die Kommandozentrale aus. Die Verbindung ist immer verschlüsselt.")
+                    Text("Den Zugangscode gibt es in Sentinel Web. Die Verbindung ist immer verschlüsselt.")
                 }
 
                 if let failure {

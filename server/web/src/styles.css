@@ -1,5 +1,5 @@
 /*
- * SENTINEL Kommandozentrale
+ * SENTINEL Web
  * Erscheinungsbild nach dem Vorbild von Trace: neutrale Anthrazitflächen, ein einziger zurückhaltender
  * Petrol-Akzent, entsättigte Statusfarben nur mit Funktion, kleine Radien, keine Unschärfe, keine Zierschatten.
  * Dunkel ist der Standard (Leitstand, Nachtdienst); bei hell eingestelltem System gilt das helle Schema.
@@ -55,31 +55,7 @@
   color-scheme: dark;
 }
 
-@media (prefers-color-scheme: light) {
-  :root {
-    --bg: #f6f6f7;
-    --panel: #ececee;
-    --raised: #ffffff;
-    --hover: #e3e3e6;
-    --active: #d9dadd;
-    --line: #d2d3d7;
-    --line-strong: #c3c4c9;
-    --ink: #2b2d31;
-    --ink-strong: #101113;
-    --muted: #565960;
-    --accent: #0066d6;
-    --accent-fill: #007aff;
-    --accent-bg: rgba(0, 122, 255, 0.12);
-    --danger: #a84444;
-    --ok: #2f7a52;
-    --warn: #7d5e15;
-    --modus-observation: #a84444;
-    --modus-fahndung: #8a6614;
-    --modus-oberflaeche: #2f6396;
-    --shadow-float: 0 4px 14px rgb(20 20 25 / 0.18);
-    color-scheme: light;
-  }
-}
+/* Nur dunkles Erscheinungsbild: Sentinel Web hat keinen hellen Modus. */
 
 *,
 *::before,
@@ -1259,3 +1235,17 @@ pre {
 .photo-list img { width: 64px; height: 64px; object-fit: cover; border-radius: 6px; display: block; }
 .photo-list .file { max-width: 120px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 12px; }
 .tag { font-size: 12px; font-weight: 600; color: var(--accent, #0a84ff); padding: 0 6px; }
+
+/* USB-Einrichtung: Protokoll der Befehle und Antworten. */
+.usb-log {
+  max-height: 220px;
+  overflow: auto;
+  padding: 8px;
+  border-radius: 8px;
+  background: var(--panel);
+  font-size: 12px;
+  white-space: pre-wrap;
+}
+.usb-aus { color: var(--accent); }
+.usb-ein { color: var(--ink-strong); }
+.usb-info { color: var(--muted); }

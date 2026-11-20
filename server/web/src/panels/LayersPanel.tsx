@@ -27,7 +27,7 @@ export function LayersPanel() {
 
   return (
     <>
-      <Section title="Ebenen" hint="Entwürfe sieht nur die Kommandozentrale. „Laden“ macht ein Paket für alle im Einsatz sichtbar.">
+      <Section title="Ebenen" hint="Entwürfe sieht nur Sentinel Web. „Laden“ macht ein Paket für alle im Einsatz sichtbar.">
         <ul class="list">
           {layers.value.map((layer) => {
             const draft = layer.data.status === 'entwurf';

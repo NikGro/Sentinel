@@ -2,6 +2,7 @@ import { useSignal } from '@preact/signals';
 import { adminStatus, api, attempt, command, del, focusRequest, newId, put, refreshStatus, tables, trackerPositions } from '../store';
 import type { Tracker } from '../types';
 import { ago, Field, Section, TextInput } from '../ui';
+import { UsbSetup } from './UsbSetup';
 
 /** GPS-Tracker: eigene Geräte (SinoTrack/H02, ohne Hersteller-Server) und PAJ-Geräte über das PAJ-Portal. */
 export function TrackersPanel() {
@@ -148,13 +149,10 @@ export function TrackersPanel() {
       <Section title="SinoTrack direkt anbinden" hint="Die Tracker senden direkt an diesen Server, der Hersteller-Server in China ist nicht beteiligt.">
         {status?.tracker.h02Port ? (
           <>
-            <p>Per SMS an die SIM des Trackers (Standardpasswort 0000):</p>
-            <pre class="mono">
-              8040000 {host} {status.tracker.h02Port}
-              {'\n'}8030000 &lt;APN des Mobilfunkanbieters&gt;
-              {'\n'}8050000 20
-            </pre>
-            <p class="hint">Voraussetzung: Am Router ist TCP-Port {status.tracker.h02Port} auf die Synology weitergeleitet. Die dritte Zeile stellt das Sendeintervall auf 20 Sekunden.</p>
+            <p>
+              Empfang auf {host}, TCP-Port {status.tracker.h02Port}. Eingerichtet werden die Tracker unten per USB.
+            </p>
+            <p class="hint">Voraussetzung: Am Router ist TCP-Port {status.tracker.h02Port} auf die Synology weitergeleitet.</p>
             {status.tracker.unbekannt.length > 0 && (
               <>
                 <p>Unbekannte Tracker, die sich gemeldet haben:</p>
@@ -176,6 +174,8 @@ export function TrackersPanel() {
           <p class="hint">Der Tracker-Empfang ist auf diesem Server abgeschaltet (SENTINEL_TRACKER_PORT).</p>
         )}
       </Section>
+
+      {status?.tracker.h02Port ? <UsbSetup host={host} port={status.tracker.h02Port} /> : null}
 
       <Section title="PAJ-Portal" hint="PAJ-Tracker melden sich nur beim Hersteller. Sentinel holt die Positionen dort alle 20 Sekunden ab. Die Zugangsdaten werden verschlüsselt gespeichert.">
         {status?.tracker.paj.aktiv ? (

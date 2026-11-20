@@ -1,6 +1,4 @@
 import assert from 'node:assert/strict';
-import { readFileSync } from 'node:fs';
-import { join } from 'node:path';
 import { after, before, test } from 'node:test';
 import type { FastifyInstance } from 'fastify';
 import WebSocket from 'ws';
@@ -12,12 +10,10 @@ import { profil, testConfig } from './helpers.js';
 let app: FastifyInstance;
 let services: Services;
 let base: string;
-let adminPassword: string;
 
 before(async () => {
   const config = testConfig();
   services = await createServices(config, new Database(':memory:'));
-  adminPassword = /Kommandozentrale: (\S+)/.exec(readFileSync(join(config.dataDir, 'ERSTZUGANG.txt'), 'utf8'))![1]!;
   app = await buildApp(services);
   await app.listen({ host: '127.0.0.1', port: 0 });
   const address = app.server.address();
@@ -134,11 +130,11 @@ test('Weg-Zeit-Berechnung liefert je Fortbewegungsart eine Fläche', async () =>
   assert.ok(body.flaechen[0]!.ringe[0]!.length > 10);
 });
 
-test('Kommandozentrale: Anmeldung, Herkunftsprüfung, Gerät sperren', async () => {
+test('Sentinel Web: Anmeldung mit dem Zugangscode, Herkunftsprüfung, Gerät sperren', async () => {
   const origin = 'http://localhost:8790';
   const wrong = await fetch(`${base}/api/v1/admin/login`, { method: 'POST', headers: { 'content-type': 'application/json', origin }, body: JSON.stringify({ passwort: 'falsch' }) });
   assert.equal(wrong.status, 401);
-  const login = await fetch(`${base}/api/v1/admin/login`, { method: 'POST', headers: { 'content-type': 'application/json', origin }, body: JSON.stringify({ passwort: adminPassword }) });
+  const login = await fetch(`${base}/api/v1/admin/login`, { method: 'POST', headers: { 'content-type': 'application/json', origin }, body: JSON.stringify({ passwort: services.auth.joinCode.toLowerCase() }) });
   assert.equal(login.status, 200);
   const setCookie = login.headers.get('set-cookie')!;
   assert.match(setCookie, /HttpOnly/);

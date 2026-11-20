@@ -1,5 +1,57 @@
 # Änderungen
 
+## 0.18.0
+
+**Navigation**
+- Unten groß die Restdauer, darunter Strecke und Ankunftszeit
+- Eigener Standort in der Navigation als großer, flach auf der Karte liegender Pfeil; Kamera wie in üblichen Navis,
+  etwas höher für mehr Überblick
+- Kfz ohne Sonderrechte: Routen mit zusätzlichen Wenden (z. B. in eine Sackgasse hinein und wieder heraus) werden
+  verworfen, die Durchfahrtspunkte rasten nur noch auf der Straße direkt am Punkt ein
+- ÖPNV-Navigation: Schritte auf der Karte (Fußwege, Ein- und Ausstieg mit Linie und Zeit) und als ausklappbare Liste
+- „Zu Objekten navigieren“ zeigt nur, was auch auf der Karte zu sehen ist
+
+**Karte**
+- Kompass und Anheften: feste Zoomstufe und Neigung, kein Zittern beim Wegwischen, im Stand keine ständigen
+  Kamerafahrten mehr
+- Punkte bündeln sich beim Herauszoomen zu einem Cluster mit Anzahl; Antippen zoomt hinein. Auseinandergerückt wird
+  nur nah herangezoomt
+- Lagename in der Leiste unten ist der Name der Instanz; die Standardinstanz heißt „KSOD“
+
+**ÖPNV**
+- Fahrzeuge verschwinden fünf Minuten nach der tatsächlichen Ankunft (mit Verspätung), mit Countdown in der Ansicht
+- Echtzeit wird den Halten über die Halte-ID zugeordnet; Anfahren und Bremsen zwischen den Halten
+- In der Fahrzeugansicht steht, wie verlässlich die Position ist: Echtzeit, Fahrplan oder geschätzt
+- Auswahl von Fahrzeug, Strecke und Haltestellen als Pillen wie im Verlauf
+
+**Verläufe**
+- Verlauf jetzt im Plus-Menü der Karte und unter Mehr › Verläufe (mit Aufzeichnung je Objekt und Aufbewahrung);
+  die einzelnen Knöpfe bei Fahndern, Zielen, Fahrzeugen und Trackern sind weg
+- Von und Bis immer sichtbar, die Vorgaben sind Schnellwahlen
+
+**Fotos und Dateien**
+- Auswahlblatt statt Sprechblase; Mediathek, Kamera und Ansehen öffnen erst, wenn das Blatt geschlossen ist, und
+  schließen nicht mehr von selbst samt Bearbeiten
+- Eigene Fotoansicht mit immer sichtbaren Knöpfen, Zoomen und Teilen
+
+**Instanzen und Dienst**
+- Kein „Im Dienst“-Schalter mehr: Wer eine Instanz betritt, ist im Dienst; wer seine letzte verlässt, ist außer
+  Dienst. Auch die Standardinstanz lässt sich verlassen
+
+**Ziele, Tracker, Pakete**
+- Zielansicht kompakter (Hinführen und Standortquelle enger), beim Zielfahrzeug steht die Bezeichnung wieder unter
+  dem Kennzeichen
+- Mehr › Ebenen und Pakete: „Paket aus der Bibliothek importieren“ statt „Paket vorbereiten“
+- SMS-Befehle aus der Tracker-Ansicht entfernt
+
+**Suche**
+- Kreuzungsvorschläge aus einem lokalen Straßenverzeichnis auf dem Server (einmal je Woche geladen): Millisekunden
+  statt Sekunden
+
+**Sentinel Web** (bisher Kommandozentrale)
+- Neuer Name, Anmeldung mit dem Zugangscode statt Verwaltungspasswort, nur noch dunkel
+- SinoTrack per USB einrichten (Chrome/Edge): Server, Port, Datenverbindung, Intervall und APN direkt an den Tracker
+
 ## 0.17.0
 
 **Standortverläufe**

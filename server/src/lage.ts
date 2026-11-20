@@ -292,7 +292,7 @@ export class Lage extends EventEmitter<{ event: [LageEvent] }> {
     const scope = this.scopeOf(kind, id, existing.data, inst);
     switch (kind) {
       case 'member':
-        if (actor.role !== 'zentrale') throw new LageError('verboten', 'Profile entfernt nur die Kommandozentrale.');
+        if (actor.role !== 'zentrale') throw new LageError('verboten', 'Profile entfernt nur Sentinel Web.');
         for (const instance of this.list('instance')) {
           if (this.operationOf(instance.id).a?.memberId === id) this.updateOperation(instance.id, { a: null });
           this.leaveLeapfrog(instance.id, id);

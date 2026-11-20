@@ -78,7 +78,8 @@ function pinElement(className: string, html: string, onClick?: () => void): HTML
   return el;
 }
 
-const colorScheme = (): ColorScheme => (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light');
+/** Sentinel Web ist immer dunkel, auch die Karte. */
+const colorScheme = (): ColorScheme => 'dark';
 
 async function createBackend(container: HTMLElement, provider: 'apple' | 'osm'): Promise<MapBackend> {
   if (provider === 'apple') {
@@ -321,12 +322,6 @@ function bind(map: MapBackend, disposers: (() => void)[]): void {
       if (request) map.flyTo(request);
     }),
   );
-
-  // Tag- und Nachtdienst folgen der Systemeinstellung.
-  const media = window.matchMedia('(prefers-color-scheme: dark)');
-  const onScheme = () => map.setColorScheme(colorScheme());
-  media.addEventListener('change', onScheme);
-  disposers.push(() => media.removeEventListener('change', onScheme));
 
   map.onClick((point) => {
     const current = tool.value;

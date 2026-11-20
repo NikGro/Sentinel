@@ -32,10 +32,10 @@ export class Auth {
     const note = [
       'SENTINEL Erstzugang',
       '',
-      `Verwaltungspasswort Kommandozentrale: ${password}`,
+      `Verwaltungspasswort (veraltet, nicht mehr nötig): ${password}`,
       `Zugangscode für Fahnder-Geräte:        ${code}`,
       '',
-      'Beides bitte nach der ersten Anmeldung in der Kommandozentrale ändern und diese Datei löschen.',
+      'Sentinel Web und die App melden sich mit dem Zugangscode an. Diese Datei bitte löschen.',
       '',
     ].join('\n');
     writeFileSync(join(dataDir, 'ERSTZUGANG.txt'), note, { mode: 0o600 });
@@ -84,9 +84,13 @@ export class Auth {
 
   // ───────────── Kommandozentrale ─────────────
 
-  async login(password: string): Promise<{ token: string; expiresAt: number } | null> {
-    const stored = this.db.getKv('adminPasswordHash');
-    if (!stored || !(await verifyPassword(password, stored))) {
+  /**
+   * Anmeldung bei Sentinel Web mit demselben Zugangscode wie die Fahnder-Geräte (kein eigenes Verwaltungspasswort
+   * mehr). Wird der Zugangscode erneuert, gilt er auch hier.
+   */
+  async login(code: string): Promise<{ token: string; expiresAt: number } | null> {
+    const expected = this.joinCode;
+    if (!expected || !safeEqual(code.trim().toUpperCase(), expected)) {
       this.db.audit('zentrale', 'anmeldung.fehlgeschlagen');
       return null;
     }
