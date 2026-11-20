@@ -169,7 +169,7 @@ extension MapScreen {
         programmaticUntil = .now.addingTimeInterval(0.8)
         withAnimation(.easeInOut(duration: 0.5)) { camera = .camera(target) }
         Task {
-            try? await Task.sleep(for: .milliseconds(560))
+            try? await Task.sleep(for: .milliseconds(750))
             cameraAnimating = false
         }
     }
