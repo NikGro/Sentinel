@@ -35,6 +35,9 @@ struct MapScreen: View {
     @State var followPitch: Double?
     /// Zuletzt angesteuerte Kamera beim Nachführen, um Wiederholungen ohne Bewegung auszulassen.
     @State var lastFollowTarget: MapCamera?
+    /// Zeitpunkt der letzten Nachführung: Die nächste Fahrt dauert so lange wie der Abstand der Standortmeldungen,
+    /// damit die Kamera gleichmäßig mitläuft statt ruckweise.
+    @State var lastFollowAt = Date.distantPast
     /// Tempolimit der Straße am eigenen Standort (OpenStreetMap), auch ohne Navigation.
     @State var roadSpeedLimit: Int?
     /// Rasterzelle (~100 m) des eigenen Standorts; ein Wechsel fragt das Tempolimit neu ab.
@@ -230,11 +233,8 @@ struct MapScreen: View {
             .ignoresSafeArea(.container, edges: .bottom)
             .onMapCameraChange(frequency: .continuous) { context in
                 cameraState.update(context.camera)
-                // Angeheftet bewegt sich die Kamera außerhalb der eigenen Fahrten nur durch den Finger: dann sofort
-                // nicht mehr nachführen, sonst kämpfen Geste und Nachführung (Zittern).
-                if pin != nil, !cameraAnimating, Date.now > programmaticUntil, !userMovedCamera { userMovedCamera = true }
             }
-            .simultaneousGesture(DragGesture(minimumDistance: 12).onChanged { _ in
+            .simultaneousGesture(DragGesture(minimumDistance: 4).onChanged { _ in
                 userMovedCamera = true
             })
             // Auch Zoomen und Drehen mit zwei Fingern: Solange die Hand auf der Karte ist, führt die App nicht nach.

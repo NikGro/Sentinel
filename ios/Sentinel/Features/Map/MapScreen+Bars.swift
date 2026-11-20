@@ -191,8 +191,11 @@ extension MapScreen {
             return
         }
         lastFollowTarget = target
-        programmaticUntil = .now.addingTimeInterval(1.0)
-        withAnimation(.linear(duration: 0.9)) { camera = .camera(target) }
+        // So lange gleiten wie bis zur nächsten Meldung (aus dem letzten Abstand geschätzt): fließend statt stückweise.
+        let interval = min(max(Date.now.timeIntervalSince(lastFollowAt), 0.3), 2.5)
+        lastFollowAt = .now
+        programmaticUntil = .now.addingTimeInterval(interval + 0.1)
+        withAnimation(.linear(duration: interval)) { camera = .camera(target) }
     }
 
     /// Nach einer Wischgeste: Ist die Karte nur gezoomt, gedreht oder leicht verrutscht (Mitte nah am eigenen Standort),

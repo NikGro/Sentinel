@@ -13,9 +13,9 @@ struct InstancesScreen: View {
         List {
             Section {
                 ForEach(lage.myInstances) { instance in
-                    InstanceRow(instance: instance, isOpen: instance.id == lage.instanz && !model.editsPermanentLayer) {
+                    InstanceRow(instance: instance, isOpen: instance.id == lage.instanz && !model.editsPermanentLayer, open: {
                         model.openInstance(instance.id)
-                    }
+                    }, leave: { lage.leaveInstance(instance.id) })
                     // Verlassen geht überall, auch bei der Standardinstanz; wer keine Instanz mehr hat, ist außer Dienst.
                     .swipeActions(edge: .trailing) {
                         if instance.id != Instance.mainId {
@@ -116,8 +116,24 @@ private struct InstanceRow: View {
     let instance: Versioned<Instance>
     let isOpen: Bool
     let open: () -> Void
+    /// Verlassen, direkt als Knopf in der Zeile; wer keine Instanz mehr hat, ist außer Dienst.
+    var leave: (() -> Void)?
 
     var body: some View {
+        HStack(spacing: 10) {
+            openButton
+            if let leave {
+                Button("Verlassen", systemImage: "rectangle.portrait.and.arrow.right", action: leave)
+                    .labelStyle(.iconOnly)
+                    .font(.title3)
+                    .foregroundStyle(.orange)
+                    .buttonStyle(.borderless)
+                    .accessibilityLabel("\(instance.data.name) verlassen")
+            }
+        }
+    }
+
+    private var openButton: some View {
         Button(action: open) {
             HStack(spacing: 12) {
                 Image(systemName: instance.id == Instance.mainId ? "map.fill" : "scope")
@@ -140,7 +156,9 @@ private struct InstanceRow: View {
                         .foregroundStyle(.green)
                 }
             }
+            .contentShape(.rect)
         }
+        .buttonStyle(.borderless)
         .tint(.primary)
     }
 }

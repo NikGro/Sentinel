@@ -38,12 +38,17 @@ struct SettingsScreen: View {
                     }
 
                     Section {
-                        // Im Dienst ist, wer in einer Instanz ist; verlassen bzw. betreten unter „Instanzen“.
+                        // Ein Eintrag für Dienst und Instanzen: Im Dienst ist, wer in einer Instanz ist.
                         NavigationLink { InstancesScreen() } label: {
-                            LabeledContent {
-                                Text(me.data.aktiv ? (lage.currentInstance?.data.name ?? "") : "Instanz betreten")
-                            } label: {
-                                Label(me.data.aktiv ? "Im Dienst" : "Außer Dienst", systemImage: me.data.aktiv ? "person.badge.shield.checkmark.fill" : "moon.zzz.fill")
+                            HStack(spacing: 12) {
+                                Image(systemName: me.data.aktiv ? "square.stack.3d.up.fill" : "moon.zzz.fill")
+                                    .foregroundStyle(me.data.aktiv ? Color.accentColor : Color.secondary)
+                                VStack(alignment: .leading, spacing: 2) {
+                                    Text("Instanzen")
+                                    Text(me.data.aktiv ? "Im Dienst · \(currentArea)" : "Außer Dienst · Instanz betreten")
+                                        .font(.caption)
+                                        .foregroundStyle(.secondary)
+                                }
                             }
                         }
 
@@ -58,23 +63,6 @@ struct SettingsScreen: View {
                             ? "Ihr Standort wird mit den eigenen Kräften geteilt, auch im Hintergrund, und nur an den eigenen Sentinel-Server übertragen."
                             : "Außer Dienst: Es wird kein Standort geteilt und die A-Position ist nicht verfügbar. Mit dem Betreten einer Instanz ist man wieder im Dienst.")
                     }
-                }
-
-                Section {
-                    NavigationLink { InstancesScreen() } label: {
-                        HStack(spacing: 12) {
-                            Image(systemName: "square.stack.3d.up.fill")
-                                .foregroundStyle(.tint)
-                            VStack(alignment: .leading, spacing: 2) {
-                                Text("Instanzen")
-                                Text(currentArea)
-                                    .font(.caption)
-                                    .foregroundStyle(.secondary)
-                            }
-                        }
-                    }
-                } footer: {
-                    Text("Einsätze wechseln und verwalten, dauerhafte Orte bearbeiten und Pakete vorbereiten.")
                 }
 
                 Section("Einsatz") {
