@@ -57,6 +57,10 @@ statt jede Änderung sofort einzubauen. Erledigtes wandert mit Version ins CHANG
   1. Im Plus-Menü der Karte als hinzufügbares Kartenobjekt „Verlauf“. Dort wählt man aus, wessen Verlauf gezeigt wird.
   2. Gesammelt unter „Mehr“ als eigener Bereich „Verläufe“: alle Spuren, Aufbewahrung, eigene Aufzeichnung.
   Die Schalter „Verlauf aufzeichnen“ bei den einzelnen Objekten neu bewerten: dort lassen oder auch dorthin verlegen.
+- **Lagename = Instanzname:** In der Infoleiste unten auf der Karte (Lageübersicht) soll als Name der Lage einfach der
+  Name der Instanz stehen; kein eigener Lagetitel mehr.
+- **Standardinstanz umbenennen:** Die Hauptlage soll „KSOD“ heißen, auch auf dem bestehenden Server (Umbenennung
+  per Migration).
 - **Punkte auf der Karte clustern:** Beim Herauszoomen nah beieinander liegende Punkte zu einem Cluster
   zusammenfassen. Auseinanderrücken nur, wenn man nah herangezoomt ist.
 - **Offene Rückfrage:** Soll der Schalter „Auf der Karte“ in der Zielliste für alle in der Instanz gelten statt nur
