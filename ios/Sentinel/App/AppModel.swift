@@ -189,8 +189,17 @@ final class AppModel {
 
     // MARK: Verlauf
 
-    /// Spuren, die gerade auf der Karte gezeigt werden (Verlaufsmodus); leer = normale Karte.
-    var historySubjects: [SpurSubject] = []
+    /// Spuren, die gerade auf der Karte gezeigt werden (Verlaufsmodus).
+    var historySubjects: [SpurSubject] = [] {
+        didSet { if !historySubjects.isEmpty { historyOpen = true } }
+    }
+    /// Verlaufsmodus offen, auch wenn noch keine Spur gewählt ist (Spuren kommen über das Plus dazu).
+    var historyOpen = false
+
+    func closeHistory() {
+        historySubjects = []
+        historyOpen = false
+    }
 
     /// Spur auf der Karte zeigen und zur Karte wechseln.
     /// Zeitraum, den die Karte beim nächsten Öffnen des Verlaufs übernimmt (z. B. aus einem Standortverlauf-Objekt).

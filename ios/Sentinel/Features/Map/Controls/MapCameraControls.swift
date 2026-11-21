@@ -75,7 +75,11 @@ struct MapStyleButton: View {
                     get: { settings.prefers3D },
                     set: { value in
                         settings.prefers3D = value
-                        applyPitch(value)
+                        // Erst wenn das Menü zu ist: Während es sich schließt, verschluckt die Karte die Kamerafahrt.
+                        Task { @MainActor in
+                            try? await Task.sleep(for: .milliseconds(350))
+                            applyPitch(value)
+                        }
                     }
                 ))
                 Toggle("Verkehrslage", systemImage: "car.rear.road.lane", isOn: $settings.showsTraffic)

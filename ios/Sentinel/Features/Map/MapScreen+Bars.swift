@@ -97,7 +97,14 @@ extension MapScreen {
                 // Im Verlauf nur der Kompass, damit die Spuren frei bleiben.
                 if !showsHistory {
                 MapStyleButton { on in
-                    animateCamera(cameraState.camera(pitch: on ? 55 : 0))
+                    // Angeheftet um den eigenen Standort kippen, sonst um die Bildmitte.
+                    var target = cameraState.camera(pitch: on ? 55 : 0)
+                    if pin != nil, let here = location.current?.coordinate {
+                        target.centerCoordinate = here
+                        target.distance = followDistance ?? target.distance
+                    }
+                    touch.phase = .idle
+                    animateCamera(target)
                 }
                 MapRoundButton(title: "Ebenen", symbol: "square.3.layers.3d") { showsLayers = true }
                 if !reducedTools, let a = lage.aPosition, !lage.holdsA {
@@ -118,7 +125,9 @@ extension MapScreen {
                     case .transitMap:
                         showsTransitMap = true
                     case .history:
-                        showsHistoryPicker = true
+                        // Direkt in den Verlauf; Spuren kommen dort über das Plus dazu.
+                        if route.isActive { model.stopNavigation() }
+                        model.historyOpen = true
                     case .shape(let shape) where shape.isTransit:
                         // ÖPNV: kein Antippen nötig, Linien werden rund um den Kartenausschnitt vorgeschlagen.
                         editor = EditorContext(id: LageStore.newId(), object: draft(shape, [GeoPoint(cameraState.center)]), isNew: true)
@@ -223,28 +232,19 @@ extension MapScreen {
         return false
     }
 
-    /// Alle Finger sind von der Karte: Bei zwei Fingern auf das Ende der Kamerabewegung (mit Schwung) warten, ein
-    /// wischender Finger löst die Kopplung sofort, ein bloßes Antippen ändert nichts.
-    func touchesEnded() {
-        switch touch.phase {
-        case .touching(let fingers, let travel):
-            if fingers >= 2 {
-                touch.phase = .settling(fingers: fingers)
-                // Kommt keine Kamerabewegung mehr (Finger lagen nur auf), nicht ewig warten.
-                Task {
-                    try? await Task.sleep(for: .milliseconds(900))
-                    if case .settling = touch.phase { settleGesture(cameraState.camera()) }
-                }
-            } else if travel > 12, pin != nil {
-                // Verschoben: frei, die Karte bleibt, wie sie ist.
-                pin = nil
-                touch.phase = .idle
-            } else {
-                touch.phase = .idle
-                followTick()
-            }
-        default:
-            break
+    /// Alle Finger sind von der Karte: Ein wischender einzelner Finger löst die Kopplung sofort. Sonst (zwei Finger,
+    /// Antippen, Doppeltippen) auf das Ende der Kamerabewegung mit Schwung warten und dann Zoomstufe und Neigung
+    /// übernehmen; kommt keine Bewegung mehr, nach kurzer Zeit.
+    func touchesEnded(_ summary: TouchObserver.Summary) {
+        if summary.fingers < 2, summary.travel > 12, pin != nil {
+            pin = nil
+            touch.phase = .idle
+            return
+        }
+        touch.phase = .settling
+        Task {
+            try? await Task.sleep(for: .milliseconds(900))
+            if touch.phase == .settling { settleGesture(cameraState.camera()) }
         }
     }
 

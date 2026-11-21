@@ -69,8 +69,7 @@ struct MapScreen: View {
     /// Verlaufsmodus: gezeigte Spuren, Zeitraum und Zeitleiste.
     @State var history = HistoryState()
     @State var storedTracks = StoredTracks()
-    @State var showsHistoryPicker = false
-    var showsHistory: Bool { !model.historySubjects.isEmpty }
+    var showsHistory: Bool { model.historyOpen }
 
     var body: some View {
         dialogs(sheets(mainBody))
@@ -115,7 +114,6 @@ struct MapScreen: View {
         .sheet(item: $targetEditor) { context in
             TargetEditor(context: context)
         }
-        .sheet(isPresented: $showsHistoryPicker) { HistoryPickerSheet() }
         .sheet(isPresented: $showsLayers) {
             LayerSheet()
                 .presentationDetents([.medium, .large])
@@ -264,18 +262,14 @@ struct MapScreen: View {
                 cameraState.update(context.camera)
                 // Rückfallebene, falls die Fingererkennung eine Geste nicht meldet: deutliche Abweichung von der
                 // Nachführung ohne eigene Kamerafahrt gilt ebenfalls als Geste.
-                if pin != nil, !cameraAnimating, touch.phase == .idle, isUserCameraChange(context.camera) { touch.phase = .settling(fingers: 2) }
+                if pin != nil, !cameraAnimating, touch.phase == .idle, isUserCameraChange(context.camera) { touch.phase = .settling }
             }
-            // Finger auf der Karte direkt zählen: Solange einer liegt, führt die App nicht nach. Zwei Finger heißen
-            // Zoomen, Neigen oder Drehen (Kopplung bleibt), ein wischender Finger heißt Verschieben (Kopplung löst sich).
-            .simultaneousGesture(
-                SpatialEventGesture()
-                    .onChanged { events in touch.track(events) }
-                    .onEnded { events in
-                        touch.track(events)
-                        touchesEnded()
-                    }
-            )
+            // Finger auf der Karte mitlesen, ohne Apples Kartengesten oder Antippen zu stören: Solange einer liegt,
+            // führt die App nicht nach. Ein wischender Finger löst die Kopplung, alles andere (zwei Finger zum Zoomen,
+            // Neigen, Drehen; Doppeltippen) behält sie und übernimmt Zoomstufe und Neigung.
+            .background {
+                TouchObserver(began: { touch.phase = .touching }, ended: { touchesEnded($0) })
+            }
             .onMapCameraChange(frequency: .onEnd) { context in
                 cameraState.update(context.camera)
                 // Gekippt (auch mit zwei Fingern): Haken bei „3D-Ansicht“ mitziehen, aber nur nach eigenen Gesten.
@@ -349,7 +343,16 @@ struct MapScreen: View {
             guard !route.isActive, let point = location.current.map({ GeoPoint($0.coordinate) }), let client = model.client else { return }
             if let limit = try? await client.speedLimit(at: point) { roadSpeedLimit = limit } else if !Task.isCancelled { roadSpeedLimit = nil }
         }
-        .overlay(alignment: .topTrailing) { if tapMode == .none, searchPin == nil { sideButtons } }
+        .overlay(alignment: .topTrailing) {
+            if tapMode == .none, searchPin == nil {
+                sideButtons
+            } else {
+                // Reduzierte Ansicht (Ort setzen, Suchtreffer): nur der Kompassknopf, um zum eigenen Standort zu springen.
+                LocationCompassButton(state: cameraState, pin: pin) { pinCamera(pin == .heading ? .north : .heading) }
+                    .padding(.trailing, Theme.barInset)
+                    .padding(.top, topAreaHeight + Theme.barSpacing)
+            }
+        }
         .overlay(alignment: .topLeading) {
             if settings.showsCameraDebug {
                 CameraDebugOverlay(state: cameraState, pin: pin, navigating: route.isActive)

@@ -7,6 +7,10 @@ statt jede Änderung sofort einzubauen. Erledigtes wandert mit Version ins CHANG
 
 ### Nächste Runde
 
+- **Routing über NRW bzw. ganz Deutschland:** Der Routingdienst kennt nur Hamburg, Schleswig-Holstein und
+  Niedersachsen; „Düsseldorf → Heegbarg“ schlägt deshalb fehl. Daten erweitern (NRW zusätzlich oder ganz
+  Deutschland). Speicher und Platz auf dem Server reichen; der Neuaufbau dauert Stunden, solange fällt das Routing
+  aus. Wartet auf Entscheidung.
 - **Straßenverzeichnis beobachten:** Läuft seit 0.18 mit 2 GB Container-Speicher, Node.js darf bis 1,5 GB nutzen;
   nach dem Start belegt der Server etwa 380 MB. Den Speicher beim wöchentlichen Neuladen über Overpass im Blick
   behalten. Wird es knapp, die Straßen in SQLite statt im Arbeitsspeicher halten und in Kacheln laden.
@@ -47,3 +51,4 @@ statt jede Änderung sofort einzubauen. Erledigtes wandert mit Version ins CHANG
   - 0.20: Geofence-Alarm (Verlassen und Betreten), Standortverlauf auf der Karte, reduzierte Verlaufskarte
   - 0.21: Anheften mit Zoomen/Neigen/Verschieben (mit dem Kamerawerte-Overlay), Route von einem Platz aus, ÖPNV-Gleiten,
     Kopfzeilen mit Verlauf
+  - 0.22: Antippen und Marker setzen, Anheften im 3D (Lösen, Zoomen, Kippen), 3D-Knopf, Verlauf ohne Vorauswahl

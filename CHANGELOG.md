@@ -1,5 +1,23 @@
 # Änderungen
 
+## 0.22.0
+
+**Karte**
+- Fingererkennung beim Anheften neu: ein Beobachter am Fenster liest Berührungen nur mit. Die Geste aus 0.21
+  konkurrierte mit Apples Kartengesten; dadurch gingen Antipper auf die Karte verloren (Marker ließen sich nicht
+  setzen), und im 3D zog die Kamera mitten in der Geste zurück (Zittern, kein Zoomen und Kippen)
+- Solange ein Finger auf der Karte liegt, führt die App nicht nach; ein wischender Finger löst die Kopplung, Zoomen,
+  Kippen, Drehen und Doppeltippen behalten sie. Wischen in Fenstern über der Karte zählt nicht
+- 3D-Ansicht im Kartenstil-Menü wechselt wieder (die Kamerafahrt startet erst, wenn das Menü zu ist); angeheftet
+  kippt sie um den eigenen Standort
+- Beim Setzen eines Orts und bei Suchtreffern bleibt der Kompassknopf, um zum eigenen Standort zu springen
+
+**Standortverlauf**
+- Öffnet direkt im Verlauf, ohne Vorauswahl; Spuren kommen über das Plus dazu
+- Oben rechts: „Ganze Spur“, Schließen und ganz außen ein blauer Haken zum dauerhaften Ablegen auf der Karte
+- Vorgaben wie „Heute“ greifen beim ersten Tippen (das Datumsfeld überschrieb sie vorher als eigenen Zeitraum)
+- Legende: „Keine Daten“ als gestrichelte Linie
+
 ## 0.21.0
 
 **Kamera beim Anheften (neu aufgebaut)**

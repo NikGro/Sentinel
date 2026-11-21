@@ -220,7 +220,6 @@ struct HistoryPanel: View {
     @Environment(LageStore.self) private var lage
     @Environment(LocalSettings.self) private var settings
     let fit: () -> Void
-    @State private var placed = false
 
     var body: some View {
         VStack(alignment: .leading, spacing: 10) {
@@ -230,7 +229,9 @@ struct HistoryPanel: View {
             VStack(alignment: .leading, spacing: 10) {
                 subjectsRow
                 rangeRow
-                if state.isEmpty, !state.loading {
+                if model.historySubjects.isEmpty {
+                    EmptyView()
+                } else if state.isEmpty, !state.loading {
                     Text(state.failure ?? "Keine Aufzeichnung in diesem Zeitraum.")
                         .font(.footnote)
                         .foregroundStyle(.secondary)
@@ -246,23 +247,31 @@ struct HistoryPanel: View {
     private var subjectsRow: some View {
         VStack(alignment: .leading, spacing: 8) {
             HStack(spacing: 8) {
-                Label("Verlauf", systemImage: "point.bottomleft.forward.to.point.topright.scurvepath")
+                Label("Standortverlauf", systemImage: "point.bottomleft.forward.to.point.topright.scurvepath")
                     .font(.headline)
                     .lineLimit(1)
+                    .minimumScaleFactor(0.8)
                 if state.loading { ProgressView().controlSize(.small) }
                 Spacer(minLength: 4)
-                Button {
-                    model.historySubjects = []
+                // Ganze Spur zeigen, Schließen und ganz außen Übernehmen (dauerhaft auf die Karte legen).
+                roundButton("arrow.up.left.and.arrow.down.right", label: "Ganze Spur zeigen", action: fit)
+                    .disabled(state.isEmpty)
+                roundButton("xmark", label: "Verlauf schließen") {
                     state.selected = nil
-                } label: {
-                    Image(systemName: "xmark")
+                    model.closeHistory()
+                }
+                Button(action: placeOnMap) {
+                    Image(systemName: "checkmark")
                         .font(.subheadline.weight(.bold))
-                        .frame(width: 32, height: 32)
+                        .foregroundStyle(.white)
+                        .frame(width: 36, height: 36)
                         .contentShape(.circle)
                 }
                 .buttonStyle(.plain)
-                .glassEffect(.regular.interactive(), in: .circle)
-                .accessibilityLabel("Verlauf schließen")
+                .glassEffect(.regular.tint(.blue).interactive(), in: .circle)
+                .disabled(state.isEmpty || model.historySubjects.isEmpty)
+                .opacity(state.isEmpty || model.historySubjects.isEmpty ? 0.5 : 1)
+                .accessibilityLabel("Auf die Karte legen")
             }
             ScrollView(.horizontal, showsIndicators: false) {
                 HStack(spacing: 6) {
@@ -284,28 +293,28 @@ struct HistoryPanel: View {
                         .padding(.vertical, 5)
                         .glassEffect(.regular, in: .capsule)
                     }
-                    // Weitere Spur direkt neben den gewählten.
+                    // Spuren kommen über das Plus dazu, direkt neben den gewählten.
                     addMenu
-                    Button("Ganze Spur", systemImage: "arrow.up.left.and.arrow.down.right", action: fit)
-                        .font(.subheadline.weight(.semibold))
-                        .lineLimit(1)
-                        .buttonStyle(.bordered)
-                        .buttonBorderShape(.capsule)
-                        .disabled(state.isEmpty)
-                    Button("Auf die Karte legen", systemImage: "pin", action: placeOnMap)
-                        .font(.subheadline.weight(.semibold))
-                        .lineLimit(1)
-                        .buttonStyle(.bordered)
-                        .buttonBorderShape(.capsule)
-                        .disabled(state.isEmpty || model.historySubjects.isEmpty)
+                    if model.historySubjects.isEmpty {
+                        Text("Spuren mit + hinzufügen")
+                            .font(.subheadline)
+                            .foregroundStyle(.secondary)
+                    }
                 }
             }
         }
-        .alert("Auf der Karte", isPresented: $placed) {
-            Button("OK", role: .cancel) {}
-        } message: {
-            Text("Der Standortverlauf liegt jetzt für alle in der Instanz auf der Karte. Löschen über das Objekt.")
+    }
+
+    private func roundButton(_ symbol: String, label: String, action: @escaping () -> Void) -> some View {
+        Button(action: action) {
+            Image(systemName: symbol)
+                .font(.subheadline.weight(.bold))
+                .frame(width: 36, height: 36)
+                .contentShape(.circle)
         }
+        .buttonStyle(.plain)
+        .glassEffect(.regular.interactive(), in: .circle)
+        .accessibilityLabel(label)
     }
 
     /// Gezeigte Spuren als Objekt „Standortverlauf“ speichern. Vorgaben bis jetzt laufen mit, ein fester Zeitraum bleibt fest.
@@ -320,7 +329,10 @@ struct HistoryPanel: View {
         object.zeitVon = (interval.lowerBound.timeIntervalSince1970 * 1000).rounded()
         object.zeitBis = live ? nil : (interval.upperBound.timeIntervalSince1970 * 1000).rounded()
         lage.saveMapObject(object, id: LageStore.newId())
-        placed = true
+        // Übernommen: Der Verlauf schließt, das Objekt bleibt für alle auf der Karte.
+        model.alerts.post(.info, "Standortverlauf auf der Karte", "Für alle in der Instanz sichtbar; löschen über das Objekt.")
+        state.selected = nil
+        model.closeHistory()
     }
 
     /// Weitere Spur hinzunehmen, z. B. eigene Kräfte und Zielperson im selben Zeitraum.
@@ -367,11 +379,14 @@ struct HistoryPanel: View {
                 DatePicker("Von", selection: Binding(
                     get: { state.interval.lowerBound },
                     set: { from in
+                        // Nur echte Eingaben (volle Minuten): Das Feld korrigiert sonst „bis jetzt“ selbst um
+                        // Millisekunden und würde eine gewählte Vorgabe sofort zum eigenen Zeitraum machen.
+                        guard abs(from.timeIntervalSince(state.interval.lowerBound)) >= 30 else { return }
                         state.customTo = state.interval.upperBound
                         state.customFrom = from
                         state.range = .custom
                     }
-                ), in: ...Date.now)
+                ), in: ...Date.now.addingTimeInterval(60))
                 .labelsHidden()
                 Menu {
                     ForEach(HistoryRange.allCases.filter { $0 != .custom }) { range in
@@ -393,11 +408,12 @@ struct HistoryPanel: View {
                 DatePicker("Bis", selection: Binding(
                     get: { state.interval.upperBound },
                     set: { to in
+                        guard abs(to.timeIntervalSince(state.interval.upperBound)) >= 30 else { return }
                         state.customFrom = state.interval.lowerBound
-                        state.customTo = to
+                        state.customTo = min(to, .now)
                         state.range = .custom
                     }
-                ), in: ...Date.now)
+                ), in: ...Date.now.addingTimeInterval(60))
                 .labelsHidden()
                 // Platzhalter in Breite des Schnellwahl-Knopfs, damit beide Felder bündig stehen.
                 Color.clear.frame(width: 32, height: 1)
@@ -416,7 +432,13 @@ struct HistoryPanel: View {
                     }
                 }
                 HStack(spacing: 4) {
-                    Capsule().stroke(.gray, style: StrokeStyle(lineWidth: 2, dash: [2, 3])).frame(width: 14, height: 4)
+                    // Gestrichelte Linie wie auf der Karte (keine Umrandung).
+                    Path { path in
+                        path.move(to: CGPoint(x: 0, y: 2))
+                        path.addLine(to: CGPoint(x: 14, y: 2))
+                    }
+                    .stroke(.gray, style: StrokeStyle(lineWidth: 3, lineCap: .round, dash: [1, 4]))
+                    .frame(width: 14, height: 4)
                     Text("Keine Daten")
                 }
             }
