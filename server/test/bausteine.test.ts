@@ -278,3 +278,23 @@ test('Transitous: Linienzüge, Verkehrsarten und fahrende Fahrzeuge', async () =
   assert.equal(segments[0]!.delay, 60);
   assert.equal(segments[0]!.path.length, 1);
 });
+
+test('Navigation: kein Weg beim ersten Versuch, dann mit gelockertem Einrasten (abseits der Straße)', async () => {
+  const bodies: Record<string, unknown>[] = [];
+  const fake = (async (_url: string, init?: RequestInit) => {
+    const body = JSON.parse(String(init?.body)) as Record<string, unknown>;
+    bodies.push(body);
+    if (bodies.length === 1) return new Response('{"error":"No suitable edges near location"}', { status: 400 });
+    return new Response(JSON.stringify({ routes: [{ duration: 100, distance: 500, legs: [] }] }), { status: 200 });
+  }) as typeof fetch;
+  const result = await new RouteService('http://v', fake).navigation({
+    costing: 'pedestrian',
+    locations: [{ lat: 53.55, lon: 10, heading: 90, heading_tolerance: 30 }, { lat: 53.56, lon: 10.01, radius: 5 }],
+  }, false);
+  assert.ok(result);
+  assert.equal(bodies.length, 2);
+  const retry = bodies[1]!.locations as Record<string, unknown>[];
+  assert.equal(retry[0]!.heading, undefined);
+  assert.equal(retry[0]!.search_cutoff, 2000);
+  assert.equal(retry[1]!.radius, 0);
+});

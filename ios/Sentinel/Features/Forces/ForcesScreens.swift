@@ -81,7 +81,6 @@ struct ForcesScreen: View {
                 TabHeader(title: "Kräfte", query: $query, prompt: "Spitzname, Funkrufname, Kennzeichen") {
                     Button("Fahrzeug anlegen", systemImage: "plus", action: newVehicle)
                 }
-                .background(Color(.systemGroupedBackground))
             }
             .navigationDestination(item: $openVehicle) { id in
                 VehicleDetail(vehicleId: id)

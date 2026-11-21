@@ -28,8 +28,8 @@ struct MapScreen: View {
     @State var pin: CameraPin?
     /// Die App bewegt die Kamera gerade selbst; solange zählt eine Kamerabewegung nicht als Verschieben.
     @State var cameraAnimating = false
-    /// Bis wann Kamerabewegungen von der App selbst stammen (Anheften, Nachführen); danach ist es der Finger.
-    @State var programmaticUntil = Date.distantPast
+    /// Finger auf der Karte und was sie tun; steuert, ob die App nachführt und ob die Kopplung bleibt.
+    @State var touch = MapTouch()
     /// Zoomstufe und Neigung beim Anheften; das Nachführen hält sie, bis man selbst zoomt oder kippt.
     @State var followDistance: CLLocationDistance?
     @State var followPitch: Double?
@@ -38,6 +38,8 @@ struct MapScreen: View {
     /// Zeitpunkt der letzten Nachführung: Die nächste Fahrt dauert so lange wie der Abstand der Standortmeldungen,
     /// damit die Kamera gleichmäßig mitläuft statt ruckweise.
     @State var lastFollowAt = Date.distantPast
+    /// Kurze Rückfahrt zum Standort nach einer Geste statt des langen Gleitens der Nachführung.
+    @State var nextFollowDuration: Double?
     @State var ownMarkerOptions = OwnMarkerOptions()
     /// Tempolimit der Straße am eigenen Standort (OpenStreetMap), auch ohne Navigation.
     @State var roadSpeedLimit: Int?
@@ -47,8 +49,6 @@ struct MapScreen: View {
         return "\((c.latitude * 1000).rounded()),\((c.longitude * 600).rounded())"
     }
     var followsMe: Bool { pin != nil }
-    /// Die letzte Kamerabewegung kam vom Finger (nicht von der App): Neigung danach als 2D/3D-Einstellung übernehmen.
-    @State var userMovedCamera = false
     /// Gerade verschobener Fahndungsraum, für die Rückfrage zum Sichtungszeitpunkt.
     @State var movedRoom: String?
     @State var bottomAreaHeight: CGFloat = 120
@@ -84,6 +84,7 @@ struct MapScreen: View {
         }
         .sheet(isPresented: $pickingBySearch) {
             SearchSheet(mode: .adresse, navigate: { _ in }, pick: { point, _ in
+                pin = nil
                 withAnimation(.easeInOut(duration: 0.6)) {
                     camera = .camera(MapCamera(centerCoordinate: point.coordinate, distance: 900, heading: 0, pitch: settings.prefers3D ? 55 : 0))
                 }
@@ -180,10 +181,15 @@ struct MapScreen: View {
             model.historyIntervalRequest = nil
         }
         .task(id: hasTransit) {
-            // Kurze Schritte: Andere Kamerabewegungen (Nachführen) unterbrechen das Gleiten sonst sichtbar.
+            // Zehn Schritte je Sekunde. Lange Animationen zwischen seltenen Schritten wurden von jeder anderen
+            // Kartenaktualisierung (Kamera, Nachführen, Positionen) unterbrochen und sprangen dann; so kurze Schritte
+            // sind auch ohne vollständige Animation flüssig (ein Bus bewegt sich je Schritt um etwa einen Meter).
+            let clock = ContinuousClock()
+            var next = clock.now
             while hasTransit, !Task.isCancelled {
-                try? await Task.sleep(for: .milliseconds(500))
-                withAnimation(.linear(duration: 0.5)) { transitNow = .now }
+                next += .milliseconds(100)
+                try? await clock.sleep(until: next)
+                withAnimation(.linear(duration: 0.1)) { transitNow = .now }
             }
         }
         .confirmationDialog(
@@ -256,22 +262,28 @@ struct MapScreen: View {
             .ignoresSafeArea(.container, edges: .bottom)
             .onMapCameraChange(frequency: .continuous) { context in
                 cameraState.update(context.camera)
-                if pin != nil, !cameraAnimating, !userMovedCamera, isUserCameraChange(context.camera) { userMovedCamera = true }
+                // Rückfallebene, falls die Fingererkennung eine Geste nicht meldet: deutliche Abweichung von der
+                // Nachführung ohne eigene Kamerafahrt gilt ebenfalls als Geste.
+                if pin != nil, !cameraAnimating, touch.phase == .idle, isUserCameraChange(context.camera) { touch.phase = .settling(fingers: 2) }
             }
-            .simultaneousGesture(DragGesture(minimumDistance: 4).onChanged { _ in
-                userMovedCamera = true
-            })
-            // Auch Zoomen und Drehen mit zwei Fingern: Solange die Hand auf der Karte ist, führt die App nicht nach.
-            .simultaneousGesture(MagnifyGesture().onChanged { _ in userMovedCamera = true })
-            .simultaneousGesture(RotateGesture().onChanged { _ in userMovedCamera = true })
+            // Finger auf der Karte direkt zählen: Solange einer liegt, führt die App nicht nach. Zwei Finger heißen
+            // Zoomen, Neigen oder Drehen (Kopplung bleibt), ein wischender Finger heißt Verschieben (Kopplung löst sich).
+            .simultaneousGesture(
+                SpatialEventGesture()
+                    .onChanged { events in touch.track(events) }
+                    .onEnded { events in
+                        touch.track(events)
+                        touchesEnded()
+                    }
+            )
             .onMapCameraChange(frequency: .onEnd) { context in
-                // Gekippt (auch mit zwei Fingern, das meldet keine Wischgeste): Haken bei „3D-Ansicht“ mitziehen.
-                let byUser = userMovedCamera
-                userMovedCamera = false
-                let is3D = context.camera.pitch > 10
-                if settings.prefers3D != is3D { settings.prefers3D = is3D }
-                // Nur nach eigenen Gesten prüfen, nicht nach den Bewegungen der Nachführung.
-                if byUser { keepPinAfterGesture(context.camera) }
+                cameraState.update(context.camera)
+                // Gekippt (auch mit zwei Fingern): Haken bei „3D-Ansicht“ mitziehen, aber nur nach eigenen Gesten.
+                if case .settling = touch.phase {
+                    let is3D = context.camera.pitch > 10
+                    if settings.prefers3D != is3D { settings.prefers3D = is3D }
+                    settleGesture(context.camera)
+                }
             }
             .onChange(of: location.current?.timestamp) { followTick() }
             .onChange(of: locationContext.compassDegrees) {

@@ -223,6 +223,8 @@ extension MapScreen {
     /// Suchtreffer auf der Karte zeigen, ohne loszufahren.
     func show(_ pin: SearchPin) {
         searchPin = pin
+        // Ein anderer Ort: nicht mehr am eigenen Standort angeheftet.
+        self.pin = nil
         withAnimation(.easeInOut(duration: 0.8)) {
             camera = .camera(MapCamera(centerCoordinate: pin.point.coordinate, distance: 900, heading: 0, pitch: settings.prefers3D ? 55 : 0))
         }

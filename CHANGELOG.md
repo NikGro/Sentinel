@@ -1,5 +1,28 @@
 # Änderungen
 
+## 0.21.0
+
+**Kamera beim Anheften (neu aufgebaut)**
+- Die App zählt die Finger auf der Karte direkt, statt Gesten aus den Kamerawerten zu erraten
+- Zwei Finger (Zoomen, Neigen, Drehen): Die Kopplung bleibt, Zoomstufe und Neigung gelten danach weiter, die Kamera
+  gleitet kurz zurück auf den eigenen Standort (MapKit zoomt um den Punkt zwischen den Fingern)
+- Ein Finger, der spürbar wischt: Die Kopplung löst sich. Antippen ändert nichts
+- Während ein Finger auf der Karte liegt, führt die App nicht nach
+- Der 2D/3D-Knopf wirkt jetzt auch angeheftet; vorher setzte das Nachführen die Neigung sofort zurück
+- Kein Zoom-Kriechen mehr durch die leicht schwankenden Werte mit Geländehöhe
+
+**Navigation**
+- Liegt Start oder Ziel abseits einer Straße (Platz, Hof, Park) oder passt die GPS-Richtung zu keiner Straße, rechnet
+  der Server mit gelockertem Einrasten neu (bis 2 km zur nächsten passenden Straße), statt keine Route zu liefern
+
+**ÖPNV**
+- Fahrzeuge gleiten wieder: zehn kurze Schritte je Sekunde statt einer langen Animation, die von anderen
+  Kartenaktualisierungen unterbrochen wurde; auf der ÖPNV-Karte fünf je Sekunde
+- „Hierhin navigieren“ steht in der Übersicht des Objekts (auch bei Strecken mit Fahrzeug), nicht mehr beim Bearbeiten
+
+**Oberfläche**
+- Ziele, Kräfte, Chat, Mehr: Plus-Knopf auf Höhe des großen Titels; die Kopfzeile läuft unten weich ins Transparente aus
+
 ## 0.20.0
 
 **Geofence-Alarm (neu im Plus-Menü unter Fahndung)**

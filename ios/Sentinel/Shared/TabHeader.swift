@@ -8,11 +8,18 @@ struct TabHeader<Actions: View>: View {
     var prompt = "Suchen"
     @ViewBuilder var actions: () -> Actions
 
+    /// Länge des Verlaufs unter der Leiste, in den der Inhalt beim Scrollen weich ausläuft.
+    private static var fade: CGFloat { 28 }
+
     var body: some View {
-        // Aufbau wie ein Navigationsbalken mit großem Titel (Human Interface Guidelines): oben eine Leiste in
-        // Standardhöhe mit den Knöpfen rechts, darunter der große Titel, dann das Suchfeld; Abstände wie im System.
+        // Großer Titel links, die Aktionen (z. B. Plus) rechts auf derselben Höhe, darunter auf Wunsch das Suchfeld.
         VStack(alignment: .leading, spacing: 0) {
-            HStack(spacing: Theme.barSpacing) {
+            HStack(alignment: .center, spacing: Theme.barSpacing) {
+                Text(title)
+                    .font(.largeTitle.weight(.bold))
+                    .accessibilityAddTraits(.isHeader)
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.8)
                 Spacer(minLength: 0)
                 if Actions.self != EmptyView.self {
                     actions()
@@ -23,12 +30,9 @@ struct TabHeader<Actions: View>: View {
                         .glassEffect(.regular.interactive(), in: .circle)
                 }
             }
-            .frame(height: 44)
-            Text(title)
-                .font(.largeTitle.weight(.bold))
-                .accessibilityAddTraits(.isHeader)
-                .padding(.top, 3)
-                .padding(.bottom, 8)
+            .frame(minHeight: Theme.roundButton)
+            .padding(.top, 12)
+            .padding(.bottom, 8)
             if let query {
                 SearchField(text: query, prompt: prompt)
                     .padding(.bottom, 8)
@@ -36,6 +40,18 @@ struct TabHeader<Actions: View>: View {
         }
         .padding(.horizontal, 16)
         .padding(.bottom, 4)
+        // Hintergrund deckend, unten ein Verlauf ins Transparente statt einer harten Kante.
+        .background(alignment: .top) {
+            VStack(spacing: 0) {
+                Color(.systemGroupedBackground)
+                LinearGradient(colors: [Color(.systemGroupedBackground), Color(.systemGroupedBackground).opacity(0)],
+                               startPoint: .top, endPoint: .bottom)
+                    .frame(height: Self.fade)
+            }
+            .padding(.bottom, -Self.fade)
+            .ignoresSafeArea(edges: .top)
+            .allowsHitTesting(false)
+        }
     }
 }
 

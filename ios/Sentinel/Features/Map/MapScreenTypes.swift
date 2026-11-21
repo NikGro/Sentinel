@@ -103,3 +103,37 @@ enum CameraPin: Equatable {
     static let navigationDistance: CLLocationDistance = 420
     static let navigationPitch: Double = 52
 }
+
+/// Finger auf der Karte, aus den rohen Berührungen (`SpatialEventGesture`): wie viele höchstens lagen und wie weit ein
+/// einzelner Finger gewischt hat. Daraus folgt beim Anheften, ob gezoomt/gekippt (Kopplung bleibt) oder verschoben
+/// (Kopplung löst sich) wurde. Zuverlässiger als die Kamerawerte, die mit Geländehöhe leicht schwanken.
+struct MapTouch: Equatable {
+    enum Phase: Equatable {
+        /// Kein Finger auf der Karte, keine Geste offen: die App führt nach.
+        case idle
+        /// Finger liegen auf; `travel` ist die weiteste Strecke eines Fingers vom Aufsetzpunkt in Bildpunkten.
+        case touching(fingers: Int, travel: CGFloat)
+        /// Finger sind weg, die Karte schwingt noch aus; danach werden Zoomstufe und Neigung übernommen.
+        case settling(fingers: Int)
+    }
+
+    var phase: Phase = .idle
+    private var starts: [SpatialEventCollection.Event.ID: CGPoint] = [:]
+
+    mutating func track(_ events: SpatialEventCollection) {
+        var fingers = 0, travel: CGFloat = 0
+        if case .touching(let f, let t) = phase { fingers = f; travel = t }
+        var active = 0
+        for event in events {
+            let start = starts[event.id] ?? event.location
+            starts[event.id] = start
+            travel = max(travel, hypot(event.location.x - start.x, event.location.y - start.y))
+            if event.phase == .active { active += 1 }
+        }
+        fingers = max(fingers, active)
+        if active == 0 {
+            starts = [:]
+        }
+        phase = .touching(fingers: max(fingers, 1), travel: travel)
+    }
+}

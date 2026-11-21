@@ -65,7 +65,6 @@ struct TargetListScreen: View {
                         Label("Ziel anlegen", systemImage: "plus")
                     }
                 }
-                .background(Color(.systemGroupedBackground))
             }
             .navigationDestination(for: String.self) { id in
                 TargetDetail(targetId: id)

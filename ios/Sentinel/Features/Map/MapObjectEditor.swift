@@ -82,13 +82,8 @@ struct MapObjectEditor: View {
     }
 
     private var form: some View {
+            // Navigieren steht in der Übersicht der Markierung, nicht in den Einstellungen.
             Form {
-                if !context.isNew {
-                    NavigateHereSection {
-                        model.navigate(to: .object(context.id))
-                        dismiss()
-                    }
-                }
                 if object.typ == .fahndungsraum {
                     Section {
                         DatePicker("Datum und Uhrzeit", selection: sinceBinding, in: ...Date.now, displayedComponents: [.date, .hourAndMinute])

@@ -98,6 +98,22 @@ function beschleunigen(route: OsrmRoute): void {
   }
 }
 
+/**
+ * Anfrage mit gelockertem Einrasten auf die Straße: ohne Richtungsfilter und Seitenvorgabe, Start und Ziel suchen bis
+ * zu 2 km entfernt nach einer passenden Straße, Durchfahrtspunkte mit größerem Radius.
+ */
+export function entspannt(body: Record<string, unknown>): Record<string, unknown> {
+  const locations = Array.isArray(body.locations) ? (body.locations as Record<string, unknown>[]) : [];
+  return {
+    ...body,
+    locations: locations.map((location, index) => {
+      const { heading: _h, heading_tolerance: _t, preferred_side: _p, search_filter: _f, radius: _r, ...rest } = location;
+      const endpoint = index === 0 || index === locations.length - 1;
+      return endpoint ? { ...rest, radius: 0, search_cutoff: 2000, minimum_reachability: 10 } : { ...rest, radius: 60 };
+    }),
+  };
+}
+
 export class RouteService {
   constructor(
     private readonly valhallaUrl: string,
@@ -120,7 +136,7 @@ export class RouteService {
       language: 'de-DE',
       directions_options: { ...((anfrage.directions_options as Record<string, unknown>) ?? {}), language: 'de-DE', units: 'kilometers' },
     };
-    const holen = async (body: Record<string, unknown>) => {
+    const einmal = async (body: Record<string, unknown>) => {
       try {
         const response = await this.fetchFn(`${this.valhallaUrl}/route`, {
           method: 'POST',
@@ -128,13 +144,19 @@ export class RouteService {
           body: JSON.stringify(body),
           signal: AbortSignal.timeout(15_000),
         });
-        if (!response.ok) return null;
+        if (!response.ok) {
+          console.warn(`Routing ${response.status}: ${(await response.text().catch(() => '')).slice(0, 200)}`);
+          return null;
+        }
         const json = (await response.json()) as { routes?: OsrmRoute[] };
         return json.routes && json.routes.length > 0 ? json : null;
       } catch {
         return null;
       }
     };
+    // Kein Weg? Meist liegt Start oder Ziel abseits der Straße (Platz, Hof, Park) oder die Fahrtrichtung aus dem GPS
+    // passt zu keiner Straße. Dann mit gelockertem Einrasten noch einmal versuchen.
+    const holen = async (body: Record<string, unknown>) => (await einmal(body)) ?? (await einmal(entspannt(body)));
     if (!sonderrechte || basis.costing !== 'auto') {
       const antwort = await holen(basis);
       return antwort ? { antwort, sonderrechte: false } : null;

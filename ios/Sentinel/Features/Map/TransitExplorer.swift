@@ -112,7 +112,7 @@ struct TransitExplorer: View {
             .onAppear {
                 camera = .region(MKCoordinateRegion(center: start.coordinate, latitudinalMeters: 2500, longitudinalMeters: 2500))
             }
-            // Fahrzeuge alle 20 Sekunden neu laden (Echtzeit), Positionen jede Sekunde weiterrechnen.
+            // Fahrzeuge alle 20 Sekunden neu laden (Echtzeit), Positionen fünfmal je Sekunde weiterrechnen.
             .task(id: region.map { "\($0.center.latitude.rounded(to: 3))|\($0.center.longitude.rounded(to: 3))|\($0.span.latitudeDelta.rounded(to: 3))" }) {
                 while !Task.isCancelled {
                     await load()
@@ -121,8 +121,9 @@ struct TransitExplorer: View {
             }
             .task {
                 while !Task.isCancelled {
-                    try? await Task.sleep(for: .seconds(1))
-                    withAnimation(.linear(duration: 1)) { now = .now }
+                    // Kurze Schritte statt einer Animation je Sekunde: flüssig, auch wenn die Karte zwischendurch neu zeichnet.
+                    try? await Task.sleep(for: .milliseconds(200))
+                    withAnimation(.linear(duration: 0.2)) { now = .now }
                 }
             }
             .task(id: query) {

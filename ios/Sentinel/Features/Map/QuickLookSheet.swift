@@ -185,8 +185,8 @@ struct MapObjectInfo: View {
 
     var body: some View {
         List {
-            // Eine ÖPNV-Linie ist kein einzelner Zielort.
-            if object.typ != .oepnvlinie {
+            // Navigieren gehört in die Übersicht; eine ÖPNV-Strecke ohne Fahrzeug ist kein einzelner Zielort.
+            if object.typ != .oepnvlinie || object.hasRealVehicle {
                 NavigateHereSection {
                     model.navigate(to: .object(id))
                     dismiss()

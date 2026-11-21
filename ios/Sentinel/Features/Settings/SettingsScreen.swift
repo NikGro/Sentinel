@@ -115,7 +115,6 @@ struct SettingsScreen: View {
             .toolbar(.hidden, for: .navigationBar)
             .safeAreaInset(edge: .top, spacing: 0) {
                 TabHeader(title: "Mehr")
-                    .background(Color(.systemGroupedBackground))
             }
         }
     }

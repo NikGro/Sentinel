@@ -39,7 +39,6 @@ struct ChatScreen: View {
                         showsNewRoom = true
                     }
                 }
-                .background(Color(.systemGroupedBackground))
             }
             .navigationDestination(for: String.self) { roomId in
                 ChatRoomView(roomId: roomId)
