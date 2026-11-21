@@ -9,11 +9,10 @@ services:
     container_name: Sentinel-Valhalla
     restart: unless-stopped
     environment:
-      # Kartenausschnitt: Hamburg und Umland. Weitere Länder mit Leerzeichen getrennt ergänzen.
-      tile_urls: >-
-        https://download.geofabrik.de/europe/germany/hamburg-latest.osm.pbf
-        https://download.geofabrik.de/europe/germany/schleswig-holstein-latest.osm.pbf
-        https://download.geofabrik.de/europe/germany/niedersachsen-latest.osm.pbf
+      # Kartenausschnitt: ganz Deutschland (Geofabrik). Erster Aufbau etwa eine Stunde, belegt rund 10 GB.
+      # Ohne Ausfall neu bauen: in einem zweiten Container mit serve_tiles=False in ein eigenes Verzeichnis bauen,
+      # dann hier das Verzeichnis tauschen.
+      tile_urls: https://download.geofabrik.de/europe/germany-latest.osm.pbf
       server_threads: "2"
       serve_tiles: "True"
       build_elevation: "False"
@@ -22,9 +21,10 @@ services:
       build_tar: "True"
       force_rebuild: "False"
     volumes:
-      - ./data:/custom_files
+      - ./data-de:/custom_files
     networks: [sentinel]
-    mem_limit: 6g
+    # Beim Neuaufbau von ganz Deutschland zeitweise mehr als 6 GB.
+    mem_limit: 10g
     # Synology-Kernel kennt keine CPU-Quoten, deshalb nur eine niedrige Gewichtung.
     cpu_shares: 256
 

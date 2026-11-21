@@ -2,6 +2,9 @@
 
 ## 0.22.0
 
+**Routing**
+- Navigation und Weg-Zeit-Flächen jetzt in ganz Deutschland (vorher nur Hamburg, Schleswig-Holstein, Niedersachsen)
+
 **Karte**
 - Fingererkennung beim Anheften neu: ein Beobachter am Fenster liest Berührungen nur mit. Die Geste aus 0.21
   konkurrierte mit Apples Kartengesten; dadurch gingen Antipper auf die Karte verloren (Marker ließen sich nicht
