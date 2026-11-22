@@ -3,8 +3,6 @@
 ## 0.28.0
 
 **Kamera**
-- Beginnt eine Geste, hält die App eine laufende Kamerafahrt der Nachführung sofort an. Im Stand dauern diese Fahrten
-  bis 2,5 s und überschrieben sonst Zoomen und Kippen mit dem alten Abstand und Winkel
 - Nach Kippen wird der genaue Winkel übernommen (vorher in 2°-Schritten)
 
 **Fehlersuche**

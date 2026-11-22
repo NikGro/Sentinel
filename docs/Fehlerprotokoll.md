@@ -46,11 +46,20 @@ gescheiterte Ansätze nicht wiederholt werden. Neue Versuche und Rückmeldungen 
 Rückmeldung zu 0.27 vom Gerät (22.11.): Zoomen und Kippen gehen in der 3D-Ansicht nicht, obwohl der Simulator-Test
 grün war. Vermutungen (0.28): (a) MapKits Erkenner werden auf dem Gerät nicht gefunden; (b) eine laufende Kamerafahrt
 der Nachführung (im Stand bis 2,5 s, Kompass-Meldungen dazwischen) läuft während der Geste weiter und überschreibt sie.
-0.28: Fahrt beim Gestenbeginn anhalten; Test um „Zoomen im Stand mit seltenen GPS-Meldungen“ erweitert; Messdaten vom
+0.28: Test um „Zoomen im Stand mit seltenen GPS-Meldungen“ erweitert; Messdaten vom
 Gerät über den Entwickler-Schalter „Kamera-Messdaten senden“ (Server: `/data/diagnose/kamera-<Gerät>.jsonl`), Overlay
 zeigt Erkenner und Gesten. Lücke des Tests: Der Simulator hat keinen Kompass, Kippen ist nicht simulierbar.
 
+Kamera-Test 0.28 (Lauf 45021559599): Kamera beim Gestenbeginn setzen (um eine laufende Fahrt anzuhalten) bricht
+MapKits Geste ab: Zoomen und Wischen wirkungslos (began → allEnded ohne Zoom-/Verschiebe-Ereignisse). Zurückgenommen.
+MapKits Erkenner laut Messung: MKVariableDelayTapRecognizer, UITapGestureRecognizer, UILongPressGestureRecognizer,
+UIPinchGestureRecognizer, MKPanGestureRecognizer, _MKUserInteractionGestureRecognizer, UIRotationGestureRecognizer,
+MKTiltGestureRecognizer, _MKConditionalPanRotation/Zoom/TiltGestureRecognizer, _MKOneHandedZoomGestureRecognizer,
+_MKZoomingPanGestureRecognizer u. a.
+
 ### Nicht wiederholen
+
+- Kamera (SwiftUI-Position) während oder zu Beginn einer Geste setzen: bricht die Geste ab.
 
 - MapKits `userTrackingMode` oder `.userLocation` zusammen mit SwiftUIs `Map(position:)`: zwei Steuerungen.
 - Gesten aus Kamerawerten erraten (Schwellen auf Abstand, Winkel, Mitte).
