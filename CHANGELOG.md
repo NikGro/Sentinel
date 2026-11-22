@@ -1,5 +1,16 @@
 # Änderungen
 
+## 0.27.0
+
+**Kamera beim Anheften: eine einzige Steuerung, Gesten aus MapKits eigenen Erkennern**
+- Die MapKit-Standortverfolgung (0.23–0.26) ist entfernt: SwiftUIs Karte und MapKit steuerten dieselbe Kamera und
+  zoomten gegeneinander hinein und heraus
+- Die App führt die Kamera wieder allein nach. Welche Geste läuft, liest sie jetzt direkt an MapKits eigenen
+  Gestenerkennern mit (Verschieben, Zoomen, Drehen, Kippen), statt sie aus Kamerawerten oder Fingern zu erraten
+- Während einer Geste keine Nachführung; Verschieben mit einem Finger über 30 Punkte oder Drehen über 20° in der
+  Kompass-Ausrichtung löst die Kopplung sofort, ohne die Kamera anzufassen
+- Zoomen, Kippen und Doppeltippen behalten die Kopplung; nach dem Ausschwingen gelten Abstand und Winkel weiter
+
 ## 0.26.0
 
 **Kamera**

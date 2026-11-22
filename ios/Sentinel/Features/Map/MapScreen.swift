@@ -28,12 +28,14 @@ struct MapScreen: View {
     @State var pin: CameraPin?
     /// Die App bewegt die Kamera gerade selbst; solange zählt eine Kamerabewegung nicht als Verschieben.
     @State var cameraAnimating = false
-    /// MapKit-Karte hinter `Map`, für deren eingebaute Standortverfolgung.
-    @State var mapHandle = MapViewHandle()
-    /// Die Karte verfolgt den Standort selbst (statt der eigenen Nachführung).
-    @State var nativeTracking = false
-    /// Zeitpunkt der Übergabe an die Verfolgung; kurz danach läuft noch die Kamerafahrt.
-    @State var trackingHandover = Date.distantPast
+    /// Liest MapKits eigene Gestenerkenner (nur lesend), damit beim Anheften sicher bekannt ist, welche Geste läuft.
+    @State var gestures = MapGestureWatcher()
+    /// Nach einer Geste: Die Karte schwingt noch aus, danach werden Abstand und Winkel übernommen.
+    @State var settling = false
+    /// In der laufenden Geste wurde gezoomt, gekippt oder gedreht (dann löst Verschieben die Kopplung nicht).
+    @State var multiTouchGesture = false
+    /// Kurze Rückfahrt zum Standort nach einer Geste statt des langen Gleitens der Nachführung.
+    @State var nextFollowDuration: Double?
     /// Zoomstufe und Neigung beim Anheften; das Nachführen hält sie, bis man selbst zoomt oder kippt.
     @State var followDistance: CLLocationDistance?
     @State var followPitch: Double?
@@ -274,15 +276,15 @@ struct MapScreen: View {
             .ignoresSafeArea(.container, edges: .bottom)
             .onMapCameraChange(frequency: .continuous) { context in
                 cameraState.update(context.camera)
-                checkNativeTracking()
-                fallbackGestureCheck(context.camera)
+                if !gestures.isAttached { gestures.attachIfNeeded() }
             }
-            // Darüber findet die App die MapKit-Karte für deren eingebaute Standortverfolgung.
-            .background { MapViewLocator(handle: mapHandle) }
+            // Darüber findet der Gestenbeobachter die MapKit-Karte.
+            .background { MapGestureAnchor(watcher: gestures) }
+            .onAppear { gestures.onEvent = { handleGesture($0) } }
             .onMapCameraChange(frequency: .onEnd) { context in
                 cameraState.update(context.camera)
-                checkNativeTracking()
-                // Mit zwei Fingern gekippt: Haken bei „3D-Ansicht“ mitziehen.
+                // Ausgeschwungen nach einer Geste: Abstand und Winkel übernehmen.
+                if settling, !gestures.isActive { settleAfterGesture() }
                 let is3D = context.camera.pitch > 10
                 if !cameraAnimating, settings.prefers3D != is3D { settings.prefers3D = is3D }
             }
@@ -293,11 +295,7 @@ struct MapScreen: View {
             }
             .onChange(of: pin, initial: true) { _, new in
                 ownMarkerOptions.showsStreet = new != nil
-                // Frei (Geste, Suche, anderer Ort): die Verfolgung der Karte beenden.
-                if new == nil {
-                    mapHandle.stopTracking()
-                    nativeTracking = false
-                }
+                if new == nil { settling = false }
             }
             // Langes Drücken auf einen Ort: wie ein Suchtreffer „Navigieren“ oder „Hier anlegen“ anbieten.
             .simultaneousGesture(

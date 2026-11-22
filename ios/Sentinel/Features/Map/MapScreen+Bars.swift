@@ -98,7 +98,7 @@ extension MapScreen {
                 MapStyleButton { on in
                     // Angeheftet: nur den Winkel ändern und angeheftet bleiben; sonst um die Bildmitte kippen.
                     if let mode = pin {
-                        startPin(mode, distance: mapHandle.mapView?.camera.centerCoordinateDistance ?? followDistance ?? mode.distance, pitch: on ? 55 : 0)
+                        startPin(mode, distance: followDistance ?? cameraState.distance, pitch: on ? 55 : 0)
                     } else {
                         animateCamera(cameraState.camera(pitch: on ? 55 : 0))
                     }
@@ -163,83 +163,97 @@ extension MapScreen {
     }
 
     /// Heftet die Karte an den eigenen Standort: in Kompass-Ausrichtung schräg von hinten, mit Norden oben von oben.
-    /// Die Karte setzt die Startansicht und übernimmt dann mit ihrer eingebauten Verfolgung (siehe `MapViewHandle`):
-    /// Zoomen und Kippen behalten die Kopplung, Verschieben oder Herausdrehen beendet sie.
+    /// Allein die App steuert die Kamera (`followTick`); welche Geste läuft, melden MapKits eigene Erkenner
+    /// (`MapGestureWatcher`).
     func pinCamera(_ mode: CameraPin) {
         // In der Navigation wie in üblichen Navis: etwas höher für mehr Überblick, deutlich gekippt.
         let navigating = route.isActive && mode == .heading
-        let distance = navigating ? CameraPin.navigationDistance : mode.distance
-        let pitch = navigating ? CameraPin.navigationPitch : mode.pitch
-        startPin(mode, distance: distance, pitch: pitch)
+        startPin(mode, distance: navigating ? CameraPin.navigationDistance : mode.distance, pitch: navigating ? CameraPin.navigationPitch : mode.pitch)
     }
 
     /// Anheften mit gegebenem Abstand und Winkel (auch für den 2D/3D-Knopf, der angeheftet nur den Winkel ändert).
     func startPin(_ mode: CameraPin, distance: CLLocationDistance, pitch: Double) {
+        gestures.attachIfNeeded()
         pin = mode
         followDistance = distance
         followPitch = pitch
+        settling = false
         guard let current = location.current else { return }
         let heading = mode == .heading ? (myCourse ?? cameraState.heading) : 0
-        trackingHandover = .now
-        if mapHandle.track(center: current.coordinate, distance: distance, pitch: pitch, heading: heading, followsHeading: mode == .heading) {
-            nativeTracking = true
-            return
-        }
-        // Rückfall ohne MapKit-Karte: eigene Nachführung.
-        nativeTracking = false
         animateCamera(MapCamera(centerCoordinate: current.coordinate, distance: distance, heading: heading, pitch: pitch))
     }
 
-    /// Hat die Karte ihre Verfolgung beendet? Verschieben beendet sie ganz, Herausdrehen aus der Kompass-Ausrichtung
-    /// stuft sie zu „nur folgen“ herab; beides heißt hier: frei. Kurz nach dem Übergeben nicht prüfen, da läuft die
-    /// Kamerafahrt noch ohne Verfolgung.
-    func checkNativeTracking() {
-        guard nativeTracking, let mode = pin, Date.now.timeIntervalSince(trackingHandover) > 1.2,
-              let tracking = mapHandle.trackingMode else { return }
-        var lost = tracking == .none || (mode == .heading && tracking != .followWithHeading)
-        // Herausgedreht: Weicht die Karte deutlich von der Blickrichtung ab, dreht sie nicht gegen den Finger zurück,
-        // sondern die Kopplung löst sich.
-        if mode == .heading, !lost, let facing = locationContext.compassDegrees {
-            var delta = abs(cameraState.heading - facing).truncatingRemainder(dividingBy: 360)
-            if delta > 180 { delta = 360 - delta }
-            if delta > 55 { lost = true }
+    /// Meldung der Kartengesten. Verschieben mit einem Finger oder Herausdrehen aus der Kompass-Ausrichtung löst die
+    /// Kopplung sofort, ohne die Kamera anzufassen (die Wischbewegung läuft weiter). Zoomen und Kippen lösen nie; nach
+    /// dem Ausschwingen gelten Abstand und Winkel weiter, und die Kamera gleitet zurück auf den Standort.
+    func handleGesture(_ event: MapGestureEvent) {
+        switch event {
+        case .began:
+            settling = false
+            multiTouchGesture = false
+        case .panned(let distance, let touches):
+            // Nur echtes Verschieben mit einem Finger: Hebt man beim Zoomen einen Finger zuerst, läuft das Verschieben
+            // weiter, zählt aber nicht.
+            if touches >= 2 { multiTouchGesture = true }
+            if pin != nil, touches == 1, !multiTouchGesture, distance > 30 { pin = nil }
+        case .pinched:
+            multiTouchGesture = true
+        case .rotated(let degrees):
+            multiTouchGesture = true
+            if pin == .heading, abs(degrees) > 20 { pin = nil }
+        case .zoomTapped, .allEnded:
+            guard pin != nil else { return }
+            settling = true
+            Task {
+                // Kommt kein Ende der Kamerabewegung (nichts schwingt aus), nicht ewig warten.
+                try? await Task.sleep(for: .milliseconds(500))
+                if settling, !gestures.isActive { settleAfterGesture() }
+            }
         }
-        if lost { pin = nil }
     }
 
-    /// Bewegt die Kamera. Ohne MapKit-Verfolgung führt die App sie danach selbst nach (siehe `followTick`).
+    /// Nach Zoomen, Kippen oder Doppeltippen: Abstand und Winkel übernehmen, kurz zurück auf den Standort gleiten.
+    func settleAfterGesture() {
+        settling = false
+        guard pin != nil else { return }
+        followDistance = cameraState.distance
+        followPitch = cameraState.pitch
+        lastFollowTarget = nil
+        nextFollowDuration = 0.35
+        followTick()
+    }
+
+    /// Bewegt die Kamera. Angeheftet führt die App sie danach selbst nach (siehe `followTick`).
     func animateCamera(_ target: MapCamera) {
         cameraAnimating = true
         lastFollowTarget = target
         withAnimation(.easeInOut(duration: 0.5)) { camera = .camera(target) }
         Task {
-            try? await Task.sleep(for: .milliseconds(750))
+            try? await Task.sleep(for: .milliseconds(650))
             cameraAnimating = false
         }
     }
 
-    /// Rückfall, falls keine MapKit-Karte zu finden ist: Kamera auf den eigenen Standort nachführen.
+    /// Angeheftet: Kamera auf den eigenen Standort nachführen, mit gespeichertem Abstand und Winkel; in
+    /// Kompass-Ausrichtung nach Kurs (in Fahrt) bzw. Gerätekompass (im Stand). Nie während einer Geste.
     func followTick() {
-        guard !nativeTracking, let mode = pin, !cameraAnimating, let current = location.current else { return }
+        guard let mode = pin, !cameraAnimating, !settling, !gestures.isActive, let current = location.current else { return }
         let heading = mode == .heading ? (myCourse ?? cameraState.heading) : cameraState.heading
         let target = MapCamera(centerCoordinate: current.coordinate, distance: followDistance ?? cameraState.distance, heading: heading,
                                pitch: followPitch ?? cameraState.pitch)
+        // Steht man still, nicht ständig neu animieren.
         if let last = lastFollowTarget,
            GeoPoint(last.centerCoordinate).distance(to: GeoPoint(target.centerCoordinate)) < 1,
-           abs(last.heading - target.heading) < 1.5 {
+           abs(last.heading - target.heading) < 1.5, abs(last.distance - target.distance) < 1, abs(last.pitch - target.pitch) < 1 {
             return
         }
         lastFollowTarget = target
-        let interval = min(max(Date.now.timeIntervalSince(lastFollowAt), 0.3), 2.5)
+        // So lange gleiten wie bis zur nächsten Standortmeldung: fließend statt stückweise. Nach einer Geste kurz.
+        let afterGesture = nextFollowDuration
+        nextFollowDuration = nil
+        let interval = afterGesture ?? min(max(Date.now.timeIntervalSince(lastFollowAt), 0.3), 2.5)
         lastFollowAt = .now
-        withAnimation(.linear(duration: interval)) { camera = .camera(target) }
-    }
-
-    /// Rückfall: Weicht die Kamera deutlich von der Nachführung ab, war es eine Geste; dann frei.
-    func fallbackGestureCheck(_ current: MapCamera) {
-        guard !nativeTracking, pin != nil, !cameraAnimating, let target = lastFollowTarget else { return }
-        let offset = GeoPoint(current.centerCoordinate).distance(to: GeoPoint(target.centerCoordinate))
-        if offset > max(target.distance * 0.25, 60) { pin = nil }
+        withAnimation(afterGesture == nil ? .linear(duration: interval) : .easeOut(duration: interval)) { camera = .camera(target) }
     }
 
     // MARK: Untere Leiste

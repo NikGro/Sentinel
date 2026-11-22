@@ -54,4 +54,5 @@ statt jede Änderung sofort einzubauen. Erledigtes wandert mit Version ins CHANG
     Kurven, Hauptmenü mit zwei Tabs, Argus als Paket
   - 0.24: Überschlagend zu einem ÖPNV-Fahrzeug mit mehreren Fahndern (über Ziel, A und Fahrzeug)
   - 0.25: Querstraßen-Sprechblasen, Antippen von ÖPNV-Fahrzeugen und Datumsfeldern beim ersten Mal
-  - 0.26: Anheften ohne Herauszoomen, Lösen durch Drehen, ÖPNV ohne Wackeln, Haltestellen nah auf der ÖPNV-Karte
+  - 0.26: ÖPNV ohne Wackeln, Haltestellen nah auf der ÖPNV-Karte
+  - 0.27: Anheften mit Gesten aus MapKits Erkennern (Zoomen/Kippen behalten, Verschieben/Drehen lösen, kein Pumpen)
