@@ -191,7 +191,13 @@ extension MapScreen {
         pinRequest += 1
         let request = pinRequest
         Task {
-            try? await Task.sleep(for: .milliseconds(600))
+            // Erst übergeben, wenn die Anfahrt angekommen ist: Apple behält den Abstand und Winkel, die beim Einschalten
+            // eingestellt sind (Kamera-Test: zu früh übergeben, blieb es bei 931 m statt 550 m).
+            for _ in 0..<30 {
+                try? await Task.sleep(for: .milliseconds(100))
+                guard pinRequest == request, pin == mode else { return }
+                if !cameraAnimating, abs(cameraState.distance - distance) < distance * 0.05 { break }
+            }
             guard pinRequest == request, pin == mode else { return }
             // Ohne Abstandsgrenze: Eine Grenze zwang MapKit, die Kamera zu verstellen, und beendete die Verfolgung
             // (Kamera-Test). Gemessen wird, welchen Abstand Apple beim Einschalten wählt.
@@ -201,27 +207,40 @@ extension MapScreen {
         }
     }
 
-    /// Spiegelt Apples Verfolgung in den Anheft-Zustand: Verschiebt man die Karte, beendet Apple die Verfolgung selbst;
-    /// dreht man sie aus der Kompass-Ausrichtung, folgt Apple nur noch ohne Richtung. Beides heißt hier: frei.
-    func checkAppleTracking() {
-        guard let mode = pin, !cameraAnimating, Date.now.timeIntervalSince(trackingHandover) > 0.5, trackingHandover > .distantPast else { return }
-        let position = cameraController.position
-        if !position.followsUserLocation || (mode == .heading && !position.followsUserHeading) {
-            CameraProbe.shared.event("apple verfolgung beendet folgt=\(position.followsUserLocation) richtung=\(position.followsUserHeading)")
-            pin = nil
-        }
-    }
-
-    /// Kartengesten: Mit Apples Verfolgung erledigt Apple Zoomen, Kippen und Lösen selbst. Nach einer Geste, die die
-    /// Kopplung gelöst hat, folgt die Karte auch nicht mehr nur ohne Richtung weiter.
+    /// Kartengesten: Zoomen und Kippen erledigt Apples Verfolgung selbst. Verschieben mit einem Finger oder Herausdrehen
+    /// aus der Kompass-Ausrichtung löst die Kopplung; erst nach der Geste wird die Kamera an der aktuellen Stelle gesetzt
+    /// und damit Apples Verfolgung beendet (während einer Geste würde das die Geste abbrechen). Der Zustand von SwiftUIs
+    /// Kameraposition taugt dafür nicht: Sie meldet schon kurz nach dem Einschalten „folgt nicht“, obwohl die Karte folgt.
     func handleGesture(_ event: MapGestureEvent) {
         switch event {
-        case .allEnded:
-            if pin == nil, cameraController.position.followsUserLocation {
-                camera = .camera(cameraState.camera())
+        case .began:
+            multiTouchGesture = false
+        case .panned(let distance, let touches):
+            if touches >= 2 { multiTouchGesture = true }
+            if pin != nil, touches == 1, !multiTouchGesture, distance > 30 {
+                pin = nil
+                releaseTracking = true
             }
-        default:
+        case .pinched:
+            multiTouchGesture = true
+        case .rotated(let degrees):
+            multiTouchGesture = true
+            if pin == .heading, abs(degrees) > 20 {
+                pin = nil
+                releaseTracking = true
+            }
+        case .zoomTapped:
             break
+        case .allEnded:
+            if releaseTracking, pin == nil {
+                releaseTracking = false
+                CameraProbe.shared.event("apple verfolgung beendet (geste)")
+                // Nach dem Ausschwingen an Ort und Stelle festhalten.
+                Task {
+                    try? await Task.sleep(for: .milliseconds(400))
+                    if pin == nil, !gestures.isActive { camera = .camera(cameraState.camera()) }
+                }
+            }
         }
     }
 

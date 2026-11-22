@@ -46,6 +46,8 @@ struct MapScreen: View {
     @State var settling = false
     /// In der laufenden Geste wurde gezoomt, gekippt oder gedreht (dann löst Verschieben die Kopplung nicht).
     @State var multiTouchGesture = false
+    /// Eine Geste hat die Kopplung gelöst: nach ihrem Ende Apples Verfolgung beenden.
+    @State var releaseTracking = false
     /// Zoomstufe und Neigung beim Anheften; das Nachführen hält sie, bis man selbst zoomt oder kippt.
     @State var followDistance: CLLocationDistance?
     @State var followPitch: Double?
@@ -292,7 +294,6 @@ struct MapScreen: View {
             .onMapCameraChange(frequency: .continuous) { context in
                 cameraState.update(context.camera)
                 if !gestures.isAttached { gestures.attachIfNeeded() }
-                checkAppleTracking()
                 CameraProbe.shared.record(context.camera, pin: pin, gesture: gestures.isActive, settling: settling, attached: gestures.isAttached)
             }
             // Darüber findet der Gestenbeobachter die MapKit-Karte.
@@ -308,7 +309,6 @@ struct MapScreen: View {
 
             .onMapCameraChange(frequency: .onEnd) { context in
                 cameraState.update(context.camera)
-                checkAppleTracking()
                 let is3D = context.camera.pitch > 10
                 if !cameraAnimating, settings.prefers3D != is3D { settings.prefers3D = is3D }
             }
