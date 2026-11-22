@@ -103,12 +103,22 @@ Versuche Apple-Verfolgung (Arbeitszweig, Kamera-Test):
 - Mit Wächter (Sprung > 40 % ohne Geste → Sollwert neu, max. 3×; eigener Zoom wird Sollwert): Kamera-Test komplett
   grün (Lauf 45063795852). Norden-Modus: Apple springt nach jeder Übergabe wieder auf 4624 m (2 Korrekturen im Test).
   Als 0.31 zum Gerätetest ausgeliefert.
+- Gerätedaten 0.31 (22.11., abends): Nach JEDER Übergabe an `.userLocation` zoomt Apple binnen 0,5 s auf seinen
+  eigenen Abstand (Kompass 4885 m, Norden 4620 m), egal welcher Abstand eingestellt war. Der Wächter heftet dann neu
+  an, das startet Apples Verfolgung neu, und die zoomt wieder hinaus: Rein-raus-Schleife (Ursache für „zoomt wild“).
+  Derselbe Ablauf erklärt 0.23 („zoomt nach Erreichen wieder heraus“). Danach behält Apple jeden Abstand, den der
+  Nutzer selbst einstellt (2102 m, 1656 m, 422 m blieben stehen), auch die Neigung. Fiel eine Geste in Apples
+  Einschalt-Zoom, blieben 550 m stehen. Folgerung: Apples Einschalt-Zoom ist das einzige Problem; nach dem Start
+  hält die Verfolgung jeden Abstand. Nicht neu anheften, sondern den Abstand an der laufenden Verfolgung ändern.
+- Versuch (Arbeitszweig): Abstand nach Apples Einschalt-Zoom direkt an der MapKit-Karte setzen (`setCamera` mit
+  gleicher Mitte und Richtung), Verfolgungsmodus vorher/nachher messen.
 
 ### Nicht wiederholen
 
 - Kamera (SwiftUI-Position) während oder zu Beginn einer Geste setzen: bricht die Geste ab.
 
 - MapKits `userTrackingMode` direkt an der `MKMapView` neben SwiftUIs `Map(position:)`: zwei Steuerungen. (SwiftUIs eigenes `.userLocation` ist dagegen eine Steuerung, siehe 0.31.)
+- Nach Apples Einschalt-Zoom neu anheften (Wächter in 0.31): startet die Verfolgung neu, Apple zoomt wieder heraus.
 - `MapCameraBounds` zum Erzwingen des Abstands beim Übergeben an Apples Verfolgung: beendet die Verfolgung.
 - SwiftUIs `followsUserLocation` als Zeichen für gelöste Verfolgung: meldet zu früh „folgt nicht“.
 - Gesten aus Kamerawerten erraten (Schwellen auf Abstand, Winkel, Mitte).
