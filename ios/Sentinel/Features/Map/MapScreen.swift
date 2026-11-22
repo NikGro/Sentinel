@@ -59,7 +59,7 @@ struct MapScreen: View {
     @State var bottomAreaHeight: CGFloat = 120
     @State var now = Date.now
     #if DEBUG
-    /// Kamera-Test „Unruhe“ (Startargument `-unruhe`): baut den Kartenbildschirm zehnmal je Sekunde neu auf, wie es auf
+    /// Kamera-Test „Unruhe“ (Startargument `-unruhe`): baut den Kartenbildschirm ab 20 s nach dem Start viermal je Sekunde neu auf, wie es auf
     /// dem Gerät durch Kompass, GPS und Positionen der anderen Kräfte ständig passiert.
     @State var debugUnrest = 0
     #endif
@@ -407,8 +407,11 @@ struct MapScreen: View {
         #if DEBUG
         .task {
             guard ProcessInfo.processInfo.arguments.contains("-unruhe") else { return }
+            // Erst nach dem Start (sonst findet das Testwerkzeug die Bedienelemente nicht), dann etwa so oft wie
+            // Kompassmeldungen auf dem Gerät.
+            try? await Task.sleep(for: .seconds(20))
             while !Task.isCancelled {
-                try? await Task.sleep(for: .milliseconds(100))
+                try? await Task.sleep(for: .milliseconds(250))
                 debugUnrest &+= 1
             }
         }

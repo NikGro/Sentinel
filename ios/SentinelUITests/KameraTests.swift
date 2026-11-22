@@ -232,7 +232,8 @@ final class KameraTests: XCTestCase {
         drive(steps: 4)
         pinHeading()
         XCTAssertEqual(probe().pin, "heading", "angeheftet")
-        drive(steps: 4)
+        // Die Unruhe beginnt 20 s nach dem Start.
+        drive(steps: 30)
 
         // Zweimal hineinzoomen: Auf dem Gerät griff nur die erste Geste, danach sprang jede zurück.
         for runde in 1...2 {
