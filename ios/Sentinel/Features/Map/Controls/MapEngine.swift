@@ -526,11 +526,11 @@ final class MapEngine {
         return nil
     }
 
-    private static func ease(_ t: Double) -> Double {
+    nonisolated private static func ease(_ t: Double) -> Double {
         t < 0.5 ? 4 * t * t * t : 1 - pow(-2 * t + 2, 3) / 2
     }
 
-    static func approachAngle(_ from: Double, _ to: Double, a: Double) -> Double {
+    nonisolated static func approachAngle(_ from: Double, _ to: Double, a: Double) -> Double {
         var delta = (to - from).truncatingRemainder(dividingBy: 360)
         if delta > 180 { delta -= 360 }
         if delta < -180 { delta += 360 }
@@ -539,14 +539,14 @@ final class MapEngine {
         return result
     }
 
-    private static func offset(_ coordinate: CLLocationCoordinate2D, meters: Double, bearing: Double) -> CLLocationCoordinate2D {
+    nonisolated private static func offset(_ coordinate: CLLocationCoordinate2D, meters: Double, bearing: Double) -> CLLocationCoordinate2D {
         let r = bearing * .pi / 180
         let dLat = meters * cos(r) / 111_320
         let dLon = meters * sin(r) / (111_320 * max(cos(coordinate.latitude * .pi / 180), 0.01))
         return CLLocationCoordinate2D(latitude: coordinate.latitude + dLat, longitude: coordinate.longitude + dLon)
     }
 
-    static func mapRect(_ region: MKCoordinateRegion) -> MKMapRect {
+    nonisolated static func mapRect(_ region: MKCoordinateRegion) -> MKMapRect {
         let a = MKMapPoint(CLLocationCoordinate2D(latitude: region.center.latitude + region.span.latitudeDelta / 2,
                                                   longitude: region.center.longitude - region.span.longitudeDelta / 2))
         let b = MKMapPoint(CLLocationCoordinate2D(latitude: region.center.latitude - region.span.latitudeDelta / 2,
