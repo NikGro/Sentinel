@@ -218,6 +218,7 @@ extension MapScreen {
     func settleAfterGesture() {
         settling = false
         guard pin != nil else { return }
+        CameraProbe.shared.event(String(format: "uebernehmen d=%.0f p=%.1f", cameraState.distance, cameraState.exactPitch))
         followDistance = cameraState.distance
         followPitch = cameraState.exactPitch
         lastFollowTarget = nil
@@ -229,6 +230,7 @@ extension MapScreen {
     func animateCamera(_ target: MapCamera) {
         cameraAnimating = true
         lastFollowTarget = target
+        CameraProbe.shared.event(String(format: "fahrt anheften d=%.0f p=%.0f h=%.0f dauer=0.5", target.distance, target.pitch, target.heading))
         withAnimation(.easeInOut(duration: 0.5)) { camera = .camera(target) }
         Task {
             try? await Task.sleep(for: .milliseconds(650))
@@ -255,6 +257,8 @@ extension MapScreen {
         nextFollowDuration = nil
         let interval = afterGesture ?? min(max(Date.now.timeIntervalSince(lastFollowAt), 0.3), 2.5)
         lastFollowAt = .now
+        CameraProbe.shared.event(String(format: "fahrt %@ d=%.0f p=%.0f h=%.0f dauer=%.2f geste=%d", afterGesture == nil ? "folgen" : "zurueck",
+                                        target.distance, target.pitch, target.heading, interval, gestures.isActive ? 1 : 0))
         withAnimation(afterGesture == nil ? .linear(duration: interval) : .easeOut(duration: interval)) { camera = .camera(target) }
     }
 

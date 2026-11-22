@@ -1,5 +1,12 @@
 # Änderungen
 
+## 0.29.0
+
+**Fehlersuche Kamera**
+- Die Kamera-Messdaten enthalten jede Kamerafahrt der App (Anheften, Folgen, Zurückgleiten nach einer Geste) mit
+  Ziel, Dauer und ob gerade eine Geste lief, sowie das Übernehmen von Abstand und Winkel nach einer Geste
+- Kamera-Test „Unruhe“ (ständige Neuaufbauten wie auf dem Gerät) läuft in einem eigenen Testlauf
+
 ## 0.28.0
 
 **Kamera**

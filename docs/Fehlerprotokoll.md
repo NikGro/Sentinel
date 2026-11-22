@@ -68,6 +68,13 @@ Vermutung: SwiftUIs `Map(position:)` setzt die zuletzt gesetzte Position bei jed
 (Kompass, GPS, andere Kräfte → ständige Neuaufbauten); erklärt auch das stückweise Folgen (Sprung ans Ziel mitten in
 der Fahrt). Im Simulator kein Kompass → Test grün. Nachstellung: Test „Unruhe“ (`-unruhe`, 10 Neuaufbauten/s).
 
+Kamera-Test „Unruhe“ (Lauf 45050621159, eigener Testlauf): 4 Neuaufbauten/s, zweimal Zoomen: beide greifen und bleiben
+(550 → 334 → 203 m). Vermutung „Neuaufbau setzt Position zurück“ damit widerlegt.
+Neue Spur aus den Gerätedaten: Erste Geste (79,0 s) zoomt auf 544 m, danach Rückzug auf 550 m = Ziel der noch laufenden
+Anheft-Fahrt. Vermutung: Eine vor der Geste gestartete Kamerafahrt (Nachführung bis 2,5 s, im Stand durch Kompass und
+GPS fast immer aktiv) läuft während der Geste weiter. 0.29 protokolliert jede Kamerafahrt (Auslöser, Ziel, Dauer) zur
+Bestätigung auf dem Gerät.
+
 ### Nicht wiederholen
 
 - Kamera (SwiftUI-Position) während oder zu Beginn einer Geste setzen: bricht die Geste ab.
