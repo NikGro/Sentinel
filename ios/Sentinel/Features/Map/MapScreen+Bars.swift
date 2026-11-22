@@ -193,14 +193,11 @@ extension MapScreen {
         Task {
             try? await Task.sleep(for: .milliseconds(600))
             guard pinRequest == request, pin == mode else { return }
-            cameraBounds = MapCameraBounds(minimumDistance: distance, maximumDistance: distance)
+            // Ohne Abstandsgrenze: Eine Grenze zwang MapKit, die Kamera zu verstellen, und beendete die Verfolgung
+            // (Kamera-Test). Gemessen wird, welchen Abstand Apple beim Einschalten wählt.
             trackingHandover = .now
             CameraProbe.shared.event(String(format: "apple verfolgung an d=%.0f kompass=%d", distance, mode == .heading ? 1 : 0))
             camera = .userLocation(followsHeading: mode == .heading, fallback: .camera(view))
-            try? await Task.sleep(for: .milliseconds(1500))
-            guard pinRequest == request else { return }
-            cameraBounds = nil
-            CameraProbe.shared.event("grenze frei")
         }
     }
 
