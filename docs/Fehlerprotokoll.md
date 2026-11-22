@@ -110,14 +110,20 @@ Versuche Apple-Verfolgung (Arbeitszweig, Kamera-Test):
   Nutzer selbst einstellt (2102 m, 1656 m, 422 m blieben stehen), auch die Neigung. Fiel eine Geste in Apples
   Einschalt-Zoom, blieben 550 m stehen. Folgerung: Apples Einschalt-Zoom ist das einzige Problem; nach dem Start
   hält die Verfolgung jeden Abstand. Nicht neu anheften, sondern den Abstand an der laufenden Verfolgung ändern.
-- Versuch (Arbeitszweig): Abstand nach Apples Einschalt-Zoom direkt an der MapKit-Karte setzen (`setCamera` mit
-  gleicher Mitte und Richtung), Verfolgungsmodus vorher/nachher messen.
+- Versuche (Arbeitszweig, Läufe 45068170070 und 45070106240), Abstand an der laufenden Verfolgung ändern:
+  `setCamera` (animiert) an der MKMapView: keine Wirkung, bleibt 4624 m. Kamera ohne Animation zuweisen: kurz 2092 m,
+  dann zieht Apple wieder auf 4624 m. `setCameraZoomRange` eng um den Sollwert: keine Wirkung. Verfolgung bleibt
+  jeweils an („folgen“). Im Simulator meldet die Kompass-Verfolgung `userTrackingMode` „aus“ (kein Kompass) und hält
+  550 m; Norden oben nutzt `.follow` und zoomt auf 4624 m. Ergebnis: Apple bestimmt den Abstand der Verfolgung selbst;
+  nur Nutzergesten ändern ihn. Gerät: Auch der eigene Zoom gilt nur bis zum nächsten Anheften (2102 m gezoomt, gelöst,
+  neu angeheftet → wieder 4885 m).
 
 ### Nicht wiederholen
 
 - Kamera (SwiftUI-Position) während oder zu Beginn einer Geste setzen: bricht die Geste ab.
 
 - MapKits `userTrackingMode` direkt an der `MKMapView` neben SwiftUIs `Map(position:)`: zwei Steuerungen. (SwiftUIs eigenes `.userLocation` ist dagegen eine Steuerung, siehe 0.31.)
+- Abstand an Apples laufender Verfolgung per Code setzen (`setCamera`, Kamerazuweisung, `setCameraZoomRange`).
 - Nach Apples Einschalt-Zoom neu anheften (Wächter in 0.31): startet die Verfolgung neu, Apple zoomt wieder heraus.
 - `MapCameraBounds` zum Erzwingen des Abstands beim Übergeben an Apples Verfolgung: beendet die Verfolgung.
 - SwiftUIs `followsUserLocation` als Zeichen für gelöste Verfolgung: meldet zu früh „folgt nicht“.
