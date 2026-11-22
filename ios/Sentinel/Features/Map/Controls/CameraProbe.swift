@@ -62,12 +62,15 @@ final class CameraProbe {
 struct CameraProbeLabel: View {
     var body: some View {
         if CameraProbe.isEnabled {
+            // Klein, aber sichtbar: Fast durchsichtige oder winzige Elemente blendet iOS für UI-Tests aus.
             Text(CameraProbe.shared.summary)
-                .font(.system(size: 1))
-                .opacity(0.02)
-                .frame(width: 2, height: 2)
+                .font(.system(size: 9, design: .monospaced))
+                .padding(2)
+                .background(.black.opacity(0.5))
+                .foregroundStyle(.white)
                 .allowsHitTesting(false)
                 .accessibilityIdentifier("kamera-probe")
+                .padding(.top, 60)
         }
     }
 }

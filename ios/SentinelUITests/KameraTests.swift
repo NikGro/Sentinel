@@ -50,7 +50,7 @@ final class KameraTests: XCTestCase {
     }
 
     private func probe() -> Probe {
-        let element = app.staticTexts["kamera-probe"]
+        let element = app.descendants(matching: .any)["kamera-probe"]
         _ = element.waitForExistence(timeout: 5)
         return Probe(element.label)
     }
