@@ -57,6 +57,10 @@ UIPinchGestureRecognizer, MKPanGestureRecognizer, _MKUserInteractionGestureRecog
 MKTiltGestureRecognizer, _MKConditionalPanRotation/Zoom/TiltGestureRecognizer, _MKOneHandedZoomGestureRecognizer,
 _MKZoomingPanGestureRecognizer u. a.
 
+Kamera-Test 0.28 korrigiert (Lauf 45023426484): komplett grün, auch „Zoomen im Stand mit seltenen GPS-Meldungen“.
+Vermutung (b) im Simulator nicht bestätigt. Nächster Schritt: Messdaten vom Gerät auswerten (Vermutung a: Erkenner
+auf dem Gerät nicht gefunden; Kompass-Einfluss; Kippen).
+
 ### Nicht wiederholen
 
 - Kamera (SwiftUI-Position) während oder zu Beginn einer Geste setzen: bricht die Geste ab.
