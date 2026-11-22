@@ -48,6 +48,10 @@ struct MapScreen: View {
     @State var multiTouchGesture = false
     /// Eine Geste hat die Kopplung gelöst: nach ihrem Ende Apples Verfolgung beenden.
     @State var releaseTracking = false
+    /// Zeitpunkt der letzten Geste (Sprünge des Abstands kurz danach stammen vom Nutzer).
+    @State var lastGestureAt = Date.distantPast
+    /// Wie oft ein von Apple gesetzter Abstand je Anheften schon korrigiert wurde.
+    @State var resetCorrections = 0
     /// Zoomstufe und Neigung beim Anheften; das Nachführen hält sie, bis man selbst zoomt oder kippt.
     @State var followDistance: CLLocationDistance?
     @State var followPitch: Double?
@@ -309,6 +313,7 @@ struct MapScreen: View {
 
             .onMapCameraChange(frequency: .onEnd) { context in
                 cameraState.update(context.camera)
+                correctAppleZoomReset()
                 let is3D = context.camera.pitch > 10
                 if !cameraAnimating, settings.prefers3D != is3D { settings.prefers3D = is3D }
             }

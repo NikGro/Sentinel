@@ -176,8 +176,9 @@ extension MapScreen {
     /// Lösen mit Apples eigenen Gesten zu. Apple wählt beim Einschalten selbst einen Abstand; deshalb erst die gewünschte
     /// Ansicht setzen und den erlaubten Abstand beim Übergeben kurz auf genau diesen Wert begrenzen (`MapCameraBounds`),
     /// danach wieder freigeben. Nur eine Steuerung: SwiftUIs Karte, kein Eingriff an MapKit vorbei.
-    func startPin(_ mode: CameraPin, distance: CLLocationDistance, pitch: Double) {
+    func startPin(_ mode: CameraPin, distance: CLLocationDistance, pitch: Double, isRetry: Bool = false) {
         gestures.attachIfNeeded()
+        if !isRetry { resetCorrections = 0 }
         pin = mode
         followDistance = distance
         followPitch = pitch
@@ -215,6 +216,7 @@ extension MapScreen {
         switch event {
         case .began:
             multiTouchGesture = false
+            lastGestureAt = .now
         case .panned(let distance, let touches):
             if touches >= 2 { multiTouchGesture = true }
             if pin != nil, touches == 1, !multiTouchGesture, distance > 30 {
@@ -230,8 +232,11 @@ extension MapScreen {
                 releaseTracking = true
             }
         case .zoomTapped:
-            break
+            lastGestureAt = .now
+            rememberUserView()
         case .allEnded:
+            lastGestureAt = .now
+            rememberUserView()
             if releaseTracking, pin == nil {
                 releaseTracking = false
                 CameraProbe.shared.event("apple verfolgung beendet (geste)")
@@ -242,6 +247,31 @@ extension MapScreen {
                 }
             }
         }
+    }
+
+    /// Nach eigenem Zoomen oder Kippen: Abstand und Winkel nach dem Ausschwingen als neuen Sollwert merken.
+    func rememberUserView() {
+        guard pin != nil else { return }
+        Task {
+            try? await Task.sleep(for: .milliseconds(700))
+            guard pin != nil, !gestures.isActive else { return }
+            followDistance = cameraState.distance
+            followPitch = cameraState.exactPitch
+            CameraProbe.shared.event(String(format: "sollwert d=%.0f p=%.1f", cameraState.distance, cameraState.exactPitch))
+        }
+    }
+
+    /// Apple setzt beim Verfolgen manchmal von sich aus einen weiten Abstand (Kamera-Test: 550 → 4890 m ohne Geste).
+    /// Springt der Abstand ohne Geste deutlich vom Sollwert weg, wird der Sollwert erneut gesetzt und die Verfolgung neu
+    /// übergeben, höchstens dreimal je Anheften.
+    func correctAppleZoomReset() {
+        guard let mode = pin, let target = followDistance, trackingHandover > .distantPast,
+              Date.now.timeIntervalSince(trackingHandover) > 1, Date.now.timeIntervalSince(lastGestureAt) > 2,
+              !gestures.isActive, !cameraAnimating, resetCorrections < 3 else { return }
+        guard abs(cameraState.distance - target) > target * 0.4 else { return }
+        resetCorrections += 1
+        CameraProbe.shared.event(String(format: "apple abstand zurueck d=%.0f soll=%.0f versuch=%d", cameraState.distance, target, resetCorrections))
+        startPin(mode, distance: target, pitch: followPitch ?? mode.pitch, isRetry: true)
     }
 
     /// Bewegt die Kamera (Anheften, Sprung zu einem Ort).
