@@ -409,13 +409,20 @@ final class MapEngine {
             }
         case .transform:
             if scale != 1 { emit(.pinched) }
-            // Drehen erst ab einigen Grad, damit Zoomen nicht nebenbei dreht.
+            // Absicht festlegen, je nachdem, was zuerst deutlich wird: Wer zoomt, dreht oft unabsichtlich ein Stück mit.
+            if m.intent == .none {
+                if abs(scale - 1) > 0.08 { m.intent = .zoom } else if abs(rotationDegrees) > 8 { m.intent = .rotate }
+                multi = m
+            }
+            // Drehen erst ab einigen Grad (beim Zoomen deutlich mehr), damit Zoomen nicht nebenbei dreht.
+            let turnThreshold = m.intent == .zoom ? 25.0 : 8.0
+            let releaseThreshold = m.intent == .zoom ? 45.0 : 20.0
             var turn = 0.0
-            if abs(rotationDegrees) > 8 {
-                turn = rotationDegrees - (rotationDegrees > 0 ? 8 : -8)
+            if abs(rotationDegrees) > turnThreshold {
+                turn = rotationDegrees - (rotationDegrees > 0 ? turnThreshold : -turnThreshold)
                 emit(.rotated(degrees: rotationDegrees))
             }
-            if pin != nil, abs(rotationDegrees) > 20 {
+            if pin != nil, abs(rotationDegrees) > releaseThreshold {
                 // Herausdrehen löst; ab hier frei weiterdrehen, vom aktuellen Stand aus.
                 unpin()
                 emit(.released(String(format: "gedreht %.0f°", rotationDegrees)))
@@ -610,6 +617,7 @@ private struct Flight {
 
 private struct MultiTouch {
     enum Mode { case undecided, tilt, transform }
+    enum Intent { case none, zoom, rotate }
     var start: EngineCamera
     var anchor: CLLocationCoordinate2D?
     var scaleBase: CGFloat
@@ -618,6 +626,7 @@ private struct MultiTouch {
     var startDistance: CLLocationDistance
     var startPitch: Double
     var mode: Mode = .undecided
+    var intent: Intent = .none
 }
 
 /// UIKit-Seite: Gestenerkenner an der MapKit-Karte und Bildtakt. Eigenes Objekt, weil UIKit Ziele als `NSObject`
