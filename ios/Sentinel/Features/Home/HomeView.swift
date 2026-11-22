@@ -21,6 +21,7 @@ struct HomeMoreScreen: View {
     @Environment(LageStore.self) private var lage
     @Environment(LocalSettings.self) private var settings
     @State private var showsSignOut = false
+    @AppStorage(CameraProbe.settingsKey) private var sendsCameraDiagnosis = false
 
     var body: some View {
         @Bindable var settings = settings
@@ -74,10 +75,11 @@ struct HomeMoreScreen: View {
 
             Section {
                 Toggle("Kamerawerte einblenden", systemImage: "camera.metering.center.weighted", isOn: $settings.showsCameraDebug)
+                Toggle("Kamera-Messdaten senden", systemImage: "waveform.path.ecg", isOn: $sendsCameraDiagnosis)
             } header: {
                 Text("Entwickler")
             } footer: {
-                Text("Zeigt auf der Karte Abstand, Neigung und Richtung der Kamera und den Anheft-Modus.")
+                Text("Kamerawerte: Abstand, Neigung, Richtung, Anheft-Modus und Gestenerkennung auf der Karte. Messdaten: Kamerawerte und Gesten alle zehn Sekunden an den eigenen Server, zur Fehlersuche; danach wieder ausschalten.")
             }
 
             Section {

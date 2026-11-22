@@ -1,3 +1,5 @@
+import { appendFileSync, mkdirSync, statSync, writeFileSync } from 'node:fs';
+import { join } from 'node:path';
 import type { FastifyInstance } from 'fastify';
 import { z } from 'zod';
 import { findCrossingStreets, findIntersections } from '../oepnv.js';
@@ -47,6 +49,11 @@ const crossingStreetsQuery = z.object({
 
 const crossStreetsBody = z.object({ punkte: z.array(geoPoint).min(2).max(600) });
 const coverageQuery = z.object({ instanz: z.string().max(64).optional() });
+/** Kamera-Messdaten eines Geräts zur Fehlersuche (Entwickler-Schalter in der App), je Zeile ein JSON-Objekt. */
+const diagnosisBody = z.object({ zeilen: z.array(z.string().max(600)).max(2000) });
+/** Höchstgröße der Messdatei je Gerät; darüber wird von vorn begonnen. */
+const DIAGNOSIS_MAX_BYTES = 8 * 1024 * 1024;
+
 const pointQuery = z.object({ lat: z.coerce.number().min(-90).max(90), lon: z.coerce.number().min(-180).max(180) });
 
 /** Bestreifung, Weg-Zeit-Flächen, Routen, Navigation, Kreuzungen und Querstraßen. */
@@ -55,6 +62,27 @@ export function registerNavigationRoutes(app: FastifyInstance, services: Service
   const reachLimiter = new RateLimiter(120, 60_000);
   const crossingLimiter = new RateLimiter(90, 60_000);
   const speedLimiter = new RateLimiter(30, 60_000);
+  const diagnosisLimiter = new RateLimiter(60, 60_000);
+
+  /** Kamera-Messdaten vom Gerät: werden je Gerät an `diagnose/kamera-<Gerät>.jsonl` angehängt (nur zur Fehlersuche). */
+  app.post('/api/v1/diagnose/kamera', { bodyLimit: 2 * 1024 * 1024 }, async (request) => {
+    const actor = guards.actor(request);
+    guards.limit(diagnosisLimiter, request);
+    const { zeilen } = parse(diagnosisBody, request.body, 'Messdaten fehlen.');
+    const folder = join(services.config.dataDir, 'diagnose');
+    mkdirSync(folder, { recursive: true });
+    const file = join(folder, `kamera-${actor.id.replace(/[^A-Za-z0-9_-]/g, '')}.jsonl`);
+    let size = 0;
+    try {
+      size = statSync(file).size;
+    } catch {
+      size = 0;
+    }
+    const text = zeilen.map((z) => z.replace(/\n/g, ' ')).join('\n') + '\n';
+    if (size + text.length > DIAGNOSIS_MAX_BYTES) writeFileSync(file, text);
+    else appendFileSync(file, text);
+    return { ok: true };
+  });
 
   const requireRouting = () => {
     if (!routes.available) throw new HttpError(503, 'Auf diesem Server ist kein Wegenetz eingerichtet.');

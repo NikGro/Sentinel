@@ -408,6 +408,14 @@ struct APIClient: Sendable {
     private struct CrossStreetsRequest: Encodable { let punkte: [GeoPoint] }
     private struct CrossStreetsResult: Decodable { let strassen: [CrossStreet] }
 
+    private struct DiagnosisRequest: Encodable { let zeilen: [String] }
+    private struct OkResult: Decodable { let ok: Bool }
+
+    /// Kamera-Messdaten zur Fehlersuche an den eigenen Server (Entwickler-Schalter).
+    func sendCameraDiagnosis(_ lines: [String]) async throws {
+        _ = try await json(OkResult.self, "POST", "api/v1/diagnose/kamera", body: DiagnosisRequest(zeilen: lines))
+    }
+
     /// Querstraßen entlang einer Route (OpenStreetMap über den eigenen Server).
     func crossStreets(along points: [GeoPoint]) async throws -> [CrossStreet] {
         try await json(CrossStreetsResult.self, "POST", "api/v1/route/querstrassen", body: CrossStreetsRequest(punkte: points)).strassen

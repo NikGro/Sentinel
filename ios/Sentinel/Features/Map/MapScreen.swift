@@ -277,19 +277,17 @@ struct MapScreen: View {
             .onMapCameraChange(frequency: .continuous) { context in
                 cameraState.update(context.camera)
                 if !gestures.isAttached { gestures.attachIfNeeded() }
-                #if DEBUG
                 CameraProbe.shared.record(context.camera, pin: pin, gesture: gestures.isActive, settling: settling, attached: gestures.isAttached)
-                #endif
             }
             // Darüber findet der Gestenbeobachter die MapKit-Karte.
             .background { MapGestureAnchor(watcher: gestures) }
             .onAppear {
                 gestures.onEvent = { event in
-                    #if DEBUG
                     CameraProbe.shared.event("\(event)")
-                    #endif
                     handleGesture(event)
                 }
+                gestures.onAttach = { CameraProbe.shared.event("erkenner \($0)") }
+                CameraProbe.shared.uploader = { [client = model.client] lines in try? await client?.sendCameraDiagnosis(lines) }
             }
 
             .onMapCameraChange(frequency: .onEnd) { context in
@@ -305,9 +303,7 @@ struct MapScreen: View {
                 if pin == .heading, (location.current?.speed ?? 0) < 1 { followTick() }
             }
             .onChange(of: pin, initial: true) { _, new in
-                #if DEBUG
                 CameraProbe.shared.event("pin \(new.map { $0 == .heading ? "heading" : "north" } ?? "none")")
-                #endif
                 ownMarkerOptions.showsStreet = new != nil
                 if new == nil { settling = false }
             }
@@ -381,7 +377,7 @@ struct MapScreen: View {
         }
         .overlay(alignment: .topLeading) {
             if settings.showsCameraDebug {
-                CameraDebugOverlay(state: cameraState, pin: pin, navigating: route.isActive)
+                CameraDebugOverlay(state: cameraState, pin: pin, navigating: route.isActive, gestures: gestures, settling: settling)
                     .padding(.leading, Theme.barInset)
                     .padding(.top, topAreaHeight + Theme.barSpacing)
             }

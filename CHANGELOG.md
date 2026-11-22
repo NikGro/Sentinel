@@ -1,5 +1,18 @@
 # Änderungen
 
+## 0.28.0
+
+**Kamera**
+- Beginnt eine Geste, hält die App eine laufende Kamerafahrt der Nachführung sofort an. Im Stand dauern diese Fahrten
+  bis 2,5 s und überschrieben sonst Zoomen und Kippen mit dem alten Abstand und Winkel
+- Nach Kippen wird der genaue Winkel übernommen (vorher in 2°-Schritten)
+
+**Fehlersuche**
+- Mehr › Entwickler: „Kamera-Messdaten senden“ schickt Kamerawerte und Gesten alle zehn Sekunden an den eigenen Server
+- Kamerawerte-Overlay zeigt zusätzlich, ob MapKits Gestenerkenner gefunden wurden, ob eine Geste läuft und das letzte
+  Ereignis
+- Kamera-Test: neuer Fall „Zoomen im Stand mit seltenen GPS-Meldungen“
+
 ## 0.27.0
 
 **Kamera beim Anheften: eine einzige Steuerung, Gesten aus MapKits eigenen Erkennern**

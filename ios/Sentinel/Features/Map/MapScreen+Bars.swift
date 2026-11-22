@@ -191,6 +191,9 @@ extension MapScreen {
         case .began:
             settling = false
             multiTouchGesture = false
+            // Eine laufende Kamerafahrt der Nachführung (bis 2,5 s lang) sofort anhalten: Sie liefe sonst weiter und
+            // überschriebe Zoomen und Kippen mit dem alten Abstand und Winkel.
+            if pin != nil { stopFollowAnimation() }
         case .panned(let distance, let touches):
             // Nur echtes Verschieben mit einem Finger: Hebt man beim Zoomen einen Finger zuerst, läuft das Verschieben
             // weiter, zählt aber nicht.
@@ -212,12 +215,20 @@ extension MapScreen {
         }
     }
 
+    /// Hält eine laufende Kamerafahrt an der aktuellen Stelle an (ohne Animation, ohne Sprung).
+    func stopFollowAnimation() {
+        var transaction = Transaction(animation: nil)
+        transaction.disablesAnimations = true
+        withTransaction(transaction) { camera = .camera(cameraState.camera()) }
+        lastFollowTarget = nil
+    }
+
     /// Nach Zoomen, Kippen oder Doppeltippen: Abstand und Winkel übernehmen, kurz zurück auf den Standort gleiten.
     func settleAfterGesture() {
         settling = false
         guard pin != nil else { return }
         followDistance = cameraState.distance
-        followPitch = cameraState.pitch
+        followPitch = cameraState.exactPitch
         lastFollowTarget = nil
         nextFollowDuration = 0.35
         followTick()

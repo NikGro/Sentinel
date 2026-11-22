@@ -122,6 +122,18 @@ test('Verwaltung ist auch für Fahnder-Geräte erreichbar, das Verwaltungspasswo
   assert.equal(password.status, 403);
 });
 
+test('Kamera-Messdaten vom Gerät werden je Gerät abgelegt, nur angemeldet', async () => {
+  const { token, deviceId } = await enroll();
+  const body = JSON.stringify({ zeilen: ['{"t":1,"d":550}', '{"t":2,"ereignis":"began"}'] });
+  assert.equal((await fetch(`${base}/api/v1/diagnose/kamera`, { method: 'POST', headers: { 'content-type': 'application/json' }, body })).status, 401);
+  const ok = await fetch(`${base}/api/v1/diagnose/kamera`, { method: 'POST', headers: { authorization: `Bearer ${token}`, 'content-type': 'application/json' }, body });
+  assert.equal(ok.status, 200);
+  const { readFileSync } = await import('node:fs');
+  const { join } = await import('node:path');
+  const text = readFileSync(join(services.config.dataDir, 'diagnose', `kamera-${deviceId}.jsonl`), 'utf8');
+  assert.equal(text.trim().split('\n').length, 2);
+});
+
 test('Weg-Zeit-Berechnung liefert je Fortbewegungsart eine Fläche', async () => {
   const { token } = await enroll();
   const response = await fetch(`${base}/api/v1/reach`, { method: 'POST', headers: { authorization: `Bearer ${token}`, 'content-type': 'application/json' }, body: JSON.stringify({ lat: 53.55, lon: 9.99, minuten: 15, modi: ['fuss', 'kfz', 'oepnv'] }) });

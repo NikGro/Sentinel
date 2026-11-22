@@ -11,6 +11,9 @@ import SwiftUI
 final class MapCameraState {
     private(set) var heading: CLLocationDirection = 0
     private(set) var pitch: Double = 0
+    /// Genaue Werte ohne Beobachtung (Richtung und Winkel oben werden nur bei merklicher Änderung weitergegeben).
+    @ObservationIgnored private(set) var exactHeading: CLLocationDirection = 0
+    @ObservationIgnored private(set) var exactPitch: Double = 0
     /// Mittelpunkt der Kamera; liest nur der Pfeil im Fahrmodus, der damit flüssig mitläuft.
     private(set) var center = CLLocationCoordinate2D(latitude: 53.55, longitude: 10.0)
     @ObservationIgnored private(set) var distance: CLLocationDistance = 2500
@@ -20,6 +23,8 @@ final class MapCameraState {
             center = camera.centerCoordinate
         }
         distance = camera.distance
+        exactHeading = camera.heading
+        exactPitch = camera.pitch
         // Nur merkliche Änderungen weitergeben, sonst würden Kompass und Kippknopf ständig neu gezeichnet.
         if abs(camera.heading - heading) > 1 { heading = camera.heading }
         if abs(camera.pitch - pitch) > 2 { pitch = camera.pitch }
@@ -28,7 +33,7 @@ final class MapCameraState {
     var is3D: Bool { pitch > 10 }
 
     func camera(heading: CLLocationDirection? = nil, pitch: Double? = nil) -> MapCamera {
-        MapCamera(centerCoordinate: center, distance: distance, heading: heading ?? self.heading, pitch: pitch ?? self.pitch)
+        MapCamera(centerCoordinate: center, distance: distance, heading: heading ?? exactHeading, pitch: pitch ?? exactPitch)
     }
 }
 

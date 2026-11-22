@@ -2,8 +2,9 @@ import MapKit
 import Observation
 import SwiftUI
 
-#if DEBUG
-/// Messfühler für automatische Kameratests (nur Testbuilds, Startargument `-kameraprobe`): schreibt bei jeder
+/// Messfühler für Kameratests und die Fehlersuche auf dem Gerät. Eingeschaltet über das Startargument `-kameraprobe`
+/// (automatischer Test) oder den Entwickler-Schalter „Kamera-Messdaten senden“ (dann gehen die Zeilen alle zehn
+/// Sekunden an den eigenen Server, `diagnose/kamera-<Gerät>.jsonl`). Schreibt bei jeder
 /// Kamerabewegung und jedem Gesten-Ereignis eine Zeile nach `Documents/kamera.jsonl` und zeigt den aktuellen Stand
 /// als unsichtbares, für UI-Tests lesbares Element `kamera-probe`. So lässt sich Bild für Bild prüfen, ob die Kamera
 /// angeheftet bleibt, zoomt, pumpt oder sich löst.
@@ -11,7 +12,15 @@ import SwiftUI
 @Observable
 final class CameraProbe {
     static let shared = CameraProbe()
-    static var isEnabled: Bool { ProcessInfo.processInfo.arguments.contains("-kameraprobe") }
+    static let settingsKey = "entwickler.kameradiagnose"
+    static var isTestRun: Bool { ProcessInfo.processInfo.arguments.contains("-kameraprobe") }
+    static var sendsToServer: Bool { UserDefaults.standard.bool(forKey: settingsKey) }
+    static var isEnabled: Bool { isTestRun || sendsToServer }
+
+    /// Versand an den Server (setzt die Karte, solange sie offen ist).
+    @ObservationIgnored var uploader: (([String]) async -> Void)?
+    @ObservationIgnored private var outbox: [String] = []
+    @ObservationIgnored private var lastUpload = Date.now
 
     /// Aktueller Stand, z. B. „pin=heading d=550 p=40 h=12 geste=0“.
     private(set) var summary = "pin=none"
@@ -43,6 +52,17 @@ final class CameraProbe {
     }
 
     private func write(_ line: String) {
+        if Self.sendsToServer {
+            outbox.append(line)
+            if outbox.count > 4000 { outbox.removeFirst(outbox.count - 4000) }
+            if Date.now.timeIntervalSince(lastUpload) > 10, let uploader {
+                lastUpload = .now
+                let lines = outbox
+                outbox.removeAll()
+                Task { await uploader(lines) }
+            }
+        }
+        guard Self.isTestRun else { return }
         buffer.append(line)
         guard Date.now.timeIntervalSince(lastFlush) > 0.5 || buffer.count > 200, let file else { return }
         lastFlush = .now
@@ -58,11 +78,12 @@ final class CameraProbe {
     }
 }
 
+#if DEBUG
 /// Bereich in der Bildmitte, auf den der Kamera-Test seine Gesten richtet (die Karte selbst meldet MapKit nicht immer
 /// als Element). Lässt alle Berührungen zur Karte durch.
 struct CameraGestureArea: View {
     var body: some View {
-        if CameraProbe.isEnabled {
+        if CameraProbe.isTestRun {
             GeometryReader { geometry in
                 Color.clear
                     .frame(width: geometry.size.width * 0.4, height: geometry.size.height * 0.2)
@@ -79,7 +100,7 @@ struct CameraGestureArea: View {
 /// Element mit dem Stand des Messfühlers, für UI-Tests.
 struct CameraProbeLabel: View {
     var body: some View {
-        if CameraProbe.isEnabled {
+        if CameraProbe.isTestRun {
             // Klein, aber sichtbar: Fast durchsichtige oder winzige Elemente blendet iOS für UI-Tests aus.
             Text(CameraProbe.shared.summary)
                 .font(.system(size: 9, design: .monospaced))

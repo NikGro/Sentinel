@@ -34,6 +34,12 @@ final class MapGestureWatcher: NSObject {
     var isActive: Bool { !active.isEmpty }
     /// Hängt der Beobachter an einer Karte? Sonst weiß die App nichts über Gesten.
     var isAttached: Bool { map != nil && !watched.isEmpty }
+    /// Gefundene Erkenner (Klassen), zur Fehlersuche; leer, solange keine Karte gefunden wurde.
+    private(set) var summary = "keine Karte gefunden"
+    /// Letztes Ereignis, für das Kamerawerte-Overlay.
+    private(set) var lastEvent = "–"
+    /// Wird nach dem ersten Anhängen einmal gemeldet (Messfühler).
+    var onAttach: ((String) -> Void)?
 
     /// Karte suchen (gleicher Bildschirm, nicht in einem darüberliegenden Fenster) und neue Erkenner anhängen.
     func attachIfNeeded() {
@@ -50,14 +56,21 @@ final class MapGestureWatcher: NSObject {
             }
         }
         guard let map else { return }
-        for recognizer in Self.recognizers(in: map, depth: 3) where !watched.contains(ObjectIdentifier(recognizer)) {
+        let before = watched.count
+        let all = Self.recognizers(in: map, depth: 3)
+        for recognizer in all where !watched.contains(ObjectIdentifier(recognizer)) {
             recognizer.addTarget(self, action: #selector(changed(_:)))
             watched.insert(ObjectIdentifier(recognizer))
+        }
+        if watched.count != before {
+            summary = "\(all.count) Erkenner: " + all.map { String(describing: type(of: $0)) }.joined(separator: ",")
+            onAttach?(summary)
         }
     }
 
     @objc private func changed(_ recognizer: UIGestureRecognizer) {
         let key = ObjectIdentifier(recognizer)
+        lastEvent = "\(type(of: recognizer)) \(recognizer.state.rawValue)"
         if let tap = recognizer as? UITapGestureRecognizer {
             if tap.state == .ended, tap.numberOfTapsRequired >= 2 { onEvent?(.zoomTapped) }
             return

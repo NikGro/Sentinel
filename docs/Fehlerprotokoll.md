@@ -43,6 +43,13 @@ gescheiterte Ansätze nicht wiederholt werden. Neue Versuche und Rückmeldungen 
 | 0.26 | Wie 0.23, Reihenfolge getauscht und einmal nachgesetzt | Zoomt wild rein und raus | Derselbe Grundfehler wie 0.23, Nachsetzen verstärkt das Pumpen |
 | 0.27 | Eigene Nachführung als einzige Steuerung; Gesten lesend an MapKits eigenen Erkennern (`MapGestureWatcher`) | Simulator, Kamera-Test komplett grün (Lauf 45014906691): Anheften 550 m/40°, beim Fahren konstant; Hineinzoomen behält Kopplung (550 → 270 m, danach konstant); Herauszoomen per Zwei-Finger-Tipp behält Kopplung (270 → 448 m, konstant); Drehen löst; Wischen löst nach 52 pt; Norden 1500 m/0°; kein Pumpen. Gerät: offen | — |
 
+Rückmeldung zu 0.27 vom Gerät (22.11.): Zoomen und Kippen gehen in der 3D-Ansicht nicht, obwohl der Simulator-Test
+grün war. Vermutungen (0.28): (a) MapKits Erkenner werden auf dem Gerät nicht gefunden; (b) eine laufende Kamerafahrt
+der Nachführung (im Stand bis 2,5 s, Kompass-Meldungen dazwischen) läuft während der Geste weiter und überschreibt sie.
+0.28: Fahrt beim Gestenbeginn anhalten; Test um „Zoomen im Stand mit seltenen GPS-Meldungen“ erweitert; Messdaten vom
+Gerät über den Entwickler-Schalter „Kamera-Messdaten senden“ (Server: `/data/diagnose/kamera-<Gerät>.jsonl`), Overlay
+zeigt Erkenner und Gesten. Lücke des Tests: Der Simulator hat keinen Kompass, Kippen ist nicht simulierbar.
+
 ### Nicht wiederholen
 
 - MapKits `userTrackingMode` oder `.userLocation` zusammen mit SwiftUIs `Map(position:)`: zwei Steuerungen.

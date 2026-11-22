@@ -66,6 +66,18 @@ final class KameraTests: XCTestCase {
         }
     }
 
+    /// Im Stand wie auf dem Gerät: seltene GPS-Meldungen mit leichtem Zittern der Position. Jede Meldung startet eine
+    /// Kamerafahrt, die bis zur nächsten dauert (bis 2,5 s); genau in eine solche Fahrt fällt dann die Geste.
+    private func stand(steps: Int = 1, pause: TimeInterval = 2.5) {
+        for i in 0..<steps {
+            let jitter = (i % 2 == 0 ? 1.0 : -1.0) * 0.00002
+            XCUIDevice.shared.location = XCUILocation(location: CLLocation(
+                coordinate: CLLocationCoordinate2D(latitude: position.latitude + jitter, longitude: position.longitude),
+                altitude: 10, horizontalAccuracy: 8, verticalAccuracy: 8, course: -1, speed: 0, timestamp: .now))
+            Thread.sleep(forTimeInterval: pause)
+        }
+    }
+
     /// Fährt weiter und sammelt dabei Messwerte, z. B. um Pumpen (schwankenden Zoom) zu erkennen.
     private func samples(seconds: Double) -> [Probe] {
         var result: [Probe] = []
@@ -144,6 +156,23 @@ final class KameraTests: XCTestCase {
         let zs = nachZoom.map(\.distance)
         XCTAssertLessThan((zs.max() ?? 0) - (zs.min() ?? 0), 60, "Zoom bleibt und pumpt nicht: \(zs)")
         XCTAssertTrue(nachZoom.allSatisfy { $0.pin == "heading" }, "bleibt nach dem Zoomen angeheftet")
+
+        // 3b. Im Stand mit seltenen GPS-Meldungen (wie auf dem Gerät): Die Geste fällt in eine lange Kamerafahrt der
+        // Nachführung. Zoom muss trotzdem greifen und bleiben (auf dem Gerät schlug genau das fehl).
+        stand(steps: 3)
+        let vorher = probe().distance
+        stand(steps: 1, pause: 0.15)
+        map.pinch(withScale: 1.8, velocity: 1.2)
+        stand(steps: 2)
+        p = probe()
+        capture("k2b-zoomen-im-stand")
+        XCTAssertEqual(p.pin, "heading", "Zoomen im Stand löst die Kopplung nicht")
+        XCTAssertLessThan(p.distance, vorher * 0.8, "Zoom im Stand greift (vorher \(vorher) m, jetzt \(p.distance) m)")
+        let imStand = (0..<4).map { _ -> Double in
+            stand(steps: 1, pause: 1.2)
+            return probe().distance
+        }
+        XCTAssertLessThan((imStand.max() ?? 0) - (imStand.min() ?? 0), 40, "Zoom bleibt im Stand: \(imStand)")
 
         // 4. Herauszoomen ebenso: Tippen mit zwei Fingern (zoomt in MapKit heraus). Ein simuliertes Zusammenziehen setzt
         // die Finger so weit auseinander an, dass einer die Tab-Leiste trifft.
