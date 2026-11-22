@@ -259,7 +259,6 @@ struct ArgusImportScreen: View {
         return formatter
     }()
 }
-}
 
 // MARK: GPS-Tracker
 
