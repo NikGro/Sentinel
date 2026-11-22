@@ -89,6 +89,11 @@ jobs:
           grep -hE "(error|failed|XCTAssert|Test Case .* (passed|failed))" build-kamera-test.log | sort -u > build/kamera/ergebnis.txt || true
           cat build/kamera/ergebnis.txt || true
           ls -la build/kamera
+          # Absturzberichte der App lesbar ins Protokoll (Ausnahme und abgestürzter Faden).
+          find build/kamera/fotos -name "*.ips" | while read -r f; do
+            echo "===== ABSTURZ $f"
+            python3 ../tools/absturz_lesen.py "$f" || head -c 6000 "$f"
+          done
 
       # Die Artefakte liegen bei einem Speicherdienst, den manche Umgebungen nicht erreichen; deshalb Auswertung,
       # Messdatei und verkleinerte Einzelbilder zusätzlich kodiert ins Protokoll (zwischen klaren Markierungen).
