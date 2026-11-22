@@ -83,6 +83,15 @@ Kamera während der Geste weiter und schluckt sie. Abbrechen geht nicht (bricht 
 Annäherung; Kameraposition in eigenem Objekt (nur die Karte wird aufgefrischt). Test: Zoomen beim Fahren mit GPS je
 Sekunde.
 
+Gerätedaten 0.29 (18:28, Kompassmodus): Während der Zoom-Geste wechseln die Kamerawerte Bild für Bild zwischen Geste
+(546, 529, …) und laufender Nachführungsfahrt (557, 556, …); die Fahrt gewinnt. Norden-Modus: Zoomen und Kippen
+übernommen (791 m, 1139 m, 51°). Lahmes Folgen: Fahrt jeweils 1 s zur schon alten GPS-Position.
+0.30 (10 Hz, je 0,1 s) im Kamera-Test und UI-Rundgang durchgefallen: Gesten beginnen nicht mehr (Wischen löst nicht,
+Zoom greift nicht), Abstand stellt sich nicht ein, Antipper kommen nicht an. Nicht veröffentlicht.
+FAZIT: Eigene Nachführung über SwiftUIs `Map(position:)` ist ausgereizt (lange Fahrten schlucken Gesten, häufige
+Schritte verhindern Gesten, Abbrechen bricht Gesten ab). Nächster Weg: Apples `.userLocation` mit Abstand über
+`MapCameraBounds` (Versuch auf dem Arbeitszweig, nur Kamera-Test).
+
 ### Nicht wiederholen
 
 - Kamera (SwiftUI-Position) während oder zu Beginn einer Geste setzen: bricht die Geste ab.
@@ -92,6 +101,7 @@ Sekunde.
 - SwiftUI-Gesten (`simultaneousGesture`, `SpatialEventGesture`) an der Karte zur Gestenerkennung.
 - Nachführung während einer laufenden Geste.
 - Lange Kamerafahrten (über ~0,2 s) in der Nachführung: laufen in eine Geste hinein und schlucken sie.
+- Kamera häufig setzen (10 Hz, 0.30): Gesten beginnen nicht mehr, Antipper gehen verloren.
 
 ### Falls 0.27 scheitert
 
