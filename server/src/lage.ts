@@ -15,6 +15,7 @@ import {
   type EntityData,
   type Fortbewegung,
   type Kind,
+  type LeapfrogKurs,
   type LeapfrogStop,
   type OepnvFahrt,
   type Operation,
@@ -64,7 +65,6 @@ const TRACK_MIN_DISTANCE_M = 12;
 const TRACK_MAX_ACCURACY_M = 60;
 /** Ältere Bestreifung wird verworfen, damit die Datenbank nicht unbegrenzt wächst. */
 const TRACK_RETENTION_MS = 72 * 3600_000;
-const LEAPFROG_STOPS = 8;
 /** Name der Standardinstanz. */
 const STANDARD_INSTANZ_NAME = 'KSOD';
 const MAX_INSTANCES = 200;
@@ -74,7 +74,7 @@ const DEFAULT_OPERATION: Operation = {
   titel: '',
   hinweise: '',
   a: null,
-  ueberschlagen: { teilnehmer: [], zuweisungen: {}, naechste: [] },
+  ueberschlagen: { teilnehmer: [], zuweisungen: {}, naechste: [], kurs: null },
   sos: null,
   fahrzeuge: [],
   ziele: [],
@@ -436,6 +436,9 @@ export class Lage extends EventEmitter<{ event: [LageEvent] }> {
       if (p) this.spuren.add('target', t.id, '', p);
     }
     this.checkGeofences(now);
+    for (const instance of this.list('instance')) {
+      if (this.operationOf(instance.id).ueberschlagen.teilnehmer.length) this.updateLeapfrog(instance.id, now);
+    }
     const inUse = new Set(this.list('instance').flatMap((i) => this.operationOf(i.id).fahrzeuge));
     for (const v of this.list('vehicle')) {
       if (v.data.aufzeichnung === false || !inUse.has(v.id)) continue;
@@ -595,12 +598,24 @@ export class Lage extends EventEmitter<{ event: [LageEvent] }> {
         this.setActive(actor, args.aktiv as boolean);
         break;
       case 'ueberschlagen.beitreten': {
+        const op = this.operationOf(here);
+        const kurs = ((args as { kurs?: LeapfrogKurs | null } | undefined)?.kurs) ?? op.ueberschlagen.kurs ?? null;
         if (actor.role !== 'fahnder') throw new LageError('verboten', 'Nur Fahnder können überschlagend anfahren.');
-        if (op.a?.memberId === actor.id) throw new LageError('konflikt', 'Wer die A hält, fährt nicht überschlagend.');
-        if (!op.ueberschlagen.teilnehmer.includes(actor.id)) {
-          this.updateOperation(here, { ueberschlagen: { ...op.ueberschlagen, teilnehmer: [...op.ueberschlagen.teilnehmer, actor.id] } });
-          this.updateLeapfrog(here);
+        // Wer selbst im angefahrenen Fahrzeug sitzt (die A hält bzw. der Fahnder selbst), fährt nicht überschlagend.
+        if ((kurs?.art ?? 'a') === 'a' && op.a?.memberId === actor.id) throw new LageError('konflikt', 'Wer die A hält, fährt nicht überschlagend.');
+        if (kurs?.art === 'member' && kurs.id === actor.id) throw new LageError('konflikt', 'Das eigene Fahrzeug lässt sich nicht überschlagend anfahren.');
+        // Andere fahren schon überschlagend: nur mitmachen, wenn es dasselbe Fahrzeug ist.
+        const others = op.ueberschlagen.teilnehmer.filter((id) => id !== actor.id);
+        if (others.length > 0) {
+          const running = this.leapfrogCourse(here, op.ueberschlagen.kurs ?? null);
+          const wanted = this.leapfrogCourse(here, kurs);
+          if (running && wanted && running.key !== wanted.key) {
+            throw new LageError('konflikt', 'Es wird bereits ein anderes ÖPNV-Fahrzeug überschlagend angefahren.');
+          }
         }
+        const teilnehmer = op.ueberschlagen.teilnehmer.includes(actor.id) ? op.ueberschlagen.teilnehmer : [...op.ueberschlagen.teilnehmer, actor.id];
+        this.updateOperation(here, { ueberschlagen: { ...op.ueberschlagen, teilnehmer, kurs: others.length > 0 ? (op.ueberschlagen.kurs ?? kurs) : kurs } });
+        this.updateLeapfrog(here);
         break;
       }
       case 'ueberschlagen.verlassen':
@@ -862,21 +877,20 @@ export class Lage extends EventEmitter<{ event: [LageEvent] }> {
     if (!current.teilnehmer.includes(memberId)) return;
     const zuweisungen = { ...current.zuweisungen };
     delete zuweisungen[memberId];
-    this.updateOperation(inst, { ueberschlagen: { ...current, teilnehmer: current.teilnehmer.filter((id) => id !== memberId), zuweisungen } });
+    const teilnehmer = current.teilnehmer.filter((id) => id !== memberId);
+    this.updateOperation(inst, { ueberschlagen: { ...current, teilnehmer, zuweisungen, kurs: teilnehmer.length ? current.kurs ?? null : null } });
   }
 
   /**
-   * Überschlagendes Anfahren: Solange die A im ÖPNV fährt, wird jedem Teilnehmer eine der kommenden Haltestellen
-   * zugewiesen. Bestehende Zuweisungen bleiben, solange die Haltestelle noch vor der A liegt; ist die A vorbei,
-   * erhält der Teilnehmer die nächste noch unbesetzte Haltestelle dahinter.
+   * Überschlagendes Anfahren eines ÖPNV-Fahrzeugs: über die A, einen Fahnder, ein Ziel oder das Fahrzeug selbst. Es
+   * gibt so viele Halte im Voraus, wie Fahnder teilnehmen. Bestehende Zuweisungen bleiben, solange das Fahrzeug den
+   * Halt noch nicht verlassen hat; ist es abgefahren, erhält der dort Wartende den weitesten freien Halt dahinter.
    */
-  private updateLeapfrog(inst: string): void {
+  private updateLeapfrog(inst: string, now = Date.now()): void {
     const op = this.operationOf(inst);
-    const holder = op.a ? this.get('member', op.a.memberId) : null;
-    const position = op.a ? this.positions.get(op.a.memberId) : undefined;
-    const linienId = holder?.data.fortbewegung === 'oepnv' ? holder.data.oepnv?.linienId : undefined;
-    const naechste = linienId && position ? this.upcomingStops(linienId, position, LEAPFROG_STOPS) : [];
-
+    const count = Math.max(1, op.ueberschlagen.teilnehmer.length);
+    const course = this.leapfrogCourse(inst, op.ueberschlagen.kurs ?? null, now);
+    const naechste = course ? course.stops(count) : [];
     const key = (s: LeapfrogStop) => `${s.name}|${s.lat.toFixed(5)}|${s.lon.toFixed(5)}`;
     const upcomingKeys = naechste.map(key);
     const zuweisungen: Record<string, LeapfrogStop> = {};
@@ -898,8 +912,61 @@ export class Lage extends EventEmitter<{ event: [LageEvent] }> {
       zuweisungen[id] = free;
       taken.add(key(free));
     }
-    const next = { teilnehmer, zuweisungen, naechste };
+    const next = { teilnehmer, zuweisungen, naechste, kurs: op.ueberschlagen.kurs ?? null };
     if (JSON.stringify(next) !== JSON.stringify(op.ueberschlagen)) this.updateOperation(inst, { ueberschlagen: next });
+  }
+
+  /**
+   * Welches ÖPNV-Fahrzeug überschlagend angefahren wird und seine kommenden Halte. `key` ist für alle Wege zum
+   * selben Fahrzeug gleich (über das Ziel, die A oder das Fahrzeug selbst).
+   */
+  private leapfrogCourse(inst: string, kurs: LeapfrogKurs | null, now = Date.now()): { key: string; stops: (count: number) => LeapfrogStop[] } | null {
+    const art = kurs?.art ?? 'a';
+    if (art === 'object') return kurs?.id ? this.objectCourse(inst, kurs.id, now) : null;
+    if (art === 'target') {
+      let target = kurs?.id ? this.get('target', kurs.id) : null;
+      for (let depth = 0; target && depth < 3; depth++) {
+        const binding = target.data.bindung;
+        if (binding?.art === 'oepnv' && binding.zielId) return this.objectCourse(inst, binding.zielId, now);
+        if (binding?.art === 'fahrzeug' && binding.zielId) {
+          target = this.get('target', binding.zielId);
+          continue;
+        }
+        // Ohne Bindung, aber an der A: dann über die A.
+        if (target.data.quelle === 'a') return this.memberCourse(inst, this.operationOf(inst).a?.memberId);
+        return null;
+      }
+      return null;
+    }
+    return this.memberCourse(inst, art === 'a' ? this.operationOf(inst).a?.memberId : kurs?.id, now);
+  }
+
+  /** Fahnder im ÖPNV: dieselbe Fahrt als Markierung in der Lage, sonst die OSM-Linie ab seinem Standort. */
+  private memberCourse(inst: string, memberId: string | undefined, now = Date.now()): { key: string; stops: (count: number) => LeapfrogStop[] } | null {
+    const member = memberId ? this.get('member', memberId) : null;
+    const fahrt = member?.data.fortbewegung === 'oepnv' ? member.data.oepnv : null;
+    if (!member || !fahrt) return null;
+    const object = this.list('annotation', inst).find((a) => a.data.fahrt?.id === fahrt.linienId);
+    if (object) return this.objectCourse(inst, object.id, now);
+    const position = this.positions.get(member.id);
+    if (!position) return null;
+    return { key: `linie:${fahrt.linienId}:${member.id}`, stops: (count) => this.upcomingStops(fahrt.linienId, position, count) };
+  }
+
+  /** ÖPNV-Fahrzeug mit echten Zeiten: Halte, die es noch nicht verlassen hat (die Zeit eines Halts gilt als Abfahrt). */
+  private objectCourse(inst: string, objectId: string, now = Date.now()): { key: string; stops: (count: number) => LeapfrogStop[] } | null {
+    const object = this.get('annotation', objectId, inst);
+    const fahrt = object?.data.fahrt;
+    if (!object || !fahrt) return null;
+    const { punkte, haltNamen } = object.data;
+    return {
+      key: `fahrt:${fahrt.id}`,
+      stops: (count) => punkte
+        .map((p, i) => ({ p, i, t: fahrt.zeiten[i] ?? null }))
+        .filter(({ t, i }) => i > 0 && t !== null && t > now)
+        .slice(0, count)
+        .map(({ p, i }) => ({ name: haltNamen?.[i] ?? `Halt ${i + 1}`, lat: p.lat, lon: p.lon })),
+    };
   }
 
   private resetCoverage(inst: string): void {

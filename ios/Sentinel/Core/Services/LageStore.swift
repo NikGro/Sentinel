@@ -370,7 +370,11 @@ final class LageStore {
     func setChannel(_ channel: String?) { command("funkkanal.setzen", args: ["kanal": channel]) }
     func setSituation(title: String, notes: String) { command("lage.setzen", args: ["titel": title, "hinweise": notes]) }
     func resetCoverage() { command("bestreifung.zuruecksetzen") }
-    func joinLeapfrog() { command("ueberschlagen.beitreten") }
+    /// Überschlagend anfahren; `kurs` sagt, welches ÖPNV-Fahrzeug (über die A, einen Fahnder, ein Ziel oder das Fahrzeug).
+    func joinLeapfrog(kurs: LeapfrogCourse? = nil) {
+        struct Args: Encodable { let kurs: LeapfrogCourse? }
+        command("ueberschlagen.beitreten", args: Args(kurs: kurs))
+    }
     func leaveLeapfrog() { command("ueberschlagen.verlassen") }
     func resetSituation(includingTargets: Bool) { command("lage.zuruecksetzen", args: ["ziele": includingTargets]) }
 

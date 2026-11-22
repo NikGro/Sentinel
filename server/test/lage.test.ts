@@ -157,6 +157,31 @@ test('Überschlagendes Anfahren: Teilnehmer erhalten die kommenden Halte und rü
   assert.deepEqual(z(), {});
 });
 
+test('Überschlagend zu einem ÖPNV-Fahrzeug: über das Ziel und das Fahrzeug selbst, Halte nach Abfahrt', () => {
+  const lage = newLage();
+  for (const id of ['a', 'b', 'c']) lage.put(fahnder(id), 'member', id, profil(id));
+  const t0 = Date.now() + 60_000;
+  const punkte = [0, 1, 2, 3, 4].map((i) => ({ lat: 53.5 + i * 0.01, lon: 10 }));
+  lage.put(fahnder('a'), 'annotation', 'bus', {
+    layerId: LAYER_LAGE, typ: 'oepnvfahrzeug', punkte, zeit: t0, haltNamen: ['H0', 'H1', 'H2', 'H3', 'H4'],
+    linie: { id: 'trip-1', ref: '5', typ: 'bus', richtung: 'Nord' },
+    fahrt: { id: 'trip-1', zeiten: punkte.map((_, i) => t0 + i * 120_000) },
+  });
+  lage.put(fahnder('a'), 'target', 'z', { vorname: 'Max', bindung: { art: 'oepnv', zielId: 'bus' } });
+  lage.command(fahnder('a'), 'ueberschlagen.beitreten', { kurs: { art: 'target', id: 'z' } });
+  lage.command(fahnder('b'), 'ueberschlagen.beitreten', { kurs: { art: 'object', id: 'bus' } });
+  const z = () => Object.fromEntries(Object.entries(lage.operation.ueberschlagen.zuweisungen).map(([k, v]) => [k, v.name]));
+  // Zwei Teilnehmer: zwei Halte im Voraus.
+  assert.deepEqual(z(), { a: 'H1', b: 'H2' });
+  // Der Bus verlässt H1: wer dort wartete, bekommt den weitesten Halt.
+  lage.recordSpuren(t0 + 130_000);
+  assert.deepEqual(z(), { a: 'H3', b: 'H2' });
+  // Ein dritter kommt dazu: drei Halte im Voraus, er bekommt den nächsten freien.
+  lage.command(fahnder('c'), 'ueberschlagen.beitreten', { kurs: { art: 'object', id: 'bus' } });
+  lage.recordSpuren(t0 + 130_000);
+  assert.deepEqual(z(), { a: 'H3', b: 'H2', c: 'H4' });
+});
+
 test('Tracker-Intervall nur für SinoTrack, wird an das Gerät weitergegeben', () => {
   const lage = newLage();
   lage.put(zentrale, 'tracker', 'tr1', { name: 'ST', anbieter: 'sinotrack', kennung: '9170123456' });

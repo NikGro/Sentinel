@@ -10,16 +10,28 @@ struct TransitAheadPicker: View {
     @Environment(AppModel.self) private var model
     @Environment(RouteFollower.self) private var route
 
+    /// Das eigentliche Ziel im ÖPNV, auch während man überschlagend zu einem zugewiesenen Halt fährt.
+    private var base: NavigationTarget? {
+        route.target == .leapfrog ? (model.leapfrogBase ?? .aPosition) : route.target?.base
+    }
+
     var body: some View {
-        // Ohne Text, im unteren Navi-Fenster: Fahrzeug selbst oder 1 bis 3 Halte voraus.
-        if let base = route.target?.base, model.transitCourse(of: base) != nil {
+        // Ohne Text, im unteren Navi-Fenster: Fahrzeug selbst, 1 bis 3 Halte voraus oder überschlagend (so viele Halte
+        // voraus, wie Fahnder mitmachen; der Server verteilt sie und rückt nach).
+        if let base, model.transitCourse(of: base) != nil {
             GlassSegmentedControl(
-                items: [(0, "tram.fill", "Zum Fahrzeug"), (1, "1.circle.fill", "1 Halt voraus"), (2, "2.circle.fill", "2 Halte voraus"), (3, "3.circle.fill", "3 Halte voraus")],
-                selection: route.target?.stopsAhead ?? 0
-            ) { stops in
+                items: [(0, "tram.fill", "Zum Fahrzeug"), (1, "1.circle.fill", "1 Halt voraus"), (2, "2.circle.fill", "2 Halte voraus"),
+                        (3, "3.circle.fill", "3 Halte voraus"), (-1, "arrow.triangle.2.circlepath", "Überschlagend")],
+                selection: route.target == .leapfrog ? -1 : (route.target?.stopsAhead ?? 0)
+            ) { choice in
                 // Nur das Ziel wechselt; Sonderrechte bleiben, wie sie waren.
                 let special = route.specialRights
-                model.navigate(to: stops == 0 ? base : .ahead(base, stops: stops))
+                if choice == -1 {
+                    model.leapfrogBase = base
+                    model.navigate(to: .leapfrog)
+                } else {
+                    model.navigate(to: choice == 0 ? base : .ahead(base, stops: choice))
+                }
                 route.specialRights = special
             }
         }

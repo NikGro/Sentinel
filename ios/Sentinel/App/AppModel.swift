@@ -266,11 +266,18 @@ final class AppModel {
     /// Fahrten von Fahndern im ÖPNV (nach Fahrt-ID), für „Halte voraus“; nur geladen, wenn man zu ihnen navigiert.
     private(set) var memberTrips: [String: TripDetail] = [:]
 
+    /// Beim überschlagenden Anfahren: das eigentliche Ziel im ÖPNV (Ziel, Fahnder, A oder Fahrzeug), für die Auswahl
+    /// im Navi-Fenster und den Kurs auf dem Server. `nil` heißt: über die A.
+    var leapfrogBase: NavigationTarget?
+
     /// Startet die dynamische Routenführung zu einem (auch bewegten) Ziel.
     func navigate(to target: NavigationTarget) {
         loadTripIfNeeded(for: target.base)
-        if target == .leapfrog, !lage.joinedLeapfrog { lage.joinLeapfrog() }
-        if case .leapfrog = route.target, target != .leapfrog { lage.leaveLeapfrog() }
+        if target == .leapfrog, !lage.joinedLeapfrog { lage.joinLeapfrog(kurs: leapfrogBase.flatMap { LeapfrogCourse($0) }) }
+        if case .leapfrog = route.target, target != .leapfrog {
+            lage.leaveLeapfrog()
+            leapfrogBase = nil
+        }
         route.start(
             target,
             origin: { [weak self] in self?.myPoint },
@@ -301,12 +308,17 @@ final class AppModel {
                 return course
             }
             return memberTrips[trip.linienId].flatMap { TransitCourse($0) }
+        case .aPosition:
+            // Die A im ÖPNV: dieselbe Fahrt wie bei dem, der sie gerade hält.
+            guard let holder = lage.aHolder else { return nil }
+            return transitCourse(of: .member(holder.id))
         default:
             return nil
         }
     }
 
     private func loadTripIfNeeded(for target: NavigationTarget) {
+        let target: NavigationTarget = if case .aPosition = target, let holder = lage.aHolder { .member(holder.id) } else { target }
         guard case .member(let id) = target, let member = lage.members[id]?.data, member.fortbewegung == .oepnv,
               let tripId = member.oepnv?.linienId, memberTrips[tripId] == nil,
               !lage.mapObjects.values.contains(where: { $0.data.fahrt?.id == tripId }), let client else { return }
@@ -317,6 +329,7 @@ final class AppModel {
 
     func stopNavigation() {
         if route.target == .leapfrog { lage.leaveLeapfrog() }
+        leapfrogBase = nil
         route.stop()
     }
 

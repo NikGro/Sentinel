@@ -321,6 +321,13 @@ export type Position = z.output<typeof position>;
 
 export const funkkanal = z.string().regex(/^\d{1,5}$/, 'Funkkanal: 1 bis 5 Ziffern');
 
+/**
+ * Was überschlagend angefahren wird: die A (wer sie gerade hält), ein Fahnder, ein Ziel oder ein ÖPNV-Fahrzeug
+ * (Markierung). Alle führen auf dasselbe Fahrzeug, wenn sie darin sitzen.
+ */
+export const leapfrogKurs = z.object({ art: z.enum(['a', 'member', 'target', 'object']), id: id.optional() });
+export type LeapfrogKurs = z.output<typeof leapfrogKurs>;
+
 export interface LeapfrogStop {
   name: string;
   lat: number;
@@ -338,7 +345,7 @@ export interface Operation {
    * Überschlagendes Anfahren der nächsten Haltestellen, solange die A im ÖPNV fährt.
    * `zuweisungen` ordnet jedem Teilnehmer die anzufahrende Haltestelle zu; `naechste` sind die kommenden Halte der A.
    */
-  ueberschlagen: { teilnehmer: string[]; zuweisungen: Record<string, LeapfrogStop>; naechste: LeapfrogStop[] };
+  ueberschlagen: { teilnehmer: string[]; zuweisungen: Record<string, LeapfrogStop>; naechste: LeapfrogStop[]; kurs?: LeapfrogKurs | null };
   /** Notruf eines Fahnders: Alle anderen werden sofort mit Sonderrechten zu ihm geführt. */
   sos: { memberId: string; seit: number } | null;
   /** Fahrzeuge, die in dieser Instanz im Einsatz sind (je Instanz, nicht serverweit). */
@@ -371,7 +378,7 @@ export const commandArgs = {
     oepnv: oepnvFahrt.nullish(),
   }),
   'aktiv.setzen': z.object({ aktiv: z.boolean() }),
-  'ueberschlagen.beitreten': z.object({}).optional(),
+  'ueberschlagen.beitreten': z.object({ kurs: leapfrogKurs.nullish() }).optional(),
   'ueberschlagen.verlassen': z.object({}).optional(),
   'tracker.intervall': z.object({ trackerId: id, sekunden: z.number().int().min(10).max(3600) }),
   'fahrzeug.aktivieren': z.object({ fahrzeugId: id, aktiv: z.boolean() }),

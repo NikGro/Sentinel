@@ -1,5 +1,16 @@
 # Änderungen
 
+## 0.24.0
+
+**Überschlagendes Navigieren zu ÖPNV-Fahrzeugen**
+- Neue Auswahl im Navi-Fenster neben „Fahrzeug“ und „1–3 Halte voraus“: überschlagend
+- Geht zu jedem Ziel im ÖPNV: einem Ziel, das darin sitzt, einem Fahnder oder der A im ÖPNV oder dem
+  ÖPNV-Fahrzeug selbst. Wege zum selben Fahrzeug zählen zusammen
+- So viele Halte im Voraus, wie Fahnder mitmachen. Verlässt das Fahrzeug einen Halt, bekommt der dort Wartende den
+  weitesten Halt; die anderen behalten ihre Halte und rücken nach, sobald ihr Halt passiert ist
+- Mit echten Fahrplanzeiten (ÖPNV-Fahrzeug aus der ÖPNV-Karte) zählt die Abfahrt am Halt; der Server prüft das
+  laufend
+
 ## 0.23.0
 
 **Kamera beim Anheften: eingebaute Standortverfolgung von MapKit**

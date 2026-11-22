@@ -256,6 +256,23 @@ struct ChatMessage: LageEntity {
     }
 }
 
+/// Was überschlagend angefahren wird (wie auf dem Server): die A, ein Fahnder, ein Ziel oder ein ÖPNV-Fahrzeug.
+struct LeapfrogCourse: Codable, Equatable, Hashable, Sendable {
+    var art: String
+    var id: String?
+
+    /// Aus dem Navigationsziel; `nil`, wenn es kein ÖPNV-Fahrzeug sein kann (z. B. ein fester Ort).
+    init?(_ target: NavigationTarget) {
+        switch target.base {
+        case .aPosition: art = "a"; id = nil
+        case .member(let memberId): art = "member"; id = memberId
+        case .target(let targetId): art = "target"; id = targetId
+        case .object(let objectId): art = "object"; id = objectId
+        default: return nil
+        }
+    }
+}
+
 struct LeapfrogStop: Codable, Equatable, Hashable, Sendable {
     var name: String
     var lat: Double
