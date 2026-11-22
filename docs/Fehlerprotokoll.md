@@ -15,6 +15,8 @@ gescheiterte Ansätze nicht wiederholt werden. Neue Versuche und Rückmeldungen 
   Einzelbilder per ffmpeg). Ist der Artefakt-Speicher nicht erreichbar (Netzsperre in der Claude-Umgebung):
   `tools/kamera_aus_protokoll.py <Ordner> [Lauf-ID]` holt Messdatei und Einzelbilder aus dem Ablaufprotokoll.
 - Grenze: Kippen mit zwei Fingern kann XCUITest nicht ausführen; das bleibt eine Prüfung auf dem Gerät.
+- Falle: Simuliertes Zusammenziehen (`pinch` mit Faktor < 1) setzt die Finger weit auseinander an; einer traf die
+  Tab-Leiste („Chat“), die Karte sah nur Verschieben. Herauszoomen deshalb per Tippen mit zwei Fingern prüfen.
 
 ## Kamera beim Anheften (Karte am eigenen Standort)
 

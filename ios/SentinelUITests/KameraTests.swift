@@ -145,8 +145,9 @@ final class KameraTests: XCTestCase {
         XCTAssertLessThan((zs.max() ?? 0) - (zs.min() ?? 0), 60, "Zoom bleibt und pumpt nicht: \(zs)")
         XCTAssertTrue(nachZoom.allSatisfy { $0.pin == "heading" }, "bleibt nach dem Zoomen angeheftet")
 
-        // 4. Herauszoomen ebenso.
-        map.pinch(withScale: 0.6, velocity: -1)
+        // 4. Herauszoomen ebenso: Tippen mit zwei Fingern (zoomt in MapKit heraus). Ein simuliertes Zusammenziehen setzt
+        // die Finger so weit auseinander an, dass einer die Tab-Leiste trifft.
+        map.twoFingerTap()
         drive(steps: 3)
         p = probe()
         XCTAssertEqual(p.pin, "heading", "Herauszoomen löst die Kopplung nicht")
