@@ -291,9 +291,7 @@ struct MapScreen: View {
                     handleGesture(event)
                 }
             }
-            #if DEBUG
-            .overlay(alignment: .topLeading) { CameraProbeLabel() }
-            #endif
+
             .onMapCameraChange(frequency: .onEnd) { context in
                 cameraState.update(context.camera)
                 // Ausgeschwungen nach einer Geste: Abstand und Winkel übernehmen.

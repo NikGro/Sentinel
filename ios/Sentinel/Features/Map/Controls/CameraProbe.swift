@@ -58,7 +58,25 @@ final class CameraProbe {
     }
 }
 
-/// Unsichtbares Element mit dem Stand des Messfühlers, für UI-Tests.
+/// Bereich in der Bildmitte, auf den der Kamera-Test seine Gesten richtet (die Karte selbst meldet MapKit nicht immer
+/// als Element). Lässt alle Berührungen zur Karte durch.
+struct CameraGestureArea: View {
+    var body: some View {
+        if CameraProbe.isEnabled {
+            GeometryReader { geometry in
+                Color.clear
+                    .frame(width: geometry.size.width * 0.6, height: geometry.size.height * 0.3)
+                    .position(x: geometry.size.width / 2, y: geometry.size.height * 0.5)
+                    .accessibilityElement()
+                    .accessibilityLabel("Kartenmitte")
+                    .accessibilityIdentifier("karte-gesten")
+                    .allowsHitTesting(false)
+            }
+        }
+    }
+}
+
+/// Element mit dem Stand des Messfühlers, für UI-Tests.
 struct CameraProbeLabel: View {
     var body: some View {
         if CameraProbe.isEnabled {

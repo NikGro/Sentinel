@@ -16,6 +16,11 @@ struct RootView: View {
             }
         }
         .animation(.default, value: lock.isLocked)
+        #if DEBUG
+        // Messfühler für den Kamera-Test auf oberster Ebene: Innerhalb der Karte verbirgt MapKit Unterelemente vor UI-Tests.
+        .overlay(alignment: .topLeading) { CameraProbeLabel() }
+        .overlay { CameraGestureArea() }
+        #endif
     }
 
     /// In einer Instanz (im Dienst) oder in einem Sonderbereich; außer Dienst bleibt nur das Hauptmenü.

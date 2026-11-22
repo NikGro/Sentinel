@@ -84,8 +84,12 @@ final class KameraTests: XCTestCase {
         add(attachment)
     }
 
-    /// Die Karte; falls MapKit sie nicht als Karte meldet, das Fenster (Gesten gehen dann auf die Bildmitte).
-    private var map: XCUIElement { app.maps.firstMatch.exists ? app.maps.firstMatch : app.windows.firstMatch }
+    /// Die Karte. MapKit meldet sie nicht immer als Karte; dann ein Ausschnitt in der Bildmitte, damit Gesten weder die
+    /// Tab-Leiste noch die Knöpfe am Rand treffen.
+    private var map: XCUIElement {
+        if app.maps.firstMatch.exists { return app.maps.firstMatch }
+        return app.otherElements.matching(NSPredicate(format: "identifier == 'karte-gesten'")).firstMatch
+    }
 
     private func pinHeading() {
         let button = app.buttons["Auf eigenen Standort anheften"]
@@ -102,8 +106,16 @@ final class KameraTests: XCTestCase {
     // MARK: Prüfungen
 
     func testKameraBeimAnheften() {
+        // Standortabfrage des Systems sofort beantworten (sonst hängt sie lange über der Karte).
+        let springboard = XCUIApplication(bundleIdentifier: "com.apple.springboard")
+        for label in ["Allow While Using App", "Beim Verwenden der App erlauben", "Allow Once", "Einmal erlauben"] {
+            let button = springboard.buttons[label]
+            if button.waitForExistence(timeout: 3) {
+                button.tap()
+                break
+            }
+        }
         XCTAssertTrue(app.tabBars.buttons["Lage"].waitForExistence(timeout: 20), "Karte erscheint")
-        app.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.01)).tap()
         drive(steps: 4)
 
         // 1. Anheften in Kompass-Ausrichtung: 550 m, schräg.

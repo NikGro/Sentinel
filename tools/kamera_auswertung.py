@@ -67,7 +67,7 @@ def main() -> None:
         name = item["ereignis"]
         if name.startswith("panned") or name.startswith("rotated"):
             recent.append(t)
-        if name == "pin none" and not any(t - r < 1.5 for r in recent):
+        if name == "pin none" and t > 2 and not any(t - r < 1.5 for r in recent):
             unexpected.append(t)
     print("Lösen ohne Verschieben/Drehen:", ", ".join(f"{t:.1f}s" for t in unexpected) or "keins")
 

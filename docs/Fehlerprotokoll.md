@@ -12,7 +12,8 @@ gescheiterte Ansätze nicht wiederholt werden. Neue Versuche und Rückmeldungen 
 - Ablauf `.github/workflows/kamera.yml` (bei jedem Push auf `ios/**` oder von Hand): Test mit Videoaufnahme;
   Artefakt `Kamera-<Nr>` mit `kamera.mp4`, `kamera.jsonl`, Bildschirmfotos und `ergebnis.txt`.
 - Auswertung: Artefakt laden, dann `tools/kamera_auswertung.py <Ordner>` (Zeitachse, Pumpen, ungewolltes Lösen,
-  Einzelbilder per ffmpeg).
+  Einzelbilder per ffmpeg). Ist der Artefakt-Speicher nicht erreichbar (Netzsperre in der Claude-Umgebung):
+  `tools/kamera_aus_protokoll.py <Ordner> [Lauf-ID]` holt Messdatei und Einzelbilder aus dem Ablaufprotokoll.
 - Grenze: Kippen mit zwei Fingern kann XCUITest nicht ausführen; das bleibt eine Prüfung auf dem Gerät.
 
 ## Kamera beim Anheften (Karte am eigenen Standort)
@@ -38,7 +39,7 @@ gescheiterte Ansätze nicht wiederholt werden. Neue Versuche und Rückmeldungen 
 | 0.22 | Finger zählen per eigenem `UIGestureRecognizer` am Fenster | „geht immer noch nicht richtig“ | Fingerzahl sagt nicht, was MapKit daraus macht; Rückfall über Kamerawerte |
 | 0.23 | MapKits `userTrackingMode` direkt an der `MKMapView` (Kamera setzen, dann Verfolgung) | Zoomt nach Erreichen wieder heraus, dreht im Kreis | Zwei Stellen steuern dieselbe Kamera (SwiftUI `position` und MapKit) |
 | 0.26 | Wie 0.23, Reihenfolge getauscht und einmal nachgesetzt | Zoomt wild rein und raus | Derselbe Grundfehler wie 0.23, Nachsetzen verstärkt das Pumpen |
-| 0.27 | Eigene Nachführung als einzige Steuerung; Gesten lesend an MapKits eigenen Erkennern (`MapGestureWatcher`) | offen | — |
+| 0.27 | Eigene Nachführung als einzige Steuerung; Gesten lesend an MapKits eigenen Erkennern (`MapGestureWatcher`) | Simulator (Kamera-Test 22.11.): Anheften 550 m/40°, beim Fahren konstant; Zoomen behält Kopplung, 550 → 270 m, danach 25 s konstant (kein Pumpen); Wischen löst nach 105 pt. Herauszoomen und Drehen noch nicht geprüft. Gerät: offen | — |
 
 ### Nicht wiederholen
 

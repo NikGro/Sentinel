@@ -89,18 +89,18 @@ jobs:
           which ffmpeg || brew install ffmpeg >/dev/null 2>&1 || true
           python3 ../tools/kamera_auswertung.py build/kamera 1 || true
           if [ -f build/kamera/kamera.jsonl ]; then
-            echo "=====MESSDATEI-ANFANG====="
+            echo "=====MESSDATEI-""ANFANG====="
             gzip -c build/kamera/kamera.jsonl | base64
-            echo "=====MESSDATEI-ENDE====="
+            echo "=====MESSDATEI-""ENDE====="
           fi
           if [ -d build/kamera/bilder ]; then
             mkdir -p build/klein
             for f in build/kamera/bilder/*.png; do
               sips -s format jpeg -s formatOptions 45 -Z 300 "$f" --out "build/klein/$(basename "${f%.png}").jpg" >/dev/null 2>&1 || true
             done
-            echo "=====BILDER-ANFANG====="
+            echo "=====BILDER-""ANFANG====="
             tar -C build/klein -czf - . | base64
-            echo "=====BILDER-ENDE====="
+            echo "=====BILDER-""ENDE====="
           fi
 
       - uses: actions/upload-artifact@v5
