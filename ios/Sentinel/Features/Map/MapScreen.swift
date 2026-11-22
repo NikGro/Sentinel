@@ -276,6 +276,8 @@ struct MapScreen: View {
                     case .panned, .pinched, .rotated, .tilted:
                         // Bild für Bild: nur im Overlay, nicht im Messprotokoll.
                         break
+                    case .note(let text):
+                        CameraProbe.shared.event(text)
                     case .target(let distance, let pitch):
                         CameraProbe.shared.event(String(format: "sollwert d=%.0f p=%.1f", distance, pitch))
                     default:

@@ -19,6 +19,8 @@ enum MapEngineEvent {
     case allEnded
     /// Die Kopplung an den eigenen Standort wurde durch eine Geste gelöst (Grund: verschoben bzw. gedreht).
     case released(String)
+    /// Hinweis für das Messprotokoll.
+    case note(String)
     /// Angeheftet: Zoom oder Neigung des Nutzers ist der neue Sollwert.
     case target(distance: CLLocationDistance, pitch: Double)
 }
@@ -412,11 +414,16 @@ final class MapEngine {
             // Absicht festlegen, je nachdem, was zuerst deutlich wird: Wer zoomt, dreht oft unabsichtlich ein Stück mit.
             if m.intent == .none {
                 if abs(scale - 1) > 0.08 { m.intent = .zoom } else if abs(rotationDegrees) > 8 { m.intent = .rotate }
+                if m.intent != .none {
+                    emit(.note(String(format: "absicht %@ zoom=%.2f drehung=%.0f°", m.intent == .zoom ? "zoom" : "drehen", scale, rotationDegrees)))
+                }
                 multi = m
             }
-            // Drehen erst ab einigen Grad (beim Zoomen deutlich mehr), damit Zoomen nicht nebenbei dreht.
+            // Drehen erst ab einigen Grad (beim Zoomen deutlich mehr), damit Zoomen nicht nebenbei dreht. Je stärker
+            // gezoomt wird, desto mehr Drehung braucht das Lösen.
+            let zoomAmount = abs(log(Double(max(scale, 0.01))))
             let turnThreshold = m.intent == .zoom ? 25.0 : 8.0
-            let releaseThreshold = m.intent == .zoom ? 45.0 : 20.0
+            let releaseThreshold = max(m.intent == .zoom ? 45.0 : 20.0, 20 + 60 * zoomAmount)
             var turn = 0.0
             if abs(rotationDegrees) > turnThreshold {
                 turn = rotationDegrees - (rotationDegrees > 0 ? turnThreshold : -turnThreshold)
@@ -425,7 +432,7 @@ final class MapEngine {
             if pin != nil, abs(rotationDegrees) > releaseThreshold {
                 // Herausdrehen löst; ab hier frei weiterdrehen, vom aktuellen Stand aus.
                 unpin()
-                emit(.released(String(format: "gedreht %.0f°", rotationDegrees)))
+                emit(.released(String(format: "gedreht %.0f° zoom=%.2f", rotationDegrees, scale)))
                 if let now = current {
                     m.start = now
                     m.startDistance = now.distance
