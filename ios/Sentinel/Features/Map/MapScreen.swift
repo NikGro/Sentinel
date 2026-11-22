@@ -14,6 +14,12 @@ struct MapScreen: View {
     /// Kameraposition in einem eigenen beobachteten Objekt, das nur die Karte liest: Die Nachführung setzt sie zehnmal
     /// je Sekunde, ohne dass der ganze Bildschirm neu aufgebaut wird.
     @State var cameraController = CameraController()
+    /// Kurzzeitige Grenze für den Abstand beim Übergeben an Apples Verfolgung (siehe `startPin`).
+    @State var cameraBounds: MapCameraBounds?
+    /// Zählt Anheft-Vorgänge, damit ein älterer verspäteter Schritt nicht in einen neueren hineinwirkt.
+    @State var pinRequest = 0
+    /// Zeitpunkt der Übergabe an Apples Verfolgung.
+    @State var trackingHandover = Date.distantPast
     var camera: MapCameraPosition {
         get { cameraController.position }
         nonmutating set { cameraController.position = newValue }
@@ -231,7 +237,7 @@ struct MapScreen: View {
         // Einmal je Darstellung: welche Punkte gebündelt bzw. auseinandergerückt werden.
         let layout = clusterLayout
         return MapReader { proxy in
-            Map(position: Binding(get: { cameraController.position }, set: { cameraController.position = $0 }), scope: mapScope) {
+            Map(position: Binding(get: { cameraController.position }, set: { cameraController.position = $0 }), bounds: cameraBounds, scope: mapScope) {
                 // Im Fahrmodus ohne Navigation bleibt der normale Standortpunkt; nur in der Navigation ersetzt ihn der Navi-Pfeil.
                 if true {
                     MyLocationLayer(lage: lage, route: route, locationService: location, cameraState: cameraState,
@@ -286,6 +292,7 @@ struct MapScreen: View {
             .onMapCameraChange(frequency: .continuous) { context in
                 cameraState.update(context.camera)
                 if !gestures.isAttached { gestures.attachIfNeeded() }
+                checkAppleTracking()
                 CameraProbe.shared.record(context.camera, pin: pin, gesture: gestures.isActive, settling: settling, attached: gestures.isAttached)
             }
             // Darüber findet der Gestenbeobachter die MapKit-Karte.
@@ -301,19 +308,11 @@ struct MapScreen: View {
 
             .onMapCameraChange(frequency: .onEnd) { context in
                 cameraState.update(context.camera)
-                // Ausgeschwungen nach einer Geste: Abstand und Winkel übernehmen.
-                if settling, !gestures.isActive { settleAfterGesture() }
+                checkAppleTracking()
                 let is3D = context.camera.pitch > 10
                 if !cameraAnimating, settings.prefers3D != is3D { settings.prefers3D = is3D }
             }
-            // Nachführung in kleinen Schritten, solange angeheftet (siehe `followTick`).
-            .task(id: pin) {
-                guard pin != nil else { return }
-                while !Task.isCancelled {
-                    followTick()
-                    try? await Task.sleep(for: .milliseconds(100))
-                }
-            }
+
             .onChange(of: pin, initial: true) { _, new in
                 CameraProbe.shared.event("pin \(new.map { $0 == .heading ? "heading" : "north" } ?? "none")")
                 ownMarkerOptions.showsStreet = new != nil
