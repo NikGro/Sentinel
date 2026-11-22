@@ -82,9 +82,16 @@ extension MapScreen {
                 let margin = TransitSimulation.standing * 1000
                 if t < start - margin || t > end + margin { continue }
             }
+            // Nach echten Zeiten mit Halt an den Haltestellen und ruhig nachgeführt (siehe `TransitSmoother`).
+            let point: GeoPoint = if let fahrt = object.data.fahrt,
+                let state = TransitSimulation.state(object.data.punkte, path: object.data.weg ?? [], times: fahrt.zeiten, at: transitNow) {
+                transitSmoother.point(id: object.id, state: state, path: object.data.weg ?? [])
+            } else {
+                lage.position(ofObject: object.data, at: transitNow)
+            }
             pins.append(TransitVehiclePin(
                 id: object.id, objectId: object.id, lineObjectId: nil,
-                coordinate: lage.position(ofObject: object.data, at: transitNow).coordinate,
+                coordinate: point.coordinate,
                 line: line, color: Color(hex: object.data.transitHex), departure: object.data.since ?? transitNow
             ))
         }
@@ -127,15 +134,41 @@ extension MapScreen {
         )
     }
 
-    /// Alle antippbaren Symbole; Tipps in ihrer Nähe gehören ihnen und nicht der Fläche dahinter.
-    var symbolCoordinates: [CLLocationCoordinate2D] {
-        forcePins.map(\.coordinate)
-            + (vehiclePins + targetPins).map(\.coordinate)
-            + handles.map(\.coordinate)
-            + transitPins.map(\.coordinate)
-            + nearbyStops.map(\.point.coordinate)
-            + lage.operation.ueberschlagen.naechste.map(\.point.coordinate)
-            + [location.current?.coordinate].compactMap { $0 }
+    /// Gibt es das angezeigte Objekt noch? (`true` ohne Auswahl.)
+    var selectionExists: Bool {
+        switch selection {
+        case nil: true
+        case .member(let id): lage.members[id] != nil
+        case .vehicle(let id): lage.vehicles[id] != nil
+        case .target(let id): lage.targets[id] != nil
+        case .object(let id): lage.mapObjects[id] != nil
+        }
+    }
+
+    /// Liegt ein Tipp auf einem Symbol (Kräfte, Fahrzeuge, Ziele, Marker, ÖPNV, Haltestellen, Cluster, eigener
+    /// Standort)? Dann gehört er dem Symbol und nicht der Form darunter. Auseinandergerückte Symbole werden an ihrer
+    /// gezeichneten Stelle geprüft, nicht an ihrer Koordinate; gebündelte über ihren Cluster.
+    func tapHitsSymbol(_ point: CGPoint, proxy: MapProxy) -> Bool {
+        let layout = clusterLayout
+        let placed: [(id: String?, coordinate: CLLocationCoordinate2D)] =
+            forcePins.map { ($0.id, $0.coordinate) }
+            + (vehiclePins + targetPins).map { ($0.id, $0.coordinate) }
+            + handles.map { ($0.id, $0.coordinate) }
+            + transitPins.map { (nil, $0.coordinate) }
+            + nearbyStops.map { (nil, $0.point.coordinate) }
+            + lage.operation.ueberschlagen.naechste.map { (nil, $0.point.coordinate) }
+            + [location.current?.coordinate].compactMap { $0 }.map { (nil, $0) }
+            + layout.clusters.map { (nil, $0.coordinate) }
+        for item in placed {
+            if let id = item.id, layout.hidden.contains(id) { continue }
+            guard var screen = proxy.convert(item.coordinate, to: .local) else { continue }
+            if let id = item.id, let offset = layout.offsets[id] {
+                screen.x += offset.width
+                screen.y += offset.height
+            }
+            if hypot(screen.x - point.x, screen.y - point.y) < 26 { return true }
+        }
+        return false
     }
 
     /// Gezeichnete Form unter dem Finger: Linien (mit etwas Spielraum), Flächen, Kreise, Prognosezellen.

@@ -166,7 +166,7 @@ function ArgusImport() {
                 method: 'POST',
                 body: { projekt: selected!.name, datum: datum.value, vonStunde: Number(von.value), bisStunde: Number(bis.value), top: Number(top.value), alsEntwurf: entwurf.value },
               }),
-            'Argus-Ebene importiert.',
+            'Argus-Prognose als Paket angelegt.',
           )
         }
       >

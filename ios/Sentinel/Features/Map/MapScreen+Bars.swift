@@ -23,7 +23,6 @@ extension MapScreen {
         VStack(spacing: 8) {
             if route.isActive {
                 NavigationBanner()
-                TransitAheadPicker()
             } else if showsHistory, tapMode == .none {
                 // Verlauf: reduzierte Karte ohne Suche.
                 EmptyView()
@@ -97,14 +96,12 @@ extension MapScreen {
                 // Im Verlauf nur der Kompass, damit die Spuren frei bleiben.
                 if !showsHistory {
                 MapStyleButton { on in
-                    // Angeheftet um den eigenen Standort kippen, sonst um die Bildmitte.
-                    var target = cameraState.camera(pitch: on ? 55 : 0)
-                    if pin != nil, let here = location.current?.coordinate {
-                        target.centerCoordinate = here
-                        target.distance = followDistance ?? target.distance
+                    // Angeheftet: nur den Winkel ändern und angeheftet bleiben; sonst um die Bildmitte kippen.
+                    if let mode = pin {
+                        startPin(mode, distance: mapHandle.mapView?.camera.centerCoordinateDistance ?? followDistance ?? mode.distance, pitch: on ? 55 : 0)
+                    } else {
+                        animateCamera(cameraState.camera(pitch: on ? 55 : 0))
                     }
-                    touch.phase = .idle
-                    animateCamera(target)
                 }
                 MapRoundButton(title: "Ebenen", symbol: "square.3.layers.3d") { showsLayers = true }
                 if !reducedTools, let a = lage.aPosition, !lage.holdsA {
@@ -165,28 +162,48 @@ extension MapScreen {
         return locationContext.compassDegrees
     }
 
-    /// Heftet die Karte an den eigenen Standort: nah und flach in Fahrtrichtung oder senkrecht mit Norden oben.
-    /// Erst fährt die Kamera dorthin, dann führt `followTick` sie mit jeder Standortmeldung nach.
+    /// Heftet die Karte an den eigenen Standort: in Kompass-Ausrichtung schräg von hinten, mit Norden oben von oben.
+    /// Die Karte setzt die Startansicht und übernimmt dann mit ihrer eingebauten Verfolgung (siehe `MapViewHandle`):
+    /// Zoomen und Kippen behalten die Kopplung, Verschieben oder Herausdrehen beendet sie.
     func pinCamera(_ mode: CameraPin) {
-        pin = mode
         // In der Navigation wie in üblichen Navis: etwas höher für mehr Überblick, deutlich gekippt.
         let navigating = route.isActive && mode == .heading
-        followDistance = navigating ? CameraPin.navigationDistance : mode.distance
-        followPitch = navigating ? CameraPin.navigationPitch : mode.pitch
-        guard let current = location.current else { return }
-        let heading = mode == .heading ? (myCourse ?? cameraState.heading) : 0
-        animateCamera(MapCamera(centerCoordinate: current.coordinate, distance: followDistance ?? mode.distance, heading: heading, pitch: followPitch ?? mode.pitch))
+        let distance = navigating ? CameraPin.navigationDistance : mode.distance
+        let pitch = navigating ? CameraPin.navigationPitch : mode.pitch
+        startPin(mode, distance: distance, pitch: pitch)
     }
 
-    /// Bewegt die Kamera. Angeheftet führt die App sie danach selbst nach (siehe `followTick`).
+    /// Anheften mit gegebenem Abstand und Winkel (auch für den 2D/3D-Knopf, der angeheftet nur den Winkel ändert).
+    func startPin(_ mode: CameraPin, distance: CLLocationDistance, pitch: Double) {
+        pin = mode
+        followDistance = distance
+        followPitch = pitch
+        guard let current = location.current else { return }
+        let heading = mode == .heading ? (myCourse ?? cameraState.heading) : 0
+        trackingHandover = .now
+        if mapHandle.track(center: current.coordinate, distance: distance, pitch: pitch, heading: heading, followsHeading: mode == .heading) {
+            nativeTracking = true
+            return
+        }
+        // Rückfall ohne MapKit-Karte: eigene Nachführung.
+        nativeTracking = false
+        animateCamera(MapCamera(centerCoordinate: current.coordinate, distance: distance, heading: heading, pitch: pitch))
+    }
+
+    /// Hat die Karte ihre Verfolgung beendet? Verschieben beendet sie ganz, Herausdrehen aus der Kompass-Ausrichtung
+    /// stuft sie zu „nur folgen“ herab; beides heißt hier: frei. Kurz nach dem Übergeben nicht prüfen, da läuft die
+    /// Kamerafahrt noch ohne Verfolgung.
+    func checkNativeTracking() {
+        guard nativeTracking, let mode = pin, Date.now.timeIntervalSince(trackingHandover) > 1.2,
+              let tracking = mapHandle.trackingMode else { return }
+        let lost = tracking == .none || (mode == .heading && tracking != .followWithHeading)
+        if lost { pin = nil }
+    }
+
+    /// Bewegt die Kamera. Ohne MapKit-Verfolgung führt die App sie danach selbst nach (siehe `followTick`).
     func animateCamera(_ target: MapCamera) {
         cameraAnimating = true
         lastFollowTarget = target
-        // Angeheftet gelten Zoomstufe und Neigung der neuen Ansicht ab jetzt auch für das Nachführen (z. B. 2D/3D-Knopf).
-        if pin != nil {
-            followDistance = target.distance
-            followPitch = target.pitch
-        }
         withAnimation(.easeInOut(duration: 0.5)) { camera = .camera(target) }
         Task {
             try? await Task.sleep(for: .milliseconds(750))
@@ -194,70 +211,28 @@ extension MapScreen {
         }
     }
 
-    /// Angeheftet: Kamera auf den eigenen Standort nachführen, mit der gespeicherten Zoomstufe und Neigung; in
-    /// Fahrtrichtung gedreht nach Kurs (in Fahrt) bzw. Gerätekompass (im Stand), Norden oben ohne Drehung. Die App führt
-    /// selbst nach, statt an Apples Nachführung zu übergeben: Die setzt beim Übergeben ihre eigene Zoomstufe und springt.
+    /// Rückfall, falls keine MapKit-Karte zu finden ist: Kamera auf den eigenen Standort nachführen.
     func followTick() {
-        guard let mode = pin, !cameraAnimating, touch.phase == .idle, let current = location.current else { return }
+        guard !nativeTracking, let mode = pin, !cameraAnimating, let current = location.current else { return }
         let heading = mode == .heading ? (myCourse ?? cameraState.heading) : cameraState.heading
-        // Gespeicherte Zoomstufe und Neigung statt der gerade gemeldeten: Während einer Kamerafahrt meldet die Karte
-        // Zwischenwerte, die sonst als neue Zoomstufe hängen blieben.
         let target = MapCamera(centerCoordinate: current.coordinate, distance: followDistance ?? cameraState.distance, heading: heading,
                                pitch: followPitch ?? cameraState.pitch)
-        // Steht man still, nicht ständig neu animieren (sonst kommt die Karte nie zur Ruhe).
         if let last = lastFollowTarget,
            GeoPoint(last.centerCoordinate).distance(to: GeoPoint(target.centerCoordinate)) < 1,
-           abs(last.heading - target.heading) < 1.5, abs(last.distance - target.distance) < 1, abs(last.pitch - target.pitch) < 1 {
+           abs(last.heading - target.heading) < 1.5 {
             return
         }
         lastFollowTarget = target
-        // So lange gleiten wie bis zur nächsten Meldung (aus dem letzten Abstand geschätzt): fließend statt stückweise.
-        // Nach einer Geste dagegen kurz und weich zurück zum Standort.
-        let afterGesture = nextFollowDuration
-        nextFollowDuration = nil
-        let interval = afterGesture ?? min(max(Date.now.timeIntervalSince(lastFollowAt), 0.3), 2.5)
+        let interval = min(max(Date.now.timeIntervalSince(lastFollowAt), 0.3), 2.5)
         lastFollowAt = .now
-        withAnimation(afterGesture == nil ? .linear(duration: interval) : .easeOut(duration: interval)) { camera = .camera(target) }
+        withAnimation(.linear(duration: interval)) { camera = .camera(target) }
     }
 
-    /// Rückfallebene: Weicht die Kamera ohne eigene Kamerafahrt deutlich von der Nachführung ab, kann das nur eine
-    /// Geste sein. Großzügige Schwellen, denn mit Geländehöhe meldet die Karte leicht andere Werte als gesetzt.
-    func isUserCameraChange(_ current: MapCamera) -> Bool {
-        if let distance = followDistance, abs(current.distance - distance) > distance * 0.12 { return true }
-        if let pitch = followPitch, abs(current.pitch - pitch) > 6 { return true }
-        if let target = lastFollowTarget {
-            let offset = GeoPoint(current.centerCoordinate).distance(to: GeoPoint(target.centerCoordinate))
-            if offset > max(target.distance * 0.25, 60) { return true }
-        }
-        return false
-    }
-
-    /// Alle Finger sind von der Karte: Ein wischender einzelner Finger löst die Kopplung sofort. Sonst (zwei Finger,
-    /// Antippen, Doppeltippen) auf das Ende der Kamerabewegung mit Schwung warten und dann Zoomstufe und Neigung
-    /// übernehmen; kommt keine Bewegung mehr, nach kurzer Zeit.
-    func touchesEnded(_ summary: TouchObserver.Summary) {
-        if summary.fingers < 2, summary.travel > 12, pin != nil {
-            pin = nil
-            touch.phase = .idle
-            return
-        }
-        touch.phase = .settling
-        Task {
-            try? await Task.sleep(for: .milliseconds(900))
-            if touch.phase == .settling { settleGesture(cameraState.camera()) }
-        }
-    }
-
-    /// Nach Zoomen, Neigen oder Drehen: Kopplung bleibt, Zoomstufe und Neigung gelten ab jetzt für das Nachführen,
-    /// und die Kamera gleitet zurück auf den eigenen Standort (MapKit zoomt um den Punkt zwischen den Fingern).
-    func settleGesture(_ current: MapCamera) {
-        touch.phase = .idle
-        guard pin != nil else { return }
-        followDistance = current.distance
-        followPitch = current.pitch
-        lastFollowTarget = nil
-        nextFollowDuration = 0.35
-        followTick()
+    /// Rückfall: Weicht die Kamera deutlich von der Nachführung ab, war es eine Geste; dann frei.
+    func fallbackGestureCheck(_ current: MapCamera) {
+        guard !nativeTracking, pin != nil, !cameraAnimating, let target = lastFollowTarget else { return }
+        let offset = GeoPoint(current.centerCoordinate).distance(to: GeoPoint(target.centerCoordinate))
+        if offset > max(target.distance * 0.25, 60) { pin = nil }
     }
 
     // MARK: Untere Leiste
@@ -271,6 +246,9 @@ extension MapScreen {
                 }, create: { kind in
                     create(kind, at: pin.point, title: pin.title, delayed: false)
                 }, close: { searchPin = nil })
+            }
+            if let selected = storedTracks.selected, let track = storedTracks.selectedTrack, track.spur.punkte.indices.contains(selected.index) {
+                HistoryPointCard(spur: track.spur, index: selected.index, title: model.title(of: track.spur.subject)) { storedTracks.selected = nil }
             }
             if showsHistory {
                 HistoryPanel(state: history, fit: fitHistory)

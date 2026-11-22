@@ -31,6 +31,8 @@ struct ChatScreen: View {
                 }
             }
             .navigationTitle("Chat")
+            // Erster Eintrag unterhalb des Verlaufs der Kopfzeile.
+            .contentMargins(.top, 20, for: .scrollContent)
             .toolbar(.hidden, for: .navigationBar)
             .safeAreaInset(edge: .top, spacing: 0) {
                 TabHeader(title: "Chat") {

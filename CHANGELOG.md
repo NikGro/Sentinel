@@ -1,5 +1,35 @@
 # Änderungen
 
+## 0.23.0
+
+**Kamera beim Anheften: eingebaute Standortverfolgung von MapKit**
+- Statt einer eigenen Nachführung übernimmt die Karte selbst (wie Apple Karten und Google Maps): Sie folgt flüssig,
+  Zoomen und Kippen behalten die Kopplung, Verschieben löst sie sofort, ohne die Wischbewegung zu unterbrechen,
+  Herausdrehen beendet die Kompass-Ausrichtung. Die App setzt nur noch Abstand und Winkel beim Anheften
+- Kompass: 550 m schräg von hinten; Norden oben: 1500 m von oben
+- 2D/3D-Knopf ändert angeheftet nur den Winkel und bleibt angeheftet
+
+**Karte**
+- Antippen auseinandergerückter Symbole trifft das Symbol, nicht die Form darunter
+- Abgelegter Standortverlauf: Antippen einer Stelle zeigt Uhrzeit, Geschwindigkeit und Quelle
+- Gelöschte Objekte: Die Ansicht schließt sofort, ohne leeres Fenster
+
+**ÖPNV**
+- Fahrzeuge halten an jeder Haltestelle (bis 20 s), fahren an, werden in Kurven langsamer und bremsen
+- Neue Verspätungen lassen das Fahrzeug kurz warten statt zurückspringen; kleine Sprünge nach vorn gleiten
+- Navigation zu einem Ziel im ÖPNV: Auswahl Fahrzeug / 1–3 Halte voraus ohne Text unten im Navi-Fenster
+- Bearbeiten einer Strecke: Auswahl Fahrzeug, Strecke, Haltestellen frei über der Liste
+
+**Hauptmenü**
+- Zwei Tabs: Instanzen (mit Sonderbereichen) und Mehr
+- Je Instanz „Verlassen“ und „Öffnen“ (blau) als Glasknöpfe, „Beitreten“ im selben Stil; „Zurück zu …“ entfällt
+- In „Mehr“ des Hauptmenüs: Profil, Geräte und Zugangscode, GPS-Tracker, Argus Predict, App-Sperre, Verbindung,
+  Entwickler, Abmelden. „Mehr“ in der Instanz behält Hauptmenü, Funkkanal sowie Ebenen und Pakete; „Verläufe“ entfällt
+- Argus Predict legt die Prognose als Paket an statt direkt auf die Karte
+
+**Oberfläche**
+- Der erste Listeneintrag in allen Tabs sitzt unterhalb des Verlaufs der Kopfzeile
+
 ## 0.22.0
 
 **Routing**

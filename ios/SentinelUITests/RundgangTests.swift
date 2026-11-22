@@ -135,22 +135,21 @@ final class RundgangTests: XCTestCase {
         app.tabBars.buttons["Mehr"].tap()
         XCTAssertTrue(app.staticTexts["Mehr"].waitForExistence(timeout: 5), "Mehr-Ansicht erscheint")
         capture("08-mehr")
-        // Hauptmenü (Instanzen) mit den beiden Sonderbereichen.
-        let instances = app.buttons.matching(NSPredicate(format: "label BEGINSWITH 'Instanzen'")).firstMatch
-        if instances.waitForExistence(timeout: 3) {
-            instances.tap()
-            XCTAssertTrue(app.staticTexts["Dauerhafte Orte bearbeiten"].waitForExistence(timeout: 3), "Sonderbereich im Instanzenmenü")
-            XCTAssertTrue(app.staticTexts["Paket vorbereiten"].exists, "Pakete im Instanzenmenü")
-            capture("08a-instanzen")
-            // Hauptmenü über den Instanzen: zurück in die geöffnete Instanz, dann wieder zu „Mehr“.
-            let back = app.buttons.matching(NSPredicate(format: "label BEGINSWITH 'Zurück zu'")).firstMatch
-            XCTAssertTrue(back.waitForExistence(timeout: 3), "Rückweg aus dem Hauptmenü in die Instanz")
-            back.tap()
-            XCTAssertTrue(app.tabBars.buttons["Mehr"].waitForExistence(timeout: 5))
-            app.tabBars.buttons["Mehr"].tap()
-        }
-        app.swipeUp()
-        XCTAssertTrue(app.buttons["GPS-Tracker"].waitForExistence(timeout: 5) || app.staticTexts["GPS-Tracker"].exists, "Verwaltung auch in der App")
+        // Hauptmenü mit Instanzen und Sonderbereichen, Verwaltung im Tab „Mehr“ des Hauptmenüs.
+        let home = app.buttons.matching(NSPredicate(format: "label BEGINSWITH 'Hauptmenü'")).firstMatch
+        XCTAssertTrue(home.waitForExistence(timeout: 3), "Weg ins Hauptmenü")
+        home.tap()
+        XCTAssertTrue(app.staticTexts["Dauerhafte Orte bearbeiten"].waitForExistence(timeout: 3), "Sonderbereich im Hauptmenü")
+        XCTAssertTrue(app.staticTexts["Paket vorbereiten"].exists, "Pakete im Hauptmenü")
+        capture("08a-hauptmenue")
+        app.tabBars.buttons["Mehr"].tap()
+        XCTAssertTrue(app.buttons["GPS-Tracker"].waitForExistence(timeout: 5) || app.staticTexts["GPS-Tracker"].exists, "Verwaltung im Hauptmenü")
+        capture("08b-hauptmenue-mehr")
+        // Zurück in die Instanz über „Öffnen“.
+        app.tabBars.buttons["Instanzen"].tap()
+        let open = app.buttons.matching(NSPredicate(format: "label ENDSWITH 'öffnen'")).firstMatch
+        XCTAssertTrue(open.waitForExistence(timeout: 3), "Öffnen-Knopf bei der eigenen Instanz")
+        open.tap()
 
         // Fortbewegung im selben Lauf: Der Simulator startet die App in einem zweiten Test ohne Startargumente neu.
         app.tabBars.buttons["Lage"].tap()

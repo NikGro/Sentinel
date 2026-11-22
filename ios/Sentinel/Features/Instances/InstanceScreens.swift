@@ -9,7 +9,6 @@ struct InstancesScreen: View {
     @Environment(AppModel.self) private var model
     @Environment(LageStore.self) private var lage
     @Environment(LocalSettings.self) private var settings
-    @State private var showsSignOut = false
     @State private var creating = false
     @State private var editing: Versioned<Instance>?
     @State private var deleting: Versioned<Instance>?
@@ -18,23 +17,12 @@ struct InstancesScreen: View {
 
     var body: some View {
         List {
-            if isHome {
+            if isHome, !onDuty {
                 Section {
-                    if onDuty, !lage.isPackageArea {
-                        Button {
-                            model.openInstance(lage.instanz)
-                        } label: {
-                            Label("Zurück zu „\(lage.currentInstance?.data.name ?? "Lage")“", systemImage: "arrow.uturn.backward.circle.fill")
-                                .font(.headline)
-                        }
-                    } else {
-                        Label("Außer Dienst", systemImage: "moon.zzz.fill")
-                            .foregroundStyle(.secondary)
-                    }
+                    Label("Außer Dienst", systemImage: "moon.zzz.fill")
+                        .foregroundStyle(.secondary)
                 } footer: {
-                    Text(onDuty
-                        ? "Im Dienst: Der Standort wird mit den Kräften der Instanz geteilt."
-                        : "Eine Instanz öffnen oder beitreten, um in den Dienst zu gehen. Lage, Ziele, Kräfte und Chat gibt es nur innerhalb einer Instanz.")
+                    Text("Eine Instanz öffnen oder beitreten, um in den Dienst zu gehen. Lage, Ziele, Kräfte und Chat gibt es nur innerhalb einer Instanz.")
                 }
             }
             Section {
@@ -79,8 +67,7 @@ struct InstancesScreen: View {
                             }
                             Spacer()
                             Button("Beitreten") { lage.joinInstance(instance.id) }
-                                .buttonStyle(.bordered)
-                                .buttonBorderShape(.capsule)
+                                .buttonStyle(.glass)
                         }
                     }
                 }
@@ -113,23 +100,14 @@ struct InstancesScreen: View {
             }
             .listRowBackground(Theme.special.opacity(0.12))
 
-            if isHome {
-                Section("Profil und App") {
-                    NavigationLink { ProfileEditor(mode: .edit) } label: {
-                        Label("Profil", systemImage: "person.crop.circle")
-                    }
-                    Toggle("App-Sperre", systemImage: "faceid", isOn: Binding(get: { settings.appLockEnabled }, set: { settings.appLockEnabled = $0 }))
-                    Button("Gerät abmelden", systemImage: "rectangle.portrait.and.arrow.right", role: .destructive) { showsSignOut = true }
-                }
-            }
         }
-        .alert("Dieses Gerät vom Server abmelden?", isPresented: $showsSignOut) {
-            Button("Abbrechen", role: .cancel) {}
-            Button("Abmelden", role: .destructive) { model.signOut() }
-        } message: {
-            Text("Für eine erneute Anmeldung wird der Zugangscode benötigt.")
-        }
+        // Im Hauptmenü wie die übrigen Tabs: großer Titel in der eigenen Kopfzeile.
+        .contentMargins(.top, isHome ? 20 : 0, for: .scrollContent)
         .navigationTitle(isHome ? "Hauptmenü" : "Instanzen")
+        .toolbar(isHome ? .hidden : .automatic, for: .navigationBar)
+        .safeAreaInset(edge: .top, spacing: 0) {
+            if isHome { TabHeader(title: "Hauptmenü") }
+        }
         .sheet(isPresented: $creating) {
             InstanceForm(title: "Neue Instanz") { name, description in
                 // Der Server öffnet die neue Instanz gleich.
@@ -163,45 +141,37 @@ private struct InstanceRow: View {
 
     var body: some View {
         HStack(spacing: 10) {
-            openButton
-            if let leave {
-                Button("Verlassen", systemImage: "rectangle.portrait.and.arrow.right", action: leave)
-                    .labelStyle(.iconOnly)
-                    .font(.title3)
-                    .foregroundStyle(.orange)
-                    .buttonStyle(.borderless)
-                    .accessibilityLabel("\(instance.data.name) verlassen")
-            }
-        }
-    }
-
-    private var openButton: some View {
-        Button(action: open) {
-            HStack(spacing: 12) {
-                Image(systemName: instance.id == Instance.mainId ? "map.fill" : "scope")
-                    .foregroundStyle(.tint)
-                    .frame(width: 26)
-                VStack(alignment: .leading, spacing: 2) {
-                    Text(instance.data.name)
-                        .font(.body.weight(isOpen ? .semibold : .regular))
-                    if !instance.data.beschreibung.isEmpty {
-                        Text(instance.data.beschreibung)
-                            .font(.caption)
-                            .foregroundStyle(.secondary)
-                            .lineLimit(2)
-                    }
-                }
-                Spacer()
+            Image(systemName: instance.id == Instance.mainId ? "map.fill" : "scope")
+                .foregroundStyle(.tint)
+                .frame(width: 26)
+            VStack(alignment: .leading, spacing: 2) {
+                Text(instance.data.name)
+                    .font(.body.weight(isOpen ? .semibold : .regular))
                 if isOpen {
                     Text("Geöffnet")
                         .font(.caption.weight(.semibold))
                         .foregroundStyle(.green)
+                } else if !instance.data.beschreibung.isEmpty {
+                    Text(instance.data.beschreibung)
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                        .lineLimit(2)
                 }
             }
-            .contentShape(.rect)
+            Spacer(minLength: 6)
+            // Gleicher Glasstil wie „Beitreten“; „Öffnen“ hervorgehoben in Blau.
+            if let leave {
+                Button("Verlassen", action: leave)
+                    .buttonStyle(.glass)
+                    .accessibilityLabel("\(instance.data.name) verlassen")
+            }
+            Button("Öffnen", action: open)
+                .buttonStyle(.glassProminent)
+                .tint(.blue)
+                .accessibilityLabel("\(instance.data.name) öffnen")
         }
-        .buttonStyle(.borderless)
-        .tint(.primary)
+        .controlSize(.small)
+        .lineLimit(1)
     }
 }
 

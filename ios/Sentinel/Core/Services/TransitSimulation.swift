@@ -114,6 +114,86 @@ enum TransitSimulation {
         /// Nächster (oder gerade bediente) Halt.
         let nextIndex: Int
         let atStop: Bool
+        /// Zurückgelegte Meter entlang des Fahrwegs (nur mit Fahrweg), für ein gleichmäßiges Nachführen.
+        var progress: Double? = nil
+    }
+
+    // MARK: Fahrweg mit Kurven
+
+    /// Fahrweg mit aufsummierten Längen und einem Kurvenaufschlag: Jede Richtungsänderung zählt wie zusätzliche
+    /// Strecke, so fährt das Fahrzeug in Kurven langsamer und auf Geraden schneller, bei gleicher Gesamtzeit.
+    final class PathGeometry: @unchecked Sendable {
+        let points: [GeoPoint]
+        /// Meter bis zu jedem Punkt.
+        let cumulative: [Double]
+        /// „Gefühlte“ Meter bis zu jedem Punkt (mit Kurvenaufschlag).
+        let effective: [Double]
+
+        /// Aufschlag in Metern je Bogenmaß Richtungsänderung (90° kosten so viel Zeit wie etwa 70 m Gerade).
+        static let cornerMeters = 45.0
+
+        init(_ points: [GeoPoint]) {
+            self.points = points
+            var cumulative: [Double] = [0], effective: [Double] = [0]
+            func bearing(_ a: GeoPoint, _ b: GeoPoint) -> Double {
+                atan2((b.lon - a.lon) * cos(a.lat * .pi / 180), b.lat - a.lat)
+            }
+            func turn(at k: Int) -> Double {
+                guard k > 0, k < points.count - 1 else { return 0 }
+                var d = abs(bearing(points[k], points[k + 1]) - bearing(points[k - 1], points[k]))
+                if d > .pi { d = 2 * .pi - d }
+                return d
+            }
+            for k in 1..<max(points.count, 1) {
+                let length = TransitSimulation.meters(points[k - 1], points[k])
+                cumulative.append(cumulative[k - 1] + length)
+                // Die Hälfte der Kurve an jedem Ende des Teilstücks.
+                effective.append(effective[k - 1] + length + Self.cornerMeters * (turn(at: k - 1) + turn(at: k)) / 2)
+            }
+            self.cumulative = cumulative
+            self.effective = effective
+        }
+
+        /// Punkt nach so vielen Metern entlang des Wegs.
+        func point(atMeters meters: Double) -> GeoPoint {
+            guard let last = points.last else { return GeoPoint(lat: 0, lon: 0) }
+            let m = min(max(meters, 0), cumulative.last ?? 0)
+            guard let k = cumulative.firstIndex(where: { $0 >= m }), k > 0 else { return points.first ?? last }
+            let span = cumulative[k] - cumulative[k - 1]
+            let f = span > 0 ? (m - cumulative[k - 1]) / span : 1
+            let a = points[k - 1], b = points[k]
+            return GeoPoint(lat: a.lat + (b.lat - a.lat) * f, lon: a.lon + (b.lon - a.lon) * f)
+        }
+
+        /// Echte Meter zu „gefühlten“ Metern (Umkehrung des Kurvenaufschlags).
+        func meters(atEffective value: Double) -> Double {
+            let e = min(max(value, 0), effective.last ?? 0)
+            guard let k = effective.firstIndex(where: { $0 >= e }), k > 0 else { return 0 }
+            let span = effective[k] - effective[k - 1]
+            let f = span > 0 ? (e - effective[k - 1]) / span : 1
+            return cumulative[k - 1] + (cumulative[k] - cumulative[k - 1]) * f
+        }
+
+        /// Fahrt von Punkt `a` bis Punkt `b` nach Zeitanteil `x`: anfahren, mit Kurven langsamer fahren, bremsen.
+        func progress(from a: Int, to b: Int, timeFraction x: Double) -> Double {
+            let start = effective[a], end = effective[b]
+            return meters(atEffective: start + (end - start) * TransitSimulation.travelFraction(x))
+        }
+    }
+
+    nonisolated(unsafe) private static var geometryCache: [IndexKey: PathGeometry] = [:]
+
+    /// Zwischengespeicherte Geometrie eines Fahrwegs (ändert sich selten, wird aber zehnmal je Sekunde gebraucht).
+    static func geometry(_ path: [GeoPoint]) -> PathGeometry? {
+        guard path.count >= 2 else { return nil }
+        let key = IndexKey(points: [], count: path.count, first: path.first, middle: path[path.count / 2], last: path.last)
+        cacheLock.lock()
+        defer { cacheLock.unlock() }
+        if let hit = geometryCache[key] { return hit }
+        if geometryCache.count > 200 { geometryCache.removeAll() }
+        let geometry = PathGeometry(path)
+        geometryCache[key] = geometry
+        return geometry
     }
 
     /// Position zur Zeit `now` bei Abfahrt `departure` am ersten Halt; `nil` vor der Abfahrt und nach der Ankunft.
@@ -128,11 +208,13 @@ enum TransitSimulation {
                 return State(point: points[i - 1], nextIndex: i - 1, atStop: true)
             }
             if t <= times[i] {
-                let fraction = times[i] > start ? (t - start) / (times[i] - start) : 1
-                let a = points[i - 1], b = points[i]
-                if let indices, let along = point(along: path[indices[i - 1]...indices[i]], fraction: fraction) {
-                    return State(point: along, nextIndex: i, atStop: false)
+                let x = times[i] > start ? (t - start) / (times[i] - start) : 1
+                if let indices, let geometry = TransitSimulation.geometry(path) {
+                    let meters = geometry.progress(from: indices[i - 1], to: indices[i], timeFraction: x)
+                    return State(point: geometry.point(atMeters: meters), nextIndex: i, atStop: false, progress: meters)
                 }
+                let fraction = travelFraction(x)
+                let a = points[i - 1], b = points[i]
                 return State(point: GeoPoint(lat: a.lat + (b.lat - a.lat) * fraction, lon: a.lon + (b.lon - a.lon) * fraction), nextIndex: i, atStop: false)
             }
         }
@@ -149,25 +231,41 @@ enum TransitSimulation {
         return vmax * (x - ramp / 2)
     }
 
-    /// Position nach echten Zeiten (Fahrplan mit Echtzeit) an jedem Halt; fehlende Zeiten werden übersprungen.
+    /// Standzeit an Zwischenhalten bei echten Zeiten: höchstens 20 Sekunden, bei kurzen Abständen ein Viertel davon.
+    static func realDwell(between ti: Double, and tj: Double) -> Double { min(20_000, max(0, tj - ti) * 0.25) }
+
+    /// Position nach echten Zeiten (Fahrplan mit Echtzeit) an jedem Halt; fehlende Zeiten werden übersprungen. Die Zeit
+    /// eines Halts gilt als Abfahrt: Davor steht das Fahrzeug kurz am Halt (Zwischenhalte), dazwischen fährt es an,
+    /// wird in Kurven langsamer und bremst vor dem nächsten Halt.
     static func state(_ points: [GeoPoint], path: [GeoPoint], times: [Double?], at now: Date = .now) -> State? {
         guard points.count >= 2, times.count == points.count else { return nil }
         let t = now.timeIntervalSince1970 * 1000
         let known = times.enumerated().compactMap { index, time in time.map { (index, $0) } }
         guard let first = known.first, let last = known.last, t >= first.1, t <= last.1 + 30_000 else { return nil }
         let indices = stopIndices(points, on: path)
+        let geometry = indices == nil ? nil : TransitSimulation.geometry(path)
+        func atStop(_ k: Int) -> State {
+            if let indices, let geometry {
+                let meters = geometry.cumulative[indices[k]]
+                return State(point: geometry.point(atMeters: meters), nextIndex: k, atStop: true, progress: meters)
+            }
+            return State(point: points[k], nextIndex: k, atStop: true)
+        }
         for pair in zip(known, known.dropFirst()) {
             let (i, ti) = pair.0, (j, tj) = pair.1
             guard t <= tj else { continue }
-            // Anfahren, fahren, bremsen bis zum nächsten bekannten Halt (Anteil des Wegs nach Anteil der Zeit).
-            let fraction = travelFraction(tj > ti ? (t - ti) / (tj - ti) : 1)
-            if let indices, let along = point(along: path[indices[i]...indices[j]], fraction: fraction) {
-                return State(point: along, nextIndex: j, atStop: fraction <= 0)
+            let arrive = j == last.0 ? tj : tj - realDwell(between: ti, and: tj)
+            if t >= arrive { return atStop(j) }
+            let x = arrive > ti ? (t - ti) / (arrive - ti) : 1
+            if let indices, let geometry {
+                let meters = geometry.progress(from: indices[i], to: indices[j], timeFraction: x)
+                return State(point: geometry.point(atMeters: meters), nextIndex: j, atStop: x <= 0, progress: meters)
             }
+            let fraction = travelFraction(x)
             let a = points[i], b = points[j]
             return State(point: GeoPoint(lat: a.lat + (b.lat - a.lat) * fraction, lon: a.lon + (b.lon - a.lon) * fraction), nextIndex: j, atStop: false)
         }
-        return State(point: points[last.0], nextIndex: last.0, atStop: true)
+        return atStop(last.0)
     }
 
     /// Ankunft am Endhalt: echte Zeit, sonst geschätzt.
@@ -195,5 +293,30 @@ enum TransitSimulation {
             if now < departure { return (departure, State(point: start, nextIndex: 0, atStop: true)) }
             return (departure, State(point: end, nextIndex: object.punkte.count - 1, atStop: true))
         }
+    }
+}
+
+/// Hält die angezeigten ÖPNV-Fahrzeuge ruhig: Korrigiert die Echtzeit ein Fahrzeug ein Stück zurück (neue Verspätung),
+/// wartet es, statt zurückzuspringen, bis die Berechnung es wieder einholt. Größere Sprünge nach vorn werden über
+/// einige Schritte verteilt. Große Abweichungen (über 150 m) gelten als echte Korrektur und werden übernommen.
+@MainActor
+final class TransitSmoother {
+    private var shown: [String: Double] = [:]
+
+    func point(id: String, state: TransitSimulation.State, path: [GeoPoint]) -> GeoPoint {
+        guard let target = state.progress, let geometry = TransitSimulation.geometry(path) else { return state.point }
+        var next = target
+        if let previous = shown[id] {
+            let delta = target - previous
+            if delta < 0, delta > -150 {
+                next = previous
+            } else if delta > 25, delta < 150 {
+                // Etwa ein Fünftel je Schritt (zehn Schritte je Sekunde): nach einer halben Sekunde fast eingeholt.
+                next = previous + delta * 0.2
+            }
+        }
+        shown[id] = next
+        if shown.count > 300 { shown.removeAll() }
+        return geometry.point(atMeters: next)
     }
 }

@@ -28,8 +28,12 @@ struct MapScreen: View {
     @State var pin: CameraPin?
     /// Die App bewegt die Kamera gerade selbst; solange zählt eine Kamerabewegung nicht als Verschieben.
     @State var cameraAnimating = false
-    /// Finger auf der Karte und was sie tun; steuert, ob die App nachführt und ob die Kopplung bleibt.
-    @State var touch = MapTouch()
+    /// MapKit-Karte hinter `Map`, für deren eingebaute Standortverfolgung.
+    @State var mapHandle = MapViewHandle()
+    /// Die Karte verfolgt den Standort selbst (statt der eigenen Nachführung).
+    @State var nativeTracking = false
+    /// Zeitpunkt der Übergabe an die Verfolgung; kurz danach läuft noch die Kamerafahrt.
+    @State var trackingHandover = Date.distantPast
     /// Zoomstufe und Neigung beim Anheften; das Nachführen hält sie, bis man selbst zoomt oder kippt.
     @State var followDistance: CLLocationDistance?
     @State var followPitch: Double?
@@ -38,8 +42,7 @@ struct MapScreen: View {
     /// Zeitpunkt der letzten Nachführung: Die nächste Fahrt dauert so lange wie der Abstand der Standortmeldungen,
     /// damit die Kamera gleichmäßig mitläuft statt ruckweise.
     @State var lastFollowAt = Date.distantPast
-    /// Kurze Rückfahrt zum Standort nach einer Geste statt des langen Gleitens der Nachführung.
-    @State var nextFollowDuration: Double?
+
     @State var ownMarkerOptions = OwnMarkerOptions()
     /// Tempolimit der Straße am eigenen Standort (OpenStreetMap), auch ohne Navigation.
     @State var roadSpeedLimit: Int?
@@ -64,6 +67,7 @@ struct MapScreen: View {
     @State var pendingPoint: GeoPoint?
     /// Takt für die geschätzten ÖPNV-Fahrzeuge (alle 2 Sekunden, solange welche sichtbar sind).
     @State var transitNow = Date.now
+    @State var transitSmoother = TransitSmoother()
     /// Angetipptes, nur im Takt eingeblendetes Fahrzeug.
     @State var virtualVehicle: TransitVehiclePin?
     /// Verlaufsmodus: gezeigte Spuren, Zeitraum und Zeitleiste.
@@ -94,6 +98,11 @@ struct MapScreen: View {
                 }
             })
             .presentationDetents([.fraction(0.94)])
+        }
+        // Gelöscht (auch aus dem Bearbeiten-Fenster heraus): die ganze Ansicht samt Bearbeiten sofort schließen.
+        // Ein Schließen aus der Ansicht selbst greift nicht, solange das Bearbeiten-Fenster noch darüber liegt.
+        .onChange(of: selectionExists) { _, exists in
+            if !exists { selection = nil }
         }
         .sheet(item: $selection) { selection in
             QuickLookSheet(selection: selection, placeTarget: { targetId in
@@ -260,31 +269,31 @@ struct MapScreen: View {
             .ignoresSafeArea(.container, edges: .bottom)
             .onMapCameraChange(frequency: .continuous) { context in
                 cameraState.update(context.camera)
-                // Rückfallebene, falls die Fingererkennung eine Geste nicht meldet: deutliche Abweichung von der
-                // Nachführung ohne eigene Kamerafahrt gilt ebenfalls als Geste.
-                if pin != nil, !cameraAnimating, touch.phase == .idle, isUserCameraChange(context.camera) { touch.phase = .settling }
+                checkNativeTracking()
+                fallbackGestureCheck(context.camera)
             }
-            // Finger auf der Karte mitlesen, ohne Apples Kartengesten oder Antippen zu stören: Solange einer liegt,
-            // führt die App nicht nach. Ein wischender Finger löst die Kopplung, alles andere (zwei Finger zum Zoomen,
-            // Neigen, Drehen; Doppeltippen) behält sie und übernimmt Zoomstufe und Neigung.
-            .background {
-                TouchObserver(began: { touch.phase = .touching }, ended: { touchesEnded($0) })
-            }
+            // Darüber findet die App die MapKit-Karte für deren eingebaute Standortverfolgung.
+            .background { MapViewLocator(handle: mapHandle) }
             .onMapCameraChange(frequency: .onEnd) { context in
                 cameraState.update(context.camera)
-                // Gekippt (auch mit zwei Fingern): Haken bei „3D-Ansicht“ mitziehen, aber nur nach eigenen Gesten.
-                if case .settling = touch.phase {
-                    let is3D = context.camera.pitch > 10
-                    if settings.prefers3D != is3D { settings.prefers3D = is3D }
-                    settleGesture(context.camera)
-                }
+                checkNativeTracking()
+                // Mit zwei Fingern gekippt: Haken bei „3D-Ansicht“ mitziehen.
+                let is3D = context.camera.pitch > 10
+                if !cameraAnimating, settings.prefers3D != is3D { settings.prefers3D = is3D }
             }
             .onChange(of: location.current?.timestamp) { followTick() }
             .onChange(of: locationContext.compassDegrees) {
                 // Im Stand dreht der Gerätekompass die Karte; in Fahrt der Kurs (kommt mit dem Standort).
                 if pin == .heading, (location.current?.speed ?? 0) < 1 { followTick() }
             }
-            .onChange(of: pin, initial: true) { _, new in ownMarkerOptions.showsStreet = new != nil }
+            .onChange(of: pin, initial: true) { _, new in
+                ownMarkerOptions.showsStreet = new != nil
+                // Frei (Geste, Suche, anderer Ort): die Verfolgung der Karte beenden.
+                if new == nil {
+                    mapHandle.stopTracking()
+                    nativeTracking = false
+                }
+            }
             // Langes Drücken auf einen Ort: wie ein Suchtreffer „Navigieren“ oder „Hier anlegen“ anbieten.
             .simultaneousGesture(
                 LongPressGesture(minimumDuration: 0.5)
@@ -303,11 +312,11 @@ struct MapScreen: View {
                 if tapMode == .none {
                     // Tipp auf eine freie Stelle einer Form. Symbole darüber (Kräfte, Fahrzeuge, Ziele, Marker)
                     // fangen ihren Tipp selbst ab und kommen hier gar nicht erst an.
-                    let nearSymbol = symbolCoordinates.contains { symbol in
-                        guard let screen = proxy.convert(symbol, to: .local) else { return false }
-                        return hypot(screen.x - point.x, screen.y - point.y) < 26
-                    }
-                    if !nearSymbol, let id = shape(at: GeoPoint(coordinate)) {
+                    let onSymbol = tapHitsSymbol(point, proxy: proxy)
+                    // Abgelegter Standortverlauf: Uhrzeit und Geschwindigkeit an dieser Stelle.
+                    if !onSymbol, storedTracks.select(near: point, proxy: proxy) { return }
+                    storedTracks.selected = nil
+                    if !onSymbol, let id = shape(at: GeoPoint(coordinate)) {
                         if lage.mapObjects[id] != nil { openEditor(for: id) }
                     }
                     return

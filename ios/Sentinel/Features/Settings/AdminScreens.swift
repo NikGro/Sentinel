@@ -90,19 +90,13 @@ struct SituationAdminScreen: View {
     }
 }
 
-// MARK: Ebenen, Pakete, Argus Predict
+// MARK: Ebenen und Pakete
 
 struct LayersAdminScreen: View {
     @Environment(AppModel.self) private var model
     @Environment(LageStore.self) private var lage
     @State private var state = AdminState()
     @State private var importing: Versioned<Instance>?
-    @State private var argusProject = ""
-    @State private var argusDay = Date.now
-    @State private var argusFrom = Calendar.current.component(.hour, from: .now)
-    @State private var argusTo = 23
-    @State private var argusTop = 40
-    @State private var argusDraft = false
 
     var body: some View {
         Form {
@@ -183,34 +177,6 @@ struct LayersAdminScreen: View {
                     : "Kopiert alle Objekte des Pakets in „\(lage.currentInstance?.data.name ?? "diese Instanz")“. Pakete anlegen und bearbeiten über Instanzen › Pakete.")
             }
 
-            Section {
-                if let argus = state.status?.argus, argus.verfuegbar, !argus.projekte.isEmpty {
-                    Picker("Projekt", selection: $argusProject) {
-                        ForEach(argus.projekte) { Text($0.name).tag($0.name) }
-                    }
-                    DatePicker("Tag", selection: $argusDay, displayedComponents: .date)
-                    Stepper("Von \(argusFrom) Uhr", value: $argusFrom, in: 0...23)
-                    Stepper("Bis \(argusTo) Uhr", value: $argusTo, in: argusFrom...23)
-                    Stepper("\(argusTop) Zellen", value: $argusTop, in: 5...150, step: 5)
-                    Toggle("Zunächst als Entwurf", isOn: $argusDraft)
-                    Button("Importieren") {
-                        let day = Self.dayFormat.string(from: argusDay)
-                        Task {
-                            await state.run(model.client) { client in
-                                _ = try await client.importArgus(project: argusProject, day: day, fromHour: argusFrom, toHour: argusTo, top: argusTop, asDraft: argusDraft)
-                            }
-                        }
-                    }
-                    .disabled(argusProject.isEmpty || state.busy)
-                } else {
-                    Text(state.status == nil ? "Lade …" : "Argus Predict ist auf diesem Server nicht eingebunden.")
-                        .foregroundStyle(.secondary)
-                }
-            } header: {
-                Text("Argus Predict")
-            } footer: {
-                Text("Lädt die auffälligsten Prognosezellen eines Tages als eigene Ebene, z. B. für die Oberflächenfahndung.")
-            }
         }
         .navigationTitle("Ebenen und Pakete")
         .navigationBarTitleDisplayMode(.inline)
@@ -222,15 +188,68 @@ struct LayersAdminScreen: View {
         } message: {
             Text("Alle Objekte des Pakets werden in „\(lage.currentInstance?.data.name ?? "")“ kopiert und sind danach eigenständige Objekte dieser Instanz. Das lässt sich nicht rückgängig machen.")
         }
-        .task {
-            await state.reload(model.client)
-            if argusProject.isEmpty { argusProject = state.status?.argus.projekte.first?.name ?? "" }
-        }
         .modifier(FailureAlert(state: state))
     }
 
     private func objectCount(_ layerId: String) -> Int {
         lage.mapObjects.values.filter { $0.data.layerId == layerId }.count
+    }
+}
+
+// MARK: Argus Predict
+
+/// Prognose aus Argus Predict laden. Sie wird als Paket abgelegt und lässt sich von dort gezielt in einen Einsatz
+/// übernehmen, statt direkt auf einer Karte zu landen.
+struct ArgusImportScreen: View {
+    @Environment(AppModel.self) private var model
+    @State private var state = AdminState()
+    @State private var argusProject = ""
+    @State private var argusDay = Date.now
+    @State private var argusFrom = Calendar.current.component(.hour, from: .now)
+    @State private var argusTo = 23
+    @State private var argusTop = 40
+    @State private var done: Int?
+
+    var body: some View {
+        Form {
+            Section {
+                if let argus = state.status?.argus, argus.verfuegbar, !argus.projekte.isEmpty {
+                    Picker("Projekt", selection: $argusProject) {
+                        ForEach(argus.projekte) { Text($0.name).tag($0.name) }
+                    }
+                    DatePicker("Tag", selection: $argusDay, displayedComponents: .date)
+                    Stepper("Von \(argusFrom) Uhr", value: $argusFrom, in: 0...23)
+                    Stepper("Bis \(argusTo) Uhr", value: $argusTo, in: argusFrom...23)
+                    Stepper("\(argusTop) Zellen", value: $argusTop, in: 5...150, step: 5)
+                    Button("Als Paket anlegen", systemImage: "shippingbox") {
+                        let day = Self.dayFormat.string(from: argusDay)
+                        Task {
+                            await state.run(model.client) { client in
+                                done = try await client.importArgus(project: argusProject, day: day, fromHour: argusFrom, toHour: argusTo, top: argusTop, asDraft: false)
+                            }
+                        }
+                    }
+                    .disabled(argusProject.isEmpty || state.busy)
+                } else {
+                    Text(state.status == nil ? "Lade …" : "Argus Predict ist auf diesem Server nicht eingebunden.")
+                        .foregroundStyle(.secondary)
+                }
+            } footer: {
+                Text("Die auffälligsten Prognosezellen eines Tages, z. B. für die Oberflächenfahndung. Sie kommen als Paket unter „Paket vorbereiten“ und lassen sich von dort in einen Einsatz übernehmen.")
+            }
+        }
+        .navigationTitle("Argus Predict")
+        .navigationBarTitleDisplayMode(.inline)
+        .alert("Paket angelegt", isPresented: Binding(get: { done != nil }, set: { if !$0 { done = nil } })) {
+            Button("OK", role: .cancel) {}
+        } message: {
+            Text("\(done ?? 0) Prognosezellen liegen jetzt als Paket unter „Paket vorbereiten“.")
+        }
+        .task {
+            await state.reload(model.client)
+            if argusProject.isEmpty { argusProject = state.status?.argus.projekte.first?.name ?? "" }
+        }
+        .modifier(FailureAlert(state: state))
     }
 
     private static let dayFormat: DateFormatter = {
@@ -239,6 +258,7 @@ struct LayersAdminScreen: View {
         formatter.dateFormat = "yyyy-MM-dd"
         return formatter
     }()
+}
 }
 
 // MARK: GPS-Tracker

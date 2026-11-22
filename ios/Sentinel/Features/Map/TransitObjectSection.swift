@@ -44,7 +44,7 @@ struct TransitObjectSection: View {
     var body: some View {
         if object.fahrt != nil || (object.linie != nil && object.linie?.id.allSatisfy(\.isNumber) == false) {
             // Aus der ÖPNV-Karte übernommen: Halte und Zeiten kommen aus dem Fahrplan, nichts von Hand einzustellen.
-            Section("Echte Fahrt") {
+            Section {
                 if let ref = object.linie {
                     HStack(spacing: 10) {
                         LineBadge(line: ref.badge, size: 15)
@@ -54,15 +54,22 @@ struct TransitObjectSection: View {
                 if let names = object.haltNamen, let first = names.first, let last = names.last {
                     LabeledContent("Strecke", value: "\(first) → \(last)")
                 }
-                // Ebenen der Strecke, jederzeit änderbar.
-                if object.typ == .oepnvlinie {
-                    PillPicker(items: TransitLayerPart.allCases, selection: layers, title: \.title, symbol: \.symbol, minimum: 1)
-                        .listRowBackground(Color.clear)
-                        .listRowInsets(EdgeInsets(top: 4, leading: 0, bottom: 4, trailing: 0))
-                }
+            } header: {
+                Text("Echte Fahrt")
+            } footer: {
                 Text("Zeiten und Verspätungen führt der Server laufend nach (Transitous).")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
+            }
+            // Ebenen der Strecke, jederzeit änderbar: frei über der Liste wie auf der ÖPNV-Karte, nicht in einer Zeile.
+            if object.typ == .oepnvlinie {
+                Section {
+                    PillPicker(items: TransitLayerPart.allCases, selection: layers, title: \.title, symbol: \.symbol, minimum: 1)
+                        .frame(maxWidth: .infinity)
+                        .listRowBackground(Color.clear)
+                        .listRowSeparator(.hidden)
+                        .listRowInsets(EdgeInsets())
+                } header: {
+                    Text("Auf der Karte zeigen")
+                }
             }
         } else if object.linie == nil || (line == nil && isLoading) {
             search

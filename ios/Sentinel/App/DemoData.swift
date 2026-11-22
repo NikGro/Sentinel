@@ -37,6 +37,8 @@ enum DemoData {
          "targets":[{"id":"t1","rev":3,"updatedAt":\(ts),"updatedBy":"m2","data":{"art":"person","bezeichnung":"","vorname":"Max","nachname":"Mustermann","geburtsdatum":"1990-05-04","geburtsort":"Hamburg","staatsangehoerigkeit":"deutsch","anschrift":"Musterstraße 1, 20095 Hamburg","merkmale":"","fotoBlob":null,"kennzeichen":"","fahrzeugBeschreibung":"","fahrzeugFotoBlob":null,"sachverhalt":"","hinweise":"ca. 1,80 m, schlank, dunkle kurze Haare, schwarze Jacke.\\n\\nBeispielsachverhalt für die Vorschau. Eigensicherung beachten. Aufenthalt feststellen.","massnahmen":"","trackerId":null,"standort":{"lat":53.5532,"lon":9.9921,"ts":\(ts)}}},
                     {"id":"t2","rev":1,"updatedAt":\(ts),"updatedBy":"m2","data":{"art":"objekt","bezeichnung":"Wohnung Musterstraße","anschrift":"Mönckebergstraße 7, 20095 Hamburg","standort":{"lat":53.5506,"lon":9.9990,"ts":\(ts)}}}],
          "trackers":[],
+         "instanz":"haupt",
+         "instances":[{"id":"haupt","rev":1,"updatedAt":1,"updatedBy":"system","data":{"name":"KSOD","art":"einsatz","beschreibung":"","mitglieder":["\(deviceId)"],"erstelltVon":""}}],
          "layers":[{"id":"lage","rev":1,"updatedAt":1,"updatedBy":"system","data":{"name":"Lage","art":"lage","status":"live","beschreibung":""}},
                    {"id":"dauerhaft","rev":1,"updatedAt":1,"updatedBy":"system","data":{"name":"Dauerhafte Orte","art":"dauerhaft","status":"live","beschreibung":""}}],
          "rooms":[{"id":"allgemein","rev":1,"updatedAt":1,"updatedBy":"system","data":{"name":"Allgemein"}},{"id":"r1","rev":1,"updatedAt":1,"updatedBy":"m2","data":{"name":"Team Nord"}}],

@@ -443,7 +443,8 @@ final class LageStore {
     }
 
     func deleteMapObject(id: String) {
-        delete(MapObject.self, id: id)
+        // Sofort ausblenden, nicht erst mit der Bestätigung des Servers: Sonst bleibt die Ansicht kurz leer offen.
+        if delete(MapObject.self, id: id) { mapObjects[id] = nil }
     }
 
     // MARK: Empfang

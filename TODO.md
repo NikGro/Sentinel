@@ -7,6 +7,12 @@ statt jede Änderung sofort einzubauen. Erledigtes wandert mit Version ins CHANG
 
 ### Nächste Runde
 
+- **ÖPNV-Haltestellen verschwinden beim nahen Heranzoomen:** Im Code werden sie nicht nach Zoomstufe ausgeblendet;
+  vermutlich verdecken 3D-Gebäude sie. Rückfrage: In 2D auch? Welche Haltestellen (Strecke, Umkreis, einzelne)?
+- **Überschlagendes Navigieren (ÖPNV):** Neue Option für Ziele, Fahnder und A-Position im ÖPNV. Navigieren mehrere
+  Fahnder zum selben ÖPNV (über das Ziel, die A oder das Fahrzeug selbst), bekommen sie so viele Halte im Voraus wie
+  Teilnehmer. Fährt das Fahrzeug an einem Halt ab, bekommt der dort Wartende den weitesten Halt; die anderen rücken
+  nach, sobald ihr Halt passiert ist.
 - **Straßenverzeichnis beobachten:** Läuft seit 0.18 mit 2 GB Container-Speicher, Node.js darf bis 1,5 GB nutzen;
   nach dem Start belegt der Server etwa 380 MB. Den Speicher beim wöchentlichen Neuladen über Overpass im Blick
   behalten. Wird es knapp, die Straßen in SQLite statt im Arbeitsspeicher halten und in Kacheln laden.
@@ -47,4 +53,6 @@ statt jede Änderung sofort einzubauen. Erledigtes wandert mit Version ins CHANG
   - 0.20: Geofence-Alarm (Verlassen und Betreten), Standortverlauf auf der Karte, reduzierte Verlaufskarte
   - 0.21: Anheften mit Zoomen/Neigen/Verschieben (mit dem Kamerawerte-Overlay), Route von einem Platz aus, ÖPNV-Gleiten,
     Kopfzeilen mit Verlauf
-  - 0.22: Antippen und Marker setzen, Anheften im 3D (Lösen, Zoomen, Kippen), 3D-Knopf, Verlauf ohne Vorauswahl
+  - 0.22: Antippen und Marker setzen, Verlauf ohne Vorauswahl
+  - 0.23: Anheften mit MapKit-Verfolgung (Zoomen, Kippen, Lösen durch Verschieben/Drehen, Navi), ÖPNV-Halten und
+    Kurven, Hauptmenü mit zwei Tabs, Argus als Paket

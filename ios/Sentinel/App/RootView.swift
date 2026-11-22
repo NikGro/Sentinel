@@ -39,7 +39,7 @@ struct RootView: View {
                 VersionLockView(message: mismatch)
             } else if model.showsHome || !insideInstance {
                 // Übergeordnetes Hauptmenü: Karte, Ziele, Kräfte und Chat gibt es nur innerhalb einer Instanz.
-                NavigationStack { InstancesScreen(isHome: true) }
+                HomeView()
             } else {
                 MainView()
             }

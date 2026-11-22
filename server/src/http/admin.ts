@@ -140,28 +140,31 @@ export function registerAdminRoutes(app: FastifyInstance, services: Services, gu
     const { projekt, datum, vonStunde, bisStunde, top, alsEntwurf } = body.data;
     const forecast = argus.forecast(projekt, datum, vonStunde, bisStunde, top);
     if (!forecast || forecast.zellen.length === 0) throw new HttpError(404, 'Für diesen Tag liegt keine Prognose vor.');
-    const layerId = `argus-${randomToken(6)}`;
+    // Als Paket ablegen statt direkt auf die Karte: Es lässt sich prüfen und dann gezielt in einen Einsatz übernehmen.
+    const paketId = `argus-${randomToken(6)}`;
+    const zeitraum = `${datum.slice(8)}.${datum.slice(5, 7)}. ${vonStunde}–${bisStunde + 1} Uhr`;
     db.transaction(() => {
-      lage.put(zentrale, 'layer', layerId, {
-        name: `Argus ${projekt} ${datum.slice(8)}.${datum.slice(5, 7)}. ${vonStunde}-${bisStunde + 1} Uhr`,
-        art: 'argus',
-        status: alsEntwurf ? 'entwurf' : 'live',
+      lage.command(zentrale, 'instanz.erstellen', {
+        id: paketId,
+        name: `Argus ${projekt} ${zeitraum}`.slice(0, 60),
         beschreibung: `Prognose aus Argus Predict, ${forecast.zellen.length} auffälligste Zellen`,
+        art: 'paket',
       });
       for (const [rang, cell] of forecast.zellen.entries()) {
-        lage.put(zentrale, 'annotation', `${layerId}-${cell.zelleId}`.slice(0, 64), {
-          layerId,
+        lage.put(zentrale, 'annotation', `${paketId}-${cell.zelleId}`.slice(0, 64), {
+          layerId: 'lage',
           typ: 'flaeche',
           titel: `Faktor ${cell.faktor.toFixed(1)}`,
           notiz: `Rang ${rang + 1} von ${forecast.zellen.length} · Argus-Projekt ${projekt} · ${datum.slice(8)}.${datum.slice(5, 7)}.${datum.slice(0, 4)}, ${vonStunde}–${bisStunde + 1} Uhr · Zelle ${cell.zelleId}`,
           farbe: argusColor(cell.faktor),
           punkte: cell.ecken,
           wert: Number(cell.faktor.toFixed(3)),
-        });
+        }, paketId);
       }
     });
+    void alsEntwurf;
     db.audit('zentrale', 'argus.importiert', `${projekt} ${datum}`);
-    return { layerId, zellen: forecast.zellen.length };
+    return { paketId, zellen: forecast.zellen.length };
   });
 
   // ───────────── Pakete ─────────────

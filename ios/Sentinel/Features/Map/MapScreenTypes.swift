@@ -96,25 +96,10 @@ enum CameraPin: Equatable {
     /// Norden oben, senkrecht von oben.
     case north
 
-    var distance: CLLocationDistance { self == .heading ? 400 : 1500 }
+    var distance: CLLocationDistance { self == .heading ? 550 : 1500 }
     var pitch: Double { self == .heading ? 40 : 0 }
 
     /// Navigation: etwas höher als beim Anheften für mehr Überblick, gekippt wie in üblichen Navis.
     static let navigationDistance: CLLocationDistance = 420
     static let navigationPitch: Double = 52
-}
-
-/// Finger auf der Karte (siehe `TouchObserver`): Solange einer liegt, führt die App beim Anheften nicht nach; danach
-/// schwingt die Karte aus, bevor Zoomstufe und Neigung übernommen werden.
-struct MapTouch: Equatable {
-    enum Phase: Equatable {
-        /// Kein Finger auf der Karte, keine Geste offen: die App führt nach.
-        case idle
-        /// Mindestens ein Finger liegt auf.
-        case touching
-        /// Finger sind weg, die Karte schwingt noch aus.
-        case settling
-    }
-
-    var phase: Phase = .idle
 }

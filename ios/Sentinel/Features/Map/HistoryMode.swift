@@ -182,6 +182,25 @@ final class StoredTracks {
     }
 
     private(set) var tracks: [Track] = []
+    /// Angetippter Punkt einer Spur: Spur und Index.
+    var selected: (trackId: String, index: Int)?
+
+    var selectedTrack: Track? { selected.flatMap { sel in tracks.first { $0.id == sel.trackId } } }
+
+    /// Angetippt: den nächsten Spurpunkt suchen, wenn er auf dem Bildschirm nah genug liegt.
+    func select(near point: CGPoint, proxy: MapProxy) -> Bool {
+        guard let coordinate = proxy.convert(point, from: .local) else { return false }
+        var best: (id: String, index: Int, screen: CGFloat)?
+        for track in tracks {
+            guard let hit = track.spur.nearest(to: GeoPoint(coordinate)),
+                  let screen = proxy.convert(track.spur.punkte[hit.index].point.coordinate, to: .local) else { continue }
+            let d = hypot(screen.x - point.x, screen.y - point.y)
+            if d < 28, best == nil || d < best!.screen { best = (track.id, hit.index, d) }
+        }
+        guard let best else { return false }
+        selected = (best.id, best.index)
+        return true
+    }
 
     static func key(_ objects: [Versioned<MapObject>]) -> String {
         objects.map { "\($0.id)#\($0.rev)" }.sorted().joined(separator: ",")
@@ -199,6 +218,7 @@ final class StoredTracks {
             }
         }
         tracks = result
+        if let selected, selectedTrack?.spur.punkte.indices.contains(selected.index) != true { self.selected = nil }
     }
 }
 
@@ -209,6 +229,17 @@ struct StoredTracksLayer: MapContent {
     var body: some MapContent {
         ForEach(state.tracks) { track in
             SpurLines(spur: track.spur, title: title(track.spur.subject))
+        }
+        if let selected = state.selected, let punkt = state.selectedTrack?.spur.punkte[safe: selected.index] {
+            Annotation("", coordinate: punkt.point.coordinate, anchor: .center) {
+                Circle()
+                    .fill(.white)
+                    .frame(width: 16, height: 16)
+                    .overlay(Circle().stroke(punkt.quelle.color, lineWidth: 4))
+                    .shadow(radius: 2)
+                    .allowsHitTesting(false)
+            }
+            .annotationTitles(.hidden)
         }
     }
 }

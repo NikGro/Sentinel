@@ -11,30 +11,17 @@ struct TransitAheadPicker: View {
     @Environment(RouteFollower.self) private var route
 
     var body: some View {
-        if let base = route.target?.base, let course = model.transitCourse(of: base) {
-            VStack(alignment: .leading, spacing: 8) {
-                Label("Ziel fährt mit \(course.line). Wohin?", systemImage: "tram.fill")
-                    .font(.footnote.weight(.semibold))
-                    .foregroundStyle(.secondary)
-                    .lineLimit(1)
-                Picker("Navigationsziel", selection: Binding(
-                    get: { route.target?.stopsAhead ?? 0 },
-                    set: { stops in
-                        // Nur das Ziel wechselt; Sonderrechte bleiben, wie sie waren.
-                        let special = route.specialRights
-                        model.navigate(to: stops == 0 ? base : .ahead(base, stops: stops))
-                        route.specialRights = special
-                    }
-                )) {
-                    Text("Fahrzeug").tag(0)
-                    ForEach(1...3, id: \.self) { stops in
-                        Text(stops == 1 ? "1 Halt vor" : "\(stops) Halte vor").tag(stops)
-                    }
-                }
-                .pickerStyle(.segmented)
+        // Ohne Text, im unteren Navi-Fenster: Fahrzeug selbst oder 1 bis 3 Halte voraus.
+        if let base = route.target?.base, model.transitCourse(of: base) != nil {
+            GlassSegmentedControl(
+                items: [(0, "tram.fill", "Zum Fahrzeug"), (1, "1.circle.fill", "1 Halt voraus"), (2, "2.circle.fill", "2 Halte voraus"), (3, "3.circle.fill", "3 Halte voraus")],
+                selection: route.target?.stopsAhead ?? 0
+            ) { stops in
+                // Nur das Ziel wechselt; Sonderrechte bleiben, wie sie waren.
+                let special = route.specialRights
+                model.navigate(to: stops == 0 ? base : .ahead(base, stops: stops))
+                route.specialRights = special
             }
-            .padding(12)
-            .glassEffect(.regular, in: .rect(cornerRadius: 22))
         }
     }
 }
@@ -146,6 +133,9 @@ struct NavigationBottomBar: View {
                 .buttonStyle(.plain)
                 .glassEffect(.regular.tint(.red).interactive(), in: .capsule)
             }
+
+            // Ziel im ÖPNV: zum Fahrzeug oder Halte voraus.
+            TransitAheadPicker()
 
             // Dieselbe Dreier-Auswahl wie auf der Karte: Auto, zu Fuß, ÖPNV.
             GlassSegmentedControl(
