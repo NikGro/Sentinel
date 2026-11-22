@@ -277,13 +277,17 @@ extension MapScreen {
         CameraProbe.shared.event(String(format: "apple abstand zurueck d=%.0f soll=%.0f versuch=%d verfolgung=%@", cameraState.distance, target, resetCorrections, gestures.trackingDescription))
         // Versuch: Abstand an der laufenden Verfolgung ändern statt neu anheften (Neuanheften startet Apples Verfolgung
         // neu, und die setzt jedes Mal wieder etwa 4,9 km: Rein-raus-Schleife auf dem Gerät).
-        guard gestures.setDistance(target, pitch: followPitch ?? mode.pitch) else {
+        let stage = resetCorrections - 1
+        trackingHandover = .now  // nächster Versuch frühestens in 1 s
+        guard gestures.setDistance(target, pitch: followPitch ?? mode.pitch, stage: stage) else {
             startPin(mode, distance: target, pitch: followPitch ?? mode.pitch, isRetry: true)
             return
         }
         Task {
-            try? await Task.sleep(for: .milliseconds(900))
-            CameraProbe.shared.event(String(format: "apple abstand gesetzt d=%.0f verfolgung=%@ pin=%@", cameraState.distance, gestures.trackingDescription, pin.map { "\($0)" } ?? "none"))
+            for wait in [300, 1700] {
+                try? await Task.sleep(for: .milliseconds(wait))
+                CameraProbe.shared.event(String(format: "apple abstand stufe %d d=%.0f verfolgung=%@ pin=%@", stage, cameraState.distance, gestures.trackingDescription, pin.map { "\($0)" } ?? "none"))
+            }
         }
     }
 

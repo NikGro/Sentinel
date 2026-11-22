@@ -110,12 +110,24 @@ final class MapGestureWatcher: NSObject {
 
     /// Versuch: Abstand und Neigung direkt an der MapKit-Karte setzen, Mittelpunkt und Richtung bleiben, damit Apples
     /// laufende Standortverfolgung nicht neu startet (ein Neustart setzt Apples eigenen, weiten Abstand).
+    /// Stufe 0: Kamera ohne Animation zuweisen. Stufe 1: Zoombereich der Karte kurz auf den Sollwert eng machen.
     @discardableResult
-    func setDistance(_ distance: CLLocationDistance, pitch: Double) -> Bool {
+    func setDistance(_ distance: CLLocationDistance, pitch: Double, stage: Int) -> Bool {
         guard let map else { return false }
-        let now = map.camera
-        let target = MKMapCamera(lookingAtCenter: now.centerCoordinate, fromDistance: distance, pitch: pitch, heading: now.heading)
-        map.setCamera(target, animated: true)
+        switch stage {
+        case 0:
+            let cam = map.camera.copy() as! MKMapCamera
+            cam.centerCoordinateDistance = distance
+            cam.pitch = pitch
+            map.camera = cam
+        default:
+            map.setCameraZoomRange(MKMapView.CameraZoomRange(minCenterCoordinateDistance: distance * 0.97,
+                                                             maxCenterCoordinateDistance: distance * 1.03), animated: true)
+            Task { @MainActor [weak map] in
+                try? await Task.sleep(for: .milliseconds(1500))
+                map?.setCameraZoomRange(nil, animated: false)
+            }
+        }
         return true
     }
 
