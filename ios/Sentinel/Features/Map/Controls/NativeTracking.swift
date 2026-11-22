@@ -36,21 +36,28 @@ final class MapViewHandle {
         return nil
     }
 
-    /// Kamera setzen und danach der Karte die Verfolgung übergeben. Erst die Ansicht (Abstand, Winkel, Richtung), dann
-    /// die Verfolgung: Sie behält Abstand und Winkel, und das Setzen einer Kamera würde sie sonst wieder beenden.
+    /// Verfolgung einschalten und dann Abstand, Winkel und Richtung setzen. In dieser Reihenfolge: Beim Einschalten
+    /// stellt MapKit sonst seine eigene Zoomstufe ein (die Karte zoomte nach dem Anheften wieder heraus). Ändert MapKit
+    /// den Abstand trotzdem oder fällt die Verfolgung durch das Setzen heraus, wird einmal nachgesetzt.
     /// Liefert `false`, wenn keine MapKit-Karte gefunden wurde (dann übernimmt die eigene Nachführung).
     @discardableResult
     func track(center: CLLocationCoordinate2D, distance: CLLocationDistance, pitch: Double, heading: CLLocationDirection,
                followsHeading: Bool) -> Bool {
         guard let map = mapView else { return false }
+        let mode: MKUserTrackingMode = followsHeading ? .followWithHeading : .follow
+        if map.userTrackingMode != mode { map.setUserTrackingMode(mode, animated: false) }
         let camera = MKMapCamera(lookingAtCenter: center, fromDistance: distance, pitch: pitch, heading: heading)
         map.setCamera(camera, animated: true)
-        let mode: MKUserTrackingMode = followsHeading ? .followWithHeading : .follow
         Task { @MainActor [weak map] in
-            // Nach der Kamerafahrt (MapKit animiert etwa eine halbe Sekunde).
-            try? await Task.sleep(for: .milliseconds(550))
+            try? await Task.sleep(for: .milliseconds(700))
             guard let map else { return }
-            map.setUserTrackingMode(mode, animated: true)
+            if map.userTrackingMode != mode { map.setUserTrackingMode(mode, animated: false) }
+            try? await Task.sleep(for: .milliseconds(150))
+            let current = map.camera
+            if abs(current.centerCoordinateDistance - distance) > distance * 0.15 || abs(Double(current.pitch) - pitch) > 8 {
+                let fix = MKMapCamera(lookingAtCenter: map.userLocation.coordinate, fromDistance: distance, pitch: pitch, heading: current.heading)
+                map.setCamera(fix, animated: true)
+            }
         }
         return true
     }

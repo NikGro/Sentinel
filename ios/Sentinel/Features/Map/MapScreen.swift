@@ -190,14 +190,15 @@ struct MapScreen: View {
             model.historyIntervalRequest = nil
         }
         .task(id: hasTransit) {
-            // Fünf Schritte je Sekunde mit gleitendem Übergang (ein Bus bewegt sich je Schritt um etwa zwei Meter). Die Uhr
+            // Zehn Schritte je Sekunde ohne Animation (ein Bus bewegt sich je Schritt um etwa einen Meter, auf der Karte
+            // rund einen Bildpunkt). Eine gleitende Animation wackelte, sobald sich die Kamera beim Mitfahren bewegt. Die Uhr
             // liest nur die ÖPNV-Ebene der Karte, der übrige Bildschirm wird dabei nicht neu berechnet.
             let clock = ContinuousClock()
             var next = clock.now
             while hasTransit, !Task.isCancelled {
-                next += .milliseconds(200)
+                next += .milliseconds(100)
                 try? await clock.sleep(until: next)
-                withAnimation(.linear(duration: 0.2)) { transitClock.now = .now }
+                transitClock.now = .now
             }
         }
         .confirmationDialog(

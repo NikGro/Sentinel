@@ -1,5 +1,26 @@
 # Änderungen
 
+## 0.26.0
+
+**Kamera**
+- Anheften: erst die MapKit-Verfolgung einschalten, dann Abstand und Winkel setzen; ändert MapKit sie dennoch, wird
+  einmal nachgesetzt (vorher zoomte die Karte nach dem Anheften wieder heraus)
+- Herausdrehen aus der Kompass-Ausrichtung (mehr als 55° neben der Blickrichtung) löst die Kopplung, statt dass die
+  Karte gegen den Finger zurückdreht
+
+**ÖPNV**
+- Fahrzeuge zehnmal je Sekunde ohne Animation weitergerückt (etwa ein Bildpunkt je Schritt): Die gleitende Animation
+  wackelte, sobald sich die Kamera mitbewegte
+- ÖPNV-Karte: Haltestellen bleiben auch nah herangezoomt; eine durch die nächste Kartenbewegung abgebrochene Abfrage
+  leert sie nicht mehr, nah wird ein etwas größerer Ausschnitt geladen
+- ÖPNV-Karte: SOS und Kompassknopf (zum eigenen Standort) oben rechts wie in den übrigen reduzierten Ansichten
+
+**Oberfläche**
+- Zielperson: Standortquelle direkt unter „Hinführen“, danach der Dreier-Schalter für das Verkehrsmittel
+- Hauptmenü: Instanzen löschen in der Liste „Weitere Instanzen“ (nach dem Verlassen), nicht mehr bei den eigenen
+- „Fertig“ in „Dauerhafte Orte bearbeiten“ und in einem Paket führt zurück ins Hauptmenü
+- Navigieren / Hier anlegen: Postleitzahl und Ort sowie die Straßenansicht (Look Around)
+
 ## 0.25.0
 
 **Navigation**

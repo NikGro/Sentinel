@@ -38,6 +38,7 @@ struct TransitExplorer: View {
     }
 
     @State private var camera: MapCameraPosition = .automatic
+    @State private var cameraState = MapCameraState()
     @State private var region: MKCoordinateRegion?
     @State private var segments: [LiveSegment] = []
     @State private var stops: [LiveStop] = []
@@ -89,19 +90,26 @@ struct TransitExplorer: View {
                     }
                 }
                 .mapStyle(.standard(pointsOfInterest: .excludingAll))
-                .mapControls { MapCompass(); MapScaleView() }
+                // Eigener Kompassknopf statt Apples Kompass, wie in den übrigen reduzierten Ansichten.
+                .mapControls { MapScaleView() }
+                .onMapCameraChange(frequency: .continuous) { context in
+                    cameraState.update(context.camera)
+                }
                 .onMapCameraChange(frequency: .onEnd) { context in
                     region = context.region
                 }
-                // Schnell zurück zum eigenen Standort, wie auf der Lagekarte.
-                .overlay(alignment: .bottomTrailing) {
-                    if let me = model.myPoint {
-                        MapRoundButton(title: "Eigener Standort", symbol: "location.fill") {
-                            withAnimation { camera = .region(MKCoordinateRegion(center: me.coordinate, latitudinalMeters: 1500, longitudinalMeters: 1500)) }
+                // SOS und Kompassknopf an der gewohnten Stelle oben rechts: Antippen springt zum eigenen Standort
+                // (Norden oben).
+                .overlay(alignment: .topTrailing) {
+                    VStack(spacing: Theme.barSpacing) {
+                        SOSButton()
+                        LocationCompassButton(state: cameraState, pin: nil) {
+                            guard let me = model.myPoint else { return }
+                            withAnimation { camera = .camera(MapCamera(centerCoordinate: me.coordinate, distance: 1500, heading: 0, pitch: 0)) }
                         }
-                        .padding(.trailing, Theme.barInset)
-                        .padding(.bottom, Theme.barSpacing)
                     }
+                    .padding(.trailing, Theme.barInset)
+                    .padding(.top, Theme.barSpacing)
                 }
             .safeAreaInset(edge: .top, spacing: 0) { searchBar }
             .safeAreaInset(edge: .bottom, spacing: 0) { bottomCard }
@@ -125,8 +133,9 @@ struct TransitExplorer: View {
             .task {
                 while !Task.isCancelled {
                     // Kurze Schritte statt einer Animation je Sekunde: flüssig, auch wenn die Karte zwischendurch neu zeichnet.
-                    try? await Task.sleep(for: .milliseconds(200))
-                    withAnimation(.linear(duration: 0.2)) { clock.now = .now }
+                    // Zehn kleine Schritte je Sekunde ohne Animation: ruhig, auch wenn sich die Kamera bewegt.
+                    try? await Task.sleep(for: .milliseconds(100))
+                    clock.now = .now
                 }
             }
             .task(id: query) {
@@ -150,7 +159,22 @@ struct TransitExplorer: View {
             segments = result.segments
             tooLarge = result.tooLarge
             failure = nil
-            stops = region.span.latitudeDelta < 0.03 ? ((try? await client.liveStops(min: min, max: max)) ?? []) : []
+            // Haltestellen erst nah genug. Bei sehr nahem Zoom einen etwas größeren Ausschnitt laden und bereits geladene
+            // behalten: Eine abgebrochene oder fehlgeschlagene Abfrage (die nächste Kartenbewegung bricht sie ab) darf
+            // die Haltestellen nicht leeren.
+            if region.span.latitudeDelta < 0.03 {
+                let padLat = Swift.max(0, 0.02 - region.span.latitudeDelta) / 2, padLon = Swift.max(0, 0.03 - region.span.longitudeDelta) / 2
+                let lower = GeoPoint(lat: min.lat - padLat, lon: min.lon - padLon), upper = GeoPoint(lat: max.lat + padLat, lon: max.lon + padLon)
+                if let loaded = try? await client.liveStops(min: lower, max: upper), !Task.isCancelled {
+                    var merged = Dictionary(stops.map { ($0.id, $0) }, uniquingKeysWith: { a, _ in a })
+                    for stop in loaded { merged[stop.id] = stop }
+                    // Nur die in der Nähe des Ausschnitts behalten, damit die Karte nicht voll läuft.
+                    let center = GeoPoint(region.center)
+                    stops = merged.values.filter { $0.point.distance(to: center) < 3000 }.sorted { $0.id < $1.id }
+                }
+            } else {
+                stops = []
+            }
         } catch {
             if (error as? URLError)?.code != .cancelled, !(error is CancellationError) { failure = "ÖPNV-Daten zurzeit nicht erreichbar." }
         }

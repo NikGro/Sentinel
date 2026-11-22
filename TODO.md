@@ -7,8 +7,6 @@ statt jede Änderung sofort einzubauen. Erledigtes wandert mit Version ins CHANG
 
 ### Nächste Runde
 
-- **ÖPNV-Haltestellen verschwinden beim nahen Heranzoomen:** Im Code werden sie nicht nach Zoomstufe ausgeblendet;
-  vermutlich verdecken 3D-Gebäude sie. Rückfrage: In 2D auch? Welche Haltestellen (Strecke, Umkreis, einzelne)?
 - **Straßenverzeichnis beobachten:** Läuft mit 2 GB Container-Speicher, Node.js darf bis 1,5 GB nutzen. Stand
   22.11.: 286 MB im Betrieb, kein Neustart seit dem Update. Das nächste wöchentliche Neuladen über Overpass ist um
   den 27.11.; danach den Speicher prüfen. Wird es knapp, die Straßen in SQLite statt im Arbeitsspeicher halten.
@@ -56,3 +54,4 @@ statt jede Änderung sofort einzubauen. Erledigtes wandert mit Version ins CHANG
     Kurven, Hauptmenü mit zwei Tabs, Argus als Paket
   - 0.24: Überschlagend zu einem ÖPNV-Fahrzeug mit mehreren Fahndern (über Ziel, A und Fahrzeug)
   - 0.25: Querstraßen-Sprechblasen, Antippen von ÖPNV-Fahrzeugen und Datumsfeldern beim ersten Mal
+  - 0.26: Anheften ohne Herauszoomen, Lösen durch Drehen, ÖPNV ohne Wackeln, Haltestellen nah auf der ÖPNV-Karte

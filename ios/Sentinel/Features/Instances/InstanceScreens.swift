@@ -31,28 +31,19 @@ struct InstancesScreen: View {
                         model.openInstance(instance.id)
                     }, leave: { lage.leaveInstance(instance.id) })
                     // Verlassen geht überall, auch bei der Standardinstanz; wer keine Instanz mehr hat, ist außer Dienst.
-                    .swipeActions(edge: .trailing) {
-                        if instance.id != Instance.mainId {
-                            Button("Löschen", systemImage: "trash", role: .destructive) { deleting = instance }
-                        }
-                        Button("Verlassen", systemImage: "rectangle.portrait.and.arrow.right") { lage.leaveInstance(instance.id) }
-                            .tint(.orange)
-                    }
+                    // Gelöscht wird erst nach dem Verlassen, in der Liste darunter.
                     .contextMenu {
                         if instance.id != Instance.mainId {
                             Button("Umbenennen", systemImage: "pencil") { editing = instance }
                         }
                         Button("Verlassen", systemImage: "rectangle.portrait.and.arrow.right") { lage.leaveInstance(instance.id) }
-                        if instance.id != Instance.mainId {
-                            Button("Löschen", systemImage: "trash", role: .destructive) { deleting = instance }
-                        }
                     }
                 }
                 Button("Neue Instanz", systemImage: "plus.circle.fill") { creating = true }
             } header: {
                 Text("Meine Instanzen")
             } footer: {
-                Text("Jede Instanz hat ihre eigene Lage, eigene Ziele, Chats, A-Position und Notrufe. Geöffnet ist immer genau eine. Aus den anderen kommen A-Position und Notruf als Hinweis.")
+                Text("Jede Instanz hat ihre eigene Lage, eigene Ziele, Chats, A-Position und Notrufe. Geöffnet ist immer genau eine. Aus den anderen kommen A-Position und Notruf als Hinweis. Löschen lässt sich eine Instanz nach dem Verlassen unter „Weitere Instanzen“.")
             }
 
             if !lage.otherInstances.isEmpty {
@@ -68,6 +59,17 @@ struct InstancesScreen: View {
                             Spacer()
                             Button("Beitreten") { lage.joinInstance(instance.id) }
                                 .buttonStyle(.glass)
+                        }
+                        // Löschen dort, wo die Instanz steht, wenn man nicht (mehr) Mitglied ist.
+                        .swipeActions(edge: .trailing) {
+                            if instance.id != Instance.mainId {
+                                Button("Löschen", systemImage: "trash", role: .destructive) { deleting = instance }
+                            }
+                        }
+                        .contextMenu {
+                            if instance.id != Instance.mainId {
+                                Button("Löschen", systemImage: "trash", role: .destructive) { deleting = instance }
+                            }
                         }
                     }
                 }

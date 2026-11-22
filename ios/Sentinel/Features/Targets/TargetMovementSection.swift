@@ -25,36 +25,7 @@ struct TargetMovementSection: View {
     }
 
     var body: some View {
-        if target.art == .person {
-            Section {
-                Picker("Unterwegs", selection: mobility) {
-                    // Symbole wie im Dreier-Umschalter der Kräfte.
-                    ForEach([TargetBinding.Art.fuss, .fahrzeug, .oepnv]) { art in
-                        Image(systemName: art.symbolName)
-                            .accessibilityLabel(art.title)
-                            .tag(art)
-                    }
-                }
-                .pickerStyle(.segmented)
-                .controlSize(.extraLarge)
-                .listRowBackground(Color.clear)
-                .listRowInsets(EdgeInsets())
-                .sheet(item: $boarding) { art in
-                    BoardingSheet(
-                        art: art,
-                        candidates: lage.boardingCandidates(for: art, excluding: entity.id, near: lage.position(ofTarget: entity)?.point ?? model.myPoint),
-                        selected: target.bindung?.art == art ? target.bindung?.zielId : nil,
-                        otherSelected: target.bindung?.art == .fahrzeug && target.bindung?.zielId == nil,
-                        pick: { id in save { $0.bindung = TargetBinding(art: art, zielId: id) } }
-                    )
-                }
-            } footer: {
-                if let boardedIn {
-                    Text("Sitzt in: \(boardedIn). Der Standort folgt dem Fahrzeug.")
-                }
-            }
-        }
-
+        // Erst die Standortquelle direkt unter „Hinführen“, dann der Dreier-Schalter für das Verkehrsmittel.
         if target.supportsDynamicSource, boardedIn == nil {
             Section {
                 Button { choosingSource = true } label: {
@@ -88,6 +59,36 @@ struct TargetMovementSection: View {
                     choosingSource: $choosingSource,
                     save: save
                 ))
+            }
+        }
+
+        if target.art == .person {
+            Section {
+                Picker("Unterwegs", selection: mobility) {
+                    // Symbole wie im Dreier-Umschalter der Kräfte.
+                    ForEach([TargetBinding.Art.fuss, .fahrzeug, .oepnv]) { art in
+                        Image(systemName: art.symbolName)
+                            .accessibilityLabel(art.title)
+                            .tag(art)
+                    }
+                }
+                .pickerStyle(.segmented)
+                .controlSize(.extraLarge)
+                .listRowBackground(Color.clear)
+                .listRowInsets(EdgeInsets())
+                .sheet(item: $boarding) { art in
+                    BoardingSheet(
+                        art: art,
+                        candidates: lage.boardingCandidates(for: art, excluding: entity.id, near: lage.position(ofTarget: entity)?.point ?? model.myPoint),
+                        selected: target.bindung?.art == art ? target.bindung?.zielId : nil,
+                        otherSelected: target.bindung?.art == .fahrzeug && target.bindung?.zielId == nil,
+                        pick: { id in save { $0.bindung = TargetBinding(art: art, zielId: id) } }
+                    )
+                }
+            } footer: {
+                if let boardedIn {
+                    Text("Sitzt in: \(boardedIn). Der Standort folgt dem Fahrzeug.")
+                }
             }
         }
 

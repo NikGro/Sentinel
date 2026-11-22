@@ -238,7 +238,8 @@ final class AppModel {
         if route.isActive { stopNavigation() }
     }
 
-    /// Verlässt den Sonderbereich (dauerhafte Orte oder Paket) zurück in den Einsatz.
+    /// Verlässt den Sonderbereich (dauerhafte Orte oder Paket) zurück ins Hauptmenü, wo man ihn geöffnet hat. Beim
+    /// Paket wird im Hintergrund wieder die vorherige Instanz aktiv, damit man nicht im Paket „im Dienst“ bleibt.
     func leaveSpecialArea() {
         if editsPermanentLayer {
             editPermanentLayer(false)
@@ -247,6 +248,7 @@ final class AppModel {
             returnInstance = nil
             openInstance(back)
         }
+        showsHome = true
     }
 
     func editPermanentLayer(_ on: Bool) {

@@ -755,7 +755,9 @@ export class Lage extends EventEmitter<{ event: [LageEvent] }> {
   private deleteInstance(actor: Actor, id: string): void {
     const instance = this.requireInstance(id);
     if (id === INSTANZ_HAUPT) throw new LageError('verboten', 'Die Standardinstanz kann nicht gelöscht werden.');
-    this.requireMembership(actor, instance);
+    // Gelöscht wird aus der Liste der Instanzen, in denen man nicht Mitglied ist (vorher verlassen); ein Paket aus der
+    // Paketliste. Mitglieder dürfen es weiterhin, z. B. über Sentinel Web.
+    if (actor.role !== 'zentrale' && actor.role !== 'fahnder') throw new LageError('verboten', 'Nur Fahnder dürfen Instanzen löschen.');
     for (const m of this.list('member')) if (m.data.instanz === id) this.switchInstance(m.id, INSTANZ_HAUPT);
     for (const kind of SCOPED_KINDS) for (const entity of this.entities.listIn(kind, id)) this.remove(kind, id, entity.id);
     this.tracks.clear(id);

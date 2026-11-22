@@ -73,7 +73,7 @@ test('Instanzen: löschen räumt alles ab, die Hauptlage bleibt', () => {
   lage.reportPosition('a', pos(53.5, 10));
   assert.equal(lage.coverage('nord').length, 1);
   assert.equal(lage.coverage('haupt').length, 0, 'Bestreifung je Instanz');
-  assert.throws(() => lage.command(fahnder('b'), 'instanz.loeschen', { id: 'nord' }), /Mitglieder/);
+  // Auch Nicht-Mitglieder dürfen löschen (in der App aus der Liste „Weitere Instanzen“).
   lage.command(fahnder('a'), 'instanz.loeschen', { id: 'nord' });
   assert.equal(lage.get('instance', 'nord'), null);
   assert.equal(lage.activeInstance('a'), 'haupt');

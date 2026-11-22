@@ -163,13 +163,23 @@ struct SearchPinCard: View {
     let close: () -> Void
 
     @State private var showsChooser = false
+    /// Postleitzahl und Ort aus der Umkehrsuche.
+    @State private var locality: String?
 
     var body: some View {
         VStack(alignment: .leading, spacing: 10) {
             HStack {
-                Text(pin.title)
-                    .font(.headline)
-                    .lineLimit(2)
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(pin.title)
+                        .font(.headline)
+                        .lineLimit(2)
+                    if let locality {
+                        Text(locality)
+                            .font(.subheadline)
+                            .foregroundStyle(.secondary)
+                            .lineLimit(1)
+                    }
+                }
                 Spacer(minLength: 0)
                 Button(action: close) {
                     Image(systemName: "xmark")
@@ -200,9 +210,18 @@ struct SearchPinCard: View {
                 .tint(.secondary)
             }
             .controlSize(.large)
+            // Straßenansicht (Apple Look Around), sofern es dort Aufnahmen gibt.
+            LookAroundCard(address: "", point: pin.point)
         }
         .padding(14)
         .glassEffect(.regular, in: .rect(cornerRadius: 22))
+        .task(id: "\(pin.point.lat)|\(pin.point.lon)") {
+            locality = nil
+            let placemarks = try? await CLGeocoder().reverseGeocodeLocation(CLLocation(latitude: pin.point.lat, longitude: pin.point.lon), preferredLocale: Locale(identifier: "de_DE"))
+            guard let place = placemarks?.first else { return }
+            let text = [place.postalCode, place.locality].compactMap { $0 }.joined(separator: " ")
+            locality = text.isEmpty ? nil : text
+        }
         .sheet(isPresented: $showsChooser) {
             AddChooser(scope: scope, includesHistory: false) { action in
                 showsChooser = false

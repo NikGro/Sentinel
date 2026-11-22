@@ -196,7 +196,14 @@ extension MapScreen {
     func checkNativeTracking() {
         guard nativeTracking, let mode = pin, Date.now.timeIntervalSince(trackingHandover) > 1.2,
               let tracking = mapHandle.trackingMode else { return }
-        let lost = tracking == .none || (mode == .heading && tracking != .followWithHeading)
+        var lost = tracking == .none || (mode == .heading && tracking != .followWithHeading)
+        // Herausgedreht: Weicht die Karte deutlich von der Blickrichtung ab, dreht sie nicht gegen den Finger zurück,
+        // sondern die Kopplung löst sich.
+        if mode == .heading, !lost, let facing = locationContext.compassDegrees {
+            var delta = abs(cameraState.heading - facing).truncatingRemainder(dividingBy: 360)
+            if delta > 180 { delta = 360 - delta }
+            if delta > 55 { lost = true }
+        }
         if lost { pin = nil }
     }
 
