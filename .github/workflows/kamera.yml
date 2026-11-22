@@ -1,0 +1,90 @@
+name: Kamera-Test
+
+# Prüft die Kamera beim Anheften automatisch im Simulator (Zoomen, Drehen, Wischen, Folgen beim Fahren) und nimmt
+# den Bildschirm dabei als Video auf. Ergebnis: Testbericht, Video, Bildschirmfotos und die Messdatei der App
+# (kamera.jsonl, eine Zeile je Kamerabewegung) als Artefakt „Kamera-…“. Blockiert den Bau der App nicht.
+on:
+  push:
+    branches: [main, "claude/**"]
+    paths: ["ios/**", ".github/workflows/kamera.yml"]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: kamera-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  kamera:
+    name: Kamera im Simulator prüfen
+    runs-on: macos-26
+    timeout-minutes: 40
+    defaults:
+      run:
+        working-directory: ios
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          persist-credentials: false
+
+      - name: Werkzeuge
+        run: |
+          which xcodegen || brew install xcodegen
+          xcodegen generate
+
+      - name: Simulator starten
+        id: sim
+        run: |
+          DEVICE=$(xcrun simctl list devices available | grep -E '^\s+iPhone' | head -1 | sed -E 's/^ +//; s/ \([0-9A-F-]{36}\).*//')
+          echo "device=$DEVICE" >> "$GITHUB_OUTPUT"
+          xcrun simctl boot "$DEVICE" || true
+          xcrun simctl bootstatus "$DEVICE" -b || true
+          xcrun simctl privacy "$DEVICE" grant location-always de.nglab.sentinel || true
+          xcrun simctl location "$DEVICE" set 53.5503,9.9930 || true
+
+      - name: Bauen
+        run: |
+          set -o pipefail
+          xcodebuild build-for-testing \
+            -project Sentinel.xcodeproj -scheme Sentinel \
+            -destination "platform=iOS Simulator,name=${{ steps.sim.outputs.device }}" \
+            -derivedDataPath build/DerivedData \
+            CODE_SIGNING_ALLOWED=NO 2>&1 | tee build-kamera.log | xcbeautify --quiet
+
+      - name: Kamera-Test mit Videoaufnahme
+        run: |
+          set -o pipefail
+          mkdir -p build/kamera
+          xcrun simctl io booted recordVideo --codec=h264 --force build/kamera/kamera.mp4 &
+          REC=$!
+          sleep 2
+          xcodebuild test-without-building \
+            -project Sentinel.xcodeproj -scheme Sentinel \
+            -destination "platform=iOS Simulator,name=${{ steps.sim.outputs.device }}" \
+            -derivedDataPath build/DerivedData \
+            -resultBundlePath build/Kamera.xcresult \
+            -only-testing:SentinelUITests/KameraTests \
+            CODE_SIGNING_ALLOWED=NO 2>&1 | tee build-kamera-test.log | xcbeautify || STATUS=$?
+          kill -INT $REC || true
+          sleep 3
+          exit ${STATUS:-0}
+
+      - name: Messdatei und Bildschirmfotos einsammeln
+        if: always()
+        run: |
+          DATA=$(xcrun simctl get_app_container booted de.nglab.sentinel data 2>/dev/null || true)
+          [ -n "$DATA" ] && cp "$DATA/Documents/kamera.jsonl" build/kamera/ 2>/dev/null || echo "Keine Messdatei gefunden"
+          xcrun xcresulttool export attachments --path build/Kamera.xcresult --output-path build/kamera/fotos || true
+          grep -hE "(error|failed|XCTAssert|Test Case .* (passed|failed))" build-kamera-test.log | sort -u > build/kamera/ergebnis.txt || true
+          cat build/kamera/ergebnis.txt || true
+          ls -la build/kamera
+
+      - uses: actions/upload-artifact@v5
+        if: always()
+        with:
+          name: Kamera-${{ github.run_number }}
+          path: ios/build/kamera
+          if-no-files-found: ignore
+          retention-days: 14

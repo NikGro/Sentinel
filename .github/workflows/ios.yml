@@ -60,6 +60,7 @@ jobs:
             -destination "platform=iOS Simulator,name=$DEVICE" \
             -derivedDataPath build/DerivedData \
             -resultBundlePath build/Tests.xcresult \
+            -skip-testing:SentinelUITests/KameraTests \
             CODE_SIGNING_ALLOWED=NO 2>&1 | tee build-test.log | xcbeautify --quiet
 
       - name: Bildschirmfotos des Rundgangs

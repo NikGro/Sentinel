@@ -277,10 +277,23 @@ struct MapScreen: View {
             .onMapCameraChange(frequency: .continuous) { context in
                 cameraState.update(context.camera)
                 if !gestures.isAttached { gestures.attachIfNeeded() }
+                #if DEBUG
+                CameraProbe.shared.record(context.camera, pin: pin, gesture: gestures.isActive, settling: settling, attached: gestures.isAttached)
+                #endif
             }
             // Darüber findet der Gestenbeobachter die MapKit-Karte.
             .background { MapGestureAnchor(watcher: gestures) }
-            .onAppear { gestures.onEvent = { handleGesture($0) } }
+            .onAppear {
+                gestures.onEvent = { event in
+                    #if DEBUG
+                    CameraProbe.shared.event("\(event)")
+                    #endif
+                    handleGesture(event)
+                }
+            }
+            #if DEBUG
+            .overlay(alignment: .topLeading) { CameraProbeLabel() }
+            #endif
             .onMapCameraChange(frequency: .onEnd) { context in
                 cameraState.update(context.camera)
                 // Ausgeschwungen nach einer Geste: Abstand und Winkel übernehmen.
@@ -294,6 +307,9 @@ struct MapScreen: View {
                 if pin == .heading, (location.current?.speed ?? 0) < 1 { followTick() }
             }
             .onChange(of: pin, initial: true) { _, new in
+                #if DEBUG
+                CameraProbe.shared.event("pin \(new.map { $0 == .heading ? "heading" : "north" } ?? "none")")
+                #endif
                 ownMarkerOptions.showsStreet = new != nil
                 if new == nil { settling = false }
             }

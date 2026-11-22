@@ -3,6 +3,18 @@
 Hartnäckige Fehler mit allen Lösungsversuchen und ihrem Ergebnis. Vor jedem neuen Versuch hier nachsehen, damit
 gescheiterte Ansätze nicht wiederholt werden. Neue Versuche und Rückmeldungen vom Gerät sofort eintragen.
 
+## Testumgebung für Kamera und Gesten
+
+- `ios/SentinelUITests/KameraTests.swift`: fährt im Simulator eine Strecke ab, heftet an, zoomt (Zwei-Finger),
+  dreht und wischt und prüft jede Anforderung unten automatisch (angeheftet, Abstand, Pumpen, Lösen).
+- Messfühler in der App (`CameraProbe`, nur Testbuild mit `-kameraprobe`): eine Zeile je Kamerabewegung und je
+  Gesten-Ereignis in `kamera.jsonl`, dazu ein lesbares Element `kamera-probe` für den Test.
+- Ablauf `.github/workflows/kamera.yml` (bei jedem Push auf `ios/**` oder von Hand): Test mit Videoaufnahme;
+  Artefakt `Kamera-<Nr>` mit `kamera.mp4`, `kamera.jsonl`, Bildschirmfotos und `ergebnis.txt`.
+- Auswertung: Artefakt laden, dann `tools/kamera_auswertung.py <Ordner>` (Zeitachse, Pumpen, ungewolltes Lösen,
+  Einzelbilder per ffmpeg).
+- Grenze: Kippen mit zwei Fingern kann XCUITest nicht ausführen; das bleibt eine Prüfung auf dem Gerät.
+
 ## Kamera beim Anheften (Karte am eigenen Standort)
 
 ### Anforderungen (verbindlich, vom Nutzer)
