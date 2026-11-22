@@ -18,7 +18,7 @@ def main() -> None:
     job = json.loads(gh(f"repos/NikGro/Sentinel/actions/runs/{run}/jobs"))["jobs"][0]["id"]
     log = gh(f"repos/NikGro/Sentinel/actions/jobs/{job}/logs")
     os.makedirs(os.path.join(out, "bilder"), exist_ok=True)
-    lines = [re.sub(r"^\d{4}-\d\d-\d\dT[\d:.]+Z ", "", l) for l in log.splitlines()]
+    lines = [re.sub(r"^\d{4}-\d\d-\d\dT[\d:.]+Z ", "", l.lstrip("\ufeff")) for l in log.splitlines()]
     with open(os.path.join(out, "protokoll.txt"), "w", encoding="utf-8") as f:
         f.write("\n".join(lines))
 

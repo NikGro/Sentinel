@@ -228,6 +228,7 @@ final class KameraTests: XCTestCase {
                 break
             }
         }
+        capture("u0-start")
         XCTAssertTrue(app.tabBars.buttons["Lage"].waitForExistence(timeout: 20), "Karte erscheint")
         drive(steps: 4)
         pinHeading()

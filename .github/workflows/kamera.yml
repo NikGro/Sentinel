@@ -90,16 +90,18 @@ jobs:
           python3 ../tools/kamera_auswertung.py build/kamera 1 || true
           if [ -f build/kamera/kamera.jsonl ]; then
             echo "=====MESSDATEI-""ANFANG====="
-            gzip -c build/kamera/kamera.jsonl | base64
+            gzip -c build/kamera/kamera.jsonl | base64 -b 76
             echo "=====MESSDATEI-""ENDE====="
           fi
           if [ -d build/kamera/bilder ]; then
             mkdir -p build/klein
+            i=0
             for f in build/kamera/bilder/*.png; do
+              i=$((i+1)); [ $((i % 2)) -eq 0 ] || continue
               sips -s format jpeg -s formatOptions 45 -Z 300 "$f" --out "build/klein/$(basename "${f%.png}").jpg" >/dev/null 2>&1 || true
             done
             echo "=====BILDER-""ANFANG====="
-            tar -C build/klein -czf - . | base64
+            tar -C build/klein -czf - . | base64 -b 76
             echo "=====BILDER-""ENDE====="
           fi
 
