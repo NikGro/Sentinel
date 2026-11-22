@@ -59,6 +59,18 @@ final class HistoryState {
         return min(customFrom, customTo)...max(customFrom, customTo)
     }
 
+    /// Obergrenze der Datumsfelder: bis zur nächsten vollen Minute, innerhalb einer Minute gleich (ein bei jedem
+    /// Neuaufbau anderer Bereich setzt das Feld sonst ebenfalls zurück).
+    static var pickerLimit: Date { Date(timeIntervalSince1970: ((Date.now.timeIntervalSince1970 / 60).rounded(.down) + 1) * 60) }
+
+    /// Zeitraum für die Datumsfelder, auf die Minute gerundet. Bei Vorgaben bis „jetzt“ bekäme das Feld sonst bei jedem
+    /// Neuaufbau einen um Millisekunden anderen Wert, finge neu an und verlöre dabei Antipper.
+    var displayInterval: ClosedRange<Date> {
+        func minute(_ date: Date) -> Date { Date(timeIntervalSince1970: (date.timeIntervalSince1970 / 60).rounded(.down) * 60) }
+        let exact = interval
+        return minute(exact.lowerBound)...max(minute(exact.lowerBound), minute(exact.upperBound))
+    }
+
     /// Ändert sich, wenn neu geladen werden muss.
     func loadKey(_ subjects: [SpurSubject]) -> String {
         let span = range == .custom ? "\(customFrom.timeIntervalSince1970)-\(customTo.timeIntervalSince1970)" : range.rawValue
@@ -408,16 +420,16 @@ struct HistoryPanel: View {
                     .foregroundStyle(.secondary)
                 Spacer(minLength: 8)
                 DatePicker("Von", selection: Binding(
-                    get: { state.interval.lowerBound },
+                    get: { state.displayInterval.lowerBound },
                     set: { from in
                         // Nur echte Eingaben (volle Minuten): Das Feld korrigiert sonst „bis jetzt“ selbst um
                         // Millisekunden und würde eine gewählte Vorgabe sofort zum eigenen Zeitraum machen.
-                        guard abs(from.timeIntervalSince(state.interval.lowerBound)) >= 30 else { return }
+                        guard abs(from.timeIntervalSince(state.displayInterval.lowerBound)) >= 30 else { return }
                         state.customTo = state.interval.upperBound
                         state.customFrom = from
                         state.range = .custom
                     }
-                ), in: ...Date.now.addingTimeInterval(60))
+                ), in: ...HistoryState.pickerLimit)
                 .labelsHidden()
                 Menu {
                     ForEach(HistoryRange.allCases.filter { $0 != .custom }) { range in
@@ -437,14 +449,14 @@ struct HistoryPanel: View {
                     .foregroundStyle(.secondary)
                 Spacer(minLength: 8)
                 DatePicker("Bis", selection: Binding(
-                    get: { state.interval.upperBound },
+                    get: { state.displayInterval.upperBound },
                     set: { to in
-                        guard abs(to.timeIntervalSince(state.interval.upperBound)) >= 30 else { return }
+                        guard abs(to.timeIntervalSince(state.displayInterval.upperBound)) >= 30 else { return }
                         state.customFrom = state.interval.lowerBound
                         state.customTo = min(to, .now)
                         state.range = .custom
                     }
-                ), in: ...Date.now.addingTimeInterval(60))
+                ), in: ...HistoryState.pickerLimit)
                 .labelsHidden()
                 // Platzhalter in Breite des Schnellwahl-Knopfs, damit beide Felder bündig stehen.
                 Color.clear.frame(width: 32, height: 1)

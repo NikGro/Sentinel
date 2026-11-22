@@ -194,3 +194,53 @@ struct TransitStepPin: View {
         .allowsHitTesting(false)
     }
 }
+
+/// Querstraßen in der Navigation: kleine Sprechblasen direkt an der Kreuzung, solange man auf sie zufährt.
+struct CrossStreetLayer: MapContent {
+    let streets: [CrossStreet]
+
+    var body: some MapContent {
+        ForEach(streets, id: \.self) { street in
+            Annotation("", coordinate: CLLocationCoordinate2D(latitude: street.lat, longitude: street.lon), anchor: .bottom) {
+                CrossStreetBubble(name: street.name)
+            }
+            .annotationTitles(.hidden)
+        }
+    }
+}
+
+/// Sprechblase mit Straßenname; die Spitze zeigt auf die Kreuzung.
+struct CrossStreetBubble: View {
+    let name: String
+
+    var body: some View {
+        VStack(spacing: 0) {
+            Text(name)
+                .font(.footnote.weight(.semibold))
+                .lineLimit(1)
+                .padding(.horizontal, 10)
+                .padding(.vertical, 5)
+                .background(.regularMaterial, in: .capsule)
+                .overlay(Capsule().stroke(.secondary.opacity(0.3), lineWidth: 0.5))
+            BubbleTail()
+                .fill(.regularMaterial)
+                .frame(width: 12, height: 7)
+        }
+        .shadow(color: .black.opacity(0.2), radius: 3, y: 1)
+        .fixedSize()
+        .allowsHitTesting(false)
+        .accessibilityLabel("Querstraße \(name)")
+    }
+}
+
+/// Spitze unter der Sprechblase.
+struct BubbleTail: Shape {
+    func path(in rect: CGRect) -> Path {
+        Path { path in
+            path.move(to: CGPoint(x: rect.minX, y: rect.minY))
+            path.addLine(to: CGPoint(x: rect.maxX, y: rect.minY))
+            path.addLine(to: CGPoint(x: rect.midX, y: rect.maxY))
+            path.closeSubpath()
+        }
+    }
+}

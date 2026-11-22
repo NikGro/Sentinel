@@ -71,7 +71,7 @@ extension MapScreen {
     var hasTransit: Bool { visibleObjects.contains { $0.data.typ.isTransit } }
 
     /// Angelegte ÖPNV-Fahrzeuge und die im Takt eingeblendeten auf ÖPNV-Linien.
-    var transitPins: [TransitVehiclePin] {
+    func transitPins(at transitNow: Date) -> [TransitVehiclePin] {
         var pins: [TransitVehiclePin] = []
         // Fahrzeuge nach echtem Fahrplan: eigene ÖPNV-Fahrzeuge und Strecken mit eingeschalteter Fahrzeug-Ebene.
         for object in objects(.oepnvfahrzeug) + objects(.oepnvlinie).filter(\.data.hasRealVehicle) {
@@ -154,7 +154,7 @@ extension MapScreen {
             forcePins.map { ($0.id, $0.coordinate) }
             + (vehiclePins + targetPins).map { ($0.id, $0.coordinate) }
             + handles.map { ($0.id, $0.coordinate) }
-            + transitPins.map { (nil, $0.coordinate) }
+            + transitPins(at: .now).map { (nil, $0.coordinate) }
             + nearbyStops.map { (nil, $0.point.coordinate) }
             + lage.operation.ueberschlagen.naechste.map { (nil, $0.point.coordinate) }
             + [location.current?.coordinate].compactMap { $0 }.map { (nil, $0) }

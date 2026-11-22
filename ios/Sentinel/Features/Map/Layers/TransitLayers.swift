@@ -243,6 +243,29 @@ struct TransitVehiclePin: Identifiable {
 }
 
 /// ÖPNV-Linienabschnitte mit ihren Halten und die Fahrzeuge darauf.
+/// Karteninhalt, der als Einziger die Uhr liest (z. B. fahrende ÖPNV-Fahrzeuge): So frischt der Takt nur diesen
+/// Teil auf, nicht den ganzen Bildschirm.
+struct ClockedContent<Content: MapContent>: MapContent {
+    let clock: TransitClock
+    @MapContentBuilder let content: (Date) -> Content
+
+    var body: some MapContent { content(clock.now) }
+}
+
+/// ÖPNV-Ebene mit eigenem Takt: Nur sie liest die Uhr, damit der Takt der Fahrzeuge nicht den ganzen Bildschirm
+/// neu berechnet (sonst gehen Antipper auf Fahrzeuge oder Datumsfelder verloren).
+struct TimedTransitLayer: MapContent {
+    let clock: TransitClock
+    let sections: [Versioned<MapObject>]
+    let pins: @MainActor (Date) -> [TransitVehiclePin]
+    let showsStopNames: Bool
+    let onSelect: (TransitVehiclePin) -> Void
+
+    var body: some MapContent {
+        TransitLayer(sections: sections, vehicles: pins(clock.now), showsStopNames: showsStopNames, onSelect: onSelect)
+    }
+}
+
 struct TransitLayer: MapContent {
     let sections: [Versioned<MapObject>]
     let vehicles: [TransitVehiclePin]

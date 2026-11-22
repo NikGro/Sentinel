@@ -9,9 +9,9 @@ statt jede Änderung sofort einzubauen. Erledigtes wandert mit Version ins CHANG
 
 - **ÖPNV-Haltestellen verschwinden beim nahen Heranzoomen:** Im Code werden sie nicht nach Zoomstufe ausgeblendet;
   vermutlich verdecken 3D-Gebäude sie. Rückfrage: In 2D auch? Welche Haltestellen (Strecke, Umkreis, einzelne)?
-- **Straßenverzeichnis beobachten:** Läuft seit 0.18 mit 2 GB Container-Speicher, Node.js darf bis 1,5 GB nutzen;
-  nach dem Start belegt der Server etwa 380 MB. Den Speicher beim wöchentlichen Neuladen über Overpass im Blick
-  behalten. Wird es knapp, die Straßen in SQLite statt im Arbeitsspeicher halten und in Kacheln laden.
+- **Straßenverzeichnis beobachten:** Läuft mit 2 GB Container-Speicher, Node.js darf bis 1,5 GB nutzen. Stand
+  22.11.: 286 MB im Betrieb, kein Neustart seit dem Update. Das nächste wöchentliche Neuladen über Overpass ist um
+  den 27.11.; danach den Speicher prüfen. Wird es knapp, die Straßen in SQLite statt im Arbeitsspeicher halten.
 - **Fahrspuren beim Abbiegehinweis beobachten:** Die Anzeige gibt es; bei Gelegenheit prüfen, ob sie zuverlässig
   erscheint.
 - **SinoTrack per USB:** Mit dem echten Tracker prüfen, ob er die Befehle über USB annimmt (Baudrate, Befehlsform).
@@ -28,7 +28,9 @@ statt jede Änderung sofort einzubauen. Erledigtes wandert mit Version ins CHANG
 
 ### Codebase-Qualität
 
-- **Laufende Bereinigung:** `MapScreen.swift` ist mit über 1000 Zeilen der größte Brocken. Dort weiter in kleinere Bausteine aufteilen, z. B. Karteninhalt, Leisten und Tippen/Zeichnen. Die Server-Tests decken Instanzen, Pakete, PAJ-Konten und Querstraßen ab. Die App-Seite hat bisher nur den UI-Rundgang.
+- **Laufende Bereinigung:** `MapScreen` ist inzwischen auf fünf Dateien verteilt (Hauptdatei gut 400 Zeilen). Offen
+  bleiben App-Tests über den UI-Rundgang hinaus, z. B. für die ÖPNV-Bewegung (`TransitSimulation`) und das
+  Überschlagen.
 
 ### Noch praktisch zu überprüfen
 
@@ -53,3 +55,4 @@ statt jede Änderung sofort einzubauen. Erledigtes wandert mit Version ins CHANG
   - 0.23: Anheften mit MapKit-Verfolgung (Zoomen, Kippen, Lösen durch Verschieben/Drehen, Navi), ÖPNV-Halten und
     Kurven, Hauptmenü mit zwei Tabs, Argus als Paket
   - 0.24: Überschlagend zu einem ÖPNV-Fahrzeug mit mehreren Fahndern (über Ziel, A und Fahrzeug)
+  - 0.25: Querstraßen-Sprechblasen, Antippen von ÖPNV-Fahrzeugen und Datumsfeldern beim ersten Mal

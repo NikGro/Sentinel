@@ -66,7 +66,9 @@ struct MapScreen: View {
     /// Vorschau des neuen Orts: erst „Übernehmen“ setzt ihn endgültig; erneutes Tippen verschiebt die Vorschau.
     @State var pendingPoint: GeoPoint?
     /// Takt für die geschätzten ÖPNV-Fahrzeuge (alle 2 Sekunden, solange welche sichtbar sind).
-    @State var transitNow = Date.now
+    /// Zeit für die ÖPNV-Fahrzeuge. Ein eigenes beobachtetes Objekt, das nur die Karte liest: So frischt der Takt nur
+    /// die Karte auf und nicht den ganzen Bildschirm samt unterer Leiste (sonst gingen Antipper verloren).
+    @State var transitClock = TransitClock()
     @State var transitSmoother = TransitSmoother()
     /// Angetipptes, nur im Takt eingeblendetes Fahrzeug.
     @State var virtualVehicle: TransitVehiclePin?
@@ -188,15 +190,14 @@ struct MapScreen: View {
             model.historyIntervalRequest = nil
         }
         .task(id: hasTransit) {
-            // Zehn Schritte je Sekunde. Lange Animationen zwischen seltenen Schritten wurden von jeder anderen
-            // Kartenaktualisierung (Kamera, Nachführen, Positionen) unterbrochen und sprangen dann; so kurze Schritte
-            // sind auch ohne vollständige Animation flüssig (ein Bus bewegt sich je Schritt um etwa einen Meter).
+            // Fünf Schritte je Sekunde mit gleitendem Übergang (ein Bus bewegt sich je Schritt um etwa zwei Meter). Die Uhr
+            // liest nur die ÖPNV-Ebene der Karte, der übrige Bildschirm wird dabei nicht neu berechnet.
             let clock = ContinuousClock()
             var next = clock.now
             while hasTransit, !Task.isCancelled {
-                next += .milliseconds(100)
+                next += .milliseconds(200)
                 try? await clock.sleep(until: next)
-                withAnimation(.linear(duration: 0.1)) { transitNow = .now }
+                withAnimation(.linear(duration: 0.2)) { transitClock.now = .now }
             }
         }
         .confirmationDialog(
@@ -234,7 +235,7 @@ struct MapScreen: View {
                 MapObjectsLayer(lines: objects(.linie) + objects(.pfeil), areas: objects(.flaeche), circles: objects(.kreis) + objects(.haltestellen), geofences: objects(.geofence), handles: handles.filter { !layout.hidden.contains($0.id) }, offsets: layout.offsets) { id in
                     openEditor(for: id)
                 }
-                TransitLayer(sections: objects(.oepnvlinie), vehicles: transitPins, showsStopNames: cameraState.distance < 5000) { pin in
+                TimedTransitLayer(clock: transitClock, sections: objects(.oepnvlinie), pins: { transitPins(at: $0) }, showsStopNames: cameraState.distance < 5000) { pin in
                     if let id = pin.objectId { openEditor(for: id) } else { virtualVehicle = pin }
                 }
                 AreaLabelLayer(objects: objects(.flaeche) + objects(.kreis) + objects(.geofence), metersPerPoint: cameraState.distance / 700)
@@ -245,6 +246,9 @@ struct MapScreen: View {
                 }
                 if !route.transit || route.transitPlan == nil {
                     RouteLayer(lines: routeLines)
+                }
+                if route.isActive, !route.walking {
+                    CrossStreetLayer(streets: route.upcomingCrossStreets)
                 }
                 StoredTracksLayer(state: storedTracks) { model.title(of: $0) }
                 if showsHistory {

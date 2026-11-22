@@ -77,12 +77,6 @@ struct NavigationBanner: View {
                         .foregroundStyle(.white.opacity(0.85))
                         .lineLimit(1)
                 }
-                if let cross = route.nextCrossStreet {
-                    Label("Querstraße \(cross.name) · \(Format.distance(cross.distance))", systemImage: "plus")
-                        .font(.footnote.weight(.semibold))
-                        .foregroundStyle(.white.opacity(0.7))
-                        .lineLimit(1)
-                }
             }
         }
         .animation(.snappy, value: route.isCalculating)

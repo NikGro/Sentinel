@@ -41,7 +41,7 @@ struct RouteResult {
 }
 
 /// Kreuzende oder einmündende Straße an der Route, `meter` ab Routenbeginn.
-struct CrossStreet: Decodable, Equatable, Sendable {
+struct CrossStreet: Decodable, Hashable, Sendable {
     let name: String
     let lat: Double
     let lon: Double
@@ -95,6 +95,14 @@ final class RouteFollower {
     @ObservationIgnored private var cumulative: [CLLocationDistance] = []
     @ObservationIgnored private var client: APIClient?
     @ObservationIgnored private var crossTask: Task<Void, Never>?
+
+    /// Querstraßen, auf die man gerade zufährt (bis 450 m voraus, höchstens drei), für die Sprechblasen auf der Karte.
+    /// Eine eben passierte bleibt noch 15 m stehen, damit sie nicht schon beim Erreichen verschwindet.
+    var upcomingCrossStreets: [CrossStreet] {
+        guard !cumulative.isEmpty else { return [] }
+        let here = cumulative[min(progressIndex, cumulative.count - 1)]
+        return Array(crossStreets.filter { $0.meter > here - 15 && $0.meter < here + 450 }.prefix(3))
+    }
 
     /// Nächste Querstraße voraus mit Entfernung, sobald die Route bekannt ist.
     var nextCrossStreet: (name: String, distance: CLLocationDistance)? {

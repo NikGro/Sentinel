@@ -43,7 +43,8 @@ struct TransitExplorer: View {
     @State private var stops: [LiveStop] = []
     @State private var tooLarge = false
     @State private var failure: String?
-    @State private var now = Date.now
+    /// Uhr für die fahrenden Fahrzeuge; nur die Fahrzeugebene der Karte liest sie (siehe `ClockedContent`).
+    @State private var clock = TransitClock()
     @State private var query = ""
     @State private var stopHits: [NearbyStop] = []
     /// Nur Fahrzeuge dieser Linie zeigen (aus Suche oder „Alle Fahrzeuge der Linie“).
@@ -77,12 +78,14 @@ struct TransitExplorer: View {
                         }
                         .annotationTitles(showsStopNames ? .visible : .hidden)
                     }
-                    ForEach(vehicles) { vehicle in
-                        Annotation(vehicle.segment.name, coordinate: vehicle.point.coordinate, anchor: .center) {
-                            VehicleBadge(segment: vehicle.segment, selected: selection == .vehicle(tripId: vehicle.segment.tripId))
-                                .onTapGesture { select(.vehicle(tripId: vehicle.segment.tripId)) }
+                    ClockedContent(clock: clock) { now in
+                        ForEach(vehicles(at: now)) { vehicle in
+                            Annotation(vehicle.segment.name, coordinate: vehicle.point.coordinate, anchor: .center) {
+                                VehicleBadge(segment: vehicle.segment, selected: selection == .vehicle(tripId: vehicle.segment.tripId))
+                                    .onTapGesture { select(.vehicle(tripId: vehicle.segment.tripId)) }
+                            }
+                            .annotationTitles(.hidden)
                         }
-                        .annotationTitles(.hidden)
                     }
                 }
                 .mapStyle(.standard(pointsOfInterest: .excludingAll))
@@ -123,7 +126,7 @@ struct TransitExplorer: View {
                 while !Task.isCancelled {
                     // Kurze Schritte statt einer Animation je Sekunde: flüssig, auch wenn die Karte zwischendurch neu zeichnet.
                     try? await Task.sleep(for: .milliseconds(200))
-                    withAnimation(.linear(duration: 0.2)) { now = .now }
+                    withAnimation(.linear(duration: 0.2)) { clock.now = .now }
                 }
             }
             .task(id: query) {
@@ -162,7 +165,7 @@ struct TransitExplorer: View {
     }
 
     /// Je Fahrt ein Fahrzeug an seiner aktuellen Position.
-    private var vehicles: [LiveVehicle] {
+    private func vehicles(at now: Date) -> [LiveVehicle] {
         var byTrip: [String: (LiveSegment, GeoPoint)] = [:]
         for segment in segments {
             if let filter = lineFilter, segment.name.caseInsensitiveCompare(filter) != .orderedSame { continue }

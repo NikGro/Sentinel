@@ -1,4 +1,5 @@
 import Foundation
+import Observation
 
 /// Schätzt, wo ein ÖPNV-Fahrzeug gerade ist: Fahrt zwischen den Halten mit typischem Tempo der Verkehrsart
 /// (wie beim ÖPNV-Fluchtraum), 30 Sekunden Halt. Keine Echtzeit- oder Fahrplandaten.
@@ -294,6 +295,13 @@ enum TransitSimulation {
             return (departure, State(point: end, nextIndex: object.punkte.count - 1, atStop: true))
         }
     }
+}
+
+/// Takt der ÖPNV-Fahrzeuge auf der Karte (siehe `MapScreen.transitClock`).
+@MainActor
+@Observable
+final class TransitClock {
+    var now = Date.now
 }
 
 /// Hält die angezeigten ÖPNV-Fahrzeuge ruhig: Korrigiert die Echtzeit ein Fahrzeug ein Stück zurück (neue Verspätung),

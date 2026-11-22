@@ -1,5 +1,18 @@
 # Änderungen
 
+## 0.25.0
+
+**Navigation**
+- Querstraßen als Sprechblasen direkt an der Kreuzung auf der Karte, solange man auf sie zufährt (bis 450 m voraus,
+  höchstens drei); nicht mehr im Banner oben
+
+**Antippen**
+- Antipper gehen nicht mehr verloren (ÖPNV-Fahrzeuge, Datumsfelder im Verlauf): Der Takt der ÖPNV-Fahrzeuge frischt
+  nur noch die Fahrzeuge auf der Karte auf statt den ganzen Bildschirm, fünfmal je Sekunde mit gleitendem Übergang;
+  auf der ÖPNV-Karte ebenso
+- Datumsfelder im Verlauf bekommen bei „bis jetzt“ einen auf die Minute festen Wert, statt bei jedem Neuaufbau einen
+  um Millisekunden anderen, der das Feld zurücksetzte
+
 ## 0.24.0
 
 **Überschlagendes Navigieren zu ÖPNV-Fahrzeugen**
