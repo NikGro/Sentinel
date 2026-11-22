@@ -97,17 +97,16 @@ extension MapScreen {
                 if !showsHistory {
                 MapStyleButton { on in
                     // Angeheftet: nur den Winkel ändern und angeheftet bleiben; sonst um die Bildmitte kippen.
-                    if let mode = pin {
-                        startPin(mode, distance: followDistance ?? cameraState.distance, pitch: on ? 55 : 0)
+                    if pin != nil {
+                        engine.setFollowPitch(on ? 55 : 0)
                     } else {
-                        animateCamera(cameraState.camera(pitch: on ? 55 : 0))
+                        engine.fly(to: cameraState.camera(pitch: on ? 55 : 0), duration: 0.5)
                     }
                 }
                 MapRoundButton(title: "Ebenen", symbol: "square.3.layers.3d") { showsLayers = true }
                 if !reducedTools, let a = lage.aPosition, !lage.holdsA {
                     Button {
-                        pin = nil
-                        withAnimation { camera = .camera(MapCamera(centerCoordinate: a.point.coordinate, distance: 900, heading: 0, pitch: 55)) }
+                        engine.fly(to: MapCamera(centerCoordinate: a.point.coordinate, distance: 900, heading: 0, pitch: 55))
                     } label: {
                         ASymbol(size: 26)
                             .frame(width: Theme.roundButton, height: Theme.roundButton)
@@ -152,8 +151,7 @@ extension MapScreen {
         let center = CLLocationCoordinate2D(latitude: (minLat + maxLat) / 2, longitude: (minLon + maxLon) / 2)
         // Rand lassen: die Leiste unten bedeckt einen Teil der Karte.
         let span = MKCoordinateSpan(latitudeDelta: max((maxLat - minLat) * 1.8, 0.004), longitudeDelta: max((maxLon - minLon) * 1.4, 0.004))
-        pin = nil
-        withAnimation(.easeInOut(duration: 0.6)) { camera = .region(MKCoordinateRegion(center: center, span: span)) }
+        engine.show(MKCoordinateRegion(center: center, span: span))
     }
 
     /// Eigene Bewegungs- bzw. Blickrichtung für den Navi-Pfeil.
@@ -163,144 +161,12 @@ extension MapScreen {
     }
 
     /// Heftet die Karte an den eigenen Standort: in Kompass-Ausrichtung schräg von hinten, mit Norden oben von oben.
-    /// Apples Standortverfolgung übernimmt (siehe `startPin`); welche Geste läuft, melden MapKits eigene Erkenner
-    /// (`MapGestureWatcher`).
+    /// Die eigene Kartensteuerung (`MapEngine`) gleitet hin und folgt dann bei jedem Bild; Zoomen und Kippen ändern
+    /// nur Sollabstand und Sollwinkel, seitliches Verschieben oder Herausdrehen löst.
     func pinCamera(_ mode: CameraPin) {
         // In der Navigation wie in üblichen Navis: etwas höher für mehr Überblick, deutlich gekippt.
         let navigating = route.isActive && mode == .heading
-        startPin(mode, distance: navigating ? CameraPin.navigationDistance : mode.distance, pitch: navigating ? CameraPin.navigationPitch : mode.pitch)
-    }
-
-    /// Anheften mit gegebenem Abstand und Winkel (auch für den 2D/3D-Knopf, der angeheftet nur den Winkel ändert).
-    /// Apples eigene Standortverfolgung übernimmt (`.userLocation`): Sie folgt flüssig und lässt Zoomen, Kippen und
-    /// Lösen mit Apples eigenen Gesten zu. Apple wählt beim Einschalten selbst einen Abstand; deshalb erst die gewünschte
-    /// Ansicht setzen und den erlaubten Abstand beim Übergeben kurz auf genau diesen Wert begrenzen (`MapCameraBounds`),
-    /// danach wieder freigeben. Nur eine Steuerung: SwiftUIs Karte, kein Eingriff an MapKit vorbei.
-    func startPin(_ mode: CameraPin, distance: CLLocationDistance, pitch: Double, isRetry: Bool = false) {
-        gestures.attachIfNeeded()
-        if !isRetry { resetCorrections = 0 }
-        pin = mode
-        followDistance = distance
-        followPitch = pitch
-        settling = false
-        // Bis zur Übergabe an Apple nicht prüfen (die Kamera fährt erst dorthin).
-        trackingHandover = .distantPast
-        guard let current = location.current else { return }
-        let heading = mode == .heading ? (myCourse ?? cameraState.heading) : 0
-        let view = MapCamera(centerCoordinate: current.coordinate, distance: distance, heading: heading, pitch: pitch)
-        animateCamera(view)
-        pinRequest += 1
-        let request = pinRequest
-        Task {
-            // Erst übergeben, wenn die Anfahrt angekommen ist: Apple behält den Abstand und Winkel, die beim Einschalten
-            // eingestellt sind (Kamera-Test: zu früh übergeben, blieb es bei 931 m statt 550 m).
-            for _ in 0..<30 {
-                try? await Task.sleep(for: .milliseconds(100))
-                guard pinRequest == request, pin == mode else { return }
-                if !cameraAnimating, abs(cameraState.distance - distance) < distance * 0.05 { break }
-            }
-            guard pinRequest == request, pin == mode else { return }
-            // Ohne Abstandsgrenze: Eine Grenze zwang MapKit, die Kamera zu verstellen, und beendete die Verfolgung
-            // (Kamera-Test). Gemessen wird, welchen Abstand Apple beim Einschalten wählt.
-            trackingHandover = .now
-            CameraProbe.shared.event(String(format: "apple verfolgung an d=%.0f kompass=%d", distance, mode == .heading ? 1 : 0))
-            camera = .userLocation(followsHeading: mode == .heading, fallback: .camera(view))
-            for wait in [300, 700] {
-                try? await Task.sleep(for: .milliseconds(wait))
-                CameraProbe.shared.event(String(format: "nach uebergabe d=%.0f verfolgung=%@", cameraState.distance, gestures.trackingDescription))
-            }
-        }
-    }
-
-    /// Kartengesten: Zoomen und Kippen erledigt Apples Verfolgung selbst. Verschieben mit einem Finger oder Herausdrehen
-    /// aus der Kompass-Ausrichtung löst die Kopplung; erst nach der Geste wird die Kamera an der aktuellen Stelle gesetzt
-    /// und damit Apples Verfolgung beendet (während einer Geste würde das die Geste abbrechen). Der Zustand von SwiftUIs
-    /// Kameraposition taugt dafür nicht: Sie meldet schon kurz nach dem Einschalten „folgt nicht“, obwohl die Karte folgt.
-    func handleGesture(_ event: MapGestureEvent) {
-        switch event {
-        case .began:
-            multiTouchGesture = false
-            lastGestureAt = .now
-        case .panned(let distance, let touches):
-            if touches >= 2 { multiTouchGesture = true }
-            if pin != nil, touches == 1, !multiTouchGesture, distance > 30 {
-                pin = nil
-                releaseTracking = true
-            }
-        case .pinched:
-            multiTouchGesture = true
-        case .rotated(let degrees):
-            multiTouchGesture = true
-            if pin == .heading, abs(degrees) > 20 {
-                pin = nil
-                releaseTracking = true
-            }
-        case .zoomTapped:
-            lastGestureAt = .now
-            rememberUserView()
-        case .allEnded:
-            lastGestureAt = .now
-            rememberUserView()
-            if releaseTracking, pin == nil {
-                releaseTracking = false
-                CameraProbe.shared.event("apple verfolgung beendet (geste)")
-                // Nach dem Ausschwingen an Ort und Stelle festhalten.
-                Task {
-                    try? await Task.sleep(for: .milliseconds(400))
-                    if pin == nil, !gestures.isActive { camera = .camera(cameraState.camera()) }
-                }
-            }
-        }
-    }
-
-    /// Nach eigenem Zoomen oder Kippen: Abstand und Winkel nach dem Ausschwingen als neuen Sollwert merken.
-    func rememberUserView() {
-        guard pin != nil else { return }
-        Task {
-            try? await Task.sleep(for: .milliseconds(700))
-            guard pin != nil, !gestures.isActive else { return }
-            followDistance = cameraState.distance
-            followPitch = cameraState.exactPitch
-            CameraProbe.shared.event(String(format: "sollwert d=%.0f p=%.1f", cameraState.distance, cameraState.exactPitch))
-        }
-    }
-
-    /// Apple setzt beim Verfolgen manchmal von sich aus einen weiten Abstand (Kamera-Test: 550 → 4890 m ohne Geste).
-    /// Springt der Abstand ohne Geste deutlich vom Sollwert weg, wird der Sollwert erneut gesetzt und die Verfolgung neu
-    /// übergeben, höchstens dreimal je Anheften.
-    func correctAppleZoomReset() {
-        guard let mode = pin, let target = followDistance, trackingHandover > .distantPast,
-              Date.now.timeIntervalSince(trackingHandover) > 1, Date.now.timeIntervalSince(lastGestureAt) > 2,
-              !gestures.isActive, !cameraAnimating, resetCorrections < 3 else { return }
-        guard abs(cameraState.distance - target) > target * 0.4 else { return }
-        resetCorrections += 1
-        CameraProbe.shared.event(String(format: "apple abstand zurueck d=%.0f soll=%.0f versuch=%d verfolgung=%@", cameraState.distance, target, resetCorrections, gestures.trackingDescription))
-        // Versuch: Abstand an der laufenden Verfolgung ändern statt neu anheften (Neuanheften startet Apples Verfolgung
-        // neu, und die setzt jedes Mal wieder etwa 4,9 km: Rein-raus-Schleife auf dem Gerät).
-        let stage = resetCorrections - 1
-        trackingHandover = .now  // nächster Versuch frühestens in 1 s
-        guard gestures.setDistance(target, pitch: followPitch ?? mode.pitch, stage: stage) else {
-            startPin(mode, distance: target, pitch: followPitch ?? mode.pitch, isRetry: true)
-            return
-        }
-        Task {
-            for wait in [300, 1700] {
-                try? await Task.sleep(for: .milliseconds(wait))
-                CameraProbe.shared.event(String(format: "apple abstand stufe %d d=%.0f verfolgung=%@ pin=%@", stage, cameraState.distance, gestures.trackingDescription, pin.map { "\($0)" } ?? "none"))
-            }
-        }
-    }
-
-    /// Bewegt die Kamera (Anheften, Sprung zu einem Ort).
-    func animateCamera(_ target: MapCamera) {
-        cameraAnimating = true
-        lastFollowTarget = target
-        CameraProbe.shared.event(String(format: "fahrt anheften d=%.0f p=%.0f h=%.0f dauer=0.5", target.distance, target.pitch, target.heading))
-        withAnimation(.easeInOut(duration: 0.5)) { camera = .camera(target) }
-        Task {
-            try? await Task.sleep(for: .milliseconds(650))
-            cameraAnimating = false
-        }
+        engine.pinTo(mode, distance: navigating ? CameraPin.navigationDistance : mode.distance, pitch: navigating ? CameraPin.navigationPitch : mode.pitch)
     }
 
     // MARK: Untere Leiste

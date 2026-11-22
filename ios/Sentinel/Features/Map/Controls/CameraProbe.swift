@@ -36,14 +36,17 @@ final class CameraProbe {
         if let file { try? FileManager.default.removeItem(at: file) }
     }
 
-    func record(_ camera: MapCamera, pin: CameraPin?, gesture: Bool, settling: Bool, attached: Bool) {
+    /// `puck`: Abstand des Standortsymbols von der Bildmitte in Punkten (nur angeheftet).
+    func record(_ camera: MapCamera, pin: CameraPin?, gesture: Bool, puck: CGPoint?, attached: Bool) {
         guard Self.isEnabled else { return }
         let mode = pin.map { $0 == .heading ? "heading" : "north" } ?? "none"
-        summary = String(format: "pin=%@ d=%.0f p=%.0f h=%.0f geste=%d erkenner=%d", mode, camera.distance, camera.pitch, camera.heading, gesture ? 1 : 0, attached ? 1 : 0)
+        let puckText = puck.map { String(format: " symbol=%.0f", hypot($0.x, $0.y)) } ?? ""
+        summary = String(format: "pin=%@ d=%.0f p=%.0f h=%.0f geste=%d erkenner=%d", mode, camera.distance, camera.pitch, camera.heading, gesture ? 1 : 0, attached ? 1 : 0) + puckText
         let t = Date.now.timeIntervalSince(start)
-        write(String(format: #"{"t":%.3f,"pin":"%@","d":%.1f,"p":%.1f,"h":%.1f,"lat":%.6f,"lon":%.6f,"geste":%d,"settle":%d,"erkenner":%d}"#,
+        let puckJSON = puck.map { String(format: #","sx":%.1f,"sy":%.1f"#, $0.x, $0.y) } ?? ""
+        write(String(format: #"{"t":%.3f,"pin":"%@","d":%.1f,"p":%.1f,"h":%.1f,"lat":%.6f,"lon":%.6f,"geste":%d,"erkenner":%d"#,
                      t, mode, camera.distance, camera.pitch, camera.heading, camera.centerCoordinate.latitude, camera.centerCoordinate.longitude,
-                     gesture ? 1 : 0, settling ? 1 : 0, attached ? 1 : 0))
+                     gesture ? 1 : 0, attached ? 1 : 0) + puckJSON + "}")
     }
 
     func event(_ name: String) {

@@ -118,6 +118,15 @@ Versuche Apple-Verfolgung (Arbeitszweig, Kamera-Test):
   nur Nutzergesten ändern ihn. Gerät: Auch der eigene Zoom gilt nur bis zum nächsten Anheften (2102 m gezoomt, gelöst,
   neu angeheftet → wieder 4885 m).
 
+Eigene Kartensteuerung nach dem Prinzip von Google Maps (`MapEngine`, Arbeitszweig, ab 0.32 geplant):
+- Eine einzige Steuerung: MapKits Gesten aus (`interactionModes: []`), eigene Erkenner an der MKMapView, Kamera
+  Bild für Bild direkt an der MKMapView gesetzt (CADisplayLink), SwiftUIs Kameraposition wird nach dem Start nicht
+  mehr gesetzt.
+- Angeheftet: Mitte folgt dem Standortsymbol, wie MapKit es zeichnet (sonst eigener, vorausgerechneter Standort),
+  Richtung, Abstand und Winkel gleiten mit kurzer Zeitkonstante. Zoomen/Kippen ändern nur die Sollwerte.
+  Verschieben mit einem Finger über 30 pt oder Drehen über 20° löst, ohne die Geste zu unterbrechen.
+- Alle Karten der App (Lage, ÖPNV-Karte, Standortwahl) nutzen dieselbe Steuerung.
+
 ### Nicht wiederholen
 
 - Kamera (SwiftUI-Position) während oder zu Beginn einer Geste setzen: bricht die Geste ab.

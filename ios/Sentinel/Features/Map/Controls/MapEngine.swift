@@ -1,0 +1,731 @@
+import MapKit
+import Observation
+import QuartzCore
+import SwiftUI
+import UIKit
+
+/// Was die Kartensteuerung meldet (für Messfühler und Bildschirm).
+enum MapEngineEvent {
+    /// Eine Geste hat begonnen; vorher lag keine.
+    case began
+    /// Verschieben mit einem Finger, Strecke in Bildpunkten seit Beginn.
+    case panned(distance: CGFloat)
+    case pinched
+    case rotated(degrees: Double)
+    case tilted
+    case zoomTapped
+    /// Alle Gesten sind vorbei.
+    case allEnded
+    /// Die Kopplung an den eigenen Standort wurde durch eine Geste gelöst.
+    case released
+    /// Angeheftet: Zoom oder Neigung des Nutzers ist der neue Sollwert.
+    case target(distance: CLLocationDistance, pitch: Double)
+}
+
+/// Eigene Kartensteuerung nach dem Prinzip von Google Maps: Eine einzige Stelle bewegt die Kamera. MapKits eigene
+/// Gesten sind abgeschaltet (`interactionModes: []`); Verschieben, Zoomen, Drehen und Kippen erkennt die Steuerung
+/// selbst und setzt die Kamera der MapKit-Karte direkt, Bild für Bild. Angeheftet folgt sie dem eigenen Standort bei
+/// jedem Bild ein Stück (keine langen Kamerafahrten, die hinterherlaufen oder Gesten schlucken); Zoomen und Kippen
+/// ändern dann nur Sollabstand und Sollwinkel. Seitliches Verschieben oder Herausdrehen löst die Kopplung.
+///
+/// Warum: Mit SwiftUIs Kameraposition oder Apples Verfolgung steuerten immer zwei Stellen dieselbe Kamera
+/// (siehe `docs/Fehlerprotokoll.md`). Apples Verfolgung setzt zudem beim Einschalten ihren eigenen Abstand (~4,9 km).
+@MainActor
+@Observable
+final class MapEngine {
+    /// Angeheftet am eigenen Standort; `nil` = frei.
+    private(set) var pin: CameraPin?
+
+    @ObservationIgnored fileprivate weak var anchor: UIView?
+    @ObservationIgnored private(set) weak var map: MKMapView?
+    @ObservationIgnored private var helper: EngineHelper?
+    /// Ereignisse für Messfühler und Bildschirm.
+    @ObservationIgnored var onEvent: ((MapEngineEvent) -> Void)?
+    /// Eigener Standort (für das Anheften).
+    @ObservationIgnored var locationProvider: (() -> CLLocation?)?
+    /// Fahrt- bzw. Blickrichtung für die Kompass-Ausrichtung.
+    @ObservationIgnored var courseProvider: (() -> CLLocationDirection?)?
+    /// Sollabstand und Sollwinkel beim Anheften (ändern sich durch Zoomen und Kippen des Nutzers).
+    @ObservationIgnored private(set) var followDistance: CLLocationDistance = 550
+    @ObservationIgnored private(set) var followPitch: Double = 40
+    /// Kamera, die gesetzt wird, sobald die Karte gefunden ist.
+    @ObservationIgnored private var pendingCamera: EngineCamera?
+    /// Herkunft der Mitte beim Anheften (zur Fehlersuche): Standortsymbol der Karte oder eigene Glättung.
+    @ObservationIgnored private(set) var followSource = "–"
+
+    // Geglätteter Stand beim Anheften.
+    @ObservationIgnored private var smooth: EngineCamera?
+    @ObservationIgnored private var flight: Flight?
+    @ObservationIgnored private var momentum: CGPoint = .zero
+    @ObservationIgnored private var lastTick: CFTimeInterval = 0
+
+    // Gesten.
+    @ObservationIgnored private var active = Set<ObjectIdentifier>()
+    @ObservationIgnored private var multi: MultiTouch?
+    @ObservationIgnored private var panLast: CGPoint?
+    @ObservationIgnored private var panReleased = false
+    /// In dieser Geste lagen schon zwei Finger: Verschieben mit einem Finger löst dann nicht (Zoomen, Kippen).
+    @ObservationIgnored private var sessionMulti = false
+    @ObservationIgnored private var quickZoom: (start: CGPoint, distance: CLLocationDistance, moved: Bool)?
+
+    /// Hängt die Steuerung an einer Karte?
+    var isAttached: Bool { map != nil }
+    /// Läuft gerade eine Geste?
+    var isGestureActive: Bool { !active.isEmpty }
+    /// Letztes Ereignis, für das Kamerawerte-Overlay.
+    @ObservationIgnored private(set) var lastEvent = "–"
+
+    // MARK: Befehle
+
+    /// Anheften am eigenen Standort mit Abstand und Winkel. Die Kamera gleitet von der aktuellen Ansicht dorthin und
+    /// folgt dann bei jedem Bild.
+    func pinTo(_ mode: CameraPin, distance: CLLocationDistance, pitch: Double) {
+        flight = nil
+        momentum = .zero
+        followDistance = distance
+        followPitch = pitch
+        if pin == nil || smooth == nil { smooth = current }
+        pin = mode
+        startTicking()
+    }
+
+    /// Angeheftet nur den Winkel ändern (2D/3D-Knopf).
+    func setFollowPitch(_ pitch: Double) {
+        followPitch = pitch
+    }
+
+    func unpin() {
+        guard pin != nil else { return }
+        pin = nil
+        smooth = nil
+    }
+
+    /// Kamerafahrt (löst die Kopplung). Eine Geste bricht sie sofort ab.
+    func fly(to camera: MapCamera, duration: Double = 0.6) {
+        fly(to: EngineCamera(camera), duration: duration)
+    }
+
+    /// Ausschnitt zeigen, z. B. Spuren, Cluster oder eine Linie. Ohne Drehung und Neigung, wie bisher bei Regionen.
+    func show(_ region: MKCoordinateRegion, padding: UIEdgeInsets = .zero, duration: Double = 0.6) {
+        show(Self.mapRect(region), padding: padding, duration: duration)
+    }
+
+    func show(_ rect: MKMapRect, padding: UIEdgeInsets = .zero, duration: Double = 0.6) {
+        guard let map else {
+            let region = MKCoordinateRegion(rect)
+            pendingCamera = EngineCamera(center: region.center, distance: max(region.span.latitudeDelta * 111_000 * 1.6, 300), heading: 0, pitch: 0)
+            return
+        }
+        // MapKit rechnet den Abstand aus: kurz unsichtbar setzen (gleicher Durchlauf, nichts wird gezeichnet), lesen,
+        // zurücksetzen, dann selbst hinfahren.
+        let saved = map.camera.copy() as! MKMapCamera
+        map.setVisibleMapRect(rect, edgePadding: padding, animated: false)
+        var target = EngineCamera(map.camera)
+        map.camera = saved
+        target.heading = 0
+        target.pitch = 0
+        fly(to: target, duration: duration)
+    }
+
+    /// Ohne Fahrt setzen.
+    func jump(to camera: MapCamera) {
+        unpin()
+        flight = nil
+        momentum = .zero
+        apply(EngineCamera(camera))
+    }
+
+    private func fly(to target: EngineCamera, duration: Double) {
+        unpin()
+        momentum = .zero
+        guard let start = current else {
+            pendingCamera = target
+            return
+        }
+        flight = Flight(from: start, to: target, start: CACurrentMediaTime(), duration: max(duration, 0.05))
+        startTicking()
+    }
+
+    // MARK: Karte finden
+
+    func attachIfNeeded() {
+        if map?.window == nil, map != nil { map = nil }
+        guard map == nil, let anchor else { return }
+        var ancestor = anchor.superview
+        var found: MKMapView?
+        for _ in 0..<8 {
+            guard let candidate = ancestor else { break }
+            if let hit = Self.firstMap(in: candidate) {
+                found = hit
+                break
+            }
+            ancestor = candidate.superview
+        }
+        guard let found else { return }
+        map = found
+        let helper = self.helper ?? EngineHelper(engine: self)
+        self.helper = helper
+        helper.install(on: found)
+        if let pendingCamera {
+            self.pendingCamera = nil
+            apply(pendingCamera)
+        }
+        if pin != nil || flight != nil { startTicking() }
+    }
+
+    // MARK: Bild für Bild
+
+    private func startTicking() {
+        helper?.startDisplayLink()
+    }
+
+    fileprivate func tick(_ time: CFTimeInterval) {
+        let dt = lastTick == 0 ? 1.0 / 60 : min(max(time - lastTick, 0.001), 0.1)
+        lastTick = time
+        if momentum != .zero, let map {
+            let center = CGPoint(x: map.bounds.midX, y: map.bounds.midY)
+            shift(from: center, to: CGPoint(x: center.x + momentum.x * dt, y: center.y + momentum.y * dt))
+            let decay = pow(0.135, dt)
+            momentum = CGPoint(x: momentum.x * decay, y: momentum.y * decay)
+            if hypot(momentum.x, momentum.y) < 15 { momentum = .zero }
+        }
+        if let flight {
+            let t = min((time - flight.start) / flight.duration, 1)
+            apply(flight.from.interpolated(to: flight.to, t: Self.ease(t)))
+            if t >= 1 { self.flight = nil }
+        } else if pin != nil {
+            follow(dt: dt)
+        }
+        if flight == nil, pin == nil, momentum == .zero {
+            lastTick = 0
+            helper?.stopDisplayLink()
+        }
+    }
+
+    private func follow(dt: Double) {
+        guard let pin, var smooth = smooth ?? current else { return }
+        // Ziel der Mitte: das Standortsymbol der Karte, wie MapKit es gerade zeichnet (dann sitzt es genau in der
+        // Mitte); ohne Symbol der letzte Standort, vorausgerechnet mit Geschwindigkeit und Richtung.
+        var target: CLLocationCoordinate2D?
+        var tau = 0.25
+        if let puck = puckCoordinate, let fix = locationProvider?(), CLLocation(latitude: puck.latitude, longitude: puck.longitude).distance(from: fix) < 300 {
+            target = puck
+            tau = 0.06
+            followSource = "symbol"
+        } else if let fix = locationProvider?() {
+            var point = fix.coordinate
+            if fix.speed > 0.5, fix.course >= 0 {
+                let age = min(max(Date.now.timeIntervalSince(fix.timestamp), 0), 1.5)
+                point = Self.offset(point, meters: fix.speed * age, bearing: fix.course)
+            }
+            target = point
+            followSource = "eigen"
+        }
+        if let target {
+            let from = MKMapPoint(smooth.center), to = MKMapPoint(target)
+            // Weit weg (Anheften aus der Ferne): schneller hin, sonst dauert es lange.
+            let far = from.distance(to: to) > 2000
+            let a = 1 - exp(-dt / (far ? 0.18 : tau))
+            smooth.center = MKMapPoint(x: from.x + (to.x - from.x) * a, y: from.y + (to.y - from.y) * a).coordinate
+        }
+        let headingTarget = pin == .heading ? (courseProvider?() ?? smooth.heading) : 0
+        smooth.heading = Self.approachAngle(smooth.heading, headingTarget, a: 1 - exp(-dt / 0.35))
+        smooth.distance = exp(log(smooth.distance) + (log(followDistance) - log(smooth.distance)) * (1 - exp(-dt / 0.2)))
+        smooth.pitch += (followPitch - smooth.pitch) * (1 - exp(-dt / 0.2))
+        self.smooth = smooth
+        apply(smooth)
+    }
+
+    /// Wo MapKit das Standortsymbol gerade zeichnet (inklusive seiner eigenen weichen Bewegung zwischen Meldungen).
+    private var puckCoordinate: CLLocationCoordinate2D? {
+        guard let map, let view = map.view(for: map.userLocation), !view.isHidden, let superlayer = view.layer.superlayer else { return nil }
+        let layer = view.layer.presentation() ?? view.layer
+        let point = map.layer.convert(layer.position, from: superlayer)
+        guard map.bounds.insetBy(dx: -map.bounds.width, dy: -map.bounds.height).contains(point) else { return nil }
+        let coordinate = map.convert(point, toCoordinateFrom: map)
+        return CLLocationCoordinate2DIsValid(coordinate) ? coordinate : nil
+    }
+
+    /// Abstand des Standortsymbols von der Bildmitte in Punkten (Messfühler: sitzt es angeheftet in der Mitte?).
+    var puckOffset: CGPoint? {
+        guard let map, let view = map.view(for: map.userLocation), let superlayer = view.layer.superlayer else { return nil }
+        let layer = view.layer.presentation() ?? view.layer
+        let point = map.layer.convert(layer.position, from: superlayer)
+        return CGPoint(x: point.x - map.bounds.midX, y: point.y - map.bounds.midY)
+    }
+
+    // MARK: Kamera lesen und setzen
+
+    private var current: EngineCamera? {
+        map.map { EngineCamera($0.camera) }
+    }
+
+    private func apply(_ camera: EngineCamera) {
+        guard let map else {
+            pendingCamera = camera
+            return
+        }
+        map.camera = MKMapCamera(lookingAtCenter: camera.center, fromDistance: camera.distance, pitch: camera.pitch, heading: camera.heading)
+    }
+
+    /// Verschiebt die Karte so, dass der Inhalt unter `from` danach unter `to` liegt.
+    private func shift(from: CGPoint, to: CGPoint) {
+        guard let map else { return }
+        let a = map.convert(from, toCoordinateFrom: map), b = map.convert(to, toCoordinateFrom: map)
+        guard CLLocationCoordinate2DIsValid(a), CLLocationCoordinate2DIsValid(b) else { return }
+        let ma = MKMapPoint(a), mb = MKMapPoint(b)
+        guard var camera = current else { return }
+        let c = MKMapPoint(camera.center)
+        camera.center = MKMapPoint(x: c.x + ma.x - mb.x, y: c.y + ma.y - mb.y).coordinate
+        apply(camera)
+    }
+
+    // MARK: Gesten
+
+    fileprivate func gestureState(_ recognizer: UIGestureRecognizer) {
+        let key = ObjectIdentifier(recognizer)
+        switch recognizer.state {
+        case .began:
+            let wasIdle = active.isEmpty
+            active.insert(key)
+            if wasIdle {
+                flight = nil
+                momentum = .zero
+                panReleased = false
+                sessionMulti = false
+                emit(.began)
+            }
+        case .ended, .cancelled, .failed:
+            guard active.remove(key) != nil else { return }
+            if active.isEmpty {
+                multi = nil
+                emit(.allEnded)
+            }
+        default:
+            break
+        }
+        lastEvent = "\(type(of: recognizer)) \(recognizer.state.rawValue)"
+    }
+
+    fileprivate func pan(_ recognizer: UIPanGestureRecognizer) {
+        guard let map else { return }
+        gestureState(recognizer)
+        let location = recognizer.location(in: map)
+        if quickZoom != nil || multi != nil || sessionMulti {
+            panLast = nil
+            return
+        }
+        switch recognizer.state {
+        case .began:
+            panLast = location
+        case .changed:
+            let total = recognizer.translation(in: map)
+            let length = hypot(total.x, total.y)
+            emit(.panned(distance: length))
+            if pin != nil {
+                // Angeheftet bleibt die Karte am Standort, bis die Schwelle überschritten ist; dann frei und ab
+                // hier verschieben (kein Sprung).
+                guard length > 30 else {
+                    panLast = location
+                    return
+                }
+                unpin()
+                panReleased = true
+                emit(.released)
+            }
+            if let last = panLast { shift(from: last, to: location) }
+            panLast = location
+        case .ended:
+            panLast = nil
+            if pin == nil {
+                let v = recognizer.velocity(in: map)
+                momentum = hypot(v.x, v.y) > 60 ? v : .zero
+                if momentum != .zero { startTicking() }
+            }
+        default:
+            panLast = nil
+        }
+    }
+
+    /// Zwei Finger: Zoomen, Drehen, Verschieben und (beide senkrecht in dieselbe Richtung) Kippen, gemeinsam
+    /// ausgewertet. Frei bleibt der Punkt zwischen den Fingern unter den Fingern; angeheftet bleibt der Standort in
+    /// der Mitte.
+    fileprivate func multiTouch(_ recognizer: UIGestureRecognizer, pinch: UIPinchGestureRecognizer, rotation: UIRotationGestureRecognizer, twoPan: UIPanGestureRecognizer) {
+        guard let map else { return }
+        gestureState(recognizer)
+        guard recognizer.state == .began || recognizer.state == .changed, recognizer.numberOfTouches >= 2 else { return }
+        sessionMulti = true
+        let centroid = recognizer.location(in: map)
+        if multi == nil {
+            guard let start = current else { return }
+            let anchor = map.convert(centroid, toCoordinateFrom: map)
+            multi = MultiTouch(start: start, anchor: CLLocationCoordinate2DIsValid(anchor) ? anchor : nil,
+                               scaleBase: pinch.state == .began || pinch.state == .changed ? pinch.scale : 1,
+                               rotationBase: rotation.state == .began || rotation.state == .changed ? rotation.rotation : 0,
+                               panBase: twoPan.translation(in: map),
+                               startDistance: pin != nil ? (smooth?.distance ?? start.distance) : start.distance,
+                               startPitch: pin != nil ? (smooth?.pitch ?? start.pitch) : start.pitch)
+        }
+        guard var m = multi else { return }
+        let scale = (pinch.state == .began || pinch.state == .changed) ? pinch.scale / m.scaleBase : 1
+        let rotationDegrees = (rotation.state == .began || rotation.state == .changed) ? Double(rotation.rotation - m.rotationBase) * 180 / .pi : 0
+        let t = twoPan.translation(in: map)
+        let move = CGPoint(x: t.x - m.panBase.x, y: t.y - m.panBase.y)
+
+        // Kippen erkennen: beide Finger senkrecht, kaum Zoom und Drehung.
+        if m.mode == .undecided {
+            if abs(move.y) > 12, abs(move.y) > 2 * abs(move.x), abs(scale - 1) < 0.08, abs(rotationDegrees) < 6 {
+                m.mode = .tilt
+                m.panBase = t
+            } else if abs(scale - 1) > 0.05 || abs(rotationDegrees) > 6 || hypot(move.x, move.y) > 20 {
+                m.mode = .transform
+            }
+        }
+        multi = m
+
+        switch m.mode {
+        case .undecided:
+            return
+        case .tilt:
+            let dy = t.y - m.panBase.y
+            let pitch = min(max(m.startPitch - Double(dy) * 0.35, 0), 80)
+            emit(.tilted)
+            if pin != nil {
+                followPitch = pitch
+                smooth?.pitch = pitch
+                if let smooth { apply(smooth) }
+                emit(.target(distance: followDistance, pitch: pitch))
+            } else if var camera = current {
+                camera.pitch = pitch
+                apply(camera)
+            }
+        case .transform:
+            if scale != 1 { emit(.pinched) }
+            // Drehen erst ab einigen Grad, damit Zoomen nicht nebenbei dreht.
+            var turn = 0.0
+            if abs(rotationDegrees) > 8 {
+                turn = rotationDegrees - (rotationDegrees > 0 ? 8 : -8)
+                emit(.rotated(degrees: rotationDegrees))
+            }
+            if pin != nil, abs(rotationDegrees) > 20 {
+                // Herausdrehen löst; ab hier frei weiterdrehen, vom aktuellen Stand aus.
+                unpin()
+                emit(.released)
+                if let now = current {
+                    m.start = now
+                    m.startDistance = now.distance
+                    m.rotationBase = rotation.rotation
+                    m.scaleBase = pinch.scale
+                    m.anchor = map.convert(centroid, toCoordinateFrom: map)
+                    multi = m
+                }
+                return
+            }
+            let distance = min(max(m.startDistance / Double(max(scale, 0.01)), 40), 40_000_000)
+            if pin != nil {
+                followDistance = distance
+                smooth?.distance = distance
+                if let smooth { apply(smooth) }
+                emit(.target(distance: distance, pitch: followPitch))
+            } else {
+                var camera = m.start
+                camera.center = current?.center ?? camera.center
+                camera.distance = distance
+                camera.heading = m.start.heading - turn
+                camera.pitch = current?.pitch ?? camera.pitch
+                apply(camera)
+                if let anchor = m.anchor {
+                    let now = map.convert(anchor, toPointTo: map)
+                    shift(from: now, to: centroid)
+                }
+            }
+        }
+    }
+
+    /// Doppeltippen (hineinzoomen) bzw. Doppeltippen und Ziehen (mit einem Finger zoomen, nach unten hinein).
+    fileprivate func handleQuickZoom(_ recognizer: UILongPressGestureRecognizer) {
+        guard let map else { return }
+        gestureState(recognizer)
+        let location = recognizer.location(in: map)
+        switch recognizer.state {
+        case .began:
+            quickZoom = (location, pin != nil ? followDistance : (current?.distance ?? 1000), false)
+        case .changed:
+            guard var zoom = quickZoom else { return }
+            let dy = location.y - zoom.start.y
+            if abs(dy) > 8 { zoom.moved = true }
+            quickZoom = zoom
+            guard zoom.moved else { return }
+            let distance = min(max(zoom.distance * exp(-Double(dy) * 0.01), 40), 40_000_000)
+            setDistance(distance, keeping: zoom.start)
+        case .ended:
+            if let zoom = quickZoom, !zoom.moved {
+                emit(.zoomTapped)
+                zoomStep(factor: 0.5, at: zoom.start)
+            }
+            quickZoom = nil
+        default:
+            quickZoom = nil
+        }
+    }
+
+    /// Mit zwei Fingern tippen: herauszoomen.
+    fileprivate func twoFingerTap(_ recognizer: UITapGestureRecognizer) {
+        guard recognizer.state == .ended, let map else { return }
+        emit(.zoomTapped)
+        zoomStep(factor: 2, at: recognizer.location(in: map))
+    }
+
+    private func zoomStep(factor: Double, at point: CGPoint) {
+        if pin != nil {
+            followDistance = min(max(followDistance * factor, 40), 40_000_000)
+            emit(.target(distance: followDistance, pitch: followPitch))
+            return
+        }
+        guard let map, let start = current else { return }
+        var target = start
+        target.distance = min(max(start.distance * factor, 40), 40_000_000)
+        // Der angetippte Punkt bleibt stehen.
+        let tapped = map.convert(point, toCoordinateFrom: map)
+        if CLLocationCoordinate2DIsValid(tapped) {
+            let c = MKMapPoint(start.center), p = MKMapPoint(tapped)
+            target.center = MKMapPoint(x: p.x + (c.x - p.x) * factor, y: p.y + (c.y - p.y) * factor).coordinate
+        }
+        flight = Flight(from: start, to: target, start: CACurrentMediaTime(), duration: 0.3)
+        startTicking()
+    }
+
+    private func setDistance(_ distance: CLLocationDistance, keeping point: CGPoint) {
+        if pin != nil {
+            followDistance = distance
+            smooth?.distance = distance
+            if let smooth { apply(smooth) }
+            emit(.target(distance: distance, pitch: followPitch))
+            return
+        }
+        guard let map, var camera = current else { return }
+        let anchor = map.convert(point, toCoordinateFrom: map)
+        camera.distance = distance
+        apply(camera)
+        if CLLocationCoordinate2DIsValid(anchor) {
+            shift(from: map.convert(anchor, toPointTo: map), to: point)
+        }
+    }
+
+    private func emit(_ event: MapEngineEvent) {
+        onEvent?(event)
+    }
+
+    // MARK: Hilfen
+
+    private static func firstMap(in view: UIView) -> MKMapView? {
+        if let map = view as? MKMapView { return map }
+        for sub in view.subviews {
+            if let map = firstMap(in: sub) { return map }
+        }
+        return nil
+    }
+
+    private static func ease(_ t: Double) -> Double {
+        t < 0.5 ? 4 * t * t * t : 1 - pow(-2 * t + 2, 3) / 2
+    }
+
+    static func approachAngle(_ from: Double, _ to: Double, a: Double) -> Double {
+        var delta = (to - from).truncatingRemainder(dividingBy: 360)
+        if delta > 180 { delta -= 360 }
+        if delta < -180 { delta += 360 }
+        var result = (from + delta * a).truncatingRemainder(dividingBy: 360)
+        if result < 0 { result += 360 }
+        return result
+    }
+
+    private static func offset(_ coordinate: CLLocationCoordinate2D, meters: Double, bearing: Double) -> CLLocationCoordinate2D {
+        let r = bearing * .pi / 180
+        let dLat = meters * cos(r) / 111_320
+        let dLon = meters * sin(r) / (111_320 * max(cos(coordinate.latitude * .pi / 180), 0.01))
+        return CLLocationCoordinate2D(latitude: coordinate.latitude + dLat, longitude: coordinate.longitude + dLon)
+    }
+
+    static func mapRect(_ region: MKCoordinateRegion) -> MKMapRect {
+        let a = MKMapPoint(CLLocationCoordinate2D(latitude: region.center.latitude + region.span.latitudeDelta / 2,
+                                                  longitude: region.center.longitude - region.span.longitudeDelta / 2))
+        let b = MKMapPoint(CLLocationCoordinate2D(latitude: region.center.latitude - region.span.latitudeDelta / 2,
+                                                  longitude: region.center.longitude + region.span.longitudeDelta / 2))
+        return MKMapRect(x: min(a.x, b.x), y: min(a.y, b.y), width: abs(a.x - b.x), height: abs(a.y - b.y))
+    }
+}
+
+/// Kamerawerte der Steuerung.
+struct EngineCamera {
+    var center: CLLocationCoordinate2D
+    var distance: CLLocationDistance
+    var heading: CLLocationDirection
+    var pitch: Double
+
+    init(center: CLLocationCoordinate2D, distance: CLLocationDistance, heading: CLLocationDirection, pitch: Double) {
+        self.center = center
+        self.distance = distance
+        self.heading = heading
+        self.pitch = pitch
+    }
+
+    init(_ camera: MKMapCamera) {
+        self.init(center: camera.centerCoordinate, distance: camera.centerCoordinateDistance, heading: camera.heading, pitch: camera.pitch)
+    }
+
+    init(_ camera: MapCamera) {
+        self.init(center: camera.centerCoordinate, distance: camera.distance, heading: camera.heading, pitch: camera.pitch)
+    }
+
+    func interpolated(to other: EngineCamera, t: Double) -> EngineCamera {
+        let a = MKMapPoint(center), b = MKMapPoint(other.center)
+        return EngineCamera(
+            center: MKMapPoint(x: a.x + (b.x - a.x) * t, y: a.y + (b.y - a.y) * t).coordinate,
+            distance: exp(log(distance) + (log(other.distance) - log(distance)) * t),
+            heading: MapEngine.approachAngle(heading, other.heading, a: t),
+            pitch: pitch + (other.pitch - pitch) * t
+        )
+    }
+}
+
+private struct Flight {
+    let from: EngineCamera
+    let to: EngineCamera
+    let start: CFTimeInterval
+    let duration: Double
+}
+
+private struct MultiTouch {
+    enum Mode { case undecided, tilt, transform }
+    var start: EngineCamera
+    var anchor: CLLocationCoordinate2D?
+    var scaleBase: CGFloat
+    var rotationBase: CGFloat
+    var panBase: CGPoint
+    var startDistance: CLLocationDistance
+    var startPitch: Double
+    var mode: Mode = .undecided
+}
+
+/// UIKit-Seite: Gestenerkenner an der MapKit-Karte und Bildtakt. Eigenes Objekt, weil UIKit Ziele als `NSObject`
+/// erwartet.
+@MainActor
+private final class EngineHelper: NSObject, UIGestureRecognizerDelegate {
+    weak var engine: MapEngine?
+    private weak var installedOn: MKMapView?
+    private var link: CADisplayLink?
+    private let pan = UIPanGestureRecognizer()
+    private let twoPan = UIPanGestureRecognizer()
+    private let pinch = UIPinchGestureRecognizer()
+    private let rotation = UIRotationGestureRecognizer()
+    private let quickZoom = UILongPressGestureRecognizer()
+    private let twoTap = UITapGestureRecognizer()
+
+    init(engine: MapEngine) {
+        self.engine = engine
+        super.init()
+        pan.maximumNumberOfTouches = 1
+        pan.addTarget(self, action: #selector(onPan(_:)))
+        twoPan.minimumNumberOfTouches = 2
+        twoPan.maximumNumberOfTouches = 2
+        twoPan.addTarget(self, action: #selector(onMulti(_:)))
+        pinch.addTarget(self, action: #selector(onMulti(_:)))
+        rotation.addTarget(self, action: #selector(onMulti(_:)))
+        quickZoom.numberOfTapsRequired = 1
+        quickZoom.minimumPressDuration = 0
+        quickZoom.allowableMovement = .greatestFiniteMagnitude
+        quickZoom.addTarget(self, action: #selector(onQuickZoom(_:)))
+        twoTap.numberOfTouchesRequired = 2
+        twoTap.addTarget(self, action: #selector(onTwoTap(_:)))
+        for recognizer in [pan, twoPan, pinch, rotation, quickZoom, twoTap] as [UIGestureRecognizer] {
+            recognizer.delegate = self
+            // Antippen von Symbolen und SwiftUIs eigene Gesten bleiben unberührt.
+            recognizer.cancelsTouchesInView = false
+            recognizer.delaysTouchesBegan = false
+            recognizer.delaysTouchesEnded = false
+        }
+    }
+
+    func install(on map: MKMapView) {
+        guard installedOn !== map else { return }
+        installedOn = map
+        // MapKits eigene Gesten aus (SwiftUI setzt das mit `interactionModes: []` ebenfalls).
+        map.isScrollEnabled = false
+        map.isZoomEnabled = false
+        map.isRotateEnabled = false
+        map.isPitchEnabled = false
+        for recognizer in [pan, twoPan, pinch, rotation, quickZoom, twoTap] as [UIGestureRecognizer] {
+            recognizer.view?.removeGestureRecognizer(recognizer)
+            map.addGestureRecognizer(recognizer)
+        }
+    }
+
+    func startDisplayLink() {
+        guard link == nil else { return }
+        let link = CADisplayLink(target: self, selector: #selector(onFrame(_:)))
+        link.preferredFrameRateRange = CAFrameRateRange(minimum: 30, maximum: 120, preferred: 60)
+        link.add(to: .main, forMode: .common)
+        self.link = link
+    }
+
+    func stopDisplayLink() {
+        link?.invalidate()
+        link = nil
+    }
+
+    @objc private func onFrame(_ link: CADisplayLink) {
+        guard let engine else {
+            stopDisplayLink()
+            return
+        }
+        engine.tick(link.targetTimestamp)
+    }
+
+    @objc private func onPan(_ recognizer: UIPanGestureRecognizer) {
+        engine?.pan(recognizer)
+    }
+
+    @objc private func onMulti(_ recognizer: UIGestureRecognizer) {
+        engine?.multiTouch(recognizer, pinch: pinch, rotation: rotation, twoPan: twoPan)
+    }
+
+    @objc private func onQuickZoom(_ recognizer: UILongPressGestureRecognizer) {
+        engine?.handleQuickZoom(recognizer)
+    }
+
+    @objc private func onTwoTap(_ recognizer: UITapGestureRecognizer) {
+        engine?.twoFingerTap(recognizer)
+    }
+
+    func gestureRecognizer(_ gestureRecognizer: UIGestureRecognizer, shouldRecognizeSimultaneouslyWith other: UIGestureRecognizer) -> Bool {
+        true
+    }
+}
+
+/// Unsichtbare Fläche hinter der Karte, über die `MapEngine` die MapKit-Karte findet.
+struct MapEngineAnchor: UIViewRepresentable {
+    let engine: MapEngine
+
+    func makeUIView(context: Context) -> UIView {
+        let view = UIView()
+        view.isUserInteractionEnabled = false
+        view.backgroundColor = .clear
+        engine.anchor = view
+        return view
+    }
+
+    func updateUIView(_ view: UIView, context: Context) {
+        engine.anchor = view
+        Task { @MainActor in engine.attachIfNeeded() }
+    }
+}
+
+extension View {
+    /// Hängt die eigene Kartensteuerung an die Karte. Die Karte muss mit `interactionModes: []` erzeugt sein.
+    func mapEngine(_ engine: MapEngine) -> some View {
+        background { MapEngineAnchor(engine: engine) }
+            .onMapCameraChange(frequency: .continuous) { _ in
+                if !engine.isAttached { engine.attachIfNeeded() }
+            }
+    }
+}

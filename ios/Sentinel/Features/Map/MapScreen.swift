@@ -11,19 +11,8 @@ struct MapScreen: View {
     @Environment(LocationService.self) var location
     @Environment(LocationContext.self) var locationContext
 
-    /// Kameraposition in einem eigenen beobachteten Objekt, das nur die Karte liest: Die Nachführung setzt sie zehnmal
-    /// je Sekunde, ohne dass der ganze Bildschirm neu aufgebaut wird.
-    @State var cameraController = CameraController()
-    /// Kurzzeitige Grenze für den Abstand beim Übergeben an Apples Verfolgung (siehe `startPin`).
-    @State var cameraBounds: MapCameraBounds?
-    /// Zählt Anheft-Vorgänge, damit ein älterer verspäteter Schritt nicht in einen neueren hineinwirkt.
-    @State var pinRequest = 0
-    /// Zeitpunkt der Übergabe an Apples Verfolgung.
-    @State var trackingHandover = Date.distantPast
-    var camera: MapCameraPosition {
-        get { cameraController.position }
-        nonmutating set { cameraController.position = newValue }
-    }
+    /// Eigene Kartensteuerung: Gesten, Nachführen und Kamerafahrten an einer Stelle (siehe `MapEngine`).
+    @State var engine = MapEngine()
     @State var selection: MapSelection?
     @State var tapMode: MapTapMode = .none
     @State var editor: EditorContext?
@@ -37,26 +26,7 @@ struct MapScreen: View {
     @State var cameraState = MapCameraState()
     @Namespace var mapScope
     /// Angeheftet am eigenen Standort (in Fahrtrichtung oder Norden oben); `nil` = frei.
-    @State var pin: CameraPin?
-    /// Die App bewegt die Kamera gerade selbst; solange zählt eine Kamerabewegung nicht als Verschieben.
-    @State var cameraAnimating = false
-    /// Liest MapKits eigene Gestenerkenner (nur lesend), damit beim Anheften sicher bekannt ist, welche Geste läuft.
-    @State var gestures = MapGestureWatcher()
-    /// Nach einer Geste: Die Karte schwingt noch aus, danach werden Abstand und Winkel übernommen.
-    @State var settling = false
-    /// In der laufenden Geste wurde gezoomt, gekippt oder gedreht (dann löst Verschieben die Kopplung nicht).
-    @State var multiTouchGesture = false
-    /// Eine Geste hat die Kopplung gelöst: nach ihrem Ende Apples Verfolgung beenden.
-    @State var releaseTracking = false
-    /// Zeitpunkt der letzten Geste (Sprünge des Abstands kurz danach stammen vom Nutzer).
-    @State var lastGestureAt = Date.distantPast
-    /// Wie oft ein von Apple gesetzter Abstand je Anheften schon korrigiert wurde.
-    @State var resetCorrections = 0
-    /// Zoomstufe und Neigung beim Anheften; das Nachführen hält sie, bis man selbst zoomt oder kippt.
-    @State var followDistance: CLLocationDistance?
-    @State var followPitch: Double?
-    /// Zuletzt angesteuerte Kamera beim Nachführen, um Wiederholungen ohne Bewegung auszulassen.
-    @State var lastFollowTarget: MapCamera?
+    var pin: CameraPin? { engine.pin }
 
     @State var ownMarkerOptions = OwnMarkerOptions()
     /// Tempolimit der Straße am eigenen Standort (OpenStreetMap), auch ohne Navigation.
@@ -109,10 +79,7 @@ struct MapScreen: View {
         }
         .sheet(isPresented: $pickingBySearch) {
             SearchSheet(mode: .adresse, navigate: { _ in }, pick: { point, _ in
-                pin = nil
-                withAnimation(.easeInOut(duration: 0.6)) {
-                    camera = .camera(MapCamera(centerCoordinate: point.coordinate, distance: 900, heading: 0, pitch: settings.prefers3D ? 55 : 0))
-                }
+                engine.fly(to: MapCamera(centerCoordinate: point.coordinate, distance: 900, heading: 0, pitch: settings.prefers3D ? 55 : 0))
                 // Erst wenn das Suchfenster zu ist, sonst kollidiert es mit dem Editor-Fenster.
                 Task {
                     try? await Task.sleep(for: .milliseconds(450))
@@ -243,7 +210,7 @@ struct MapScreen: View {
         // Einmal je Darstellung: welche Punkte gebündelt bzw. auseinandergerückt werden.
         let layout = clusterLayout
         return MapReader { proxy in
-            Map(position: Binding(get: { cameraController.position }, set: { cameraController.position = $0 }), bounds: cameraBounds, scope: mapScope) {
+            Map(initialPosition: .userLocation(fallback: .automatic), interactionModes: [], scope: mapScope) {
                 // Im Fahrmodus ohne Navigation bleibt der normale Standortpunkt; nur in der Navigation ersetzt ihn der Navi-Pfeil.
                 if true {
                     MyLocationLayer(lage: lage, route: route, locationService: location, cameraState: cameraState,
@@ -297,31 +264,36 @@ struct MapScreen: View {
             .ignoresSafeArea(.container, edges: .bottom)
             .onMapCameraChange(frequency: .continuous) { context in
                 cameraState.update(context.camera)
-                if !gestures.isAttached { gestures.attachIfNeeded() }
-                CameraProbe.shared.record(context.camera, pin: pin, gesture: gestures.isActive, settling: settling, attached: gestures.isAttached)
+                CameraProbe.shared.record(context.camera, pin: pin, gesture: engine.isGestureActive, puck: engine.pin != nil ? engine.puckOffset : nil, attached: engine.isAttached)
             }
-            // Darüber findet der Gestenbeobachter die MapKit-Karte.
-            .background { MapGestureAnchor(watcher: gestures) }
+            // Eigene Steuerung: findet über diese Fläche die MapKit-Karte und übernimmt Gesten und Kamera.
+            .mapEngine(engine)
             .onAppear {
-                gestures.onEvent = { event in
-                    CameraProbe.shared.event("\(event)")
-                    handleGesture(event)
+                engine.locationProvider = { [location, route] in route.snappedLocation ?? location.current }
+                engine.courseProvider = { myCourse }
+                engine.onEvent = { event in
+                    switch event {
+                    case .panned, .pinched, .rotated, .tilted:
+                        // Bild für Bild: nur im Overlay, nicht im Messprotokoll.
+                        break
+                    case .target(let distance, let pitch):
+                        CameraProbe.shared.event(String(format: "sollwert d=%.0f p=%.1f", distance, pitch))
+                    default:
+                        CameraProbe.shared.event("\(event)")
+                    }
                 }
-                gestures.onAttach = { CameraProbe.shared.event("erkenner \($0)") }
                 CameraProbe.shared.uploader = { [client = model.client] lines in try? await client?.sendCameraDiagnosis(lines) }
             }
 
             .onMapCameraChange(frequency: .onEnd) { context in
                 cameraState.update(context.camera)
-                correctAppleZoomReset()
                 let is3D = context.camera.pitch > 10
-                if !cameraAnimating, settings.prefers3D != is3D { settings.prefers3D = is3D }
+                if settings.prefers3D != is3D { settings.prefers3D = is3D }
             }
 
             .onChange(of: pin, initial: true) { _, new in
                 CameraProbe.shared.event("pin \(new.map { $0 == .heading ? "heading" : "north" } ?? "none")")
                 ownMarkerOptions.showsStreet = new != nil
-                if new == nil { settling = false }
             }
             // Langes Drücken auf einen Ort: wie ein Suchtreffer „Navigieren“ oder „Hier anlegen“ anbieten.
             .simultaneousGesture(
@@ -393,7 +365,7 @@ struct MapScreen: View {
         }
         .overlay(alignment: .topLeading) {
             if settings.showsCameraDebug {
-                CameraDebugOverlay(state: cameraState, pin: pin, navigating: route.isActive, gestures: gestures, settling: settling)
+                CameraDebugOverlay(state: cameraState, pin: pin, navigating: route.isActive, engine: engine)
                     .padding(.leading, Theme.barInset)
                     .padding(.top, topAreaHeight + Theme.barSpacing)
             }
@@ -439,15 +411,16 @@ struct MapScreen: View {
             if active {
                 pinCamera(.heading)
             } else if followsMe {
-                pin = nil
-                camera = .camera(cameraState.camera())
+                engine.unpin()
             }
         }
         .task {
             // Beim Öffnen: auf den eigenen Standort, gekippt wie in einer Navi-App.
             for _ in 0..<40 where location.current == nil { try? await Task.sleep(for: .milliseconds(250)) }
             if let current = location.current {
-                camera = .camera(MapCamera(centerCoordinate: current.coordinate, distance: 1200, heading: 0, pitch: settings.prefers3D ? 55 : 0))
+                if engine.pin == nil {
+                    engine.jump(to: MapCamera(centerCoordinate: current.coordinate, distance: 1200, heading: 0, pitch: settings.prefers3D ? 55 : 0))
+                }
             }
         }
         .sensoryFeedback(.impact, trigger: lage.operation.a?.memberId)

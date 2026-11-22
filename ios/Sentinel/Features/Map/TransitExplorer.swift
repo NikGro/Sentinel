@@ -37,7 +37,8 @@ struct TransitExplorer: View {
         }
     }
 
-    @State private var camera: MapCameraPosition = .automatic
+    /// Eigene Kartensteuerung wie auf der Lagekarte (gleiches Gefühl beim Verschieben, Zoomen, Drehen).
+    @State private var engine = MapEngine()
     @State private var cameraState = MapCameraState()
     @State private var region: MKCoordinateRegion?
     @State private var segments: [LiveSegment] = []
@@ -58,7 +59,7 @@ struct TransitExplorer: View {
 
     var body: some View {
         NavigationStack {
-            Map(position: $camera) {
+            Map(initialPosition: .region(MKCoordinateRegion(center: start.coordinate, latitudinalMeters: 2500, longitudinalMeters: 2500)), interactionModes: []) {
                     UserAnnotation()
                     if let trip, trip.points.count >= 2 {
                         MapPolyline(coordinates: trip.points.map(\.coordinate))
@@ -92,6 +93,7 @@ struct TransitExplorer: View {
                 .mapStyle(.standard(pointsOfInterest: .excludingAll))
                 // Eigener Kompassknopf statt Apples Kompass, wie in den übrigen reduzierten Ansichten.
                 .mapControls { MapScaleView() }
+                .mapEngine(engine)
                 .onMapCameraChange(frequency: .continuous) { context in
                     cameraState.update(context.camera)
                 }
@@ -105,7 +107,7 @@ struct TransitExplorer: View {
                         SOSButton()
                         LocationCompassButton(state: cameraState, pin: nil) {
                             guard let me = model.myPoint else { return }
-                            withAnimation { camera = .camera(MapCamera(centerCoordinate: me.coordinate, distance: 1500, heading: 0, pitch: 0)) }
+                            engine.fly(to: MapCamera(centerCoordinate: me.coordinate, distance: 1500, heading: 0, pitch: 0))
                         }
                     }
                     .padding(.trailing, Theme.barInset)
@@ -119,9 +121,6 @@ struct TransitExplorer: View {
                 ToolbarItem(placement: .cancellationAction) {
                     Button("Schließen") { dismiss() }
                 }
-            }
-            .onAppear {
-                camera = .region(MKCoordinateRegion(center: start.coordinate, latitudinalMeters: 2500, longitudinalMeters: 2500))
             }
             // Fahrzeuge alle 20 Sekunden neu laden (Echtzeit), Positionen fünfmal je Sekunde weiterrechnen.
             .task(id: region.map { "\($0.center.latitude.rounded(to: 3))|\($0.center.longitude.rounded(to: 3))|\($0.span.latitudeDelta.rounded(to: 3))" }) {
@@ -291,7 +290,7 @@ struct TransitExplorer: View {
                         ForEach(stopHits) { stop in
                             Button {
                                 searching = false
-                                camera = .region(MKCoordinateRegion(center: stop.point.coordinate, latitudinalMeters: 800, longitudinalMeters: 800))
+                                engine.show(MKCoordinateRegion(center: stop.point.coordinate, latitudinalMeters: 800, longitudinalMeters: 800))
                             } label: {
                                 HStack(spacing: 10) {
                                     StationSymbol(lines: stop.linien, size: 18)
@@ -320,7 +319,7 @@ struct TransitExplorer: View {
         var rect = MKMapRect.null
         for p in points { rect = rect.union(MKMapRect(origin: MKMapPoint(p.coordinate), size: MKMapSize(width: 0, height: 0))) }
         let pad = Swift.max(rect.width, rect.height) * 0.2 + 400
-        withAnimation { camera = .rect(rect.insetBy(dx: -pad, dy: -pad)) }
+        engine.show(rect.insetBy(dx: -pad, dy: -pad))
     }
 
     // MARK: Auswahl und Übernahme

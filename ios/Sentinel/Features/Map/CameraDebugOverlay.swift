@@ -5,8 +5,7 @@ struct CameraDebugOverlay: View {
     let state: MapCameraState
     let pin: CameraPin?
     let navigating: Bool
-    let gestures: MapGestureWatcher
-    let settling: Bool
+    let engine: MapEngine
 
     var body: some View {
         // Der Abstand wird ohne Beobachtung geführt; deshalb regelmäßig neu lesen.
@@ -16,8 +15,8 @@ struct CameraDebugOverlay: View {
                 Text("Neigung \(Int(state.pitch.rounded()))°")
                 Text("Richtung \(Int(state.heading.rounded()))°")
                 Text("Modus \(mode)")
-                Text("Erkenner \(gestures.isAttached ? "ja" : "NEIN") · Geste \(gestures.isActive ? "läuft" : "–")\(settling ? " · schwingt aus" : "")")
-                Text(gestures.lastEvent)
+                Text("Steuerung \(engine.isAttached ? "ja" : "NEIN") · Geste \(engine.isGestureActive ? "läuft" : "–") · Mitte \(engine.followSource)")
+                Text(engine.lastEvent)
                     .lineLimit(1)
             }
             .font(.caption2.monospacedDigit().weight(.semibold))

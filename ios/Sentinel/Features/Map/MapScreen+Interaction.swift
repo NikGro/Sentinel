@@ -64,8 +64,7 @@ extension MapScreen {
         guard let minLat = lats.min(), let maxLat = lats.max(), let minLon = lons.min(), let maxLon = lons.max() else { return }
         let center = CLLocationCoordinate2D(latitude: (minLat + maxLat) / 2, longitude: (minLon + maxLon) / 2)
         let span = MKCoordinateSpan(latitudeDelta: max((maxLat - minLat) * 2.5, 0.003), longitudeDelta: max((maxLon - minLon) * 2.5, 0.003))
-        pin = nil
-        withAnimation(.easeInOut(duration: 0.5)) { camera = .region(MKCoordinateRegion(center: center, span: span)) }
+        engine.show(MKCoordinateRegion(center: center, span: span), duration: 0.5)
     }
 
     var hasTransit: Bool { visibleObjects.contains { $0.data.typ.isTransit } }
@@ -257,10 +256,7 @@ extension MapScreen {
     func show(_ pin: SearchPin) {
         searchPin = pin
         // Ein anderer Ort: nicht mehr am eigenen Standort angeheftet.
-        self.pin = nil
-        withAnimation(.easeInOut(duration: 0.8)) {
-            camera = .camera(MapCamera(centerCoordinate: pin.point.coordinate, distance: 900, heading: 0, pitch: settings.prefers3D ? 55 : 0))
-        }
+        engine.fly(to: MapCamera(centerCoordinate: pin.point.coordinate, distance: 900, heading: 0, pitch: settings.prefers3D ? 55 : 0), duration: 0.8)
     }
 
     /// Markierung oder Ziel an einem Suchtreffer anlegen; der Editor öffnet sich, sobald das Suchfenster zu ist.

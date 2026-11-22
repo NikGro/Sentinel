@@ -34,6 +34,8 @@ final class KameraTests: XCTestCase {
         var pitch = 0.0
         var heading = 0.0
         var recognizers = false
+        /// Abstand des Standortsymbols von der Bildmitte in Punkten (nur angeheftet gemeldet).
+        var symbol: Double?
 
         init(_ text: String) {
             for part in text.split(separator: " ") {
@@ -45,6 +47,7 @@ final class KameraTests: XCTestCase {
                 case "p": pitch = Double(kv[1]) ?? 0
                 case "h": heading = Double(kv[1]) ?? 0
                 case "erkenner": recognizers = kv[1] == "1"
+                case "symbol": symbol = Double(kv[1])
                 default: break
                 }
             }
@@ -139,13 +142,17 @@ final class KameraTests: XCTestCase {
         XCTAssertEqual(p.pin, "heading", "angeheftet in Kompass-Ausrichtung")
         XCTAssertEqual(p.distance, 550, accuracy: 120, "Abstand beim Anheften etwa 550 m")
         XCTAssertGreaterThan(p.pitch, 20, "schräg von hinten")
-        XCTAssertTrue(p.recognizers, "MapKits Gestenerkenner gefunden")
+        XCTAssertTrue(p.recognizers, "Eigene Kartensteuerung hängt an der Karte")
 
         // 2. Folgen ohne Pumpen: Abstand bleibt beim Fahren ruhig.
         let ruhig = samples(seconds: 4)
         let ds = ruhig.map(\.distance)
         XCTAssertLessThan((ds.max() ?? 0) - (ds.min() ?? 0), 60, "kein Pumpen beim Folgen: \(ds)")
         XCTAssertTrue(ruhig.allSatisfy { $0.pin == "heading" }, "bleibt angeheftet beim Fahren")
+        // Folgt ohne Hinterherlahmen: Das Standortsymbol sitzt beim Fahren in der Bildmitte.
+        let versatz = ruhig.compactMap(\.symbol)
+        XCTAssertFalse(versatz.isEmpty, "Standortsymbol gemessen")
+        XCTAssertLessThan(versatz.max() ?? 999, 40, "Symbol bleibt in der Mitte (Punkte): \(versatz)")
 
         // 3. Zoomen (Zwei-Finger) löst nicht, der neue Abstand bleibt und pumpt nicht.
         map.pinch(withScale: 2.2, velocity: 1.5)

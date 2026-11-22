@@ -40,7 +40,7 @@ def main() -> None:
             print(f"{t:8.2f}  >> {item['ereignis']}")
         elif t - last_print >= 0.25:
             last_print = t
-            print(f"{t:8.2f}  pin={item['pin']:<7} d={item['d']:7.0f} p={item['p']:4.0f} h={item['h']:5.0f} geste={item['geste']} settle={item['settle']}")
+            print(f"{t:8.2f}  pin={item['pin']:<7} d={item['d']:7.0f} p={item['p']:4.0f} h={item['h']:5.0f} geste={item['geste']}" + (f" symbol={(item['sx']**2 + item['sy']**2) ** 0.5:4.0f}" if 'sx' in item else ""))
 
     # Pumpen: Vorzeichenwechsel der Abstandsänderung ohne Geste, innerhalb von 3 s.
     pumps, previous, direction, flips = [], None, 0, []

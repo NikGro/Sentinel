@@ -11,7 +11,8 @@ struct LocationPickerSheet: View {
 
     @Environment(AppModel.self) private var model
     @Environment(\.dismiss) private var dismiss
-    @State private var camera: MapCameraPosition = .automatic
+    /// Eigene Kartensteuerung wie auf der Lagekarte.
+    @State private var engine = MapEngine()
     @State private var point: GeoPoint?
     @State private var address = ""
     @State private var isSearching = false
@@ -20,11 +21,12 @@ struct LocationPickerSheet: View {
     var body: some View {
         NavigationStack {
             MapReader { proxy in
-                Map(position: $camera) {
+                Map(initialPosition: .camera(MapCamera(centerCoordinate: (initial ?? model.myPoint ?? GeoPoint(lat: 53.5511, lon: 9.9937)).coordinate, distance: 1200)), interactionModes: []) {
                     UserAnnotation()
                     if let point { PlacementPreview(point: point) }
                 }
                 .mapControls { MapCompass() }
+                .mapEngine(engine)
                 .onTapGesture { location in
                     if let coordinate = proxy.convert(location, from: .local) {
                         withAnimation(.snappy) { point = GeoPoint(coordinate) }
@@ -56,9 +58,7 @@ struct LocationPickerSheet: View {
             .navigationTitle(title)
             .navigationBarTitleDisplayMode(.inline)
             .onAppear {
-                let start = initial ?? model.myPoint ?? GeoPoint(lat: 53.5511, lon: 9.9937)
                 point = initial
-                camera = .camera(MapCamera(centerCoordinate: start.coordinate, distance: 1200))
             }
         }
     }
@@ -76,9 +76,7 @@ struct LocationPickerSheet: View {
             return
         }
         failure = nil
-        withAnimation(.easeInOut(duration: 0.6)) {
-            camera = .camera(MapCamera(centerCoordinate: coordinate, distance: 600))
-            point = GeoPoint(coordinate)
-        }
+        engine.fly(to: MapCamera(centerCoordinate: coordinate, distance: 600))
+        withAnimation(.easeInOut(duration: 0.6)) { point = GeoPoint(coordinate) }
     }
 }
