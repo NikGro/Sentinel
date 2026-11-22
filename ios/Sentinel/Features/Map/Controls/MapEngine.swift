@@ -66,6 +66,9 @@ final class MapEngine {
     @ObservationIgnored private var panReleased = false
     /// In dieser Geste lagen schon zwei Finger: Verschieben mit einem Finger löst dann nicht (Zoomen, Kippen).
     @ObservationIgnored private var sessionMulti = false
+    /// Letzte Bewegung mit zwei Fingern: Das Abheben am Ende eines Zoomens zählt nicht als Tippen mit zwei Fingern.
+    @ObservationIgnored private var lastMultiTouchAt: CFTimeInterval = 0
+    @ObservationIgnored private var lastTarget: (distance: CLLocationDistance, pitch: Double) = (0, 0)
     @ObservationIgnored private var quickZoom: (start: CGPoint, distance: CLLocationDistance, moved: Bool)?
 
     /// Hängt die Steuerung an einer Karte?
@@ -246,12 +249,14 @@ final class MapEngine {
         return CLLocationCoordinate2DIsValid(coordinate) ? coordinate : nil
     }
 
-    /// Abstand des Standortsymbols von der Bildmitte in Punkten (Messfühler: sitzt es angeheftet in der Mitte?).
+    /// Abstand des Standortsymbols vom Kameramittelpunkt auf dem Bildschirm in Punkten (Messfühler: sitzt es
+    /// angeheftet genau dort, wohin die Kamera schaut? MapKit legt die Mitte wegen der Leisten etwas tiefer).
     var puckOffset: CGPoint? {
         guard let map, let view = map.view(for: map.userLocation), let superlayer = view.layer.superlayer else { return nil }
         let layer = view.layer.presentation() ?? view.layer
         let point = map.layer.convert(layer.position, from: superlayer)
-        return CGPoint(x: point.x - map.bounds.midX, y: point.y - map.bounds.midY)
+        let center = map.convert(map.camera.centerCoordinate, toPointTo: map)
+        return CGPoint(x: point.x - center.x, y: point.y - center.y)
     }
 
     // MARK: Kamera lesen und setzen
@@ -355,6 +360,7 @@ final class MapEngine {
         gestureState(recognizer)
         guard recognizer.state == .began || recognizer.state == .changed, recognizer.numberOfTouches >= 2 else { return }
         sessionMulti = true
+        lastMultiTouchAt = CACurrentMediaTime()
         let centroid = recognizer.location(in: map)
         if multi == nil {
             guard let start = current else { return }
@@ -471,7 +477,7 @@ final class MapEngine {
 
     /// Mit zwei Fingern tippen: herauszoomen.
     fileprivate func twoFingerTap(_ recognizer: UITapGestureRecognizer) {
-        guard recognizer.state == .ended, let map else { return }
+        guard recognizer.state == .ended, let map, CACurrentMediaTime() - lastMultiTouchAt > 0.4, multi == nil else { return }
         emit(.zoomTapped)
         zoomStep(factor: 2, at: recognizer.location(in: map))
     }
@@ -513,6 +519,11 @@ final class MapEngine {
     }
 
     private func emit(_ event: MapEngineEvent) {
+        if case .target(let distance, let pitch) = event {
+            // Zwei Erkenner melden je Bild; nur merkliche Änderungen weitergeben.
+            guard abs(distance - lastTarget.distance) > 1 || abs(pitch - lastTarget.pitch) > 0.5 else { return }
+            lastTarget = (distance, pitch)
+        }
         onEvent?(event)
     }
 
