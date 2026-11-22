@@ -205,6 +205,10 @@ extension MapScreen {
             trackingHandover = .now
             CameraProbe.shared.event(String(format: "apple verfolgung an d=%.0f kompass=%d", distance, mode == .heading ? 1 : 0))
             camera = .userLocation(followsHeading: mode == .heading, fallback: .camera(view))
+            for wait in [300, 700] {
+                try? await Task.sleep(for: .milliseconds(wait))
+                CameraProbe.shared.event(String(format: "nach uebergabe d=%.0f verfolgung=%@", cameraState.distance, gestures.trackingDescription))
+            }
         }
     }
 
@@ -270,8 +274,17 @@ extension MapScreen {
               !gestures.isActive, !cameraAnimating, resetCorrections < 3 else { return }
         guard abs(cameraState.distance - target) > target * 0.4 else { return }
         resetCorrections += 1
-        CameraProbe.shared.event(String(format: "apple abstand zurueck d=%.0f soll=%.0f versuch=%d", cameraState.distance, target, resetCorrections))
-        startPin(mode, distance: target, pitch: followPitch ?? mode.pitch, isRetry: true)
+        CameraProbe.shared.event(String(format: "apple abstand zurueck d=%.0f soll=%.0f versuch=%d verfolgung=%@", cameraState.distance, target, resetCorrections, gestures.trackingDescription))
+        // Versuch: Abstand an der laufenden Verfolgung ändern statt neu anheften (Neuanheften startet Apples Verfolgung
+        // neu, und die setzt jedes Mal wieder etwa 4,9 km: Rein-raus-Schleife auf dem Gerät).
+        guard gestures.setDistance(target, pitch: followPitch ?? mode.pitch) else {
+            startPin(mode, distance: target, pitch: followPitch ?? mode.pitch, isRetry: true)
+            return
+        }
+        Task {
+            try? await Task.sleep(for: .milliseconds(900))
+            CameraProbe.shared.event(String(format: "apple abstand gesetzt d=%.0f verfolgung=%@ pin=%@", cameraState.distance, gestures.trackingDescription, pin.map { "\($0)" } ?? "none"))
+        }
     }
 
     /// Bewegt die Kamera (Anheften, Sprung zu einem Ort).

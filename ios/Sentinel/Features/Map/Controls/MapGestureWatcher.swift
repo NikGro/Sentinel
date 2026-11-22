@@ -97,6 +97,28 @@ final class MapGestureWatcher: NSObject {
         }
     }
 
+    /// Verfolgungsmodus der MapKit-Karte, zur Fehlersuche.
+    var trackingDescription: String {
+        guard let map else { return "keine karte" }
+        switch map.userTrackingMode {
+        case .none: return "aus"
+        case .follow: return "folgen"
+        case .followWithHeading: return "kompass"
+        @unknown default: return "?"
+        }
+    }
+
+    /// Versuch: Abstand und Neigung direkt an der MapKit-Karte setzen, Mittelpunkt und Richtung bleiben, damit Apples
+    /// laufende Standortverfolgung nicht neu startet (ein Neustart setzt Apples eigenen, weiten Abstand).
+    @discardableResult
+    func setDistance(_ distance: CLLocationDistance, pitch: Double) -> Bool {
+        guard let map else { return false }
+        let now = map.camera
+        let target = MKMapCamera(lookingAtCenter: now.centerCoordinate, fromDistance: distance, pitch: pitch, heading: now.heading)
+        map.setCamera(target, animated: true)
+        return true
+    }
+
     private static func firstMap(in view: UIView) -> MKMapView? {
         if let map = view as? MKMapView { return map }
         for sub in view.subviews {
