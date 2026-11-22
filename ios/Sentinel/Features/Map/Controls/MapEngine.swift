@@ -3,6 +3,7 @@ import Observation
 import QuartzCore
 import SwiftUI
 import UIKit
+import UIKit.UIGestureRecognizerSubclass
 
 /// Was die Kartensteuerung meldet (für Messfühler und Bildschirm).
 enum MapEngineEvent {
@@ -16,8 +17,8 @@ enum MapEngineEvent {
     case zoomTapped
     /// Alle Gesten sind vorbei.
     case allEnded
-    /// Die Kopplung an den eigenen Standort wurde durch eine Geste gelöst.
-    case released
+    /// Die Kopplung an den eigenen Standort wurde durch eine Geste gelöst (Grund: verschoben bzw. gedreht).
+    case released(String)
     /// Angeheftet: Zoom oder Neigung des Nutzers ist der neue Sollwert.
     case target(distance: CLLocationDistance, pitch: Double)
 }
@@ -316,6 +317,7 @@ final class MapEngine {
         guard let map else { return }
         gestureState(recognizer)
         let location = recognizer.location(in: map)
+        if (helper?.maxTouches ?? 1) >= 2 { sessionMulti = true }
         if quickZoom != nil || multi != nil || sessionMulti {
             panLast = nil
             return
@@ -336,7 +338,7 @@ final class MapEngine {
                 }
                 unpin()
                 panReleased = true
-                emit(.released)
+                emit(.released("verschoben"))
             }
             if let last = panLast { shift(from: last, to: location) }
             panLast = location
@@ -416,7 +418,7 @@ final class MapEngine {
             if pin != nil, abs(rotationDegrees) > 20 {
                 // Herausdrehen löst; ab hier frei weiterdrehen, vom aktuellen Stand aus.
                 unpin()
-                emit(.released)
+                emit(.released(String(format: "gedreht %.0f°", rotationDegrees)))
                 if let now = current {
                     m.start = now
                     m.startDistance = now.distance
@@ -631,6 +633,9 @@ private final class EngineHelper: NSObject, UIGestureRecognizerDelegate {
     private let rotation = UIRotationGestureRecognizer()
     private let quickZoom = UILongPressGestureRecognizer()
     private let twoTap = UITapGestureRecognizer()
+    private let counter = TouchCounter()
+    /// Höchste Fingerzahl seit dem ersten Aufsetzen (bis alle Finger weg sind).
+    var maxTouches: Int { counter.maxTouches }
 
     init(engine: MapEngine) {
         self.engine = engine
@@ -648,7 +653,7 @@ private final class EngineHelper: NSObject, UIGestureRecognizerDelegate {
         quickZoom.addTarget(self, action: #selector(onQuickZoom(_:)))
         twoTap.numberOfTouchesRequired = 2
         twoTap.addTarget(self, action: #selector(onTwoTap(_:)))
-        for recognizer in [pan, twoPan, pinch, rotation, quickZoom, twoTap] as [UIGestureRecognizer] {
+        for recognizer in [pan, twoPan, pinch, rotation, quickZoom, twoTap, counter] as [UIGestureRecognizer] {
             recognizer.delegate = self
             // Antippen von Symbolen und SwiftUIs eigene Gesten bleiben unberührt.
             recognizer.cancelsTouchesInView = false
@@ -665,7 +670,7 @@ private final class EngineHelper: NSObject, UIGestureRecognizerDelegate {
         map.isZoomEnabled = false
         map.isRotateEnabled = false
         map.isPitchEnabled = false
-        for recognizer in [pan, twoPan, pinch, rotation, quickZoom, twoTap] as [UIGestureRecognizer] {
+        for recognizer in [pan, twoPan, pinch, rotation, quickZoom, twoTap, counter] as [UIGestureRecognizer] {
             recognizer.view?.removeGestureRecognizer(recognizer)
             map.addGestureRecognizer(recognizer)
         }
@@ -710,6 +715,36 @@ private final class EngineHelper: NSObject, UIGestureRecognizerDelegate {
 
     func gestureRecognizer(_ gestureRecognizer: UIGestureRecognizer, shouldRecognizeSimultaneouslyWith other: UIGestureRecognizer) -> Bool {
         true
+    }
+}
+
+/// Zählt nur die Finger auf der Karte, erkennt selbst nie etwas. So weiß die Steuerung, ob in einer Geste schon zwei
+/// Finger lagen (dann löst Verschieben nicht, auch wenn der erste Finger beim Zoomen weit wandert).
+private final class TouchCounter: UIGestureRecognizer {
+    private var touching = 0
+    private(set) var maxTouches = 0
+
+    override func touchesBegan(_ touches: Set<UITouch>, with event: UIEvent) {
+        if touching == 0 { maxTouches = 0 }
+        touching += touches.count
+        maxTouches = max(maxTouches, touching)
+    }
+
+    override func touchesEnded(_ touches: Set<UITouch>, with event: UIEvent) {
+        lift(touches.count)
+    }
+
+    override func touchesCancelled(_ touches: Set<UITouch>, with event: UIEvent) {
+        lift(touches.count)
+    }
+
+    private func lift(_ count: Int) {
+        touching = max(touching - count, 0)
+        if touching == 0 { state = .failed }
+    }
+
+    override func reset() {
+        touching = 0
     }
 }
 

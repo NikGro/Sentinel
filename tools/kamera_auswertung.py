@@ -67,7 +67,7 @@ def main() -> None:
         name = item["ereignis"]
         if name.startswith("pin ") and name != "pin none":
             pinned_once = True
-        if name.startswith("panned") or name.startswith("rotated") or name == "released":
+        if name.startswith("panned") or name.startswith("rotated") or name.startswith("released"):
             recent.append(t)
         # Der Anfangszustand („pin none“ beim Start) zählt nicht.
         if name == "pin none" and pinned_once and not any(t - r < 1.5 for r in recent):
