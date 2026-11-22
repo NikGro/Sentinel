@@ -60,14 +60,17 @@ def main() -> None:
     print("\nPumpen (Zoom rein/raus ohne Geste):", ", ".join(f"{t:.1f}s" for t in pumps) or "keins")
 
     # Lösen ohne Verschieben oder Drehen davor.
-    unexpected, recent = [], []
+    unexpected, recent, pinned_once = [], [], False
     for t, kind, item in timeline:
         if kind != "ereignis":
             continue
         name = item["ereignis"]
+        if name.startswith("pin ") and name != "pin none":
+            pinned_once = True
         if name.startswith("panned") or name.startswith("rotated"):
             recent.append(t)
-        if name == "pin none" and t > 2 and not any(t - r < 1.5 for r in recent):
+        # Der Anfangszustand („pin none“ beim Start) zählt nicht.
+        if name == "pin none" and pinned_once and not any(t - r < 1.5 for r in recent):
             unexpected.append(t)
     print("Lösen ohne Verschieben/Drehen:", ", ".join(f"{t:.1f}s" for t in unexpected) or "keins")
 

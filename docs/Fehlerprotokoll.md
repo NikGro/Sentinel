@@ -41,7 +41,7 @@ gescheiterte Ansätze nicht wiederholt werden. Neue Versuche und Rückmeldungen 
 | 0.22 | Finger zählen per eigenem `UIGestureRecognizer` am Fenster | „geht immer noch nicht richtig“ | Fingerzahl sagt nicht, was MapKit daraus macht; Rückfall über Kamerawerte |
 | 0.23 | MapKits `userTrackingMode` direkt an der `MKMapView` (Kamera setzen, dann Verfolgung) | Zoomt nach Erreichen wieder heraus, dreht im Kreis | Zwei Stellen steuern dieselbe Kamera (SwiftUI `position` und MapKit) |
 | 0.26 | Wie 0.23, Reihenfolge getauscht und einmal nachgesetzt | Zoomt wild rein und raus | Derselbe Grundfehler wie 0.23, Nachsetzen verstärkt das Pumpen |
-| 0.27 | Eigene Nachführung als einzige Steuerung; Gesten lesend an MapKits eigenen Erkennern (`MapGestureWatcher`) | Simulator (Kamera-Test 22.11.): Anheften 550 m/40°, beim Fahren konstant; Zoomen behält Kopplung, 550 → 270 m, danach 25 s konstant (kein Pumpen); Wischen löst nach 105 pt. Herauszoomen und Drehen noch nicht geprüft. Gerät: offen | — |
+| 0.27 | Eigene Nachführung als einzige Steuerung; Gesten lesend an MapKits eigenen Erkennern (`MapGestureWatcher`) | Simulator, Kamera-Test komplett grün (Lauf 45014906691): Anheften 550 m/40°, beim Fahren konstant; Hineinzoomen behält Kopplung (550 → 270 m, danach konstant); Herauszoomen per Zwei-Finger-Tipp behält Kopplung (270 → 448 m, konstant); Drehen löst; Wischen löst nach 52 pt; Norden 1500 m/0°; kein Pumpen. Gerät: offen | — |
 
 ### Nicht wiederholen
 
