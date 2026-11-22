@@ -12,7 +12,7 @@ final class KameraTests: XCTestCase {
     override func setUp() {
         continueAfterFailure = true
         app = XCUIApplication()
-        app.launchArguments = ["-demo", "-kameraprobe"]
+        app.launchArguments = ["-demo", "-kameraprobe"] + (name.contains("Unruhe") ? ["-unruhe"] : [])
         XCUIDevice.shared.location = XCUILocation(location: CLLocation(latitude: position.latitude, longitude: position.longitude))
         app.launch()
         addUIInterruptionMonitor(withDescription: "Systemabfrage") { alert in
@@ -214,5 +214,37 @@ final class KameraTests: XCTestCase {
         XCTAssertEqual(p.pin, "north", "Norden oben angeheftet")
         XCTAssertEqual(p.distance, 1500, accuracy: 300, "Abstand Norden oben etwa 1500 m")
         XCTAssertLessThan(p.pitch, 10, "von oben")
+    }
+
+    /// Wie auf dem Gerät: Der Kartenbildschirm wird ständig neu aufgebaut (Kompass, GPS, andere Kräfte). Gemessen am
+    /// Gerät (0.28): Zoom greift kurz und springt noch während der Geste auf den alten Wert zurück; Kippen wirkungslos;
+    /// Folgen stückweise.
+    func testKameraUnterUnruhe() {
+        let springboard = XCUIApplication(bundleIdentifier: "com.apple.springboard")
+        for label in ["Allow While Using App", "Beim Verwenden der App erlauben", "Allow Once", "Einmal erlauben"] {
+            let button = springboard.buttons[label]
+            if button.waitForExistence(timeout: 3) {
+                button.tap()
+                break
+            }
+        }
+        XCTAssertTrue(app.tabBars.buttons["Lage"].waitForExistence(timeout: 20), "Karte erscheint")
+        drive(steps: 4)
+        pinHeading()
+        XCTAssertEqual(probe().pin, "heading", "angeheftet")
+        drive(steps: 4)
+
+        // Zweimal hineinzoomen: Auf dem Gerät griff nur die erste Geste, danach sprang jede zurück.
+        for runde in 1...2 {
+            let vorher = probe().distance
+            map.pinch(withScale: 1.8, velocity: 1.2)
+            drive(steps: 3)
+            let p = probe()
+            capture("u\(runde)-nach-zoomen")
+            XCTAssertEqual(p.pin, "heading", "Runde \(runde): Zoomen löst die Kopplung nicht")
+            XCTAssertLessThan(p.distance, vorher * 0.8, "Runde \(runde): Zoom greift unter Unruhe (vorher \(vorher) m, jetzt \(p.distance) m)")
+            let danach = samples(seconds: 3).map(\.distance)
+            XCTAssertLessThan((danach.max() ?? 0) - (danach.min() ?? 0), 40, "Runde \(runde): Zoom bleibt unter Unruhe: \(danach)")
+        }
     }
 }

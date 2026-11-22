@@ -58,6 +58,11 @@ struct MapScreen: View {
     @State var movedRoom: String?
     @State var bottomAreaHeight: CGFloat = 120
     @State var now = Date.now
+    #if DEBUG
+    /// Kamera-Test „Unruhe“ (Startargument `-unruhe`): baut den Kartenbildschirm zehnmal je Sekunde neu auf, wie es auf
+    /// dem Gerät durch Kompass, GPS und Positionen der anderen Kräfte ständig passiert.
+    @State var debugUnrest = 0
+    #endif
     @State var topAreaHeight: CGFloat = 60
     /// Über die Suche gezeigter Ort; Antippen bietet Navigation oder Marker an.
     @State var searchPin: SearchPin?
@@ -219,6 +224,9 @@ struct MapScreen: View {
     }
 
     var mainBody: some View {
+        #if DEBUG
+        let _ = debugUnrest
+        #endif
         // Einmal je Darstellung: welche Punkte gebündelt bzw. auseinandergerückt werden.
         let layout = clusterLayout
         return MapReader { proxy in
@@ -396,6 +404,15 @@ struct MapScreen: View {
         .task(id: reachInputs.map { "\($0.id)|\($0.since.timeIntervalSince1970)|\($0.point.lat)|\($0.point.lon)" }.joined() + enabledReachModes.map(\.rawValue).joined()) {
             fahndung.trackReach(reachInputs, modes: enabledReachModes)
         }
+        #if DEBUG
+        .task {
+            guard ProcessInfo.processInfo.arguments.contains("-unruhe") else { return }
+            while !Task.isCancelled {
+                try? await Task.sleep(for: .milliseconds(100))
+                debugUnrest &+= 1
+            }
+        }
+        #endif
         .task {
             // Takt für Altersangaben und veraltete Positionen.
             while !Task.isCancelled {

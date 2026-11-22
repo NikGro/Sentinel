@@ -61,6 +61,13 @@ Kamera-Test 0.28 korrigiert (Lauf 45023426484): komplett grün, auch „Zoomen i
 Vermutung (b) im Simulator nicht bestätigt. Nächster Schritt: Messdaten vom Gerät auswerten (Vermutung a: Erkenner
 auf dem Gerät nicht gefunden; Kompass-Einfluss; Kippen).
 
+Gerätedaten 0.28 (22.11., `diagnose/kamera-YlXBwZC5x51F.jsonl`): Erkenner gefunden (18). Erste Zwei-Finger-Geste
+im Kompassmodus greift (550 → 343 m). Jede weitere: Abstand ändert sich kurz (343 → 329/358) und springt NOCH WÄHREND
+der Geste (g=1, Nachführung angehalten) exakt auf 343 zurück; Winkel bleibt immer 40° (Kippen kommt nicht durch).
+Vermutung: SwiftUIs `Map(position:)` setzt die zuletzt gesetzte Position bei jedem Neuaufbau des Bildschirms erneut
+(Kompass, GPS, andere Kräfte → ständige Neuaufbauten); erklärt auch das stückweise Folgen (Sprung ans Ziel mitten in
+der Fahrt). Im Simulator kein Kompass → Test grün. Nachstellung: Test „Unruhe“ (`-unruhe`, 10 Neuaufbauten/s).
+
 ### Nicht wiederholen
 
 - Kamera (SwiftUI-Position) während oder zu Beginn einer Geste setzen: bricht die Geste ab.
