@@ -65,8 +65,8 @@ struct CameraGestureArea: View {
         if CameraProbe.isEnabled {
             GeometryReader { geometry in
                 Color.clear
-                    .frame(width: geometry.size.width * 0.6, height: geometry.size.height * 0.3)
-                    .position(x: geometry.size.width / 2, y: geometry.size.height * 0.5)
+                    .frame(width: geometry.size.width * 0.4, height: geometry.size.height * 0.2)
+                    .position(x: geometry.size.width * 0.45, y: geometry.size.height * 0.5)
                     .accessibilityElement()
                     .accessibilityLabel("Kartenmitte")
                     .accessibilityIdentifier("karte-gesten")

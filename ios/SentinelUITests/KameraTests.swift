@@ -146,7 +146,7 @@ final class KameraTests: XCTestCase {
         XCTAssertTrue(nachZoom.allSatisfy { $0.pin == "heading" }, "bleibt nach dem Zoomen angeheftet")
 
         // 4. Herauszoomen ebenso.
-        map.pinch(withScale: 0.5, velocity: -1.5)
+        map.pinch(withScale: 0.6, velocity: -1)
         drive(steps: 3)
         p = probe()
         XCTAssertEqual(p.pin, "heading", "Herauszoomen löst die Kopplung nicht")
@@ -154,7 +154,7 @@ final class KameraTests: XCTestCase {
         XCTAssertLessThan((weit.max() ?? 0) - (weit.min() ?? 0), 80, "Abstand nach Herauszoomen ruhig: \(weit)")
 
         // 5. Herausdrehen löst die Kompass-Ausrichtung.
-        map.rotate(.pi / 3, withVelocity: 1.5)
+        map.rotate(.pi / 2, withVelocity: 1)
         drive(steps: 2)
         p = probe()
         capture("k3-nach-drehen")
