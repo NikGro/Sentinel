@@ -1,5 +1,15 @@
 # Änderungen
 
+## 0.30.0
+
+**Kamera beim Anheften**
+- Nachführung in kleinen Schritten (zehnmal je Sekunde, je 0,1 s) statt einer Kamerafahrt je GPS-Meldung. Die
+  Gerätedaten zeigten: Eine bis zu sekundenlange Fahrt lief in jede Geste hinein und schluckte Zoomen und Kippen
+- Zwischen zwei GPS-Meldungen rechnet die Nachführung nach Tempo und Kurs voraus und nähert sich weich an: gleichmäßiges
+  Folgen statt stückweise, nach einer Geste weiches Zurückgleiten
+- Die Kameraposition liegt in einem eigenen Objekt; die häufigen Schritte frischen nur die Karte auf
+- Kamera-Test: Zoomen beim Fahren mit einer GPS-Meldung je Sekunde
+
 ## 0.29.0
 
 **Fehlersuche Kamera**

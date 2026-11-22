@@ -37,6 +37,13 @@ final class MapCameraState {
     }
 }
 
+/// Kameraposition der Hauptkarte. Eigenes Objekt, damit häufiges Setzen (Nachführung) nur die Karte auffrischt.
+@MainActor
+@Observable
+final class CameraController {
+    var position: MapCameraPosition = .userLocation(fallback: .automatic)
+}
+
 /// Einheitlicher runder Glasknopf am Kartenrand.
 struct MapRoundButton: View {
     let title: String

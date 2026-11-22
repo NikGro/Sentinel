@@ -214,7 +214,7 @@ extension MapScreen {
         }
     }
 
-    /// Nach Zoomen, Kippen oder Doppeltippen: Abstand und Winkel übernehmen, kurz zurück auf den Standort gleiten.
+    /// Nach Zoomen, Kippen oder Doppeltippen: Abstand und Winkel übernehmen; die Nachführung gleitet zurück auf den Standort.
     func settleAfterGesture() {
         settling = false
         guard pin != nil else { return }
@@ -222,8 +222,6 @@ extension MapScreen {
         followDistance = cameraState.distance
         followPitch = cameraState.exactPitch
         lastFollowTarget = nil
-        nextFollowDuration = 0.35
-        followTick()
     }
 
     /// Bewegt die Kamera. Angeheftet führt die App sie danach selbst nach (siehe `followTick`).
@@ -238,28 +236,44 @@ extension MapScreen {
         }
     }
 
-    /// Angeheftet: Kamera auf den eigenen Standort nachführen, mit gespeichertem Abstand und Winkel; in
-    /// Kompass-Ausrichtung nach Kurs (in Fahrt) bzw. Gerätekompass (im Stand). Nie während einer Geste.
+    /// Ein Schritt der Nachführung, zehnmal je Sekunde (siehe `.task(id: pin)` in `MapScreen`). Jeder Schritt dauert
+    /// nur 0,1 s: Eine laufende Kamerafahrt lässt sich nicht abbrechen, ohne MapKits Geste mit abzubrechen, und eine
+    /// lange Fahrt (vorher bis 2,5 s, bei GPS je Sekunde praktisch immer eine) schluckte Zoomen und Kippen
+    /// (Gerätedaten 0.28). Zwischen zwei GPS-Meldungen wird nach Tempo und Kurs vorausgerechnet; die Kamera nähert sich
+    /// dem Ziel weich (je Schritt gut ein Drittel), so gleitet sie auch nach einer Geste zurück auf den Standort.
     func followTick() {
-        guard let mode = pin, !cameraAnimating, !settling, !gestures.isActive, let current = location.current else { return }
-        let heading = mode == .heading ? (myCourse ?? cameraState.heading) : cameraState.heading
-        let target = MapCamera(centerCoordinate: current.coordinate, distance: followDistance ?? cameraState.distance, heading: heading,
-                               pitch: followPitch ?? cameraState.pitch)
-        // Steht man still, nicht ständig neu animieren.
+        guard let mode = pin, !cameraAnimating, !settling, !gestures.isActive, let fix = location.current else { return }
+        // Vorausrechnen: wo man jetzt ist, nicht wo die letzte Meldung war.
+        var target = fix.coordinate
+        if fix.speed > 1, fix.course >= 0 {
+            let age = min(max(Date.now.timeIntervalSince(fix.timestamp), 0), 2)
+            let meters = fix.speed * age
+            let bearing = fix.course * .pi / 180
+            target.latitude += meters * cos(bearing) / 111_320
+            target.longitude += meters * sin(bearing) / (111_320 * cos(target.latitude * .pi / 180))
+        }
+        let k = 0.35
+        let here = cameraState.center
+        let far = GeoPoint(here).distance(to: GeoPoint(target)) > 400
+        let center = far ? target : CLLocationCoordinate2D(latitude: here.latitude + (target.latitude - here.latitude) * k,
+                                                           longitude: here.longitude + (target.longitude - here.longitude) * k)
+        var heading = cameraState.exactHeading
+        if mode == .heading, let course = myCourse {
+            var delta = (course - heading).truncatingRemainder(dividingBy: 360)
+            if delta > 180 { delta -= 360 } else if delta < -180 { delta += 360 }
+            heading += delta * 0.25
+        }
+        let distance = cameraState.distance + ((followDistance ?? cameraState.distance) - cameraState.distance) * k
+        let pitch = cameraState.exactPitch + ((followPitch ?? cameraState.exactPitch) - cameraState.exactPitch) * k
+        let next = MapCamera(centerCoordinate: center, distance: distance, heading: heading, pitch: pitch)
+        // Nichts zu tun (Stand, Ziel erreicht): die Karte zur Ruhe kommen lassen.
         if let last = lastFollowTarget,
-           GeoPoint(last.centerCoordinate).distance(to: GeoPoint(target.centerCoordinate)) < 1,
-           abs(last.heading - target.heading) < 1.5, abs(last.distance - target.distance) < 1, abs(last.pitch - target.pitch) < 1 {
+           GeoPoint(last.centerCoordinate).distance(to: GeoPoint(next.centerCoordinate)) < 0.3,
+           abs(last.heading - next.heading) < 0.3, abs(last.distance - next.distance) < 0.5, abs(last.pitch - next.pitch) < 0.3 {
             return
         }
-        lastFollowTarget = target
-        // So lange gleiten wie bis zur nächsten Standortmeldung: fließend statt stückweise. Nach einer Geste kurz.
-        let afterGesture = nextFollowDuration
-        nextFollowDuration = nil
-        let interval = afterGesture ?? min(max(Date.now.timeIntervalSince(lastFollowAt), 0.3), 2.5)
-        lastFollowAt = .now
-        CameraProbe.shared.event(String(format: "fahrt %@ d=%.0f p=%.0f h=%.0f dauer=%.2f geste=%d", afterGesture == nil ? "folgen" : "zurueck",
-                                        target.distance, target.pitch, target.heading, interval, gestures.isActive ? 1 : 0))
-        withAnimation(afterGesture == nil ? .linear(duration: interval) : .easeOut(duration: interval)) { camera = .camera(target) }
+        lastFollowTarget = next
+        withAnimation(.linear(duration: 0.1)) { camera = .camera(next) }
     }
 
     // MARK: Untere Leiste

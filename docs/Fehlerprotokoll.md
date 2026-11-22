@@ -75,6 +75,14 @@ Anheft-Fahrt. Vermutung: Eine vor der Geste gestartete Kamerafahrt (Nachführung
 GPS fast immer aktiv) läuft während der Geste weiter. 0.29 protokolliert jede Kamerafahrt (Auslöser, Ziel, Dauer) zur
 Bestätigung auf dem Gerät.
 
+Gerätedaten 0.28 beim Fahren (Norden, 22.70–27.98 s): Während der Geste (g=1) bleibt der Abstand 1745 m und die
+Kartenmitte wandert weiter mit der Fahrt; nach der Geste kurz 1033 m, dann zurück auf 1745 m. BESTÄTIGT: Eine vor
+der Geste gestartete Kamerafahrt der Nachführung (bei GPS je Sekunde ~1 s lang, also fast immer aktiv) steuert die
+Kamera während der Geste weiter und schluckt sie. Abbrechen geht nicht (bricht die Geste ab, 0.28).
+0.30: Nachführung in Schritten von 0,1 s zehnmal je Sekunde mit Vorausrechnung nach Tempo und Kurs und weicher
+Annäherung; Kameraposition in eigenem Objekt (nur die Karte wird aufgefrischt). Test: Zoomen beim Fahren mit GPS je
+Sekunde.
+
 ### Nicht wiederholen
 
 - Kamera (SwiftUI-Position) während oder zu Beginn einer Geste setzen: bricht die Geste ab.
@@ -83,6 +91,7 @@ Bestätigung auf dem Gerät.
 - Gesten aus Kamerawerten erraten (Schwellen auf Abstand, Winkel, Mitte).
 - SwiftUI-Gesten (`simultaneousGesture`, `SpatialEventGesture`) an der Karte zur Gestenerkennung.
 - Nachführung während einer laufenden Geste.
+- Lange Kamerafahrten (über ~0,2 s) in der Nachführung: laufen in eine Geste hinein und schlucken sie.
 
 ### Falls 0.27 scheitert
 

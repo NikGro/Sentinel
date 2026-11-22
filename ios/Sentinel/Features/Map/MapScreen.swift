@@ -11,7 +11,13 @@ struct MapScreen: View {
     @Environment(LocationService.self) var location
     @Environment(LocationContext.self) var locationContext
 
-    @State var camera: MapCameraPosition = .userLocation(fallback: .automatic)
+    /// Kameraposition in einem eigenen beobachteten Objekt, das nur die Karte liest: Die Nachführung setzt sie zehnmal
+    /// je Sekunde, ohne dass der ganze Bildschirm neu aufgebaut wird.
+    @State var cameraController = CameraController()
+    var camera: MapCameraPosition {
+        get { cameraController.position }
+        nonmutating set { cameraController.position = newValue }
+    }
     @State var selection: MapSelection?
     @State var tapMode: MapTapMode = .none
     @State var editor: EditorContext?
@@ -34,16 +40,11 @@ struct MapScreen: View {
     @State var settling = false
     /// In der laufenden Geste wurde gezoomt, gekippt oder gedreht (dann löst Verschieben die Kopplung nicht).
     @State var multiTouchGesture = false
-    /// Kurze Rückfahrt zum Standort nach einer Geste statt des langen Gleitens der Nachführung.
-    @State var nextFollowDuration: Double?
     /// Zoomstufe und Neigung beim Anheften; das Nachführen hält sie, bis man selbst zoomt oder kippt.
     @State var followDistance: CLLocationDistance?
     @State var followPitch: Double?
     /// Zuletzt angesteuerte Kamera beim Nachführen, um Wiederholungen ohne Bewegung auszulassen.
     @State var lastFollowTarget: MapCamera?
-    /// Zeitpunkt der letzten Nachführung: Die nächste Fahrt dauert so lange wie der Abstand der Standortmeldungen,
-    /// damit die Kamera gleichmäßig mitläuft statt ruckweise.
-    @State var lastFollowAt = Date.distantPast
 
     @State var ownMarkerOptions = OwnMarkerOptions()
     /// Tempolimit der Straße am eigenen Standort (OpenStreetMap), auch ohne Navigation.
@@ -230,7 +231,7 @@ struct MapScreen: View {
         // Einmal je Darstellung: welche Punkte gebündelt bzw. auseinandergerückt werden.
         let layout = clusterLayout
         return MapReader { proxy in
-            Map(position: $camera, scope: mapScope) {
+            Map(position: Binding(get: { cameraController.position }, set: { cameraController.position = $0 }), scope: mapScope) {
                 // Im Fahrmodus ohne Navigation bleibt der normale Standortpunkt; nur in der Navigation ersetzt ihn der Navi-Pfeil.
                 if true {
                     MyLocationLayer(lage: lage, route: route, locationService: location, cameraState: cameraState,
@@ -305,10 +306,13 @@ struct MapScreen: View {
                 let is3D = context.camera.pitch > 10
                 if !cameraAnimating, settings.prefers3D != is3D { settings.prefers3D = is3D }
             }
-            .onChange(of: location.current?.timestamp) { followTick() }
-            .onChange(of: locationContext.compassDegrees) {
-                // Im Stand dreht der Gerätekompass die Karte; in Fahrt der Kurs (kommt mit dem Standort).
-                if pin == .heading, (location.current?.speed ?? 0) < 1 { followTick() }
+            // Nachführung in kleinen Schritten, solange angeheftet (siehe `followTick`).
+            .task(id: pin) {
+                guard pin != nil else { return }
+                while !Task.isCancelled {
+                    followTick()
+                    try? await Task.sleep(for: .milliseconds(100))
+                }
             }
             .onChange(of: pin, initial: true) { _, new in
                 CameraProbe.shared.event("pin \(new.map { $0 == .heading ? "heading" : "north" } ?? "none")")

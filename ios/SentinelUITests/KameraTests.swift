@@ -238,16 +238,21 @@ final class KameraTests: XCTestCase {
         // Die Unruhe beginnt 20 s nach dem Start.
         drive(steps: 30)
 
-        // Zweimal hineinzoomen: Auf dem Gerät griff nur die erste Geste, danach sprang jede zurück.
+        // Zweimal hineinzoomen, dabei fahren mit einer GPS-Meldung je Sekunde wie auf dem Gerät: Dort lief bei jeder
+        // Geste eine Kamerafahrt der Nachführung (rund 1 s lang), die die Geste schluckte (Gerätedaten 0.28).
         for runde in 1...2 {
+            drive(steps: 3, pause: 1.0)
             let vorher = probe().distance
             map.pinch(withScale: 1.8, velocity: 1.2)
-            drive(steps: 3)
+            drive(steps: 2, pause: 1.0)
             let p = probe()
             capture("u\(runde)-nach-zoomen")
             XCTAssertEqual(p.pin, "heading", "Runde \(runde): Zoomen löst die Kopplung nicht")
             XCTAssertLessThan(p.distance, vorher * 0.8, "Runde \(runde): Zoom greift unter Unruhe (vorher \(vorher) m, jetzt \(p.distance) m)")
-            let danach = samples(seconds: 3).map(\.distance)
+            let danach = (0..<4).map { _ -> Double in
+                drive(steps: 1, pause: 1.0)
+                return probe().distance
+            }
             XCTAssertLessThan((danach.max() ?? 0) - (danach.min() ?? 0), 40, "Runde \(runde): Zoom bleibt unter Unruhe: \(danach)")
         }
     }
