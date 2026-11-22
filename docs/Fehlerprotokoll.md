@@ -92,11 +92,25 @@ FAZIT: Eigene Nachführung über SwiftUIs `Map(position:)` ist ausgereizt (lange
 Schritte verhindern Gesten, Abbrechen bricht Gesten ab). Nächster Weg: Apples `.userLocation` mit Abstand über
 `MapCameraBounds` (Versuch auf dem Arbeitszweig, nur Kamera-Test).
 
+Versuche Apple-Verfolgung (Arbeitszweig, Kamera-Test):
+- Mit `MapCameraBounds` beim Übergeben: Grenze zwingt MapKit zum Verstellen, Verfolgung endet nach 0,5 s. Verworfen.
+  (Grenze bezieht sich auf die senkrechte Höhe: 550 m bei 40° ergaben 718 m Abstand.)
+- Ohne Grenze: Apple behält Abstand UND Winkel, die beim Einschalten eingestellt sind (550 m/40° blieben). Zu früh
+  übergeben (Anfahrt läuft) bleibt der Zwischenwert. SwiftUIs `followsUserLocation` meldet schon nach 0,5 s „folgt
+  nicht“, obwohl die Karte folgt: zum Erkennen des Lösens unbrauchbar.
+- Erst nach der Anfahrt übergeben, Lösen über MapKits Gestenerkenner: Zoomen/Kippen bleiben (4624 → 2393 m, 40 → 35°),
+  Wischen und Drehen lösen. Apple setzt aber manchmal von sich aus ~4600–4900 m.
+- Mit Wächter (Sprung > 40 % ohne Geste → Sollwert neu, max. 3×; eigener Zoom wird Sollwert): Kamera-Test komplett
+  grün (Lauf 45063795852). Norden-Modus: Apple springt nach jeder Übergabe wieder auf 4624 m (2 Korrekturen im Test).
+  Als 0.31 zum Gerätetest ausgeliefert.
+
 ### Nicht wiederholen
 
 - Kamera (SwiftUI-Position) während oder zu Beginn einer Geste setzen: bricht die Geste ab.
 
-- MapKits `userTrackingMode` oder `.userLocation` zusammen mit SwiftUIs `Map(position:)`: zwei Steuerungen.
+- MapKits `userTrackingMode` direkt an der `MKMapView` neben SwiftUIs `Map(position:)`: zwei Steuerungen. (SwiftUIs eigenes `.userLocation` ist dagegen eine Steuerung, siehe 0.31.)
+- `MapCameraBounds` zum Erzwingen des Abstands beim Übergeben an Apples Verfolgung: beendet die Verfolgung.
+- SwiftUIs `followsUserLocation` als Zeichen für gelöste Verfolgung: meldet zu früh „folgt nicht“.
 - Gesten aus Kamerawerten erraten (Schwellen auf Abstand, Winkel, Mitte).
 - SwiftUI-Gesten (`simultaneousGesture`, `SpatialEventGesture`) an der Karte zur Gestenerkennung.
 - Nachführung während einer laufenden Geste.

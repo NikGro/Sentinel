@@ -1,14 +1,16 @@
 # Änderungen
 
-## 0.30.0
+## 0.31.0
 
-**Kamera beim Anheften**
-- Nachführung in kleinen Schritten (zehnmal je Sekunde, je 0,1 s) statt einer Kamerafahrt je GPS-Meldung. Die
-  Gerätedaten zeigten: Eine bis zu sekundenlange Fahrt lief in jede Geste hinein und schluckte Zoomen und Kippen
-- Zwischen zwei GPS-Meldungen rechnet die Nachführung nach Tempo und Kurs voraus und nähert sich weich an: gleichmäßiges
-  Folgen statt stückweise, nach einer Geste weiches Zurückgleiten
-- Die Kameraposition liegt in einem eigenen Objekt; die häufigen Schritte frischen nur die Karte auf
-- Kamera-Test: Zoomen beim Fahren mit einer GPS-Meldung je Sekunde
+**Kamera beim Anheften: Apples eigene Standortverfolgung**
+- Folgen, Zoomen, Kippen und Lösen übernimmt Apples Verfolgung (SwiftUI `.userLocation`), wie in Apple Karten. Die
+  eigene Nachführung ist entfernt: Ihre Kamerafahrten schluckten Gesten (Gerätedaten 0.28/0.29), häufige kurze
+  Schritte verhinderten sie ganz (0.30, nicht veröffentlicht)
+- Abstand und Winkel werden vor dem Einschalten gesetzt; Apple behält sie (Kompass 550 m/40°, Norden 1500 m/0°)
+- Eigenes Zoomen und Kippen wird zum neuen Sollwert. Springt Apple ohne Geste auf einen weiten Abstand, setzt die App
+  den Sollwert wieder (höchstens dreimal je Anheften)
+- Lösen: Verschieben mit einem Finger oder Herausdrehen aus der Kompass-Ausrichtung (über MapKits Gestenerkenner)
+- Kamera-Test: Zoomen beim Fahren mit einer GPS-Meldung je Sekunde; alle Fälle grün
 
 ## 0.29.0
 
