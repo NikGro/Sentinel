@@ -12,7 +12,9 @@ final class KameraTests: XCTestCase {
     override func setUp() {
         continueAfterFailure = true
         app = XCUIApplication()
-        app.launchArguments = ["-demo", "-kameraprobe"] + (name.contains("Unruhe") ? ["-unruhe"] : [])
+        app.launchArguments = ["-demo", "-kameraprobe"]
+        // Als Umgebungsvariable statt als Startargument: Ein weiteres „-…“-Argument störte den Demo-Start.
+        if name.contains("Unruhe") { app.launchEnvironment["SENTINEL_UNRUHE"] = "1" }
         XCUIDevice.shared.location = XCUILocation(location: CLLocation(latitude: position.latitude, longitude: position.longitude))
         app.launch()
         addUIInterruptionMonitor(withDescription: "Systemabfrage") { alert in
