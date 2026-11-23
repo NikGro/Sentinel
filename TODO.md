@@ -48,6 +48,10 @@ statt jede Änderung sofort einzubauen. Erledigtes wandert mit Version ins CHANG
 
 ### Codebase-Qualität
 
+- **Build-Pipeline beschleunigen** (heute ~45 min bis SideStore): main übernimmt das getestete App-Paket des
+  Arbeitszweigs statt neu zu bauen; Cache für Swift-Pakete/Build; Archiv parallel zum Rundgang; schnelle Spur
+  (Bauen + Unit-Tests) für kleine Fixes, Kamera-Test nur bei Änderungen an der Kartensteuerung.
+
 - **Laufende Bereinigung:** `MapScreen` ist inzwischen auf fünf Dateien verteilt (Hauptdatei gut 400 Zeilen). Offen
   bleiben App-Tests über den UI-Rundgang hinaus, z. B. für die ÖPNV-Bewegung (`TransitSimulation`) und das
   Überschlagen.
