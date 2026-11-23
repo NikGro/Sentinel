@@ -18,6 +18,8 @@ statt jede Änderung sofort einzubauen. Erledigtes wandert mit Version ins CHANG
 
 ### Karte, Kompass und Navigation
 
+- Ausrollende Kamerafahrt nach schwungvollem Wischen schon durch bloßes Auflegen eines Fingers stoppen (jetzt muss
+  man erst wischen). Umsetzung: Beim ersten Berühren der Karte den Schwung der eigenen Steuerung sofort beenden.
 - **App-Absturz während aktiver Navigation (0.9: mögliche Ursache abgesichert):** Dafür ist ein Absturzbericht nötig, zu finden unter Einstellungen › Datenschutz & Sicherheit › Analyse & Verbesserungen › Analysedaten › „Sentinel-…“.
 
 ### Marker und Oberfläche
