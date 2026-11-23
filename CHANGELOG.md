@@ -1,5 +1,15 @@
 # Änderungen
 
+## 0.34.0
+
+**Karte und Navigation**
+- Eigener Punkt erscheint beim Anfliegen über den Kompassknopf nicht mehr doppelt
+- Routenlinie beginnt genau unter dem eigenen Punkt und wird fünfmal je Sekunde gekürzt (kein Haken hinter einem)
+- Navigation: Kamera 1500 m, 45°; im Fahrzeug hält die Karte an der Ampel die letzte Fahrtrichtung statt des Kompasses
+- Finger auflegen stoppt eine ausrollende Karte und laufende Kamerafahrten
+- Wischen löst angeheftet wieder zuverlässig (Fingerzahl kommt von iOS statt aus einem eigenen Zähler), auch sehr
+  schnelles Wischen; schnelles Zoomen übernimmt auch die letzte Bewegung
+
 ## 0.33.0
 
 **Karte und Kamera**
