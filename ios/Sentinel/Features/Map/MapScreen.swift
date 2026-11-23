@@ -278,6 +278,8 @@ struct MapScreen: View {
                         break
                     case .note(let text):
                         CameraProbe.shared.event(text)
+                    case .released(let reason):
+                        CameraProbe.shared.event("released " + reason)
                     case .target(let distance, let pitch):
                         CameraProbe.shared.event(String(format: "sollwert d=%.0f p=%.1f", distance, pitch))
                     default:

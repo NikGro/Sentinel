@@ -126,6 +126,12 @@ Eigene Kartensteuerung nach dem Prinzip von Google Maps (`MapEngine`, Arbeitszwe
   Richtung, Abstand und Winkel gleiten mit kurzer Zeitkonstante. Zoomen/Kippen ändern nur die Sollwerte.
   Verschieben mit einem Finger über 30 pt oder Drehen über 20° löst, ohne die Geste zu unterbrechen.
 - Alle Karten der App (Lage, ÖPNV-Karte, Standortwahl) nutzen dieselbe Steuerung.
+- Kamera-Test (Lauf 45085782969): beide Tests grün; Standortsymbol beim Fahren < 1 pt neben der Kameramitte
+  (MapKit legt die Kameramitte wegen der Leisten ~55 pt unter die Bildmitte, daran messen).
+- Stolpersteine unterwegs: Abheben nach dem Zoomen wurde als Zwei-Finger-Tippen erkannt (zoomte wieder heraus);
+  der erste Finger wanderte vor dem Aufsetzen des zweiten über 30 pt (löste als Verschieben; jetzt Fingerzähler);
+  beim Zoomen dreht man 10–20° mit (löste als Drehen; jetzt mehr Drehung nötig, je stärker gezoomt wird).
+  Als 0.32 zum Gerätetest.
 
 ### Nicht wiederholen
 

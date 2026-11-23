@@ -1,5 +1,19 @@
 # Änderungen
 
+## 0.32.0
+
+**Eigene Kartensteuerung auf allen Karten (Lage, ÖPNV-Karte, Standortwahl)**
+- Eine einzige Stelle steuert die Kamera, nach dem Prinzip von Google Maps: Apples Kartengesten sind aus, Verschieben,
+  Zoomen, Drehen und Kippen erkennt die App selbst und setzt die Kamera Bild für Bild. Kein Gegeneinander mehr
+  zwischen App und Apple, kein fremder Abstand beim Anheften (Apple setzte ~4,9 km)
+- Gesten: Verschieben mit Schwung, Zoomen um den Punkt zwischen den Fingern, Drehen erst ab einigen Grad, Kippen mit
+  zwei Fingern senkrecht, Doppeltippen zoomt hinein, Doppeltippen und Ziehen zoomt mit einem Finger, Tippen mit zwei
+  Fingern zoomt heraus
+- Angeheftet: Kompass 550 m schräg, Norden 1500 m von oben; die Karte folgt dem Standortsymbol bei jedem Bild (im
+  Kamera-Test unter 1 Punkt Versatz). Zoomen und Kippen ändern nur Abstand und Winkel. Lösen durch Wischen mit einem
+  Finger (über 30 Punkte) oder Drehen (20°, beim gleichzeitigen Zoomen mehr); die Geste läuft dabei ohne Ruck weiter
+- Kamera-Test: misst zusätzlich den Versatz des Standortsymbols und schreibt Absturzberichte ins Protokoll
+
 ## 0.31.0
 
 **Kamera beim Anheften: Apples eigene Standortverfolgung**
