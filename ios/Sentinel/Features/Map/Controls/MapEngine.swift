@@ -381,6 +381,16 @@ final class MapEngine {
             panLast = location
         case .ended:
             panLast = nil
+            // Sehr schneller Wisch: Er kann enden, ohne dass zwischendurch eine Bewegung gemeldet wurde (Kamera-Test).
+            // Auch dann löst er, und die Karte rollt mit seinem Schwung aus.
+            if pin != nil, !panReleased {
+                let total = recognizer.translation(in: map)
+                if hypot(total.x, total.y) > 30 {
+                    unpin()
+                    panReleased = true
+                    emit(.released("verschoben"))
+                }
+            }
             if pin == nil {
                 let v = recognizer.velocity(in: map)
                 momentum = hypot(v.x, v.y) > 60 ? v : .zero
