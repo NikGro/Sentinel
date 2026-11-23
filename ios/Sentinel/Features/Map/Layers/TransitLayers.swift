@@ -262,7 +262,11 @@ struct TimedTransitLayer: MapContent {
     let onSelect: (TransitVehiclePin) -> Void
 
     var body: some MapContent {
-        TransitLayer(sections: sections, vehicles: pins(clock.now), showsStopNames: showsStopNames, onSelect: onSelect)
+        // Linien und Halte lesen die Uhr nicht: Sie bleiben ruhig, nur die Fahrzeuge folgen dem Takt.
+        TransitLayer(sections: sections, vehicles: [], showsStopNames: showsStopNames, onSelect: onSelect)
+        ClockedContent(clock: clock) { now in
+            TransitLayer(sections: [], vehicles: pins(now), showsStopNames: false, onSelect: onSelect)
+        }
     }
 }
 

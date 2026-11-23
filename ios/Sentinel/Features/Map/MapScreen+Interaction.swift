@@ -81,10 +81,10 @@ extension MapScreen {
                 let margin = TransitSimulation.standing * 1000
                 if t < start - margin || t > end + margin { continue }
             }
-            // Nach echten Zeiten mit Halt an den Haltestellen und ruhig nachgeführt (siehe `TransitSmoother`).
+            // Nach echten Zeiten mit dem Fahrmodell (`TransitMotion`), bei neuer Echtzeit weich nachgeführt.
             let point: GeoPoint = if let fahrt = object.data.fahrt,
-                let state = TransitSimulation.state(object.data.punkte, path: object.data.weg ?? [], times: fahrt.zeiten, at: transitNow) {
-                transitSmoother.point(id: object.id, state: state, path: object.data.weg ?? [])
+                let motion = TransitSimulation.motion(object.data.punkte, path: object.data.weg ?? [], times: fahrt.zeiten, typ: line.typ) {
+                transitSmoother.point(id: object.id, motion: motion, at: transitNow)
             } else {
                 lage.position(ofObject: object.data, at: transitNow)
             }

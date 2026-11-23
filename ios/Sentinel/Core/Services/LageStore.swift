@@ -280,7 +280,7 @@ final class LageStore {
     /// Standort einer Markierung: bei verbundenem Tracker dessen Position, sonst der gesetzte Punkt.
     func position(ofObject object: MapObject, at now: Date = .now) -> GeoPoint {
         if object.typ == .oepnvfahrzeug || object.typ == .oepnvlinie, let fahrt = object.fahrt {
-            if let state = TransitSimulation.state(object.punkte, path: object.weg ?? [], times: fahrt.zeiten, at: now) { return state.point }
+            if let state = TransitSimulation.state(object.punkte, path: object.weg ?? [], times: fahrt.zeiten, typ: object.linie?.typ ?? "bus", at: now) { return state.point }
             let first = fahrt.zeiten.compactMap { $0 }.first.map { Date(timeIntervalSince1970: $0 / 1000) } ?? now
             return now < first ? (object.punkte.first ?? object.anchor) : (object.punkte.last ?? object.anchor)
         }

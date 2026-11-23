@@ -69,10 +69,13 @@ struct LiveSegment: Codable, Hashable, Identifiable, Sendable {
     func position(at now: Date) -> GeoPoint? {
         let t = now.timeIntervalSince1970 * 1000
         guard t >= dep - 1000, t <= arr + 1000 else { return nil }
-        let fraction = arr > dep ? (t - dep) / (arr - dep) : 1
+        // Fahrmodell wie auf der Lagekarte: weich anfahren, in Kurven langsamer, vor dem Halt bremsen und dort stehen.
+        if let motion = TransitMotion.segment(from: from.point, to: to.point, path: points, dep: dep, arr: arr, typ: osmType) {
+            return motion.state(at: t / 1000).point
+        }
         let line = points
         guard line.count >= 2 else { return line.first ?? from.point }
-        return TransitSimulation.point(along: line[...], fraction: fraction)
+        return TransitSimulation.point(along: line[...], fraction: arr > dep ? (t - dep) / (arr - dep) : 1)
     }
 }
 

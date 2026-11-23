@@ -254,9 +254,53 @@ struct TransitSimulationTests {
         object.takt = 5
         let now = Date(timeIntervalSince1970: 2_000_000)
         object.zeit = (now.addingTimeInterval(-3600).timeIntervalSince1970 * 1000)
-        // 5,5 km mit 520 m/min ≈ 10,7 min Fahrt, dazu je fünf Minuten Stehen an den Endhalten: ≈ 20,7 min bei
-        // 5-Minuten-Takt, also vier oder fünf Fahrzeuge gleichzeitig.
+        // 5,5 km mit etwa 63 km/h ≈ 5,5 min Fahrt, dazu je fünf Minuten Stehen an den Endhalten: ≈ 15,5 min bei
+        // 5-Minuten-Takt, also drei oder vier Fahrzeuge gleichzeitig.
         let count = TransitSimulation.vehicles(on: object, at: now).count
-        #expect((4...5).contains(count))
+        #expect((3...4).contains(count))
+    }
+
+    @Test func fahrmodellHaeltBremstUndFaehrtWeichAn() throws {
+        // Drei Halte je etwa 1,1 km auf gerader Strecke, Fahrplan je 4 Minuten.
+        let path = (0...100).map { GeoPoint(lat: 53.55 + Double($0) * 0.0002, lon: 10.0) }
+        let stops = [path[0], path[50], path[100]]
+        let start = 1_700_000_000_000.0
+        let motion = try #require(TransitSimulation.motion(stops, path: path, times: [start, start + 240_000, start + 480_000], typ: "bus"))
+        // Realistische Standzeit am Zwischenhalt (Bus etwa 20 s).
+        let stand = motion.depart[1] - motion.arrive[1]
+        #expect(stand >= 15 && stand <= 25, "Standzeit \(stand) s")
+        // Weich: Das Tempo ändert sich nie sprunghaft (Abtastung alle 0,2 s).
+        var previous = motion.speed(at: start / 1000)
+        var t = start / 1000
+        var maxChange = 0.0
+        while t < start / 1000 + 480 {
+            t += 0.2
+            let v = motion.speed(at: t)
+            maxChange = max(maxChange, abs(v - previous))
+            previous = v
+        }
+        #expect(maxChange < 0.6, "größte Tempoänderung in 0,2 s: \(maxChange) m/s")
+        // Kurz vor dem Halt deutlich langsamer als in der Mitte der Fahrt.
+        let middle = motion.speed(at: (motion.depart[0] + motion.arrive[1]) / 2)
+        let beforeStop = motion.speed(at: motion.arrive[1] - 3)
+        #expect(beforeStop < middle * 0.5)
+    }
+
+    @Test func fahrmodellIstInKurvenLangsamer() throws {
+        // Gerade nach Norden, dann scharf nach Osten.
+        let north = (0...60).map { GeoPoint(lat: 53.55 + Double($0) * 0.0002, lon: 10.0) }
+        let east = (1...60).map { GeoPoint(lat: 53.562, lon: 10.0 + Double($0) * 0.0003) }
+        let path = north + east
+        let motion = try #require(TransitMotion.estimated([path[0], path[path.count - 1]], path: path, typ: "bus"))
+        let corner = motion.stopMeters[0] + 1330
+        var cornerSpeed = Double.greatestFiniteMagnitude, straightSpeed = 0.0
+        var t = 0.0
+        while t < (motion.arrive.last ?? 0) {
+            let m = motion.meters(at: t), v = motion.speed(at: t)
+            if abs(m - corner) < 15 { cornerSpeed = min(cornerSpeed, v) }
+            if abs(m - 600) < 15 { straightSpeed = max(straightSpeed, v) }
+            t += 0.5
+        }
+        #expect(cornerSpeed < straightSpeed * 0.8, "Kurve \(cornerSpeed) m/s, Gerade \(straightSpeed) m/s")
     }
 }

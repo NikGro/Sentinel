@@ -177,13 +177,13 @@ struct MapScreen: View {
             model.historyIntervalRequest = nil
         }
         .task(id: hasTransit) {
-            // Zehn Schritte je Sekunde ohne Animation (ein Bus bewegt sich je Schritt um etwa einen Meter, auf der Karte
-            // rund einen Bildpunkt). Eine gleitende Animation wackelte, sobald sich die Kamera beim Mitfahren bewegt. Die Uhr
-            // liest nur die ÖPNV-Ebene der Karte, der übrige Bildschirm wird dabei nicht neu berechnet.
+            // 30 Schritte je Sekunde ohne Animation: Die Position kommt aus dem vorberechneten Fahrmodell (nur
+            // Nachschlagen), eine gleitende Animation wackelte, sobald sich die Kamera bewegt. Die Uhr liest nur die
+            // Fahrzeugebene der Karte, Linien, Halte und der übrige Bildschirm werden dabei nicht neu berechnet.
             let clock = ContinuousClock()
             var next = clock.now
             while hasTransit, !Task.isCancelled {
-                next += .milliseconds(100)
+                next += .milliseconds(33)
                 try? await clock.sleep(until: next)
                 transitClock.now = .now
             }

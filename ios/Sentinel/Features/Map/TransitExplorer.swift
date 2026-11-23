@@ -131,9 +131,9 @@ struct TransitExplorer: View {
             }
             .task {
                 while !Task.isCancelled {
-                    // Kurze Schritte statt einer Animation je Sekunde: flüssig, auch wenn die Karte zwischendurch neu zeichnet.
-                    // Zehn kleine Schritte je Sekunde ohne Animation: ruhig, auch wenn sich die Kamera bewegt.
-                    try? await Task.sleep(for: .milliseconds(100))
+                    // Kleine Schritte ohne Animation (Position aus dem Fahrmodell): 30 je Sekunde, bei sehr vielen
+                    // Fahrzeugen im Ausschnitt zehn, damit die Karte bedienbar bleibt.
+                    try? await Task.sleep(for: .milliseconds(segments.count > 150 ? 100 : 33))
                     clock.now = .now
                 }
             }
