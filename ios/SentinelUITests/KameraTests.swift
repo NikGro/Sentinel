@@ -6,7 +6,7 @@ import XCTest
 /// Prüfschritt. Bildschirmfotos und die Messdatei (`kamera.jsonl`) liegen danach als Artefakt bereit.
 final class KameraTests: XCTestCase {
     private var app: XCUIApplication!
-    /// Fahrt: von hier nach Norden, je Schritt etwa 14 m (50 km/h bei zwei Schritten je Sekunde).
+    /// Fahrt: von hier nach Norden, je Schritt etwa 14 m bei zwei Schritten je Sekunde (28 m/s, so auch gemeldet).
     private var position = CLLocationCoordinate2D(latitude: 53.5503, longitude: 9.9930)
 
     override func setUp() {
@@ -71,7 +71,7 @@ final class KameraTests: XCTestCase {
             position.latitude += 0.000126
             XCUIDevice.shared.location = XCUILocation(location: CLLocation(
                 coordinate: position, altitude: 10, horizontalAccuracy: 5, verticalAccuracy: 5,
-                course: 0, speed: 14, timestamp: .now))
+                course: 0, speed: 28, timestamp: .now))
             Thread.sleep(forTimeInterval: pause)
         }
     }
