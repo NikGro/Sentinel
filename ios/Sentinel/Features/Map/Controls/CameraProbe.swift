@@ -41,7 +41,8 @@ final class CameraProbe {
         guard Self.isEnabled else { return }
         let mode = pin.map { $0 == .heading ? "heading" : "north" } ?? "none"
         let puckText = puck.map { String(format: " symbol=%.0f", hypot($0.x, $0.y)) } ?? ""
-        summary = String(format: "pin=%@ d=%.0f p=%.0f h=%.0f geste=%d erkenner=%d", mode, camera.distance, camera.pitch, camera.heading, gesture ? 1 : 0, attached ? 1 : 0) + puckText
+        summary = String(format: "pin=%@ d=%.0f p=%.0f h=%.0f geste=%d erkenner=%d lat=%.6f lon=%.6f", mode, camera.distance, camera.pitch, camera.heading,
+                         gesture ? 1 : 0, attached ? 1 : 0, camera.centerCoordinate.latitude, camera.centerCoordinate.longitude) + puckText
         let t = Date.now.timeIntervalSince(start)
         let puckJSON = puck.map { String(format: #","sx":%.1f,"sy":%.1f"#, $0.x, $0.y) } ?? ""
         write(String(format: #"{"t":%.3f,"pin":"%@","d":%.1f,"p":%.1f,"h":%.1f,"lat":%.6f,"lon":%.6f,"geste":%d,"erkenner":%d"#,

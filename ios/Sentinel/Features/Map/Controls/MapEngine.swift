@@ -38,6 +38,9 @@ enum MapEngineEvent {
 final class MapEngine {
     /// Angeheftet am eigenen Standort; `nil` = frei.
     private(set) var pin: CameraPin?
+    /// Angeheftet und angekommen: Stelle des eigenen Standorts auf dem Bildschirm (Fensterkoordinaten). Dort zeichnet
+    /// die App den eigenen Punkt selbst, ruhig und genau in der Mitte; sonst `nil` (MapKits Standortanzeige).
+    private(set) var centerPoint: CGPoint?
 
     @ObservationIgnored fileprivate weak var anchor: UIView?
     @ObservationIgnored private(set) weak var map: MKMapView?
@@ -105,6 +108,7 @@ final class MapEngine {
         guard pin != nil else { return }
         pin = nil
         smooth = nil
+        centerPoint = nil
     }
 
     /// Kamerafahrt (löst die Kopplung). Eine Geste bricht sie sofort ab.
@@ -215,15 +219,12 @@ final class MapEngine {
 
     private func follow(dt: Double) {
         guard let pin, var smooth = smooth ?? current else { return }
-        // Ziel der Mitte: das Standortsymbol der Karte, wie MapKit es gerade zeichnet (dann sitzt es genau in der
-        // Mitte); ohne Symbol der letzte Standort, vorausgerechnet mit Geschwindigkeit und Richtung.
+        // Ziel der Mitte: der letzte Standort, vorausgerechnet mit Geschwindigkeit und Richtung. Nicht MapKits
+        // gezeichnetes Standortsymbol: Dessen Lage hängt selbst von der Kamera ab, das Folgen schaukelte sich auf
+        // (Punkt zitterte angeheftet). Angeheftet zeichnet die App den eigenen Punkt selbst fest in der Mitte.
         var target: CLLocationCoordinate2D?
-        var tau = 0.25
-        if let puck = puckCoordinate, let fix = locationProvider?(), CLLocation(latitude: puck.latitude, longitude: puck.longitude).distance(from: fix) < 300 {
-            target = puck
-            tau = 0.06
-            followSource = "symbol"
-        } else if let fix = locationProvider?() {
+        let tau = 0.25
+        if let fix = locationProvider?() {
             var point = fix.coordinate
             if fix.speed > 0.5, fix.course >= 0 {
                 let age = min(max(Date.now.timeIntervalSince(fix.timestamp), 0), 1.5)
@@ -245,16 +246,17 @@ final class MapEngine {
         smooth.pitch += (followPitch - smooth.pitch) * (1 - exp(-dt / 0.2))
         self.smooth = smooth
         apply(smooth)
-    }
-
-    /// Wo MapKit das Standortsymbol gerade zeichnet (inklusive seiner eigenen weichen Bewegung zwischen Meldungen).
-    private var puckCoordinate: CLLocationCoordinate2D? {
-        guard let map, let view = map.view(for: map.userLocation), !view.isHidden, let superlayer = view.layer.superlayer else { return nil }
-        let layer = view.layer.presentation() ?? view.layer
-        let point = map.layer.convert(layer.position, from: superlayer)
-        guard map.bounds.insetBy(dx: -map.bounds.width, dy: -map.bounds.height).contains(point) else { return nil }
-        let coordinate = map.convert(point, toCoordinateFrom: map)
-        return CLLocationCoordinate2DIsValid(coordinate) ? coordinate : nil
+        // Angekommen (Mitte nahe am Standort): Ab hier steht der eigene Punkt fest in der Bildmitte.
+        if let target, let map {
+            let near = MKMapPoint(smooth.center).distance(to: MKMapPoint(target)) < max(25, smooth.distance * 0.03)
+            let point = map.convert(smooth.center, toPointTo: nil)
+            let locked: CGPoint? = near ? point : nil
+            if locked == nil && centerPoint != nil {
+                centerPoint = nil
+            } else if let locked, centerPoint.map({ hypot($0.x - locked.x, $0.y - locked.y) > 0.5 }) ?? true {
+                centerPoint = locked
+            }
+        }
     }
 
     /// Abstand des Standortsymbols vom Kameramittelpunkt auf dem Bildschirm in Punkten (Messfühler: sitzt es

@@ -268,6 +268,23 @@ struct MapScreen: View {
             }
             // Eigene Steuerung: findet über diese Fläche die MapKit-Karte und übernimmt Gesten und Kamera.
             .mapEngine(engine)
+            // Angeheftet: eigener Punkt fest in der Bildmitte, von der App gezeichnet (Apples Standortanzeige folgt
+            // dem Standort mit eigener Bewegung und zitterte gegen die nachgeführte Kamera).
+            .overlay {
+                if let point = engine.centerPoint {
+                    GeometryReader { geometry in
+                        let frame = geometry.frame(in: .global)
+                        LiveMyLocationMarker(lage: lage, route: route, locationService: location, cameraState: cameraState,
+                                             locationContext: locationContext, options: ownMarkerOptions)
+                            .position(x: point.x - frame.minX, y: point.y - frame.minY)
+                    }
+                    .ignoresSafeArea()
+                    .allowsHitTesting(false)
+                }
+            }
+            .onChange(of: engine.centerPoint != nil, initial: true) { _, drawn in
+                ownMarkerOptions.drawnByScreen = drawn
+            }
             .onAppear {
                 engine.locationProvider = { [location, route] in route.snappedLocation ?? location.current }
                 engine.courseProvider = { myCourse }

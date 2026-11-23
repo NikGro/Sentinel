@@ -32,19 +32,22 @@ struct MyLocationLayer: MapContent {
     let options: OwnMarkerOptions
 
     var body: some MapContent {
-        // Eine einzige, vom System geführte Standortanzeige (bewegt sich flüssig). Ihr Inhalt liest den Zustand
+        // Eine vom System geführte Standortanzeige (bewegt sich flüssig). Ihr Inhalt liest den Zustand
         // selbst: Apple Karten baut den Inhalt nicht neu, wenn sich nur die übergebenen Werte ändern; so wechselt
         // das Symbol beim Aussteigen zuverlässig vom Fahrzeug zurück zum Punkt.
         UserAnnotation(anchor: .center) { _ in
             LiveMyLocationMarker(lage: lage, route: route, locationService: locationService, cameraState: cameraState,
                                  locationContext: locationContext, options: options)
+                .opacity(options.drawnByScreen ? 0 : 1)
         }
         .annotationTitles(.hidden)
     }
 }
 
 /// Eigenes Symbol, abgeleitet aus dem aktuellen Zustand: Navi-Pfeil, Fahrzeug oder Punkt, mit A, falls man sie hält.
-private struct LiveMyLocationMarker: View {
+/// Auf der Karte in Apples Standortanzeige; angeheftet zeichnet der Kartenbildschirm es fest in der Bildmitte
+/// (`OwnMarkerOptions.drawnByScreen`), dann bleibt die Standortanzeige der Karte unsichtbar.
+struct LiveMyLocationMarker: View {
     let lage: LageStore
     let route: RouteFollower
     let locationService: LocationService
@@ -196,4 +199,7 @@ struct FlatNavigationArrow: View {
 final class OwnMarkerOptions {
     /// Straße und Fahrtrichtung unter dem eigenen Standort (beim Anheften).
     var showsStreet = false
+    /// Angeheftet zeichnet der Kartenbildschirm den eigenen Punkt fest in der Bildmitte; die Standortanzeige der
+    /// Karte ist dann unsichtbar.
+    var drawnByScreen = false
 }

@@ -36,6 +36,9 @@ final class KameraTests: XCTestCase {
         var recognizers = false
         /// Abstand des Standortsymbols von der Bildmitte in Punkten (nur angeheftet gemeldet).
         var symbol: Double?
+        /// Mitte der Kamera.
+        var lat = 0.0
+        var lon = 0.0
 
         init(_ text: String) {
             for part in text.split(separator: " ") {
@@ -48,6 +51,8 @@ final class KameraTests: XCTestCase {
                 case "h": heading = Double(kv[1]) ?? 0
                 case "erkenner": recognizers = kv[1] == "1"
                 case "symbol": symbol = Double(kv[1])
+                case "lat": lat = Double(kv[1]) ?? 0
+                case "lon": lon = Double(kv[1]) ?? 0
                 default: break
                 }
             }
@@ -149,10 +154,14 @@ final class KameraTests: XCTestCase {
         let ds = ruhig.map(\.distance)
         XCTAssertLessThan((ds.max() ?? 0) - (ds.min() ?? 0), 60, "kein Pumpen beim Folgen: \(ds)")
         XCTAssertTrue(ruhig.allSatisfy { $0.pin == "heading" }, "bleibt angeheftet beim Fahren")
-        // Folgt ohne Hinterherlahmen: Das Standortsymbol sitzt beim Fahren in der Bildmitte.
-        let versatz = ruhig.compactMap(\.symbol)
-        XCTAssertFalse(versatz.isEmpty, "Standortsymbol gemessen")
-        XCTAssertLessThan(versatz.max() ?? 999, 40, "Symbol bleibt in der Mitte (Punkte): \(versatz)")
+        // Folgt ohne Hinterherlahmen: Die Kameramitte liegt beim Fahren dicht am aktuellen Standort (der Test fährt
+        // 28 m/s; die App zeichnet den eigenen Punkt angeheftet selbst in der Mitte).
+        let abstand = ruhig.map { p -> Double in
+            let dy = (p.lat - position.latitude) * 110_540
+            let dx = (p.lon - position.longitude) * 111_320 * cos(position.latitude * .pi / 180)
+            return (dx * dx + dy * dy).squareRoot()
+        }
+        XCTAssertLessThan(abstand.max() ?? 999, 45, "Kameramitte folgt dem Standort (Meter): \(abstand.map { Int($0) })")
 
         // 3. Zoomen (Zwei-Finger) löst nicht, der neue Abstand bleibt und pumpt nicht.
         map.pinch(withScale: 2.2, velocity: 1.5)
