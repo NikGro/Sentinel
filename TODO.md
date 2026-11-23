@@ -43,6 +43,8 @@ statt jede Änderung sofort einzubauen. Erledigtes wandert mit Version ins CHANG
 
 - **Ebene leeren**: Unter „Ebenen und Pakete“ fehlt bei den Ebenen (mindestens der Lage-Ebene) die Möglichkeit, alle
   Objekte der Ebene zu löschen. Im Menüpunkt bzw. in der Ansicht der Ebene selbst unterbringen, mit Rückfrage.
+  Nicht bei der Ebene der dauerhaften Orte: Die wird nur über das Hauptmenü bearbeitet und darf nicht versehentlich
+  geleert werden.
 - **Kurzübersichten als Variante 2** (Skizzen vom 23.11.): Statt der Fenster mit großen „Schließen“/„Bearbeiten“-
   Knöpfen überall schwebende Glaskarten mit kleinen runden Knöpfen (Hinführen blau, Bearbeiten, Schließen) für
   Marker, Objekte, Zielpersonen, Zielfahrzeuge, ÖPNV-Linien und den GPS-Verlauf. Umsetzung als iOS-26-Fenster mit
