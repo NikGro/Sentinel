@@ -24,6 +24,8 @@ statt jede Änderung sofort einzubauen. Erledigtes wandert mit Version ins CHANG
 
 ### Marker und Oberfläche
 
+- Beschriftung auf Flächen (`AreaLabelLayer`) schwer lesbar wegen Glow: Text in der Farbe der Fläche (deckend, nicht
+  transparent) mit festem Rand von wenigen Pixeln statt Glow.
 - **Zielperson: Karte friert ein (0.13: ÖPNV-Positionsberechnung als wahrscheinliche Ursache stark beschleunigt):** Offene Rückfrage, welches Symbol genau gemeint ist: im Plus-Menü, im Editor („Unterwegs“) oder auf der Karte. Mit 0.13 erneut prüfen.
 
 ### Codebase-Qualität
