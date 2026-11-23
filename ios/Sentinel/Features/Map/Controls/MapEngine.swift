@@ -475,7 +475,9 @@ final class MapEngine {
             // Drehen erst ab einigen Grad (beim Zoomen deutlich mehr), damit Zoomen nicht nebenbei dreht. Je stärker
             // gezoomt wird, desto mehr Drehung braucht das Lösen.
             let zoomAmount = abs(log(Double(max(scale, 0.01))))
-            let turnThreshold = m.intent == .zoom ? 25.0 : 8.0
+            // Feste Drehschwelle: Eine höhere Schwelle beim Zoomen ließ die Karte mitten in der Geste stehen, bis
+            // 25° erreicht waren (Gerätedaten: hing bei 290°, „in beide Richtungen“).
+            let turnThreshold = 10.0
             let releaseThreshold = max(m.intent == .zoom ? 45.0 : 20.0, 20 + 60 * zoomAmount)
             // Ab der Schwelle dreht die Karte, von dort an ohne Sprung (Versatz merken statt abziehen).
             if m.turnOffset == nil, abs(rotationDegrees) > turnThreshold {
