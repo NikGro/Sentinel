@@ -183,7 +183,7 @@ extension MapScreen {
                 }, close: { searchPin = nil })
             }
             if let selected = storedTracks.selected, let track = storedTracks.selectedTrack, track.spur.punkte.indices.contains(selected.index) {
-                HistoryPointCard(spur: track.spur, index: selected.index, title: model.title(of: track.spur.subject)) { storedTracks.selected = nil }
+                HistoryPointCard(spur: track.spur, index: selected.index, fraction: selected.fraction, title: model.title(of: track.spur.subject)) { storedTracks.selected = nil }
             }
             if showsHistory {
                 HistoryPanel(state: history, fit: fitHistory)

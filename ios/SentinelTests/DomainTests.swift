@@ -303,4 +303,23 @@ struct TransitSimulationTests {
         }
         #expect(cornerSpeed < straightSpeed * 0.8, "Kurve \(cornerSpeed) m/s, Gerade \(straightSpeed) m/s")
     }
+
 }
+
+struct SpurTests {
+    @Test func zwischenZweiPunktenWerdenWerteAngenommen() throws {
+        let start = Date(timeIntervalSince1970: 1_700_000_000)
+        let a = SpurPunkt(point: GeoPoint(lat: 53.55, lon: 10.0), date: start, speed: 10, quelle: .gps, info: nil)
+        let b = SpurPunkt(point: GeoPoint(lat: 53.56, lon: 10.0), date: start.addingTimeInterval(120), speed: 20, quelle: .gps, info: nil)
+        let spur = Spur(subject: SpurSubject(art: .member, id: "x"), punkte: [a, b])
+        let middle = spur.sample(index: 0, fraction: 0.5)
+        #expect(middle.between)
+        #expect(abs(middle.punkt.point.lat - 53.555) < 1e-9)
+        #expect(middle.punkt.date == start.addingTimeInterval(60))
+        #expect(abs((middle.speed?.value ?? 0) - 15) < 1e-9)
+        // Angetippt nah an der Linie, weit weg von beiden Punkten: Stelle in der Mitte (Bildschirm wie Meter).
+        let hit = try #require(spur.hit(at: CGPoint(x: 3, y: 555)) { CGPoint(x: 0, y: ($0.lat - 53.55) * 111_000) })
+        #expect(hit.index == 0 && abs(hit.fraction - 0.5) < 0.01 && hit.distance < 4)
+    }
+}
+

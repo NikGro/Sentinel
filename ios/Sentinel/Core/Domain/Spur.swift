@@ -176,6 +176,56 @@ struct Spur: Identifiable, Sendable {
         return GeoPoint(lat: a.point.lat + (b.point.lat - a.point.lat) * f, lon: a.point.lon + (b.point.lon - a.point.lon) * f)
     }
 
+    /// Liegt zwischen Punkt `index` und dem nächsten eine Lücke (lange ohne Daten und weit bewegt)?
+    func isGap(after index: Int) -> Bool {
+        guard punkte.indices.contains(index + 1) else { return true }
+        let a = punkte[index], b = punkte[index + 1]
+        return b.date.timeIntervalSince(a.date) > Self.gapSeconds && a.point.distance(to: b.point) > Self.gapMeters
+    }
+
+    /// Stelle auf der Spur: zwischen Punkt `index` und dem nächsten beim Anteil `fraction` (0 = genau der Punkt).
+    /// Zwischen zwei echten Punkten werden Ort, Zeit und Tempo gleichmäßig angenommen.
+    func sample(index: Int, fraction: Double) -> (punkt: SpurPunkt, speed: (value: Double, estimated: Bool)?, between: Bool) {
+        let f = min(max(fraction, 0), 1)
+        guard f > 0, punkte.indices.contains(index + 1), !isGap(after: index) else { return (punkte[index], speed(at: index), false) }
+        let a = punkte[index], b = punkte[index + 1]
+        let point = GeoPoint(lat: a.point.lat + (b.point.lat - a.point.lat) * f, lon: a.point.lon + (b.point.lon - a.point.lon) * f)
+        let date = a.date.addingTimeInterval(b.date.timeIntervalSince(a.date) * f)
+        var speed: (value: Double, estimated: Bool)?
+        if let va = a.speed, let vb = b.speed {
+            speed = (va + (vb - va) * f, true)
+        } else {
+            let seconds = b.date.timeIntervalSince(a.date)
+            if seconds > 0 { speed = (a.point.distance(to: b.point) / seconds, true) }
+        }
+        let punkt = SpurPunkt(point: point, date: date, speed: speed?.value, quelle: a.quelle, info: a.info)
+        return (punkt, speed, true)
+    }
+
+    /// Angetippte Stelle: nächste Stelle auf der Linie (nicht nur der nächste echte Punkt), gemessen auf dem
+    /// Bildschirm. `screen` rechnet einen Ort in Bildschirmpunkte um. Über Lücken nur die echten Punkte.
+    func hit(at tap: CGPoint, screen: (GeoPoint) -> CGPoint?) -> (index: Int, fraction: Double, distance: CGFloat)? {
+        let points = punkte.map { screen($0.point) }
+        var best: (index: Int, fraction: Double, distance: CGFloat)?
+        func consider(_ index: Int, _ fraction: Double, _ d: CGFloat) {
+            if best == nil || d < best!.distance { best = (index, fraction, d) }
+        }
+        for i in points.indices {
+            guard let a = points[i] else { continue }
+            consider(i, 0, hypot(tap.x - a.x, tap.y - a.y))
+            guard i + 1 < points.count, let b = points[i + 1], !isGap(after: i) else { continue }
+            let dx = b.x - a.x, dy = b.y - a.y
+            let length2 = dx * dx + dy * dy
+            guard length2 > 0 else { continue }
+            let t = min(max(((tap.x - a.x) * dx + (tap.y - a.y) * dy) / length2, 0), 1)
+            let px = a.x + dx * t, py = a.y + dy * t
+            consider(i, Double(t), hypot(tap.x - px, tap.y - py))
+        }
+        // Am Ende eines Abschnitts als der nächste Punkt selbst.
+        if let hit = best, hit.fraction > 0.999, punkte.indices.contains(hit.index + 1) { return (hit.index + 1, 0, hit.distance) }
+        return best
+    }
+
     /// Nächster Punkt zu einer Stelle, mit Abstand in Metern.
     func nearest(to point: GeoPoint) -> (index: Int, distance: Double)? {
         var best: (Int, Double)?

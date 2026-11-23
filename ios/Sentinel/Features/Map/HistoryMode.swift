@@ -51,8 +51,8 @@ final class HistoryState {
     var spuren: [String: Spur] = [:]
     var loading = false
     var failure: String?
-    /// Angetippter Punkt: Spur und Index.
-    var selected: (key: String, index: Int)?
+    /// Angetippte Stelle: Spur, Punkt und Anteil bis zum nächsten Punkt.
+    var selected: (key: String, index: Int, fraction: Double)?
 
     var interval: ClosedRange<Date> {
         if let preset = range.interval() { return preset }
@@ -104,15 +104,13 @@ final class HistoryState {
 
     /// Angetippt: den nächsten Spurpunkt suchen, wenn er auf dem Bildschirm nah genug liegt.
     func select(near point: CGPoint, proxy: MapProxy) -> Bool {
-        guard let coordinate = proxy.convert(point, from: .local) else { return false }
-        var best: (key: String, index: Int, screen: CGFloat)?
+        var best: (key: String, index: Int, fraction: Double, screen: CGFloat)?
         for (key, spur) in spuren {
-            guard let hit = spur.nearest(to: GeoPoint(coordinate)), let screen = proxy.convert(spur.punkte[hit.index].point.coordinate, to: .local) else { continue }
-            let d = hypot(screen.x - point.x, screen.y - point.y)
-            if d < 32, best == nil || d < best!.screen { best = (key, hit.index, d) }
+            guard let hit = spur.hit(at: point, screen: { proxy.convert($0.coordinate, to: .local) }) else { continue }
+            if hit.distance < 28, best == nil || hit.distance < best!.screen { best = (key, hit.index, hit.fraction, hit.distance) }
         }
         guard let best else { return false }
-        selected = (best.key, best.index)
+        selected = (best.key, best.index, best.fraction)
         return true
     }
 }
@@ -127,7 +125,8 @@ struct HistoryLayer: MapContent {
         ForEach(Array(state.spuren.values)) { spur in
             SpurLines(spur: spur, title: title(spur.subject))
         }
-        if let selected = state.selected, let punkt = state.spuren[selected.key]?.punkte[safe: selected.index] {
+        if let selected = state.selected, let spur = state.spuren[selected.key], spur.punkte.indices.contains(selected.index) {
+            let punkt = spur.sample(index: selected.index, fraction: selected.fraction).punkt
             Annotation("", coordinate: punkt.point.coordinate, anchor: .center) {
                 Circle()
                     .fill(.white)
@@ -194,23 +193,20 @@ final class StoredTracks {
     }
 
     private(set) var tracks: [Track] = []
-    /// Angetippter Punkt einer Spur: Spur und Index.
-    var selected: (trackId: String, index: Int)?
+    /// Angetippte Stelle einer Spur: Spur, Punkt und Anteil bis zum nächsten Punkt.
+    var selected: (trackId: String, index: Int, fraction: Double)?
 
     var selectedTrack: Track? { selected.flatMap { sel in tracks.first { $0.id == sel.trackId } } }
 
     /// Angetippt: den nächsten Spurpunkt suchen, wenn er auf dem Bildschirm nah genug liegt.
     func select(near point: CGPoint, proxy: MapProxy) -> Bool {
-        guard let coordinate = proxy.convert(point, from: .local) else { return false }
-        var best: (id: String, index: Int, screen: CGFloat)?
+        var best: (id: String, index: Int, fraction: Double, screen: CGFloat)?
         for track in tracks {
-            guard let hit = track.spur.nearest(to: GeoPoint(coordinate)),
-                  let screen = proxy.convert(track.spur.punkte[hit.index].point.coordinate, to: .local) else { continue }
-            let d = hypot(screen.x - point.x, screen.y - point.y)
-            if d < 28, best == nil || d < best!.screen { best = (track.id, hit.index, d) }
+            guard let hit = track.spur.hit(at: point, screen: { proxy.convert($0.coordinate, to: .local) }) else { continue }
+            if hit.distance < 28, best == nil || hit.distance < best!.screen { best = (track.id, hit.index, hit.fraction, hit.distance) }
         }
         guard let best else { return false }
-        selected = (best.id, best.index)
+        selected = (best.id, best.index, best.fraction)
         return true
     }
 
@@ -242,7 +238,8 @@ struct StoredTracksLayer: MapContent {
         ForEach(state.tracks) { track in
             SpurLines(spur: track.spur, title: title(track.spur.subject))
         }
-        if let selected = state.selected, let punkt = state.selectedTrack?.spur.punkte[safe: selected.index] {
+        if let selected = state.selected, let spur = state.selectedTrack?.spur, spur.punkte.indices.contains(selected.index) {
+            let punkt = spur.sample(index: selected.index, fraction: selected.fraction).punkt
             Annotation("", coordinate: punkt.point.coordinate, anchor: .center) {
                 Circle()
                     .fill(.white)
@@ -267,7 +264,7 @@ struct HistoryPanel: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 10) {
             if let selected = state.selected, let spur = state.spuren[selected.key], spur.punkte.indices.contains(selected.index) {
-                HistoryPointCard(spur: spur, index: selected.index, title: model.title(of: spur.subject)) { state.selected = nil }
+                HistoryPointCard(spur: spur, index: selected.index, fraction: selected.fraction, title: model.title(of: spur.subject)) { state.selected = nil }
             }
             VStack(alignment: .leading, spacing: 10) {
                 subjectsRow
@@ -503,11 +500,14 @@ struct HistoryPanel: View {
 struct HistoryPointCard: View {
     let spur: Spur
     let index: Int
+    /// Zwischen zwei echten Punkten: Anteil bis zum nächsten (Werte dort angenommen).
+    var fraction: Double = 0
     let title: String
     let close: () -> Void
 
     var body: some View {
-        let punkt = spur.punkte[index]
+        let sample = spur.sample(index: index, fraction: fraction)
+        let punkt = sample.punkt
         let stop = spur.standzeiten.first { punkt.date >= $0.von && punkt.date <= $0.bis && punkt.point.distance(to: $0.point) <= Spur.stopRadius }
         VStack(alignment: .leading, spacing: 6) {
             HStack {
@@ -527,11 +527,11 @@ struct HistoryPointCard: View {
                 .glassEffect(.regular.interactive(), in: .circle)
                 .accessibilityLabel("Punkt schließen")
             }
-            row("Zeit", Format.dateTime(punkt.date))
-            if let speed = spur.speed(at: index) {
+            row("Zeit", (sample.between ? "etwa " : "") + Format.dateTime(punkt.date))
+            if let speed = sample.speed {
                 row("Geschwindigkeit", "\((speed.value * 3.6).roundedInt ?? 0) km/h" + (speed.estimated ? " (geschätzt)" : ""))
             }
-            row("Quelle", [punkt.quelle.title, punkt.info].compactMap { $0 }.joined(separator: " · "))
+            row("Quelle", [punkt.quelle.title, punkt.info, sample.between ? "zwischen zwei Punkten" : nil].compactMap { $0 }.joined(separator: " · "))
             if let stop {
                 row("Stand hier", "\(Format.time(stop.von))–\(Format.time(stop.bis)) (\(Format.duration(stop.dauer)))")
             }
