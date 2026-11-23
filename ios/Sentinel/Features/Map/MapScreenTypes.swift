@@ -103,3 +103,17 @@ enum CameraPin: Equatable {
     static let navigationDistance: CLLocationDistance = 420
     static let navigationPitch: Double = 52
 }
+
+/// Letzter Tipp auf Formen bzw. Verläufe: zum Durchschalten übereinanderliegender Linien.
+struct ShapeTap {
+    let point: CGPoint
+    let keys: [String]
+    let index: Int
+    let at: Date
+}
+
+/// Höhe der Kurzübersicht nach einem Tipp auf eine Strecke (etwa ein Drittel des Bildschirms).
+enum QuickLookHeight {
+    static let lowFraction: CGFloat = 0.3
+    static let low = PresentationDetent.fraction(lowFraction)
+}

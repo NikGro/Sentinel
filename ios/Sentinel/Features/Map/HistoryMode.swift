@@ -199,6 +199,16 @@ final class StoredTracks {
     var selectedTrack: Track? { selected.flatMap { sel in tracks.first { $0.id == sel.trackId } } }
 
     /// Angetippt: den nächsten Spurpunkt suchen, wenn er auf dem Bildschirm nah genug liegt.
+    /// Alle Spuren, die nah an der angetippten Stelle verlaufen, die nächste zuerst.
+    func hits(near point: CGPoint, proxy: MapProxy) -> [(trackId: String, index: Int, fraction: Double)] {
+        tracks.compactMap { track -> (String, Int, Double, CGFloat)? in
+            guard let hit = track.spur.hit(at: point, screen: { proxy.convert($0.coordinate, to: .local) }), hit.distance < 28 else { return nil }
+            return (track.id, hit.index, hit.fraction, hit.distance)
+        }
+        .sorted { $0.3 < $1.3 }
+        .map { (trackId: $0.0, index: $0.1, fraction: $0.2) }
+    }
+
     func select(near point: CGPoint, proxy: MapProxy) -> Bool {
         var best: (id: String, index: Int, fraction: Double, screen: CGFloat)?
         for track in tracks {
@@ -253,65 +263,57 @@ struct StoredTracksLayer: MapContent {
     }
 }
 
-/// Untere Leiste im Verlaufsmodus: angezeigte Spuren, Zeitraum und Legende.
+/// Fenster im Verlaufsmodus (von unten, wie die Kurzübersicht): angezeigte Spuren, Zeitraum und Legende.
 struct HistoryPanel: View {
     @Bindable var state: HistoryState
     @Environment(AppModel.self) private var model
     @Environment(LageStore.self) private var lage
     @Environment(LocalSettings.self) private var settings
-    let fit: () -> Void
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 10) {
-            if let selected = state.selected, let spur = state.spuren[selected.key], spur.punkte.indices.contains(selected.index) {
-                HistoryPointCard(spur: spur, index: selected.index, fraction: selected.fraction, title: model.title(of: spur.subject)) { state.selected = nil }
+        // Fenster von unten wie die Kurzübersicht: links Schließen, rechts Hinzufügen (auf die Karte legen).
+        NavigationStack {
+            ScrollView {
+                VStack(alignment: .leading, spacing: 12) {
+                    if let selected = state.selected, let spur = state.spuren[selected.key], spur.punkte.indices.contains(selected.index) {
+                        HistoryPointCard(spur: spur, index: selected.index, fraction: selected.fraction, title: model.title(of: spur.subject)) { state.selected = nil }
+                    }
+                    subjectsRow
+                    rangeRow
+                    if model.historySubjects.isEmpty {
+                        EmptyView()
+                    } else if state.isEmpty, !state.loading {
+                        Text(state.failure ?? "Keine Aufzeichnung in diesem Zeitraum.")
+                            .font(.footnote)
+                            .foregroundStyle(.secondary)
+                    } else if !state.quellen.isEmpty {
+                        legend
+                    }
+                }
+                .padding(.horizontal, 18)
+                .padding(.vertical, 8)
             }
-            VStack(alignment: .leading, spacing: 10) {
-                subjectsRow
-                rangeRow
-                if model.historySubjects.isEmpty {
-                    EmptyView()
-                } else if state.isEmpty, !state.loading {
-                    Text(state.failure ?? "Keine Aufzeichnung in diesem Zeitraum.")
-                        .font(.footnote)
-                        .foregroundStyle(.secondary)
-                } else if !state.quellen.isEmpty {
-                    legend
+            .navigationTitle("Standortverlauf")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .cancellationAction) {
+                    Button("Schließen") {
+                        state.selected = nil
+                        model.closeHistory()
+                    }
+                }
+                ToolbarItem(placement: .confirmationAction) {
+                    Button("Hinzufügen", action: placeOnMap)
+                        .disabled(state.isEmpty || model.historySubjects.isEmpty)
                 }
             }
-            .padding(14)
-            .glassEffect(.regular, in: .rect(cornerRadius: 24))
         }
     }
 
     private var subjectsRow: some View {
         VStack(alignment: .leading, spacing: 8) {
-            HStack(spacing: 8) {
-                Label("Standortverlauf", systemImage: "point.bottomleft.forward.to.point.topright.scurvepath")
-                    .font(.headline)
-                    .lineLimit(1)
-                    .minimumScaleFactor(0.8)
-                if state.loading { ProgressView().controlSize(.small) }
-                Spacer(minLength: 4)
-                // Ganze Spur zeigen, Schließen und ganz außen Übernehmen (dauerhaft auf die Karte legen).
-                roundButton("arrow.up.left.and.arrow.down.right", label: "Ganze Spur zeigen", action: fit)
-                    .disabled(state.isEmpty)
-                roundButton("xmark", label: "Verlauf schließen") {
-                    state.selected = nil
-                    model.closeHistory()
-                }
-                Button(action: placeOnMap) {
-                    Image(systemName: "checkmark")
-                        .font(.subheadline.weight(.bold))
-                        .foregroundStyle(.white)
-                        .frame(width: 36, height: 36)
-                        .contentShape(.circle)
-                }
-                .buttonStyle(.plain)
-                .glassEffect(.regular.tint(.blue).interactive(), in: .circle)
-                .disabled(state.isEmpty || model.historySubjects.isEmpty)
-                .opacity(state.isEmpty || model.historySubjects.isEmpty ? 0.5 : 1)
-                .accessibilityLabel("Auf die Karte legen")
+            if state.loading {
+                ProgressView().controlSize(.small)
             }
             ScrollView(.horizontal, showsIndicators: false) {
                 HStack(spacing: 6) {
@@ -343,18 +345,6 @@ struct HistoryPanel: View {
                 }
             }
         }
-    }
-
-    private func roundButton(_ symbol: String, label: String, action: @escaping () -> Void) -> some View {
-        Button(action: action) {
-            Image(systemName: symbol)
-                .font(.subheadline.weight(.bold))
-                .frame(width: 36, height: 36)
-                .contentShape(.circle)
-        }
-        .buttonStyle(.plain)
-        .glassEffect(.regular.interactive(), in: .circle)
-        .accessibilityLabel(label)
     }
 
     /// Gezeigte Spuren als Objekt „Standortverlauf“ speichern. Vorgaben bis jetzt laufen mit, ein fester Zeitraum bleibt fest.

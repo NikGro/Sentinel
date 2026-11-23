@@ -80,6 +80,8 @@ final class MapEngine {
 
     /// Hängt die Steuerung an einer Karte?
     var isAttached: Bool { map != nil }
+    /// Höhe des Fensters der Karte (für Fenster, die von unten kommen).
+    var windowHeight: CGFloat? { map?.window?.bounds.height }
     /// Läuft gerade eine Geste?
     var isGestureActive: Bool { !active.isEmpty }
     /// Letztes Ereignis, für das Kamerawerte-Overlay.

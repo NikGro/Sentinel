@@ -94,7 +94,10 @@ extension MapScreen {
                 LocationCompassButton(state: cameraState, pin: pin) {
                     pinCamera(pin == .heading ? .north : .heading)
                 }
-                // Im Verlauf nur der Kompass, damit die Spuren frei bleiben.
+                // Im Verlauf nur Kompass und Gesamtansicht, damit die Spuren frei bleiben.
+                if showsHistory {
+                    MapRoundButton(title: "Ganze Spur zeigen", symbol: "arrow.up.left.and.arrow.down.right") { fitHistory() }
+                }
                 if !showsHistory {
                 MapStyleButton { on in
                     // Angeheftet: nur den Winkel ändern und angeheftet bleiben; sonst um die Bildmitte kippen.
@@ -182,11 +185,9 @@ extension MapScreen {
                     create(kind, at: pin.point, title: pin.title, delayed: false)
                 }, close: { searchPin = nil })
             }
-            if let selected = storedTracks.selected, let track = storedTracks.selectedTrack, track.spur.punkte.indices.contains(selected.index) {
-                HistoryPointCard(spur: track.spur, index: selected.index, fraction: selected.fraction, title: model.title(of: track.spur.subject)) { storedTracks.selected = nil }
-            }
             if showsHistory {
-                HistoryPanel(state: history, fit: fitHistory)
+                // Der Verlauf hat sein eigenes Fenster von unten (siehe `sheets`).
+                EmptyView()
             } else if route.isActive {
                 NavigationBottomBar()
             } else if searchPin == nil, reducedTools {

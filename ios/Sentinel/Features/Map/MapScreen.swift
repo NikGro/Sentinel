@@ -14,6 +14,10 @@ struct MapScreen: View {
     /// Eigene Kartensteuerung: Gesten, Nachführen und Kamerafahrten an einer Stelle (siehe `MapEngine`).
     @State var engine = MapEngine()
     @State var selection: MapSelection?
+    /// Punkt auf einer angetippten Strecke (Linie, ÖPNV-Strecke, Standortverlauf).
+    @State var tapMarker: GeoPoint?
+    @State var lastShapeTap: ShapeTap?
+    @State var quickLookDetent: PresentationDetent = .medium
     @State var tapMode: MapTapMode = .none
     @State var editor: EditorContext?
     @State var targetEditor: TargetEditorContext?
@@ -97,6 +101,13 @@ struct MapScreen: View {
         }
         // Gelöscht (auch aus dem Bearbeiten-Fenster heraus): die ganze Ansicht samt Bearbeiten sofort schließen.
         // Ein Schließen aus der Ansicht selbst greift nicht, solange das Bearbeiten-Fenster noch darüber liegt.
+        .onChange(of: selection == nil) { _, closed in
+            // Kurzübersicht zu: Punkt auf der Strecke und Verlaufsstelle weg.
+            if closed {
+                tapMarker = nil
+                storedTracks.selected = nil
+            }
+        }
         .onChange(of: selectionExists) { _, exists in
             if !exists { selection = nil }
         }
@@ -106,9 +117,18 @@ struct MapScreen: View {
             }, moveObject: { objectId in
                 self.selection = nil
                 tapMode = .moving(objectId: objectId)
-            })
-            .presentationDetents([.medium, .large])
+            }, trackPoint: selectedTrackPoint)
+            .presentationDetents([QuickLookHeight.low, .medium, .large], selection: $quickLookDetent)
             .presentationBackgroundInteraction(.enabled(upThrough: .medium))
+        }
+        // Verlauf: Fenster von unten wie die Kurzübersicht; die Karte bleibt darüber bedienbar.
+        .sheet(isPresented: Binding(
+            get: { showsHistory && selection == nil && editor == nil },
+            set: { open in if !open, showsHistory, selection == nil, editor == nil { model.closeHistory() } }
+        )) {
+            HistoryPanel(state: history)
+                .presentationDetents([QuickLookHeight.low, .medium, .large])
+                .presentationBackgroundInteraction(.enabled(upThrough: .medium))
         }
         .sheet(item: $editor) { context in
             MapObjectEditor(context: context) { objectId in
@@ -249,12 +269,24 @@ struct MapScreen: View {
                     CrossStreetLayer(streets: route.upcomingCrossStreets)
                 }
                 StoredTracksLayer(state: storedTracks) { model.title(of: $0) }
+                // Angetippte Stelle auf einer Strecke (beim Verlauf zeichnet ihn die Spur selbst).
+                if let tapMarker, selection != nil, storedTracks.selected == nil {
+                    Annotation("", coordinate: tapMarker.coordinate, anchor: .center) {
+                        Circle()
+                            .fill(.white)
+                            .frame(width: 14, height: 14)
+                            .overlay(Circle().stroke(Theme.accent, lineWidth: 4))
+                            .shadow(radius: 2)
+                            .allowsHitTesting(false)
+                    }
+                    .annotationTitles(.hidden)
+                }
                 if showsHistory {
                     HistoryLayer(state: history) { model.title(of: $0) }
                 }
                 StopsLayer(stops: lage.operation.ueberschlagen.naechste, mine: lage.myLeapfrogStop, line: lage.aHolder?.data.oepnv.map { NearbyStop.Line(ref: $0.linie, typ: "", farbe: nil) })
-                SymbolLayer(pins: (vehiclePins + targetPins).filter { !layout.hidden.contains($0.id) }, offsets: layout.offsets) { selection = $0 }
-                ForcesLayer(pins: forcePins.filter { !layout.hidden.contains($0.id) }, offsets: layout.offsets) { selection = $0 }
+                SymbolLayer(pins: (vehiclePins + targetPins).filter { !layout.hidden.contains($0.id) }, offsets: layout.offsets) { tapMarker = nil; present($0, low: false) }
+                ForcesLayer(pins: forcePins.filter { !layout.hidden.contains($0.id) }, offsets: layout.offsets) { tapMarker = nil; present($0, low: false) }
                 ClusterLayer(clusters: layout.clusters) { zoom(into: $0) }
                 DraftLayer(points: draftPoints, outline: draftOutline)
             }
@@ -337,17 +369,21 @@ struct MapScreen: View {
             .onTapGesture { point in
                 guard let coordinate = proxy.convert(point, from: .local) else { return }
                 // Verlauf: Tipp auf die Spur zeigt die Daten dieses Punkts.
-                if tapMode == .none, showsHistory, history.select(near: point, proxy: proxy) { return }
+                if tapMode == .none, showsHistory, history.select(near: point, proxy: proxy) {
+                    // Die Stelle mittig zwischen oberen Rand und Fenster rücken.
+                    if let selected = history.selected, let spur = history.spuren[selected.key] {
+                        tapMarker = spur.sample(index: selected.index, fraction: selected.fraction).punkt.point
+                        focusTapMarker()
+                        tapMarker = nil
+                    }
+                    return
+                }
                 if tapMode == .none {
                     // Tipp auf eine freie Stelle einer Form. Symbole darüber (Kräfte, Fahrzeuge, Ziele, Marker)
                     // fangen ihren Tipp selbst ab und kommen hier gar nicht erst an.
                     let onSymbol = tapHitsSymbol(point, proxy: proxy)
-                    // Abgelegter Standortverlauf: Uhrzeit und Geschwindigkeit an dieser Stelle.
-                    if !onSymbol, storedTracks.select(near: point, proxy: proxy) { return }
-                    storedTracks.selected = nil
-                    if !onSymbol, let id = shape(at: GeoPoint(coordinate)) {
-                        if lage.mapObjects[id] != nil { openEditor(for: id) }
-                    }
+                    // Standortverläufe und Formen an dieser Stelle (mehrfach tippen schaltet durch).
+                    if !onSymbol { selectShapeOrTrack(at: point, proxy: proxy) }
                     return
                 }
                 if tapMode.needsConfirmation {

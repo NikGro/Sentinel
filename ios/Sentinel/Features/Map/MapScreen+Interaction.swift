@@ -172,6 +172,107 @@ extension MapScreen {
 
     /// Gezeichnete Form unter dem Finger: Linien (mit etwas Spielraum), Flächen, Kreise, Prognosezellen.
     /// Bei Überlappung gewinnt die kleinste, denn sie ist die gezielt gemeinte.
+    /// Alle Formen an einer Stelle, die kleinste zuerst (Linien vor Flächen).
+    func shapes(at point: GeoPoint) -> [String] {
+        let tolerance = max(8, cameraState.distance / 45)
+        var found: [(id: String, size: Double)] = []
+        for object in visibleObjects {
+            let data = object.data
+            let size: Double?
+            switch data.typ {
+            case .flaeche where data.punkte.count >= 3, .geofence where data.radius == nil && data.punkte.count >= 3:
+                size = Self.contains(data.punkte, point) ? Self.area(data.punkte) : nil
+            case .kreis, .haltestellen, .geofence:
+                guard let center = data.punkte.first else { continue }
+                let radius = data.radius ?? 100
+                size = center.distance(to: point) <= radius ? Double.pi * radius * radius : nil
+            case .linie where data.punkte.count >= 2, .oepnvlinie where data.punkte.count >= 2, .pfeil where data.punkte.count >= 2:
+                let line = data.typ == .oepnvlinie && (data.weg?.count ?? 0) >= 2 ? data.weg! : data.punkte
+                size = Self.distance(from: point, toLine: line) <= tolerance ? 0 : nil
+            default:
+                size = nil
+            }
+            if let size { found.append((object.id, size)) }
+        }
+        return found.sorted { $0.size < $1.size }.map(\.id)
+    }
+
+    /// Nächster Punkt auf einer Linie zur angetippten Stelle (auf dem Bildschirm gemessen), für den Punkt auf der
+    /// Strecke. `nil` bei Flächen und Kreisen.
+    func pointOnLine(of id: String, near tap: CGPoint, proxy: MapProxy) -> GeoPoint? {
+        guard let data = lage.mapObjects[id]?.data, [.linie, .oepnvlinie, .pfeil].contains(data.typ) else { return nil }
+        let line = data.typ == .oepnvlinie && (data.weg?.count ?? 0) >= 2 ? data.weg! : data.punkte
+        let screen = line.map { proxy.convert($0.coordinate, to: .local) }
+        var best: (point: CGPoint, d: CGFloat)?
+        for i in 0..<max(screen.count - 1, 0) {
+            guard let a = screen[i], let b = screen[i + 1] else { continue }
+            let dx = b.x - a.x, dy = b.y - a.y
+            let l2 = dx * dx + dy * dy
+            let t = l2 > 0 ? min(max(((tap.x - a.x) * dx + (tap.y - a.y) * dy) / l2, 0), 1) : 0
+            let p = CGPoint(x: a.x + dx * t, y: a.y + dy * t)
+            let d = hypot(tap.x - p.x, tap.y - p.y)
+            if best == nil || d < best!.d { best = (p, d) }
+        }
+        guard let best, let coordinate = proxy.convert(best.point, from: .local) else { return nil }
+        return GeoPoint(coordinate)
+    }
+
+    /// Angetippte Stelle: Standortverläufe und Formen dort. Mehrfaches Tippen auf dieselbe Stelle schaltet der Reihe
+    /// nach durch, was dort übereinanderliegt. Linien und Verläufe bekommen einen Punkt auf der Strecke, die Kamera
+    /// rückt ihn zwischen Suchleiste und das (niedrige) Fenster unten.
+    func selectShapeOrTrack(at tap: CGPoint, proxy: MapProxy) {
+        guard let coordinate = proxy.convert(tap, from: .local) else { return }
+        let tracks = storedTracks.hits(near: tap, proxy: proxy)
+        let shapeIds = shapes(at: GeoPoint(coordinate))
+        let keys = tracks.map { "spur:\($0.trackId)" } + shapeIds.map { "form:\($0)" }
+        guard !keys.isEmpty else {
+            storedTracks.selected = nil
+            return
+        }
+        var index = 0
+        if let last = lastShapeTap, hypot(last.point.x - tap.x, last.point.y - tap.y) < 30, Set(last.keys) == Set(keys),
+           Date.now.timeIntervalSince(last.at) < 15 {
+            index = (last.index + 1) % keys.count
+        }
+        lastShapeTap = ShapeTap(point: tap, keys: keys, index: index, at: .now)
+        if index < tracks.count {
+            let hit = tracks[index]
+            storedTracks.selected = (hit.trackId, hit.index, hit.fraction)
+            guard let track = storedTracks.selectedTrack, let objectId = hit.trackId.split(separator: "|").first.map(String.init),
+                  lage.mapObjects[objectId] != nil else { return }
+            tapMarker = track.spur.sample(index: hit.index, fraction: hit.fraction).punkt.point
+            present(.object(objectId), low: true)
+        } else {
+            let id = shapeIds[index - tracks.count]
+            storedTracks.selected = nil
+            tapMarker = pointOnLine(of: id, near: tap, proxy: proxy)
+            guard lage.mapObjects[id] != nil, tapMode == .none else { return }
+            present(.object(id), low: tapMarker != nil)
+        }
+        focusTapMarker()
+    }
+
+    /// Angetippte Stelle eines abgelegten Standortverlaufs für die Kurzübersicht.
+    var selectedTrackPoint: TrackPoint? {
+        guard let selected = storedTracks.selected, let track = storedTracks.selectedTrack, track.spur.punkte.indices.contains(selected.index) else { return nil }
+        return TrackPoint(spur: track.spur, index: selected.index, fraction: selected.fraction, title: model.title(of: track.spur.subject))
+    }
+
+    /// Kurzübersicht öffnen; nach einem Tipp auf eine Strecke zunächst niedrig.
+    func present(_ new: MapSelection, low: Bool) {
+        quickLookDetent = low ? QuickLookHeight.low : .medium
+        selection = new
+    }
+
+    /// Den Punkt auf der Strecke mittig zwischen Suchleiste und Oberkante des niedrigen Fensters zeigen.
+    func focusTapMarker() {
+        guard let point = tapMarker else { return }
+        let view = cameraState.camera()
+        let height = engine.windowHeight ?? 800
+        engine.fly(to: MapCamera(centerCoordinate: point.coordinate, distance: view.distance, heading: view.heading, pitch: view.pitch),
+                   betweenTop: showsHistory ? 60 : topBarBottom, bottom: height * (1 - QuickLookHeight.lowFraction), duration: 0.45)
+    }
+
     func shape(at point: GeoPoint) -> String? {
         // Spielraum für Linien: etwa 22 Bildpunkte, abhängig von der Zoomstufe.
         let tolerance = max(8, cameraState.distance / 45)
@@ -301,7 +402,8 @@ extension MapScreen {
     /// Bestehende Markierungen öffnen erst die Ansicht; bearbeitet wird über deren Bearbeiten-Knopf.
     func openEditor(for id: String) {
         guard tapMode == .none, lage.mapObjects[id] != nil else { return }
-        selection = .object(id)
+        tapMarker = nil
+        present(.object(id), low: false)
     }
 
     /// Wie die Vorschau beim Setzen aussieht: schon wie das spätere Symbol.

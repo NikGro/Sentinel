@@ -7,6 +7,8 @@ struct QuickLookSheet: View {
     let placeTarget: (String) -> Void
     /// Markierung per Tipp auf die Karte verschieben.
     let moveObject: (String) -> Void
+    /// Angetippte Stelle eines Standortverlaufs (Werte dort).
+    var trackPoint: TrackPoint?
 
     @Environment(LageStore.self) private var lage
     @Environment(\.dismiss) private var dismiss
@@ -22,7 +24,7 @@ struct QuickLookSheet: View {
                 case .target(let id):
                     if lage.targets[id] != nil { TargetDetail(targetId: id, placeOnMap: placeTarget) } else { gone }
                 case .object(let id):
-                    if let object = lage.mapObjects[id] { MapObjectInfo(id: id, object: object.data, startMoving: moveObject) } else { gone }
+                    if let object = lage.mapObjects[id] { MapObjectInfo(id: id, object: object.data, startMoving: moveObject, trackPoint: trackPoint) } else { gone }
                 }
             }
             .navigationBarTitleDisplayMode(.inline)
@@ -165,6 +167,8 @@ struct MapObjectInfo: View {
     let object: MapObject
     /// Startet das Verschieben per Tipp auf die Karte.
     let startMoving: (String) -> Void
+    /// Standortverlauf: angetippte Stelle der Spur.
+    var trackPoint: TrackPoint?
 
     @Environment(AppModel.self) private var model
     @Environment(LageStore.self) private var lage
@@ -185,6 +189,10 @@ struct MapObjectInfo: View {
 
     var body: some View {
         List {
+            // Standortverlauf: zuerst die Werte an der angetippten Stelle.
+            if let trackPoint {
+                TrackPointSection(point: trackPoint)
+            }
             // Navigieren gehört in die Übersicht; eine ÖPNV-Strecke ohne Fahrzeug ist kein einzelner Zielort.
             if object.typ != .oepnvlinie || object.hasRealVehicle {
                 NavigateHereSection {
@@ -376,6 +384,33 @@ struct MapObjectInfo: View {
                 .fill(color.opacity(0.6))
                 .overlay(RoundedRectangle(cornerRadius: 6).stroke(color, lineWidth: 2))
                 .frame(width: 44, height: 44)
+        }
+    }
+}
+
+/// Angetippte Stelle einer Spur: Spur, Punkt und Anteil bis zum nächsten Punkt, mit dem Namen der Spur.
+struct TrackPoint {
+    let spur: Spur
+    let index: Int
+    let fraction: Double
+    let title: String
+}
+
+/// Werte an der angetippten Stelle eines Standortverlaufs.
+struct TrackPointSection: View {
+    let point: TrackPoint
+
+    var body: some View {
+        let sample = point.spur.sample(index: point.index, fraction: point.fraction)
+        let punkt = sample.punkt
+        Section {
+            LabeledContent("Zeit", value: (sample.between ? "etwa " : "") + Format.dateTime(punkt.date))
+            if let speed = sample.speed {
+                LabeledContent("Geschwindigkeit", value: "\((speed.value * 3.6).roundedInt ?? 0) km/h" + (speed.estimated ? " (geschätzt)" : ""))
+            }
+            LabeledContent("Quelle", value: [punkt.quelle.title, punkt.info, sample.between ? "zwischen zwei Punkten" : nil].compactMap { $0 }.joined(separator: " · "))
+        } header: {
+            Label(point.title, systemImage: punkt.quelle.symbol)
         }
     }
 }
