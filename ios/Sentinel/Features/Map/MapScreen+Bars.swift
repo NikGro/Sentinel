@@ -160,7 +160,10 @@ extension MapScreen {
 
     /// Eigene Bewegungs- bzw. Blickrichtung für den Navi-Pfeil.
     var myCourse: CLLocationDirection? {
-        if let current = route.displayLocation(raw: location.current), current.course >= 0, current.speed > 1 {
+        // Im Fahrzeug erst ab etwa 11 km/h: Beim Ausrollen an der Ampel ist die GPS-Richtung unzuverlässig und
+        // drehte die Karte schräg weg.
+        let driving = route.isActive && !route.walking
+        if let current = route.displayLocation(raw: location.current), current.course >= 0, current.speed > (driving ? 3 : 1) {
             courseMemory.course = current.course
             return current.course
         }

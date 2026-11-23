@@ -7,6 +7,8 @@
   sobald man über 25 m (bzw. die GPS-Ungenauigkeit) von der Route weg ist
 - Abweichungen werden auch bei mäßigem GPS (bis 50 m Ungenauigkeit, im Auto üblich) erkannt und die Route neu
   berechnet; vorher erst ab 25 m Genauigkeit
+- An der Ampel bleibt die Karte geradeaus: Die Fahrtrichtung wird im Fahrzeug erst ab etwa 11 km/h übernommen, darunter
+  (Ausrollen, Stehen) gilt die letzte verlässliche Richtung
 
 ## 0.34.0
 
