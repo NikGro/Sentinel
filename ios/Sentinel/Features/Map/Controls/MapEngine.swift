@@ -377,8 +377,16 @@ final class MapEngine {
                                startPitch: pin != nil ? (smooth?.pitch ?? start.pitch) : start.pitch)
         }
         guard var m = multi else { return }
-        let scale = (pinch.state == .began || pinch.state == .changed) ? pinch.scale / m.scaleBase : 1
-        let rotationDegrees = (rotation.state == .began || rotation.state == .changed) ? Double(rotation.rotation - m.rotationBase) * 180 / .pi : 0
+        // Erkenner, die mitten in der Geste (neu) beginnen, setzen ihren Wert zurück (Drehung 0, Zoom 1). Damit die
+        // Karte nicht springt, setzt ihr Beginn den Bezug so, dass der bisherige Wert bleibt; ein beendeter Erkenner
+        // behält seinen letzten Wert.
+        if recognizer === rotation, rotation.state == .began { m.rotationBase = rotation.rotation - m.lastRotation }
+        if recognizer === pinch, pinch.state == .began { m.scaleBase = pinch.scale / max(m.lastScale, 0.01) }
+        if rotation.state == .began || rotation.state == .changed { m.lastRotation = rotation.rotation - m.rotationBase }
+        if pinch.state == .began || pinch.state == .changed { m.lastScale = pinch.scale / m.scaleBase }
+        multi = m
+        let scale = m.lastScale
+        let rotationDegrees = Double(m.lastRotation) * 180 / .pi
         let t = twoPan.translation(in: map)
         let move = CGPoint(x: t.x - m.panBase.x, y: t.y - m.panBase.y)
 
@@ -424,9 +432,14 @@ final class MapEngine {
             let zoomAmount = abs(log(Double(max(scale, 0.01))))
             let turnThreshold = m.intent == .zoom ? 25.0 : 8.0
             let releaseThreshold = max(m.intent == .zoom ? 45.0 : 20.0, 20 + 60 * zoomAmount)
+            // Ab der Schwelle dreht die Karte, von dort an ohne Sprung (Versatz merken statt abziehen).
+            if m.turnOffset == nil, abs(rotationDegrees) > turnThreshold {
+                m.turnOffset = rotationDegrees
+                multi = m
+            }
             var turn = 0.0
-            if abs(rotationDegrees) > turnThreshold {
-                turn = rotationDegrees - (rotationDegrees > 0 ? turnThreshold : -turnThreshold)
+            if let offset = m.turnOffset {
+                turn = rotationDegrees - offset
                 emit(.rotated(degrees: rotationDegrees))
             }
             if pin != nil, abs(rotationDegrees) > releaseThreshold {
@@ -434,10 +447,14 @@ final class MapEngine {
                 unpin()
                 emit(.released(String(format: "gedreht %.0f° zoom=%.2f", rotationDegrees, scale)))
                 if let now = current {
+                    // Ab hier frei weiterdrehen und -zoomen, ohne neue Schwelle (die Geste läuft ohne Pause weiter).
                     m.start = now
                     m.startDistance = now.distance
                     m.rotationBase = rotation.rotation
+                    m.lastRotation = 0
                     m.scaleBase = pinch.scale
+                    m.lastScale = 1
+                    m.turnOffset = 0
                     m.anchor = map.convert(centroid, toCoordinateFrom: map)
                     multi = m
                 }
@@ -458,8 +475,16 @@ final class MapEngine {
                 apply(camera)
                 if let anchor = m.anchor {
                     let now = map.convert(anchor, toPointTo: map)
-                    shift(from: now, to: centroid)
+                    // Nahe am Horizont (stark gekippt) ist die Umrechnung unzuverlässig: dann nicht nachziehen.
+                    if hypot(now.x - centroid.x, now.y - centroid.y) < 150 { shift(from: now, to: centroid) }
                 }
+                if let last = m.lastHeading {
+                    var jump = abs(camera.heading - last).truncatingRemainder(dividingBy: 360)
+                    if jump > 180 { jump = 360 - jump }
+                    if jump > 12 { emit(.note(String(format: "sprung drehung %.0f° roh=%.0f° zoom=%.2f", jump, rotationDegrees, scale))) }
+                }
+                m.lastHeading = camera.heading
+                multi = m
             }
         }
     }
@@ -634,6 +659,13 @@ private struct MultiTouch {
     var startPitch: Double
     var mode: Mode = .undecided
     var intent: Intent = .none
+    /// Bisherige Drehung (Bogenmaß) und Zoom der Geste, auch über Neubeginn eines Erkenners hinweg.
+    var lastRotation: CGFloat = 0
+    var lastScale: CGFloat = 1
+    /// Drehung beim Überschreiten der Schwelle; ab da dreht die Karte.
+    var turnOffset: Double?
+    /// Zuletzt gesetzte Richtung (Messfühler: Sprünge erkennen).
+    var lastHeading: Double?
 }
 
 /// UIKit-Seite: Gestenerkenner an der MapKit-Karte und Bildtakt. Eigenes Objekt, weil UIKit Ziele als `NSObject`
