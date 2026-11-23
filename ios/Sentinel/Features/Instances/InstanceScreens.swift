@@ -33,6 +33,7 @@ struct InstancesScreen: View {
                         InstanceRow(instance: instance, isOpen: instance.id == lage.instanz && !model.editsPermanentLayer)
                     }
                     .tint(.primary)
+                    .accessibilityIdentifier("instanz-oeffnen")
                     .swipeActions(edge: .trailing) {
                         Button("Verlassen", systemImage: "rectangle.portrait.and.arrow.right", role: .destructive) { lage.leaveInstance(instance.id) }
                     }

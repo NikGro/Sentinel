@@ -145,10 +145,10 @@ final class RundgangTests: XCTestCase {
         app.tabBars.buttons["Mehr"].tap()
         XCTAssertTrue(app.buttons["GPS-Tracker"].waitForExistence(timeout: 5) || app.staticTexts["GPS-Tracker"].exists, "Verwaltung im Hauptmenü")
         capture("08b-hauptmenue-mehr")
-        // Zurück in die Instanz über „Öffnen“.
+        // Zurück in die Instanz: Zeile der eigenen Instanz antippen.
         app.tabBars.buttons["Instanzen"].tap()
-        let open = app.buttons.matching(NSPredicate(format: "label ENDSWITH 'öffnen'")).firstMatch
-        XCTAssertTrue(open.waitForExistence(timeout: 3), "Öffnen-Knopf bei der eigenen Instanz")
+        let open = app.buttons["instanz-oeffnen"].firstMatch
+        XCTAssertTrue(open.waitForExistence(timeout: 3), "Zeile der eigenen Instanz")
         open.tap()
 
         // Fortbewegung im selben Lauf: Der Simulator startet die App in einem zweiten Test ohne Startargumente neu.
