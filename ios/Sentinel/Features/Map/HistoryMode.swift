@@ -419,7 +419,7 @@ struct HistoryPanel: View {
                 Text("Von")
                     .foregroundStyle(.secondary)
                 Spacer(minLength: 8)
-                DatePicker("Von", selection: Binding(
+                dateAndTime("Von", Binding(
                     get: { state.displayInterval.lowerBound },
                     set: { from in
                         // Nur echte Eingaben (volle Minuten): Das Feld korrigiert sonst „bis jetzt“ selbst um
@@ -429,8 +429,7 @@ struct HistoryPanel: View {
                         state.customFrom = from
                         state.range = .custom
                     }
-                ), in: ...HistoryState.pickerLimit)
-                .labelsHidden()
+                ))
                 Menu {
                     ForEach(HistoryRange.allCases.filter { $0 != .custom }) { range in
                         Button(range.title) { state.range = range }
@@ -448,7 +447,7 @@ struct HistoryPanel: View {
                 Text("Bis")
                     .foregroundStyle(.secondary)
                 Spacer(minLength: 8)
-                DatePicker("Bis", selection: Binding(
+                dateAndTime("Bis", Binding(
                     get: { state.displayInterval.upperBound },
                     set: { to in
                         guard abs(to.timeIntervalSince(state.displayInterval.upperBound)) >= 30 else { return }
@@ -456,13 +455,22 @@ struct HistoryPanel: View {
                         state.customTo = min(to, .now)
                         state.range = .custom
                     }
-                ), in: ...HistoryState.pickerLimit)
-                .labelsHidden()
+                ))
                 // Platzhalter in Breite des Schnellwahl-Knopfs, damit beide Felder bündig stehen.
                 Color.clear.frame(width: 32, height: 1)
             }
         }
         .font(.subheadline)
+    }
+
+    /// Datum und Uhrzeit als zwei getrennte Felder: Ein Feld nur für das Datum schließt den Kalender, sobald ein Tag
+    /// angetippt ist (ein gemeinsames Feld blieb offen).
+    private func dateAndTime(_ title: String, _ value: Binding<Date>) -> some View {
+        HStack(spacing: 4) {
+            DatePicker(title, selection: value, in: ...HistoryState.pickerLimit, displayedComponents: .date)
+            DatePicker(title, selection: value, in: ...HistoryState.pickerLimit, displayedComponents: .hourAndMinute)
+        }
+        .labelsHidden()
     }
 
     private var legend: some View {
