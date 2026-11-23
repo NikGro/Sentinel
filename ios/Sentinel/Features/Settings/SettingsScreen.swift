@@ -32,7 +32,13 @@ struct SettingsScreen: View {
                                         .font(.caption)
                                         .foregroundStyle(.secondary)
                                 }
+                                Spacer()
+                                // Wie die übrigen Einträge, die weiterführen.
+                                Image(systemName: "chevron.right")
+                                    .font(.footnote.weight(.semibold))
+                                    .foregroundStyle(.tertiary)
                             }
+                            .contentShape(.rect)
                         }
                         .tint(.primary)
 
