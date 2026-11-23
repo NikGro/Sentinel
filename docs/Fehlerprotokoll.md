@@ -132,6 +132,11 @@ Eigene Kartensteuerung nach dem Prinzip von Google Maps (`MapEngine`, Arbeitszwe
   der erste Finger wanderte vor dem Aufsetzen des zweiten über 30 pt (löste als Verschieben; jetzt Fingerzähler);
   beim Zoomen dreht man 10–20° mit (löste als Drehen; jetzt mehr Drehung nötig, je stärker gezoomt wird).
   Als 0.32 zum Gerätetest.
+- Gerät 0.32: „funktioniert richtig gut“. Danach: (1) Punkt zitterte angeheftet: Kamera folgte Apples gezeichnetem
+  Standortsymbol, dessen Lage selbst von der Kamera abhängt (Rückkopplung). 0.33: App zeichnet den Punkt angeheftet
+  selbst in der Mitte, Kamera folgt dem vorausberechneten Standort. (2) Drehung „hing bei 290°“: Geste als Zoomen
+  eingestuft (erster Zoomwert zählte mit), Drehschwelle dann 25°. 0.33: feste Schwelle 10°, Bezug beim Beginn eines
+  Erkenners neu.
 
 ### Nicht wiederholen
 
@@ -164,7 +169,12 @@ Eigene Kartensteuerung nach dem Prinzip von Google Maps (`MapEngine`, Arbeitszwe
 | 0.25 | Takt nur für die ÖPNV-Ebene (eigene Uhr), 5 Schritte/s mit Animation | „zittern immer noch“ |
 | 0.26 | 10 Schritte/s ohne Animation | offen |
 
-Offene Vermutung: Fahrzeuge auf der ÖPNV-Karte springen zusätzlich beim Nachladen alle 20 s (kein Glätten dort).
+| 0.32 | (Gerät) „besser, aber nicht perfekt“: fehlende Glättung, Manöver hart, Halte nur Sekunden | – |
+| 0.33 | Neu gedacht statt weiter geflickt: Fahrmodell (`TransitMotion`) mit abgerundetem Weg, Tempoprofil aus Kurvenradius, Anfahren/Bremsen, Standzeiten je Verkehrsart, auf Fahrplan gestreckt; Echtzeit-Abweichung klingt über 3 s ab; nur Fahrzeuge im 30-Hz-Takt | offen |
+
+Ursachen bis 0.32: Tempo sprang an jedem Punkt des Linienverlaufs (Kurvenaufschlag je Teilstück), Trapezprofil nur
+nach Zeitanteil, Standzeit aus der Fahrzeit abgezwackt (oft wenige Sekunden), der Takt baute Linien und Halte mit neu.
+Offen: Auf der ÖPNV-Karte (Live) werden Echtzeit-Korrekturen beim Nachladen noch nicht geglättet.
 
 ## Antippen muss wiederholt werden
 

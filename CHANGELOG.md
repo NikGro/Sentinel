@@ -1,5 +1,33 @@
 # Änderungen
 
+## 0.33.0
+
+**Karte und Kamera**
+- Angeheftet zeichnet die App den eigenen Punkt selbst fest in der Bildmitte; die Kamera folgt dem (vorausberechneten)
+  Standort statt Apples Standortanzeige. Behebt das Zittern des Punkts nach dem Anheften
+- Drehen: feste Schwelle von 10° (beim Zoomen hing die Drehung bis 25°), kein Sprung bei kurz verlorenem Finger oder
+  nach dem Lösen; Zwei-Finger-Gesten werden einmal je Bild ausgewertet
+- Suchtreffer und gedrückter Ort: Die Kamera endet mit dem Ort mittig zwischen Suchleiste und Fenster unten
+- Linie, ÖPNV-Strecke oder Standortverlauf antippen: niedriges Fenster, Punkt auf der Strecke, Kamera rückt ihn in die
+  freie Mitte. Mehrfaches Tippen auf dieselbe Stelle schaltet durch übereinanderliegende Linien
+- Standortverlauf: angetippt die Kurzübersicht mit Bearbeiten und den Werten an der Stelle; überall auf der Spur
+  antippbar, zwischen zwei Punkten werden Ort, Zeit und Tempo angenommen. Anlegen als Fenster von unten mit Schließen
+  und Hinzufügen, Gesamtansicht als Knopf am Rand. Datum und Uhrzeit getrennt (Kalender schließt nach dem Antippen)
+
+**ÖPNV**
+- Neues Fahrmodell: abgerundeter Fahrweg, langsamer in Kurven, weiches Bremsen und Anfahren, realistische Standzeiten
+  (Bus/Tram ~20 s, U-Bahn ~25 s, Zug ~45 s), an den Fahrplan angepasst; Echtzeit-Korrekturen weich ohne Zurückspringen.
+  Fahrzeuge mit 30 Schritten je Sekunde, Linien und Halte bleiben dabei ruhig
+
+**Ziele**
+- Zielperson auf ÖPNV setzen öffnet die ÖPNV-Karte zum Einsteigen
+- Standortquelle als Vierer-Schalter (Ort beibehalten, von Hand, Tracker, A-Position), auch bei Zielfahrzeugen; bleibt
+  sichtbar, wenn die Person in einem nicht angelegten Fahrzeug sitzt
+
+**Hauptmenü**
+- Instanzen antippen zum Öffnen bzw. Beitreten, wischen zum Verlassen bzw. Löschen, Pfeil statt Knöpfen; Pfeil auch am
+  Eintrag Hauptmenü unter Mehr
+
 ## 0.32.0
 
 **Eigene Kartensteuerung auf allen Karten (Lage, ÖPNV-Karte, Standortwahl)**
