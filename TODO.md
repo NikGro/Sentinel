@@ -18,6 +18,11 @@ statt jede Änderung sofort einzubauen. Erledigtes wandert mit Version ins CHANG
 
 ### Karte, Kompass und Navigation
 
+- Überschlagende Navigation und Navigation zu Haltestellen (1, 2, 3 voraus): Keine zusätzlichen Haltestellenmarker mit
+  Nummer daneben (`StopsLayer`), die doppelt neben schon angelegten Haltestellen stehen und nach dem Ende liegen
+  bleiben. Stattdessen: Ist die Haltestellenebene eingeschaltet, die Ziel-Haltestelle bzw. die eigene Position im
+  Überschlagen dort hervorheben. Ohne Haltestellenebene darf ein Marker erscheinen, der aber wieder verschwindet bzw.
+  die Hervorhebung endet, sobald die Navigation endet oder zur nächsten Haltestelle weitergeht.
 - Ausrollende Kamerafahrt nach schwungvollem Wischen schon durch bloßes Auflegen eines Fingers stoppen (jetzt muss
   man erst wischen). Umsetzung: Beim ersten Berühren der Karte den Schwung der eigenen Steuerung sofort beenden.
 - **App-Absturz während aktiver Navigation (0.9: mögliche Ursache abgesichert):** Dafür ist ein Absturzbericht nötig, zu finden unter Einstellungen › Datenschutz & Sicherheit › Analyse & Verbesserungen › Analysedaten › „Sentinel-…“.
