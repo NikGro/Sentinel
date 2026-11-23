@@ -243,6 +243,7 @@ extension MapScreen {
     /// Gedrückter Ort: Feld mit Navigieren und Anlegen; der Name kommt aus der Umkehrsuche nach.
     func pressed(at point: GeoPoint) {
         searchPin = SearchPin(point: point, title: "Markierter Ort")
+        focus(on: point, keepingView: true)
         Task {
             let placemarks = try? await CLGeocoder().reverseGeocodeLocation(CLLocation(latitude: point.lat, longitude: point.lon), preferredLocale: Locale(identifier: "de_DE"))
             guard let place = placemarks?.first, searchPin?.point == point else { return }
@@ -256,7 +257,25 @@ extension MapScreen {
     func show(_ pin: SearchPin) {
         searchPin = pin
         // Ein anderer Ort: nicht mehr am eigenen Standort angeheftet.
-        engine.fly(to: MapCamera(centerCoordinate: pin.point.coordinate, distance: 900, heading: 0, pitch: settings.prefers3D ? 55 : 0), duration: 0.8)
+        focus(on: pin.point, keepingView: false)
+    }
+
+    /// Ort mittig zwischen Suchleiste und dem Fenster unten zeigen (nicht in der Bildmitte, die das Fenster verdeckt).
+    /// `keepingView`: Abstand, Richtung und Neigung bleiben (gedrückter Ort); sonst nah heran wie bei einem Suchtreffer.
+    /// Wächst das Fenster danach noch, rückt der Ort mit derselben Ansicht nach (`refocusSearchPin`).
+    func focus(on point: GeoPoint, keepingView: Bool) {
+        searchPinFocusedAt = .now
+        let view = keepingView
+            ? cameraState.camera()
+            : MapCamera(centerCoordinate: point.coordinate, distance: 900, heading: 0, pitch: settings.prefers3D ? 55 : 0)
+        let target = MapCamera(centerCoordinate: point.coordinate, distance: view.distance, heading: view.heading, pitch: view.pitch)
+        searchPinView = target
+        engine.fly(to: target, betweenTop: topBarBottom, bottom: bottomBarTop, duration: keepingView ? 0.45 : 0.8)
+    }
+
+    func refocusSearchPin() {
+        guard let target = searchPinView, searchPin != nil, Date.now.timeIntervalSince(searchPinFocusedAt) < 2.5, !engine.isGestureActive else { return }
+        engine.fly(to: target, betweenTop: topBarBottom, bottom: bottomBarTop, duration: 0.35)
     }
 
     /// Markierung oder Ziel an einem Suchtreffer anlegen; der Editor öffnet sich, sobald das Suchfenster zu ist.

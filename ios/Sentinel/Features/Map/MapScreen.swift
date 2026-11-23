@@ -47,6 +47,13 @@ struct MapScreen: View {
     @State var debugUnrest = 0
     #endif
     @State var topAreaHeight: CGFloat = 60
+    /// Unterkante der Suchleiste und Oberkante des Bereichs unten, in Fensterkoordinaten (für das Zeigen eines Orts
+    /// mittig dazwischen).
+    @State var topBarBottom: CGFloat = 120
+    @State var bottomBarTop: CGFloat = 600
+    /// Wann zuletzt ein Ort (Suchtreffer, gedrückter Ort) in die freie Mitte gerückt wurde.
+    @State var searchPinFocusedAt = Date.distantPast
+    @State var searchPinView: MapCamera?
     /// Über die Suche gezeigter Ort; Antippen bietet Navigation oder Marker an.
     @State var searchPin: SearchPin?
     /// Ort für das gerade gewählte Werkzeug über die Adresssuche statt per Tipp bestimmen.
@@ -355,7 +362,10 @@ struct MapScreen: View {
             // Beim Setzen eines Orts nur Karte und Suchleiste: alles Übrige ausgeblendet.
             Group { if tapMode == .none { bottomArea } }
                 .onGeometryChange(for: CGFloat.self) { $0.size.height } action: { bottomAreaHeight = $0 }
+                .onGeometryChange(for: CGFloat.self) { $0.frame(in: .global).minY } action: { bottomBarTop = $0 }
         }
+        // Wächst das Fenster unten noch (Straßenansicht lädt), den Ort gleich nachrücken, solange er frisch ist.
+        .onChange(of: bottomBarTop) { refocusSearchPin() }
         .overlay(alignment: .bottomLeading) {
             // Tempo beim Anheften bzw. in der Navigation; das Tempolimit immer, sobald es für die Straße bekannt ist.
             HStack(spacing: Theme.barSpacing) {

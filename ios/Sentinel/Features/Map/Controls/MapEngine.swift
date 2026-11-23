@@ -116,6 +116,32 @@ final class MapEngine {
         fly(to: EngineCamera(camera), duration: duration)
     }
 
+    /// Kamerafahrt, nach der der Mittelpunkt von `camera` waagerecht mittig und senkrecht mittig zwischen `topY` und
+    /// `bottomY` (Fensterkoordinaten) liegt statt in der Bildmitte, z. B. zwischen Suchleiste und einem Fenster unten.
+    func fly(to camera: MapCamera, betweenTop topY: CGFloat, bottom bottomY: CGFloat, duration: Double = 0.6) {
+        guard let map else {
+            fly(to: camera, duration: duration)
+            return
+        }
+        var target = EngineCamera(camera)
+        let coordinate = camera.centerCoordinate
+        // Kurz unsichtbar auf das Ziel setzen (gleicher Durchlauf, nichts wird gezeichnet) und ausmessen, wo die
+        // Koordinate läge; zweimal nachbessern (bei Neigung ist der Maßstab nicht überall gleich).
+        let saved = map.camera.copy() as! MKMapCamera
+        let windowHeight = map.window?.bounds.height ?? map.bounds.height
+        let middleY = (max(topY, 0) + min(bottomY, windowHeight)) / 2
+        let wanted = CGPoint(x: map.bounds.midX, y: map.convert(CGPoint(x: 0, y: middleY), from: nil).y)
+        for _ in 0..<2 {
+            map.camera = MKMapCamera(lookingAtCenter: target.center, fromDistance: target.distance, pitch: target.pitch, heading: target.heading)
+            let atWanted = map.convert(wanted, toCoordinateFrom: map)
+            guard CLLocationCoordinate2DIsValid(atWanted) else { break }
+            let c = MKMapPoint(target.center), a = MKMapPoint(atWanted), k = MKMapPoint(coordinate)
+            target.center = MKMapPoint(x: c.x + k.x - a.x, y: c.y + k.y - a.y).coordinate
+        }
+        map.camera = saved
+        fly(to: target, duration: duration)
+    }
+
     /// Ausschnitt zeigen, z. B. Spuren, Cluster oder eine Linie. Ohne Drehung und Neigung, wie bisher bei Regionen.
     func show(_ region: MKCoordinateRegion, padding: UIEdgeInsets = .zero, duration: Double = 0.6) {
         show(Self.mapRect(region), padding: padding, duration: duration)

@@ -76,6 +76,7 @@ extension MapScreen {
         .padding(.horizontal, Theme.barInset)
         .padding(.top, 4)
         .onGeometryChange(for: CGFloat.self) { $0.size.height } action: { topAreaHeight = $0 }
+        .onGeometryChange(for: CGFloat.self) { $0.frame(in: .global).maxY } action: { topBarBottom = $0 }
         .animation(.snappy, value: tapMode)
         .animation(.snappy, value: route.isActive)
     }
