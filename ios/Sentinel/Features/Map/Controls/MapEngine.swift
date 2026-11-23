@@ -348,6 +348,11 @@ final class MapEngine {
         case .ended, .cancelled, .failed:
             guard active.remove(key) != nil else { return }
             if active.isEmpty {
+                // Letzte, noch nicht ausgewertete Bewegung der Geste übernehmen.
+                if let (pinch, rotation, twoPan) = multiPending {
+                    multiPending = nil
+                    processMulti(pinch: pinch, rotation: rotation, twoPan: twoPan)
+                }
                 multi = nil
                 emit(.allEnded)
             }
@@ -440,6 +445,12 @@ final class MapEngine {
         // behält seinen letzten Wert.
         if recognizer === rotation, rotation.state == .began { m.rotationBase = rotation.rotation - m.lastRotation }
         if recognizer === pinch, pinch.state == .began { m.scaleBase = pinch.scale / max(m.lastScale, 0.01) }
+        // Werte hier merken, ausgewertet wird im Bildtakt (auch noch nach dem Loslassen: schnelle Gesten enden,
+        // bevor das nächste Bild kommt).
+        if rotation.state == .began || rotation.state == .changed { m.lastRotation = rotation.rotation - m.rotationBase }
+        if pinch.state == .began || pinch.state == .changed { m.lastScale = pinch.scale / m.scaleBase }
+        m.lastCentroid = centroid
+        m.lastPan = twoPan.translation(in: map)
         multi = m
         // Ausgewertet wird einmal je Bild (im Bildtakt), nicht bei jeder Meldung der drei Erkenner: sonst setzt die
         // Karte je Bild mehrmals die Kamera mit teils veralteten Werten des jeweils anderen Erkenners.
@@ -448,16 +459,10 @@ final class MapEngine {
     }
 
     private func processMulti(pinch: UIPinchGestureRecognizer, rotation: UIRotationGestureRecognizer, twoPan: UIPanGestureRecognizer) {
-        guard let map, var m = multi else { return }
-        let all: [UIGestureRecognizer] = [pinch, rotation, twoPan]
-        guard let touching = all.first(where: { ($0.state == .began || $0.state == .changed) && $0.numberOfTouches >= 2 }) else { return }
-        let centroid = touching.location(in: map)
-        if rotation.state == .began || rotation.state == .changed { m.lastRotation = rotation.rotation - m.rotationBase }
-        if pinch.state == .began || pinch.state == .changed { m.lastScale = pinch.scale / m.scaleBase }
-        multi = m
+        guard let map, var m = multi, let centroid = m.lastCentroid else { return }
         let scale = m.lastScale
         let rotationDegrees = Double(m.lastRotation) * 180 / .pi
-        let t = twoPan.translation(in: map)
+        let t = m.lastPan
         let move = CGPoint(x: t.x - m.panBase.x, y: t.y - m.panBase.y)
 
         // Kippen erkennen: beide Finger senkrecht, kaum Zoom und Drehung.
@@ -738,6 +743,9 @@ private struct MultiTouch {
     var turnOffset: Double?
     /// Zuletzt gesetzte Richtung (Messfühler: Sprünge erkennen).
     var lastHeading: Double?
+    /// Letzte gemeldete Fingermitte und Verschiebung mit zwei Fingern.
+    var lastCentroid: CGPoint?
+    var lastPan: CGPoint = .zero
 }
 
 /// UIKit-Seite: Gestenerkenner an der MapKit-Karte und Bildtakt. Eigenes Objekt, weil UIKit Ziele als `NSObject`
@@ -842,36 +850,33 @@ private final class EngineHelper: NSObject, UIGestureRecognizerDelegate {
 /// Zählt nur die Finger auf der Karte, erkennt selbst nie etwas. So weiß die Steuerung, ob in einer Geste schon zwei
 /// Finger lagen (dann löst Verschieben nicht, auch wenn der erste Finger beim Zoomen weit wandert).
 private final class TouchCounter: UIGestureRecognizer {
-    private var touching = 0
     private(set) var maxTouches = 0
 
     /// Erster Finger auf der Karte (z. B. um eine ausrollende Karte anzuhalten).
     var onTouchDown: (() -> Void)?
 
+    /// Finger, die gerade auf dem Bildschirm liegen, laut Ereignis (ein eigener Zähler lief auseinander, wenn ein
+    /// Ende nicht ankam, und hielt dann jedes Wischen für eine Zwei-Finger-Geste).
+    private func down(_ event: UIEvent) -> Int {
+        event.allTouches?.filter { $0.phase != .ended && $0.phase != .cancelled }.count ?? 0
+    }
+
     override func touchesBegan(_ touches: Set<UITouch>, with event: UIEvent) {
-        if touching == 0 {
+        let now = down(event)
+        // Alle liegenden Finger sind neu: eine neue Geste beginnt.
+        if now <= touches.count {
             maxTouches = 0
             onTouchDown?()
         }
-        touching += touches.count
-        maxTouches = max(maxTouches, touching)
+        maxTouches = max(maxTouches, now)
     }
 
     override func touchesEnded(_ touches: Set<UITouch>, with event: UIEvent) {
-        lift(touches.count)
+        if down(event) == 0 { state = .failed }
     }
 
     override func touchesCancelled(_ touches: Set<UITouch>, with event: UIEvent) {
-        lift(touches.count)
-    }
-
-    private func lift(_ count: Int) {
-        touching = max(touching - count, 0)
-        if touching == 0 { state = .failed }
-    }
-
-    override func reset() {
-        touching = 0
+        if down(event) == 0 { state = .failed }
     }
 }
 
