@@ -72,6 +72,7 @@ final class MapEngine {
     /// Letzte Bewegung mit zwei Fingern: Das Abheben am Ende eines Zoomens zählt nicht als Tippen mit zwei Fingern.
     @ObservationIgnored private var lastMultiTouchAt: CFTimeInterval = 0
     @ObservationIgnored private var lastTarget: (distance: CLLocationDistance, pitch: Double) = (0, 0)
+    @ObservationIgnored private var multiPending: (UIPinchGestureRecognizer, UIRotationGestureRecognizer, UIPanGestureRecognizer)?
     @ObservationIgnored private var quickZoom: (start: CGPoint, distance: CLLocationDistance, moved: Bool)?
 
     /// Hängt die Steuerung an einer Karte?
@@ -188,6 +189,10 @@ final class MapEngine {
     fileprivate func tick(_ time: CFTimeInterval) {
         let dt = lastTick == 0 ? 1.0 / 60 : min(max(time - lastTick, 0.001), 0.1)
         lastTick = time
+        if let (pinch, rotation, twoPan) = multiPending {
+            multiPending = nil
+            processMulti(pinch: pinch, rotation: rotation, twoPan: twoPan)
+        }
         if momentum != .zero, let map {
             let center = CGPoint(x: map.bounds.midX, y: map.bounds.midY)
             shift(from: center, to: CGPoint(x: center.x + momentum.x * dt, y: center.y + momentum.y * dt))
@@ -202,7 +207,7 @@ final class MapEngine {
         } else if pin != nil {
             follow(dt: dt)
         }
-        if flight == nil, pin == nil, momentum == .zero {
+        if flight == nil, pin == nil, momentum == .zero, multi == nil {
             lastTick = 0
             helper?.stopDisplayLink()
         }
@@ -382,6 +387,18 @@ final class MapEngine {
         // behält seinen letzten Wert.
         if recognizer === rotation, rotation.state == .began { m.rotationBase = rotation.rotation - m.lastRotation }
         if recognizer === pinch, pinch.state == .began { m.scaleBase = pinch.scale / max(m.lastScale, 0.01) }
+        multi = m
+        // Ausgewertet wird einmal je Bild (im Bildtakt), nicht bei jeder Meldung der drei Erkenner: sonst setzt die
+        // Karte je Bild mehrmals die Kamera mit teils veralteten Werten des jeweils anderen Erkenners.
+        multiPending = (pinch, rotation, twoPan)
+        startTicking()
+    }
+
+    private func processMulti(pinch: UIPinchGestureRecognizer, rotation: UIRotationGestureRecognizer, twoPan: UIPanGestureRecognizer) {
+        guard let map, var m = multi else { return }
+        let all: [UIGestureRecognizer] = [pinch, rotation, twoPan]
+        guard let touching = all.first(where: { ($0.state == .began || $0.state == .changed) && $0.numberOfTouches >= 2 }) else { return }
+        let centroid = touching.location(in: map)
         if rotation.state == .began || rotation.state == .changed { m.lastRotation = rotation.rotation - m.rotationBase }
         if pinch.state == .began || pinch.state == .changed { m.lastScale = pinch.scale / m.scaleBase }
         multi = m
