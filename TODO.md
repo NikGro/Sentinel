@@ -18,6 +18,9 @@ statt jede Änderung sofort einzubauen. Erledigtes wandert mit Version ins CHANG
 
 ### Karte, Kompass und Navigation
 
+- **Routenlinie unter dem Navi-Pfeil**: Sie beginnt genau unter der Pfeilmitte; hinten in der Kerbe des Pfeils bleibt
+  ein kleiner runder Rest der Linie sichtbar. Beginn ein Stück in Fahrtrichtung verschieben (etwa halbe Pfeillänge,
+  in Metern aus der Zoomstufe umgerechnet), so dass die Linie vorne in den Pfeil hineinläuft und hinten nichts übersteht.
 - **Straßenschild am eigenen Punkt**: Text mit aktueller Straße und Fahrtrichtung kleiner (etwa wie die eigene
   Beschriftung/Funkrufname) und zweizeilig: darunter „Ecke <Querstraße>“, die nächstgelegene Querstraße (vor oder hinter
   einem), z. B. „Nordschleswiger Straße Richtung Nord“ / „Ecke Straßburger Straße“. Ersetzt die Querstraßen-Schilder
