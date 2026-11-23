@@ -14,6 +14,8 @@ struct TargetMovementSection: View {
     /// ÖPNV: Fahrzeug auf der ÖPNV-Karte wählen.
     @State private var boardingTransit = false
     @State private var choosingTracker = false
+    /// Zuletzt „Ort beibehalten“ gewählt (gespeichert wird das wie „Von Hand“: fester Ort).
+    @State private var keptHere = false
     @State private var pickingLocation = false
 
     private var target: Target { entity.data }
@@ -33,7 +35,7 @@ struct TargetMovementSection: View {
         if target.supportsDynamicSource, boardedIn == nil {
             Section {
                 Picker("Standortquelle", selection: source) {
-                    ForEach(LocationSource.allCases) { option in
+                    ForEach(SourceChoice.allCases) { option in
                         Image(systemName: option.symbolName)
                             .accessibilityLabel(option.title)
                             .tag(option)
@@ -45,7 +47,7 @@ struct TargetMovementSection: View {
                 .listRowInsets(EdgeInsets())
                 HStack(spacing: 10) {
                     VStack(alignment: .leading, spacing: 1) {
-                        Text("Standortquelle: \(target.effectiveSource.title)")
+                        Text("Standortquelle: \(source.wrappedValue.title)")
                             .font(.subheadline.weight(.semibold))
                         Text(sourceDescription)
                             .font(.caption)
@@ -53,14 +55,14 @@ struct TargetMovementSection: View {
                             .lineLimit(1)
                     }
                     Spacer()
-                    switch target.effectiveSource {
+                    switch source.wrappedValue {
                     case .hand:
                         Button("Ort setzen") { placeByHand() }
                             .buttonStyle(.glass)
                     case .tracker:
                         Button("Tracker wählen") { choosingTracker = true }
                             .buttonStyle(.glass)
-                    case .a:
+                    case .keep, .a:
                         EmptyView()
                     }
                 }
@@ -182,19 +184,28 @@ struct TargetMovementSection: View {
         )
     }
 
-    /// Schalter der Standortquelle: Von Hand behält den aktuellen Ort, Tracker fragt nach dem Tracker, solange keiner
-    /// verbunden ist, A-Position folgt sofort.
-    private var source: Binding<LocationSource> {
+    /// Vierer-Schalter der Standortquelle: Ort beibehalten (bleibt, wo das Ziel gerade ist), von Hand setzen
+    /// (Ort wählen), Tracker (fragt nach dem Tracker, solange keiner verbunden ist), A-Position (folgt sofort).
+    private var source: Binding<SourceChoice> {
         Binding(
-            get: { target.effectiveSource },
+            get: {
+                switch target.effectiveSource {
+                case .hand: keptHere ? .keep : .hand
+                case .tracker: .tracker
+                case .a: .a
+                }
+            },
             set: { option in
+                keptHere = option == .keep
                 switch option {
-                case .hand:
+                case .keep:
                     let here = lage.position(ofTarget: entity)?.point
                     save {
                         if let here { $0.standort = TimedPoint(here) }
                         $0.quelle = .hand
                     }
+                case .hand:
+                    placeByHand()
                 case .tracker:
                     if target.trackerId != nil { save { $0.quelle = .tracker } } else { choosingTracker = true }
                 case .a:
@@ -218,6 +229,31 @@ struct TargetMovementSection: View {
         var next = target
         change(&next)
         lage.put(next, id: entity.id)
+    }
+}
+
+/// Wahl im Vierer-Schalter der Standortquelle.
+private enum SourceChoice: String, CaseIterable, Identifiable {
+    case keep, hand, tracker, a
+
+    var id: String { rawValue }
+
+    var title: String {
+        switch self {
+        case .keep: "Ort beibehalten"
+        case .hand: LocationSource.hand.title
+        case .tracker: LocationSource.tracker.title
+        case .a: LocationSource.a.title
+        }
+    }
+
+    var symbolName: String {
+        switch self {
+        case .keep: "pin.fill"
+        case .hand: LocationSource.hand.symbolName
+        case .tracker: LocationSource.tracker.symbolName
+        case .a: LocationSource.a.symbolName
+        }
     }
 }
 
