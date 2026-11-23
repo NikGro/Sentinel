@@ -1,5 +1,13 @@
 # Änderungen
 
+## 0.34.1
+
+**Navigation**
+- Falsch abgebogen: Der eigene Punkt bleibt nicht mehr auf der alten Route kleben, sondern zeigt den echten Standort,
+  sobald man über 25 m (bzw. die GPS-Ungenauigkeit) von der Route weg ist
+- Abweichungen werden auch bei mäßigem GPS (bis 50 m Ungenauigkeit, im Auto üblich) erkannt und die Route neu
+  berechnet; vorher erst ab 25 m Genauigkeit
+
 ## 0.34.0
 
 **Karte und Navigation**

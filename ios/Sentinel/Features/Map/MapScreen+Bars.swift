@@ -160,7 +160,7 @@ extension MapScreen {
 
     /// Eigene Bewegungs- bzw. Blickrichtung für den Navi-Pfeil.
     var myCourse: CLLocationDirection? {
-        if let current = route.snappedLocation ?? location.current, current.course >= 0, current.speed > 1 {
+        if let current = route.displayLocation(raw: location.current), current.course >= 0, current.speed > 1 {
             courseMemory.course = current.course
             return current.course
         }

@@ -327,7 +327,7 @@ struct MapScreen: View {
                 ownMarkerOptions.drawnByScreen = drawn
             }
             .onAppear {
-                engine.locationProvider = { [location, route] in route.snappedLocation ?? location.current }
+                engine.locationProvider = { [location, route] in route.displayLocation(raw: location.current) }
                 engine.courseProvider = { myCourse }
                 engine.onEvent = { event in
                     switch event {
@@ -482,7 +482,7 @@ struct MapScreen: View {
                 return
             }
             while !Task.isCancelled {
-                let here = engine.followedCoordinate ?? route.snappedLocation?.coordinate ?? location.current?.coordinate
+                let here = engine.followedCoordinate ?? route.displayLocation(raw: location.current)?.coordinate
                 if let here, routeAnchor.coordinate.map({ MKMapPoint($0).distance(to: MKMapPoint(here)) > 0.3 }) ?? true {
                     routeAnchor.coordinate = here
                 }

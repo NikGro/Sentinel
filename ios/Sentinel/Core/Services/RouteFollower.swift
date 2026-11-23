@@ -87,6 +87,15 @@ final class RouteFollower {
     private(set) var progressIndex = 0
     /// Eigener Standort, auf die Route gelegt (ohne GPS-Zittern neben der Straße).
     private(set) var snappedLocation: CLLocation?
+
+    /// Wo der eigene Punkt gezeigt wird: auf der Route, solange man wirklich auf ihr ist; sonst der echte Standort.
+    /// Falsch abgebogen hielt die Route-Lage den Punkt auf der alten Strecke fest, bis neu berechnet war.
+    func displayLocation(raw: CLLocation?) -> CLLocation? {
+        guard let snapped = snappedLocation else { return raw }
+        guard let raw else { return snapped }
+        let allowed = max(25, raw.horizontalAccuracy * 1.5)
+        return snapped.distance(from: raw) <= allowed ? snapped : raw
+    }
     /// Erlaubte Höchstgeschwindigkeit auf dem aktuellen Abschnitt in km/h, soweit bekannt.
     private(set) var speedLimit: Int?
     /// Querstraßen entlang der Route (aus OpenStreetMap über den eigenen Server).
@@ -426,8 +435,10 @@ enum NaviConfig {
         waypointAdvance: .waypointWithinRange(30),
         stepAdvanceCondition: stepAdvanceDistanceEntryAndExit(distanceToEndOfStep: 25, distanceAfterEndOfStep: 5, minimumHorizontalAccuracy: 32),
         arrivalStepAdvanceCondition: stepAdvanceDistanceToEndOfStep(distance: 20, minimumHorizontalAccuracy: 32),
-        // Ab 30 m neben der Route gilt man als abgewichen, dann wird sofort neu berechnet.
-        routeDeviationTracking: .staticThreshold(minimumHorizontalAccuracy: 25, maxAcceptableDeviation: 30),
+        // Ab 30 m neben der Route gilt man als abgewichen, dann wird sofort neu berechnet. Geprüft wird bis zu einer
+        // GPS-Ungenauigkeit von 50 m: Mit 25 m blieb im Auto (oft 25–40 m) die Abweichung unbemerkt, es wurde nicht
+        // neu berechnet und der Punkt klebte an der alten Route.
+        routeDeviationTracking: .staticThreshold(minimumHorizontalAccuracy: 50, maxAcceptableDeviation: 30),
         snappedLocationCourseFiltering: .snapToRoute
     )
 }
