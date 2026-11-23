@@ -18,6 +18,10 @@ statt jede Änderung sofort einzubauen. Erledigtes wandert mit Version ins CHANG
 
 ### Karte, Kompass und Navigation
 
+- **Straßenschild am eigenen Punkt**: Text mit aktueller Straße und Fahrtrichtung kleiner (etwa wie die eigene
+  Beschriftung/Funkrufname) und zweizeilig: darunter „Ecke <Querstraße>“, die nächstgelegene Querstraße (vor oder hinter
+  einem), z. B. „Nordschleswiger Straße Richtung Nord“ / „Ecke Straßburger Straße“. Ersetzt die Querstraßen-Schilder
+  entlang der Route, die auf dem Gerät nicht erscheinen (prüfen, warum `CrossStreetLayer` nichts zeigt).
 - (Fix liegt auf dem Arbeitszweig, kommt mit der nächsten Version) Sehr schneller Wisch löste angeheftet nicht, wenn
   zwischen Beginn und Ende keine Bewegung gemeldet wurde (Kamera-Test 0.33).
 - **Navigation zu einem Zielfahrzeug mit drei Modi** (wie der Schalter beim ÖPNV): normal, parallel, Vorlauf. Nur
