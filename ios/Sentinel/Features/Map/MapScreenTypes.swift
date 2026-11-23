@@ -100,8 +100,8 @@ enum CameraPin: Equatable {
     var pitch: Double { self == .heading ? 40 : 0 }
 
     /// Navigation: etwas höher als beim Anheften für mehr Überblick, gekippt wie in üblichen Navis.
-    static let navigationDistance: CLLocationDistance = 420
-    static let navigationPitch: Double = 52
+    static let navigationDistance: CLLocationDistance = 1500
+    static let navigationPitch: Double = 45
 }
 
 /// Letzter Tipp auf Formen bzw. Verläufe: zum Durchschalten übereinanderliegender Linien.
@@ -116,4 +116,18 @@ struct ShapeTap {
 enum QuickLookHeight {
     static let lowFraction: CGFloat = 0.3
     static let low = PresentationDetent.fraction(lowFraction)
+}
+
+/// Wo die Routenlinie beginnt: unter dem eigenen Punkt, mehrmals je Sekunde nachgeführt. Eigenes Objekt, damit nur
+/// die Routenlinie neu gezeichnet wird, nicht der ganze Kartenbildschirm.
+@MainActor
+@Observable
+final class RouteAnchor {
+    var coordinate: CLLocationCoordinate2D?
+}
+
+/// Letzte verlässliche Fahrtrichtung (im Auto bleibt sie an der Ampel stehen, statt dem Kompass zu folgen).
+@MainActor
+final class CourseMemory {
+    var course: CLLocationDirection?
 }

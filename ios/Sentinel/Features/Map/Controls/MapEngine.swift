@@ -80,6 +80,9 @@ final class MapEngine {
 
     /// Hängt die Steuerung an einer Karte?
     var isAttached: Bool { map != nil }
+    /// Angeheftet: die Stelle, der die Kamera gerade folgt (geglättet, vorausberechnet), z. B. für den Beginn der
+    /// Routenlinie genau unter dem eigenen Punkt.
+    var followedCoordinate: CLLocationCoordinate2D? { pin != nil ? smooth?.center : nil }
     /// Höhe des Fensters der Karte (für Fenster, die von unten kommen).
     var windowHeight: CGFloat? { map?.window?.bounds.height }
     /// Läuft gerade eine Geste?
@@ -276,8 +279,12 @@ final class MapEngine {
         apply(smooth)
         // Angekommen (Mitte nahe am Standort): Ab hier steht der eigene Punkt fest in der Bildmitte.
         if let target, let map {
-            let near = MKMapPoint(smooth.center).distance(to: MKMapPoint(target)) < max(25, smooth.distance * 0.03)
+            // Erst wenn die Mitte auf dem Bildschirm (fast) genau auf dem Standort liegt, sonst sähe man den Punkt
+            // während der Anfahrt zweimal (mitfliegend und am echten Ort). Einmal eingerastet, mit etwas Spielraum.
             let point = map.convert(smooth.center, toPointTo: nil)
+            let real = map.convert(target, toPointTo: nil)
+            let gap = hypot(point.x - real.x, point.y - real.y)
+            let near = gap < (centerPoint == nil ? 4 : 30)
             let locked: CGPoint? = near ? point : nil
             if locked == nil && centerPoint != nil {
                 centerPoint = nil
@@ -348,6 +355,12 @@ final class MapEngine {
             break
         }
         lastEvent = "\(type(of: recognizer)) \(recognizer.state.rawValue)"
+    }
+
+    /// Finger aufgelegt: Ausrollen und Kamerafahrten sofort anhalten, wie in Apple Karten und Google Maps.
+    fileprivate func touchDown() {
+        momentum = .zero
+        flight = nil
     }
 
     fileprivate func pan(_ recognizer: UIPanGestureRecognizer) {
@@ -771,6 +784,7 @@ private final class EngineHelper: NSObject, UIGestureRecognizerDelegate {
 
     func install(on map: MKMapView) {
         guard installedOn !== map else { return }
+        counter.onTouchDown = { [weak self] in self?.engine?.touchDown() }
         installedOn = map
         // MapKits eigene Gesten aus (SwiftUI setzt das mit `interactionModes: []` ebenfalls).
         map.isScrollEnabled = false
@@ -831,8 +845,14 @@ private final class TouchCounter: UIGestureRecognizer {
     private var touching = 0
     private(set) var maxTouches = 0
 
+    /// Erster Finger auf der Karte (z. B. um eine ausrollende Karte anzuhalten).
+    var onTouchDown: (() -> Void)?
+
     override func touchesBegan(_ touches: Set<UITouch>, with event: UIEvent) {
-        if touching == 0 { maxTouches = 0 }
+        if touching == 0 {
+            maxTouches = 0
+            onTouchDown?()
+        }
         touching += touches.count
         maxTouches = max(maxTouches, touching)
     }

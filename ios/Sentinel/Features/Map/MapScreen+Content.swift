@@ -157,14 +157,6 @@ extension MapScreen {
         return fahndung.segments.filter { $0.points.count > 1 }
     }
 
-    var routeLines: [RouteLine] {
-        guard let current = route.route, current.coordinates.count > 1 else { return [] }
-        // Bereits gefahrene Strecke verschwindet hinter einem.
-        var remaining = Array(current.coordinates.dropFirst(min(route.progressIndex, current.coordinates.count - 2)))
-        if let here = location.current?.coordinate { remaining.insert(here, at: 0) }
-        return [RouteLine(polyline: MKPolyline(coordinates: remaining, count: remaining.count), specialRights: route.specialRights)]
-    }
-
     var draftPoints: [DraftPoint] {
         guard case .drawing(_, let points) = tapMode else { return [] }
         return points.enumerated().map { DraftPoint(id: $0.offset, coordinate: $0.element.coordinate) }

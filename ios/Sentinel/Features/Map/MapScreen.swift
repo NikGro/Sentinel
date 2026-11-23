@@ -17,6 +17,8 @@ struct MapScreen: View {
     /// Punkt auf einer angetippten Strecke (Linie, ÖPNV-Strecke, Standortverlauf).
     @State var tapMarker: GeoPoint?
     @State var lastShapeTap: ShapeTap?
+    @State var routeAnchor = RouteAnchor()
+    @State var courseMemory = CourseMemory()
     @State var quickLookDetent: PresentationDetent = .medium
     @State var tapMode: MapTapMode = .none
     @State var editor: EditorContext?
@@ -263,7 +265,7 @@ struct MapScreen: View {
                     TransitPlanLayer(plan: plan)
                 }
                 if !route.transit || route.transitPlan == nil {
-                    RouteLayer(lines: routeLines)
+                    LiveRouteLayer(route: route, anchor: routeAnchor)
                 }
                 if route.isActive, !route.walking {
                     CrossStreetLayer(streets: route.upcomingCrossStreets)
@@ -472,6 +474,20 @@ struct MapScreen: View {
         }
         .task(id: stopCircles.map { FahndungStore.stopsKey($0.point, radius: $0.radius) }.joined(separator: ";")) {
             await fahndung.loadStops(for: stopCircles)
+        }
+        // Routenlinie: Beginn unter dem eigenen Punkt, fünfmal je Sekunde nachgeführt (nur die Linie wird neu gezeichnet).
+        .task(id: route.isActive) {
+            guard route.isActive else {
+                routeAnchor.coordinate = nil
+                return
+            }
+            while !Task.isCancelled {
+                let here = engine.followedCoordinate ?? route.snappedLocation?.coordinate ?? location.current?.coordinate
+                if let here, routeAnchor.coordinate.map({ MKMapPoint($0).distance(to: MKMapPoint(here)) > 0.3 }) ?? true {
+                    routeAnchor.coordinate = here
+                }
+                try? await Task.sleep(for: .milliseconds(200))
+            }
         }
         .onChange(of: route.isActive) { _, active in
             // Navigation: nah, gekippt, in Blickrichtung folgen. Danach nicht im Fahrmodus hängen bleiben.

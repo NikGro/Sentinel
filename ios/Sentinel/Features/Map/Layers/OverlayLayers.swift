@@ -108,6 +108,42 @@ struct RouteLayer: MapContent {
     }
 }
 
+/// Routenlinie der laufenden Navigation: beginnt genau unter dem eigenen Punkt (Lot auf die Route) und folgt ihm
+/// mehrmals je Sekunde, ohne Haken zurück zu bereits gefahrenen Punkten.
+struct LiveRouteLayer: MapContent {
+    let route: RouteFollower
+    let anchor: RouteAnchor
+
+    var body: some MapContent {
+        RouteLayer(lines: lines)
+    }
+
+    private var lines: [RouteLine] {
+        guard let current = route.route, current.coordinates.count > 1 else { return [] }
+        let coordinates = current.coordinates
+        guard let here = anchor.coordinate else {
+            return [RouteLine(polyline: MKPolyline(coordinates: coordinates, count: coordinates.count), specialRights: route.specialRights)]
+        }
+        // Nächstes Teilstück zum eigenen Ort, in der Nähe des bisherigen Fortschritts gesucht.
+        let p = MKMapPoint(here)
+        let from = max(0, min(route.progressIndex, coordinates.count - 2) - 3)
+        let to = min(coordinates.count - 2, from + 400)
+        var best: (index: Int, point: MKMapPoint, d: Double)?
+        for i in from...to {
+            let a = MKMapPoint(coordinates[i]), b = MKMapPoint(coordinates[i + 1])
+            let dx = b.x - a.x, dy = b.y - a.y
+            let l2 = dx * dx + dy * dy
+            let t = l2 > 0 ? min(max(((p.x - a.x) * dx + (p.y - a.y) * dy) / l2, 0), 1) : 0
+            let q = MKMapPoint(x: a.x + dx * t, y: a.y + dy * t)
+            let d = q.distance(to: p)
+            if best == nil || d < best!.d { best = (i, q, d) }
+        }
+        guard let best else { return [] }
+        let remaining = [best.point.coordinate] + coordinates[(best.index + 1)...]
+        return [RouteLine(polyline: MKPolyline(coordinates: remaining, count: remaining.count), specialRights: route.specialRights)]
+    }
+}
+
 struct DraftPoint: Identifiable {
     let id: Int
     let coordinate: CLLocationCoordinate2D

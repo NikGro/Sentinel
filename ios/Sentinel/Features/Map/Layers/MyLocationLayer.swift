@@ -37,8 +37,7 @@ struct MyLocationLayer: MapContent {
         // das Symbol beim Aussteigen zuverlässig vom Fahrzeug zurück zum Punkt.
         UserAnnotation(anchor: .center) { _ in
             LiveMyLocationMarker(lage: lage, route: route, locationService: locationService, cameraState: cameraState,
-                                 locationContext: locationContext, options: options)
-                .opacity(options.drawnByScreen ? 0 : 1)
+                                 locationContext: locationContext, options: options, onMap: true)
         }
         .annotationTitles(.hidden)
     }
@@ -54,6 +53,10 @@ struct LiveMyLocationMarker: View {
     let cameraState: MapCameraState
     let locationContext: LocationContext
     let options: OwnMarkerOptions
+    /// In Apples Standortanzeige: unsichtbar, solange der Kartenbildschirm den Punkt selbst zeichnet. Die Abfrage
+    /// steht hier im Inhalt, weil Apple Karten den Inhalt der Standortanzeige nur über Beobachtung neu aufbaut
+    /// (außen angehängt blieb der Punkt sichtbar und erschien doppelt).
+    var onMap = false
 
     var body: some View {
         VStack(spacing: 4) {
@@ -75,6 +78,7 @@ struct LiveMyLocationMarker: View {
                     .fixedSize()
             }
         }
+        .opacity(onMap && options.drawnByScreen ? 0 : 1)
     }
 
     private var style: MyLocationLayer.Style { .of(lage, navigating: route.isActive) }

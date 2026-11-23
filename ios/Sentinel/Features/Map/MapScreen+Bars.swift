@@ -160,7 +160,13 @@ extension MapScreen {
 
     /// Eigene Bewegungs- bzw. Blickrichtung für den Navi-Pfeil.
     var myCourse: CLLocationDirection? {
-        if let current = route.snappedLocation ?? location.current, current.course >= 0, current.speed > 1 { return current.course }
+        if let current = route.snappedLocation ?? location.current, current.course >= 0, current.speed > 1 {
+            courseMemory.course = current.course
+            return current.course
+        }
+        // Navigation im Fahrzeug: an der Ampel die letzte Fahrtrichtung halten wie Google Maps und Apple Karten,
+        // statt mit dem Kompass (Handy in der Halterung) herumzudrehen. Sonst im Stand der Kompass.
+        if route.isActive, !route.walking, let last = courseMemory.course { return last }
         return locationContext.compassDegrees
     }
 
