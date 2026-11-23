@@ -27,11 +27,15 @@ struct InstancesScreen: View {
             }
             Section {
                 ForEach(lage.myInstances) { instance in
-                    InstanceRow(instance: instance, isOpen: instance.id == lage.instanz && !model.editsPermanentLayer, open: {
-                        model.openInstance(instance.id)
-                    }, leave: { lage.leaveInstance(instance.id) })
-                    // Verlassen geht überall, auch bei der Standardinstanz; wer keine Instanz mehr hat, ist außer Dienst.
-                    // Gelöscht wird erst nach dem Verlassen, in der Liste darunter.
+                    // Antippen öffnet, nach links wischen verlässt (geht überall, auch bei der Standardinstanz; wer
+                    // keine Instanz mehr hat, ist außer Dienst). Gelöscht wird erst nach dem Verlassen, darunter.
+                    Button { model.openInstance(instance.id) } label: {
+                        InstanceRow(instance: instance, isOpen: instance.id == lage.instanz && !model.editsPermanentLayer)
+                    }
+                    .tint(.primary)
+                    .swipeActions(edge: .trailing) {
+                        Button("Verlassen", systemImage: "rectangle.portrait.and.arrow.right", role: .destructive) { lage.leaveInstance(instance.id) }
+                    }
                     .contextMenu {
                         if instance.id != Instance.mainId {
                             Button("Umbenennen", systemImage: "pencil") { editing = instance }
@@ -43,23 +47,28 @@ struct InstancesScreen: View {
             } header: {
                 Text("Meine Instanzen")
             } footer: {
-                Text("Jede Instanz hat ihre eigene Lage, eigene Ziele, Chats, A-Position und Notrufe. Geöffnet ist immer genau eine. Aus den anderen kommen A-Position und Notruf als Hinweis. Löschen lässt sich eine Instanz nach dem Verlassen unter „Weitere Instanzen“.")
+                Text("Antippen öffnet, nach links wischen verlässt. Jede Instanz hat ihre eigene Lage, eigene Ziele, Chats, A-Position und Notrufe. Geöffnet ist immer genau eine. Aus den anderen kommen A-Position und Notruf als Hinweis. Löschen lässt sich eine Instanz nach dem Verlassen unter „Weitere Instanzen“.")
             }
 
             if !lage.otherInstances.isEmpty {
-                Section("Weitere Instanzen") {
+                Section {
                     ForEach(lage.otherInstances) { instance in
-                        HStack {
-                            VStack(alignment: .leading, spacing: 2) {
-                                Text(instance.data.name)
-                                Text("\(instance.data.mitglieder.count) Mitglieder")
-                                    .font(.caption)
-                                    .foregroundStyle(.secondary)
+                        // Antippen tritt bei, nach links wischen löscht.
+                        Button { lage.joinInstance(instance.id) } label: {
+                            HStack {
+                                VStack(alignment: .leading, spacing: 2) {
+                                    Text(instance.data.name)
+                                    Text("\(instance.data.mitglieder.count) Mitglieder")
+                                        .font(.caption)
+                                        .foregroundStyle(.secondary)
+                                }
+                                Spacer()
+                                RowChevron()
                             }
-                            Spacer()
-                            Button("Beitreten") { lage.joinInstance(instance.id) }
-                                .buttonStyle(.glass)
+                            .contentShape(.rect)
                         }
+                        .tint(.primary)
+                        .accessibilityHint("Tritt der Instanz bei")
                         // Löschen dort, wo die Instanz steht, wenn man nicht (mehr) Mitglied ist.
                         .swipeActions(edge: .trailing) {
                             if instance.id != Instance.mainId {
@@ -72,6 +81,10 @@ struct InstancesScreen: View {
                             }
                         }
                     }
+                } header: {
+                    Text("Weitere Instanzen")
+                } footer: {
+                    Text("Antippen tritt bei, nach links wischen löscht.")
                 }
             }
 
@@ -137,9 +150,6 @@ struct InstancesScreen: View {
 private struct InstanceRow: View {
     let instance: Versioned<Instance>
     let isOpen: Bool
-    let open: () -> Void
-    /// Verlassen, direkt als Knopf in der Zeile; wer keine Instanz mehr hat, ist außer Dienst.
-    var leave: (() -> Void)?
 
     var body: some View {
         HStack(spacing: 10) {
@@ -161,19 +171,21 @@ private struct InstanceRow: View {
                 }
             }
             Spacer(minLength: 6)
-            // Gleicher Glasstil wie „Beitreten“; „Öffnen“ hervorgehoben in Blau.
-            if let leave {
-                Button("Verlassen", action: leave)
-                    .buttonStyle(.glass)
-                    .accessibilityLabel("\(instance.data.name) verlassen")
-            }
-            Button("Öffnen", action: open)
-                .buttonStyle(.glassProminent)
-                .tint(.blue)
-                .accessibilityLabel("\(instance.data.name) öffnen")
+            RowChevron()
         }
-        .controlSize(.small)
         .lineLimit(1)
+        .contentShape(.rect)
+        .accessibilityHint("Öffnet die Instanz")
+    }
+}
+
+/// Pfeil am rechten Rand einer Zeile, die beim Antippen weiterführt (wie in den Einstellungen).
+struct RowChevron: View {
+    var body: some View {
+        Image(systemName: "chevron.right")
+            .font(.footnote.weight(.semibold))
+            .foregroundStyle(.tertiary)
+            .accessibilityHidden(true)
     }
 }
 
