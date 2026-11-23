@@ -11,54 +11,76 @@ struct TargetMovementSection: View {
     @Environment(LageStore.self) private var lage
     @Environment(\.dismiss) private var dismiss
     @State private var boarding: TargetBinding.Art?
-    @State private var choosingSource = false
+    /// ÖPNV: Fahrzeug auf der ÖPNV-Karte wählen.
+    @State private var boardingTransit = false
+    @State private var choosingTracker = false
+    @State private var pickingLocation = false
 
     private var target: Target { entity.data }
 
-    /// Eingestiegen: Der Standort kommt vom Fahrzeug bzw. Gebäude, eine eigene Quelle gibt es dann nicht.
+    /// Eingestiegen: Der Standort kommt vom Fahrzeug bzw. Gebäude, eine eigene Quelle gibt es dann nicht. In einem
+    /// anderen, nicht angelegten Fahrzeug bleibt die eigene Standortquelle.
     private var boardedIn: String? {
-        guard let binding = target.bindung, binding.art != .fuss else { return nil }
-        guard let id = binding.zielId else { return binding.art == .fahrzeug ? "Anderes Fahrzeug" : nil }
+        guard let binding = target.bindung, binding.art != .fuss, let id = binding.zielId else { return nil }
         if let other = lage.targets[id] { return other.data.displayName }
         if let object = lage.mapObjects[id]?.data { return [object.linie?.ref, object.linie.map { "Richtung \($0.richtung)" }].compactMap { $0 }.joined(separator: " ") }
         return nil
     }
 
     var body: some View {
-        // Erst die Standortquelle direkt unter „Hinführen“, dann der Dreier-Schalter für das Verkehrsmittel.
+        // Erst die Standortquelle direkt unter „Hinführen“, dann der Dreier-Schalter für das Verkehrsmittel. Beide
+        // gleich bedienbar: ein Schalter mit drei Symbolen, darunter, was gerade gilt.
         if target.supportsDynamicSource, boardedIn == nil {
             Section {
-                Button { choosingSource = true } label: {
-                    HStack(spacing: 12) {
-                        Image(systemName: target.effectiveSource.symbolName)
-                            .font(.title3)
-                            .frame(width: 28)
-                        VStack(alignment: .leading, spacing: 1) {
-                            Text("Standortquelle")
-                                .font(.headline)
-                            Text(sourceDescription)
-                                .font(.caption)
-                                .foregroundStyle(.secondary)
-                                .lineLimit(1)
-                        }
-                        Spacer()
-                        Image(systemName: "chevron.up.chevron.down")
-                            .font(.caption.weight(.semibold))
-                            .foregroundStyle(.secondary)
+                Picker("Standortquelle", selection: source) {
+                    ForEach(LocationSource.allCases) { option in
+                        Image(systemName: option.symbolName)
+                            .accessibilityLabel(option.title)
+                            .tag(option)
                     }
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                    .frame(minHeight: Theme.barHeight - 6)
-                    .contentShape(.rect)
                 }
-                .buttonStyle(.glass)
+                .pickerStyle(.segmented)
+                .controlSize(.extraLarge)
                 .listRowBackground(Color.clear)
                 .listRowInsets(EdgeInsets())
-                .modifier(SourceDialogs(
-                    entity: entity,
-                    placeOnMap: placeOnMap,
-                    choosingSource: $choosingSource,
-                    save: save
-                ))
+                HStack(spacing: 10) {
+                    VStack(alignment: .leading, spacing: 1) {
+                        Text("Standortquelle: \(target.effectiveSource.title)")
+                            .font(.subheadline.weight(.semibold))
+                        Text(sourceDescription)
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                            .lineLimit(1)
+                    }
+                    Spacer()
+                    switch target.effectiveSource {
+                    case .hand:
+                        Button("Ort setzen") { placeByHand() }
+                            .buttonStyle(.glass)
+                    case .tracker:
+                        Button("Tracker wählen") { choosingTracker = true }
+                            .buttonStyle(.glass)
+                    case .a:
+                        EmptyView()
+                    }
+                }
+                .controlSize(.small)
+                .sheet(isPresented: $choosingTracker) {
+                    TrackerChoiceSheet(selected: target.trackerId) { trackerId in
+                        save {
+                            $0.trackerId = trackerId
+                            $0.quelle = trackerId == nil ? .hand : .tracker
+                        }
+                    }
+                }
+                .sheet(isPresented: $pickingLocation) {
+                    LocationPickerSheet(title: "Standort setzen", initial: lage.position(ofTarget: entity)?.point) { point in
+                        save {
+                            $0.standort = TimedPoint(point)
+                            $0.quelle = .hand
+                        }
+                    }
+                }
             }
         }
 
@@ -76,6 +98,12 @@ struct TargetMovementSection: View {
                 .controlSize(.extraLarge)
                 .listRowBackground(Color.clear)
                 .listRowInsets(EdgeInsets())
+                .fullScreenCover(isPresented: $boardingTransit) {
+                    // ÖPNV wie bei den eigenen Kräften: Fahrt auf der ÖPNV-Karte wählen, sie kommt in die Lage.
+                    TransitExplorer(start: lage.position(ofTarget: entity)?.point ?? model.myPoint ?? GeoPoint(lat: 53.5511, lon: 9.9937), boardInto: { id in
+                        save { $0.bindung = TargetBinding(art: .oepnv, zielId: id) }
+                    })
+                }
                 .sheet(item: $boarding) { art in
                     BoardingSheet(
                         art: art,
@@ -88,6 +116,8 @@ struct TargetMovementSection: View {
             } footer: {
                 if let boardedIn {
                     Text("Sitzt in: \(boardedIn). Der Standort folgt dem Fahrzeug.")
+                } else if target.bindung?.art == .fahrzeug {
+                    Text("Sitzt in einem anderen, nicht angelegten Fahrzeug. Der Standort kommt aus der Standortquelle.")
                 }
             }
         }
@@ -143,6 +173,8 @@ struct TargetMovementSection: View {
                         $0.bindung = nil
                         if let here, $0.effectiveSource == .hand { $0.standort = TimedPoint(here) }
                     }
+                } else if art == .oepnv {
+                    boardingTransit = true
                 } else {
                     boarding = art
                 }
@@ -150,89 +182,42 @@ struct TargetMovementSection: View {
         )
     }
 
+    /// Schalter der Standortquelle: Von Hand behält den aktuellen Ort, Tracker fragt nach dem Tracker, solange keiner
+    /// verbunden ist, A-Position folgt sofort.
+    private var source: Binding<LocationSource> {
+        Binding(
+            get: { target.effectiveSource },
+            set: { option in
+                switch option {
+                case .hand:
+                    let here = lage.position(ofTarget: entity)?.point
+                    save {
+                        if let here { $0.standort = TimedPoint(here) }
+                        $0.quelle = .hand
+                    }
+                case .tracker:
+                    if target.trackerId != nil { save { $0.quelle = .tracker } } else { choosingTracker = true }
+                case .a:
+                    save { $0.quelle = .a }
+                }
+            }
+        )
+    }
+
+    private func placeByHand() {
+        if let placeOnMap {
+            save { $0.quelle = .hand }
+            placeOnMap(entity.id)
+            dismiss()
+        } else {
+            pickingLocation = true
+        }
+    }
+
     private func save(_ change: (inout Target) -> Void) {
         var next = target
         change(&next)
         lage.put(next, id: entity.id)
-    }
-}
-
-/// Auswahl der Standortquelle samt Trackerwahl und Standortwahl.
-private struct SourceDialogs: ViewModifier {
-    let entity: Versioned<Target>
-    let placeOnMap: ((String) -> Void)?
-    @Binding var choosingSource: Bool
-    let save: ((inout Target) -> Void) -> Void
-
-    @Environment(LageStore.self) private var lage
-    @Environment(\.dismiss) private var dismiss
-    @State private var choosingTracker = false
-    @State private var pickingLocation = false
-    @State private var followup: String?
-
-    private var sourceActions: [MediaAction] {
-        var actions: [MediaAction] = []
-        if lage.position(ofTarget: entity) != nil {
-            actions.append(MediaAction(id: "behalten", title: "Aktuellen Ort beibehalten", symbol: "pin.fill"))
-        }
-        actions.append(MediaAction(id: "hand", title: "Von Hand setzen", symbol: LocationSource.hand.symbolName))
-        actions.append(MediaAction(id: "tracker", title: "An Tracker binden …", symbol: LocationSource.tracker.symbolName))
-        actions.append(MediaAction(id: "a", title: "Der A-Position folgen", symbol: LocationSource.a.symbolName))
-        return actions
-    }
-
-    private func runFollowup() {
-        guard let next = followup else { return }
-        followup = nil
-        switch next {
-        case "hand":
-            if let placeOnMap {
-                save { $0.quelle = .hand }
-                placeOnMap(entity.id)
-                dismiss()
-            } else {
-                pickingLocation = true
-            }
-        case "tracker": choosingTracker = true
-        default: break
-        }
-    }
-
-    func body(content: Content) -> some View {
-        content
-            // Auswahlblatt statt Sprechblase; Weiteres (Karte, Tracker, Ortswahl) erst nach dem Schließen.
-            .sheet(isPresented: $choosingSource, onDismiss: runFollowup) {
-                MediaActionSheet(title: "Standortquelle", actions: sourceActions) { action in
-                    switch action.id {
-                    case "behalten":
-                        // Wo das Ziel gerade ist, bleibt es stehen: als von Hand gesetzter Standort.
-                        if let here = lage.position(ofTarget: entity)?.point {
-                            save {
-                                $0.standort = TimedPoint(here)
-                                $0.quelle = .hand
-                            }
-                        }
-                    case "a": save { $0.quelle = .a }
-                    default: followup = action.id
-                    }
-                }
-            }
-            .sheet(isPresented: $choosingTracker) {
-                TrackerChoiceSheet(selected: entity.data.trackerId) { trackerId in
-                    save {
-                        $0.trackerId = trackerId
-                        $0.quelle = trackerId == nil ? .hand : .tracker
-                    }
-                }
-            }
-            .sheet(isPresented: $pickingLocation) {
-                LocationPickerSheet(title: "Standort setzen", initial: lage.position(ofTarget: entity)?.point) { point in
-                    save {
-                        $0.standort = TimedPoint(point)
-                        $0.quelle = .hand
-                    }
-                }
-            }
     }
 }
 

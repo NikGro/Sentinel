@@ -8,6 +8,11 @@ struct TransitExplorer: View {
     let start: GeoPoint
     /// Einsteigen statt Übernehmen: Die gewählte Fahrt wird die eigene Fortbewegung.
     var board: ((TripDetail) -> Void)?
+    /// Eine Zielperson steigt ein: Das gewählte Fahrzeug kommt (mit Fahrzeug-Ebene) in die Lage, zurück kommt die
+    /// Kennung der ÖPNV-Markierung. Gibt es die Fahrt in der Lage schon, wird die vorhandene genommen.
+    var boardInto: ((String) -> Void)?
+
+    private var isBoarding: Bool { board != nil || boardInto != nil }
 
     @Environment(AppModel.self) private var model
     @Environment(LageStore.self) private var lage
@@ -115,7 +120,7 @@ struct TransitExplorer: View {
                 }
             .safeAreaInset(edge: .top, spacing: 0) { searchBar }
             .safeAreaInset(edge: .bottom, spacing: 0) { bottomCard }
-            .navigationTitle(board == nil ? "ÖPNV-Karte" : "Fahrzeug wählen")
+            .navigationTitle(isBoarding ? "Fahrzeug wählen" : "ÖPNV-Karte")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
@@ -379,13 +384,17 @@ struct TransitExplorer: View {
         if trip == nil {
             ProgressView().frame(maxWidth: .infinity)
         }
-        if let board {
+        if isBoarding {
             // Wie beim Übernehmen: was zusätzlich auf die Lagekarte kommt (nichts gewählt = nur einsteigen).
             partsPicker
             Button {
                 if let trip {
-                    if !parts.isEmpty { saveLine(trip) }
-                    board(trip)
+                    if let boardInto {
+                        if let id = existingObject(for: trip) ?? saveLine(trip, withVehicle: true) { boardInto(id) }
+                    } else if let board {
+                        if !parts.isEmpty { saveLine(trip) }
+                        board(trip)
+                    }
                     dismiss()
                 }
             } label: {
@@ -446,7 +455,7 @@ struct TransitExplorer: View {
             }
             .frame(maxHeight: 180)
         }
-        if board == nil {
+        if !isBoarding {
             Button {
                 adopt(stop: stop)
             } label: {
@@ -491,9 +500,24 @@ struct TransitExplorer: View {
         dismiss()
     }
 
-    private func saveLine(_ trip: TripDetail) {
+    /// ÖPNV-Markierung derselben Fahrt, die schon in der Lage ist (Fahrzeug-Ebene wird dabei eingeschaltet).
+    private func existingObject(for trip: TripDetail) -> String? {
+        guard let hit = lage.mapObjects.first(where: { $0.value.data.typ.isTransit && $0.value.data.fahrt?.id == trip.tripId }) else { return nil }
+        var object = hit.value.data
+        if object.typ == .oepnvlinie, object.ebenen?.fahrzeug != true {
+            var layers = object.ebenen ?? TransitLayerChoice(fahrzeug: true, strecke: false, halte: false)
+            layers.fahrzeug = true
+            object.ebenen = layers
+            lage.saveMapObject(object, id: hit.key)
+        }
+        return hit.key
+    }
+
+    @discardableResult
+    private func saveLine(_ trip: TripDetail, withVehicle: Bool = false) -> String? {
         let points = trip.stops.map(\.point)
-        guard points.count >= 2 else { return }
+        guard points.count >= 2 else { return nil }
+        let parts = withVehicle ? parts.union([.fahrzeug]) : parts
         let names = trip.stops.map(\.name)
         let typ = LiveSegment.osmType(trip.mode, name: trip.name)
         let color = tripColor
@@ -508,7 +532,9 @@ struct TransitExplorer: View {
         line.ebenen = TransitLayerChoice(fahrzeug: parts.contains(.fahrzeug), strecke: parts.contains(.strecke), halte: parts.contains(.haltestellen))
         // Nur das Fahrzeug: verschwindet nach der Ankunft von selbst.
         if parts == [.fahrzeug], let end = times.compactMap({ $0 }).last { line.ablauf = end + 300_000 }
-        lage.saveMapObject(line, id: LageStore.newId())
+        let id = LageStore.newId()
+        lage.saveMapObject(line, id: id)
+        return id
     }
 
     private func adopt(stop: LiveStop) {
