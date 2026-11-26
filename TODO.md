@@ -5,7 +5,21 @@ statt jede Änderung sofort einzubauen. Erledigtes wandert mit Version ins CHANG
 
 ## Geplant
 
-### Nächste Runde
+### Nächste Runde (0.37, beschlossen am 26.11.)
+
+- **Parallel-Modus** der Navigation zum Zielfahrzeug (siehe unten).
+- **Kurzübersichten als Variante 2** (siehe unten).
+- **Navi-Leiste kompakter**: Die Schalter für Verkehrsmittel und Navigationsart (Zum Ziel/Vorlauf bzw. ÖPNV-Halte)
+  liegen übereinander und sind unnötig breit; schmaler machen und nebeneinander, damit das Fenster nicht höher wird.
+- **Beziehungen zwischen Zielen (Bedienung)**: Beim Zielfahrzeug keine Personalien und Anschrift mehr von Hand, bei der
+  Zielperson keine Wohnanschrift und Fahrzeuge mehr von Hand. Stattdessen jedes Ding als eigenes Ziel seines Typs
+  anlegen (Person, Fahrzeug, Objekt/Anschrift) und Beziehungen herstellen (z. B. Halter, Fahrer, Bewohner), von beiden
+  Seiten sichtbar und bearbeitbar. Datenmodell nach dem „Universellen Beziehungsmodell“ unten (eigenständige
+  Beziehungsdatensätze, Herkunft/Status), ohne die übrigen Datenschutz-Bausteine vorwegzunehmen.
+- **UI-Abnahme**: Die Oberfläche einmal gesamt mit den Design-Skills prüfen (Frontend-Design, Design-Kritik,
+  Barrierefreiheit, UX-Bewertung) und Befunde umsetzen.
+
+### Beobachten
 
 - **Straßenverzeichnis beobachten:** Läuft mit 2 GB Container-Speicher, Node.js darf bis 1,5 GB nutzen. Stand
   22.11.: 286 MB im Betrieb, kein Neustart seit dem Update. Das nächste wöchentliche Neuladen über Overpass ist um
