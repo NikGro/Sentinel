@@ -1,5 +1,26 @@
 # Änderungen
 
+## 0.35.0
+
+**Karte und Navigation**
+- Standortspur als Objekt (Plus-Menü › Auswertung): zeichnet den eigenen Weg ab dem Anlegen, deckend mit Farbverlauf
+  nach Zeit (Blau alt, Rot neu), mehrfach gefahrene Wege werden nicht dunkler; Antippen an beliebiger Stelle öffnet
+  das Objekt mit Bearbeiten und Löschen. Der Ebenen-Schalter „Bestreifte Wege“ entfällt
+- Straßenschild am eigenen Punkt kleiner und zweizeilig: Straße und Richtung, darunter „Ecke …“ mit der nächsten
+  Querstraße (ersetzt die Querstraßen-Schilder entlang der Route)
+- Routenlinie beginnt an der Spitze des Navi-Pfeils statt unter seiner Mitte (kein Rest in der Kerbe)
+- Überschlagen und „Halte voraus“: Die Ziel-Haltestelle wird hervorgehoben (grüner Ring auf einer vorhandenen
+  Haltestelle, sonst eigenes Symbol ohne Nummer) und verschwindet mit dem Ende der Navigation bzw. beim Weiterrücken
+
+**Ebenen und Oberfläche**
+- Ebenen und Pakete: Ebene leeren (alle Objekte löschen, mit Rückfrage), nicht bei den dauerhaften Orten
+- Beschriftung auf Flächen in der Farbe der Fläche mit festem weißem Rand statt Leuchten
+
+**Bauen und Veröffentlichen**
+- Testen und Archiv laufen parallel, Swift-Pakete und Build-Zwischenstände werden zwischengespeichert; main übernimmt
+  die getestete App des Arbeitszweigs und veröffentlicht sie nur noch. Schnelle Spur mit „[schnell]“ (nur
+  Unit-Tests); Kamera-Test nur bei Änderungen an der Kartensteuerung
+
 ## 0.34.1
 
 **Navigation**

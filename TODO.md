@@ -18,13 +18,6 @@ statt jede Änderung sofort einzubauen. Erledigtes wandert mit Version ins CHANG
 
 ### Karte, Kompass und Navigation
 
-- **Routenlinie unter dem Navi-Pfeil**: Sie beginnt genau unter der Pfeilmitte; hinten in der Kerbe des Pfeils bleibt
-  ein kleiner runder Rest der Linie sichtbar. Beginn ein Stück in Fahrtrichtung verschieben (etwa halbe Pfeillänge,
-  in Metern aus der Zoomstufe umgerechnet), so dass die Linie vorne in den Pfeil hineinläuft und hinten nichts übersteht.
-- **Straßenschild am eigenen Punkt**: Text mit aktueller Straße und Fahrtrichtung kleiner (etwa wie die eigene
-  Beschriftung/Funkrufname) und zweizeilig: darunter „Ecke <Querstraße>“, die nächstgelegene Querstraße (vor oder hinter
-  einem), z. B. „Nordschleswiger Straße Richtung Nord“ / „Ecke Straßburger Straße“. Ersetzt die Querstraßen-Schilder
-  entlang der Route, die auf dem Gerät nicht erscheinen (prüfen, warum `CrossStreetLayer` nichts zeigt).
 - **Navigation zu einem Zielfahrzeug mit drei Modi** (wie der Schalter beim ÖPNV): normal, parallel, Vorlauf. Nur
   sinnvoll mit Live-Standort samt Richtung (Tracker oder A-Position), nicht bei von Hand gesetztem Standort.
   - *Vorlauf* (zuerst umsetzen, gut machbar): Straße des Ziels über den Straßenindex/Valhalla bestimmen, in
@@ -33,35 +26,19 @@ statt jede Änderung sofort einzubauen. Erledigtes wandert mit Version ins CHANG
   - *Parallel* (machbar, heuristisch): Route zu einem Punkt seitlich voraus berechnen und die Straße des Ziels für
     Valhalla sperren (Ausschlussfläche entlang seiner Straße), regelmäßig neu. Gibt es keine Parallelstraße (Umweg zu
     groß, z. B. Landstraße), automatisch normal navigieren.
-- Überschlagende Navigation und Navigation zu Haltestellen (1, 2, 3 voraus): Keine zusätzlichen Haltestellenmarker mit
-  Nummer daneben (`StopsLayer`), die doppelt neben schon angelegten Haltestellen stehen und nach dem Ende liegen
-  bleiben. Stattdessen: Ist die Haltestellenebene eingeschaltet, die Ziel-Haltestelle bzw. die eigene Position im
-  Überschlagen dort hervorheben. Ohne Haltestellenebene darf ein Marker erscheinen, der aber wieder verschwindet bzw.
-  die Hervorhebung endet, sobald die Navigation endet oder zur nächsten Haltestelle weitergeht.
 - **App-Absturz während aktiver Navigation (0.9: mögliche Ursache abgesichert):** Dafür ist ein Absturzbericht nötig, zu finden unter Einstellungen › Datenschutz & Sicherheit › Analyse & Verbesserungen › Analysedaten › „Sentinel-…“.
 
 ### Marker und Oberfläche
 
-- **Ebene leeren**: Unter „Ebenen und Pakete“ fehlt bei den Ebenen (mindestens der Lage-Ebene) die Möglichkeit, alle
-  Objekte der Ebene zu löschen. Im Menüpunkt bzw. in der Ansicht der Ebene selbst unterbringen, mit Rückfrage.
-  Nicht bei der Ebene der dauerhaften Orte: Die wird nur über das Hauptmenü bearbeitet und darf nicht versehentlich
-  geleert werden.
 - **Kurzübersichten als Variante 2** (Skizzen vom 23.11.): Statt der Fenster mit großen „Schließen“/„Bearbeiten“-
   Knöpfen überall schwebende Glaskarten mit kleinen runden Knöpfen (Hinführen blau, Bearbeiten, Schließen) für
   Marker, Objekte, Zielpersonen, Zielfahrzeuge, ÖPNV-Linien und den GPS-Verlauf. Umsetzung als iOS-26-Fenster mit
   Stufen: niedrig schwebend als Karte, hochgezogen halbe Höhe bzw. fast Vollbild mit allen Angaben; Karte dahinter
   in der niedrigen Stufe bedienbar.
-- Beschriftung auf Flächen (`AreaLabelLayer`) schwer lesbar wegen Glow: Text in der Farbe der Fläche (deckend, nicht
-  transparent) mit festem Rand von wenigen Pixeln statt Glow.
 - **Zielperson: Karte friert ein (0.13: ÖPNV-Positionsberechnung als wahrscheinliche Ursache stark beschleunigt):** Offene Rückfrage, welches Symbol genau gemeint ist: im Plus-Menü, im Editor („Unterwegs“) oder auf der Karte. Mit 0.13 erneut prüfen.
 
-- **Standortspur als eigenständiges Objekt:** Die bisherige Funktion, den eigenen Standortverlauf über einen Layer ein- und auszuschalten, aus den Layern entfernen. Stattdessen kann eine **Standortspur** als normales Kartenobjekt angelegt werden. Ab dem Anlegen zeichnet Sentinel den eigenen Standort fortlaufend als Spur auf; die Aufzeichnung läuft, solange das Objekt besteht. Die Darstellung soll deutlich weniger transparent sein als bisher, dabei aber eine feste, gleichbleibende Deckkraft behalten: Auch wenn dieselbe Strecke mehrfach gefahren wird, darf sie durch Überlagerung weder dunkler noch undurchsichtiger werden. Die Spur erhält stattdessen einen Farbverlauf entlang einer Farbskala. Ein Antippen an beliebiger Stelle der Spur wählt das gesamte Standortspur-Objekt aus und öffnet dessen gewohnte Objektansicht mit Bearbeiten- und Löschen-Funktion. Beim Löschen wird das Objekt entfernt und zugleich die weitere Aufzeichnung beendet. Die Standortspur ist damit – wie andere Objekte – gezielt anlegbar, auswählbar und löschbar und kein dauerhafter Layer-Schalter mehr.
 
 ### Codebase-Qualität
-
-- **Build-Pipeline beschleunigen** (heute ~45 min bis SideStore): main übernimmt das getestete App-Paket des
-  Arbeitszweigs statt neu zu bauen; Cache für Swift-Pakete/Build; Archiv parallel zum Rundgang; schnelle Spur
-  (Bauen + Unit-Tests) für kleine Fixes, Kamera-Test nur bei Änderungen an der Kartensteuerung.
 
 - **Laufende Bereinigung:** `MapScreen` ist inzwischen auf fünf Dateien verteilt (Hauptdatei gut 400 Zeilen). Offen
   bleiben App-Tests über den UI-Rundgang hinaus, z. B. für die ÖPNV-Bewegung (`TransitSimulation`) und das
