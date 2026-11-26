@@ -52,6 +52,21 @@ statt jede Änderung sofort einzubauen. Erledigtes wandert mit Version ins CHANG
   bleiben App-Tests über den UI-Rundgang hinaus, z. B. für die ÖPNV-Bewegung (`TransitSimulation`) und das
   Überschlagen.
 
+
+### Sicherheit, Administration und Datenschutz
+
+- **Admin-/Benutzertrennung:**
+  - Rollen und Berechtigungen serverseitig strikt trennen; administrative Funktionen dürfen nicht durch normale Benutzer aufrufbar sein.
+  - Benutzer können ausschließlich durch Admins angelegt werden.
+  - Name und Dienststelle werden beim Anlegen durch Admins festgelegt und können nur durch Admins geändert werden.
+  - Handynummer, Spitzname und Profilbild bleiben durch den jeweiligen Benutzer selbst änderbar.
+  - Admin-Werkzeuge zum Bearbeiten, Sperren und Entsperren, Löschen sowie Widerrufen und Wiederherstellen von Benutzerzugängen/Berechtigungen.
+- **Datenbankverschlüsselung:** Verschlüsselung ruhender Datenbankdaten implementieren; Schlüssel getrennt von Datenbank und Backups verwalten.
+- **GPS-Tracker-Verbindung absichern:** Prüfen, ob die Tracker-Firmware eine verschlüsselte Verbindung unterstützt. Wenn möglich TLS mit gegenseitiger Geräteauthentifizierung oder ein geeignetes Verfahren mit individueller Gerätekennung und individuellem Schlüssel statt alleiniger Tracker-ID umsetzen; Replay-Schutz und sichere Schlüsselverwaltung berücksichtigen. Einschränkungen der vorhandenen SinoTrack-Firmware dokumentieren.
+- **Aktionsprotokoll:** Relevante Benutzer- und Systemaktionen vollständig und nachvollziehbar protokollieren (insbesondere Anmeldungen, Zugriffe/Abfragen, Änderungen, Admin-Aktionen, Freigaben und Exporte). Protokolle gegen Manipulation und unberechtigtes Löschen schützen; Zugriffs- und Löschkonzept festlegen.
+- **Automatische Backups:** Automatisiertes Backup-System mit Verschlüsselung, restriktiven Zugriffen, definierten Aufbewahrungs- und Löschfristen sowie regelmäßigen Wiederherstellungstests implementieren. Backups und enthaltene personenbezogene Daten in das Datenschutz- und Löschkonzept einbeziehen.
+- **Rechtsgrundlagen-/Maßnahmenkonzept:** Noch offen. Gestaltung der dauerhaften KASOD-Grundinstanz, personenbezogener Anzeigen und Abfragen sowie anlassbezogener Maßnahmenkontexte erst nach weiterer rechtlicher Klärung festlegen.
+
 ### Noch praktisch zu überprüfen
 
 - **Auf dem Gerät prüfen:**
