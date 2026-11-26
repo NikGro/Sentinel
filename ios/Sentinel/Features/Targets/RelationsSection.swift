@@ -40,7 +40,9 @@ struct RelationsSection: View {
         let label = RelationLabel(relation: relation.data, other: other.data)
         if opensTargets {
             NavigationLink {
+                // Eigene Ansicht mit eigener Leiste, nicht über die Kopfzeile der Kurzübersicht.
                 TargetDetail(targetId: other.id)
+                    .environment(\.quickLookActions, nil)
             } label: {
                 label
             }

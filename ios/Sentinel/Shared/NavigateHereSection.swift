@@ -5,7 +5,16 @@ struct NavigateHereSection: View {
     var title = "Hinführen"
     let action: () -> Void
 
+    /// In der Kurzübersicht navigiert der blaue Knopf der Kopfzeile; der große Knopf entfällt dort.
+    @Environment(\.quickLookActions) private var quickLook
+
     var body: some View {
+        if quickLook == nil {
+            section
+        }
+    }
+
+    private var section: some View {
         Section {
             Button(action: action) {
                 Label(title, systemImage: "arrow.triangle.turn.up.right.diamond.fill")

@@ -10,8 +10,10 @@ struct QuickLookSheet: View {
     /// Angetippte Stelle eines Standortverlaufs (Werte dort).
     var trackPoint: TrackPoint?
 
+    @Environment(AppModel.self) private var model
     @Environment(LageStore.self) private var lage
     @Environment(\.dismiss) private var dismiss
+    @State private var actions = QuickLookActions()
 
     var body: some View {
         NavigationStack {
@@ -27,12 +29,20 @@ struct QuickLookSheet: View {
                     if let object = lage.mapObjects[id] { MapObjectInfo(id: id, object: object.data, startMoving: moveObject, trackPoint: trackPoint) } else { gone }
                 }
             }
-            .navigationBarTitleDisplayMode(.inline)
-            .toolbar {
-                // Links Schließen, rechts Bearbeiten: einheitlich für alle Ansichten über der Karte.
-                ToolbarItem(placement: .cancellationAction) {
-                    Button("Schließen") { dismiss() }
-                }
+            .environment(\.quickLookActions, actions)
+            // Variante 2: Kopfzeile mit kleinen runden Knöpfen statt Navigationsleiste; so bleibt die Karte in der
+            // niedrigen Höhe fast frei und die wichtigsten Angaben stehen trotzdem oben.
+            .toolbar(.hidden, for: .navigationBar)
+            .safeAreaInset(edge: .top, spacing: 0) {
+                QuickLookHeader(
+                    symbol: header.symbol,
+                    tint: header.tint,
+                    title: header.title,
+                    subtitle: header.subtitle,
+                    navigate: navigation.map { target in { model.navigate(to: target); dismiss() } },
+                    actions: actions,
+                    close: { dismiss() }
+                )
             }
         }
         // Gelöscht (auch von anderen): die Ansicht schließt sich.
@@ -48,6 +58,43 @@ struct QuickLookSheet: View {
         case .target(let id): lage.targets[id] != nil
         case .object(let id): lage.mapObjects[id] != nil
         }
+    }
+
+    private var header: (symbol: String, tint: Color, title: String, subtitle: String) {
+        switch selection {
+        case .member(let id):
+            let member = lage.members[id]
+            return ("person.fill", Theme.force, member?.data.spitzname ?? "Fahnder", id == lage.selfId ? "Eigener Standort" : "Fahnder")
+        case .vehicle(let id):
+            let vehicle = lage.vehicles[id]?.data
+            return ("car.fill", Theme.force, vehicle?.funkrufname ?? "Fahrzeug", vehicle?.bezeichnung ?? "")
+        case .target(let id):
+            let target = lage.targets[id]?.data
+            return (target?.art.symbolName ?? "person.fill", Theme.target, target?.displayName ?? "Ziel",
+                    [target?.art.title, target?.secondaryName].compactMap { $0 }.joined(separator: " · "))
+        case .object(let id):
+            let object = lage.mapObjects[id]?.data
+            let layer = object.flatMap { lage.layers[$0.layerId]?.data.name }
+            return (object?.typ.symbolName ?? "mappin", object.map { Color(hex: $0.farbe) } ?? Theme.accent,
+                    object.map { $0.titel.isEmpty ? $0.typ.title : $0.titel } ?? "Objekt",
+                    [object?.typ.title, layer].compactMap { $0 }.joined(separator: " · "))
+        }
+    }
+
+    /// Wohin der blaue Knopf führt; `nil` ohne Standort oder ohne einzelnen Zielort (ÖPNV-Strecke ohne Fahrzeug).
+    private var navigation: NavigationTarget? {
+        let target: NavigationTarget
+        switch selection {
+        case .member:
+            // Fahnder: Hinführen und Anrufen stehen in der Ansicht selbst.
+            return nil
+        case .vehicle(let id): target = .vehicle(id)
+        case .target(let id): target = .target(id)
+        case .object(let id):
+            guard let object = lage.mapObjects[id]?.data, object.typ != .oepnvlinie || object.hasRealVehicle else { return nil }
+            target = .object(id)
+        }
+        return model.resolve(target) == nil ? nil : target
     }
 
     private var gone: some View {
@@ -362,13 +409,7 @@ struct MapObjectInfo: View {
             }
         }
         .navigationTitle(title)
-        .toolbar {
-            if editable {
-                ToolbarItem(placement: .primaryAction) {
-                    Button("Bearbeiten") { editing = EditorContext(id: id, object: object, isNew: false) }
-                }
-            }
-        }
+        .editAction(enabled: editable) { editing = EditorContext(id: id, object: object, isNew: false) }
         .sheet(item: $editing) { context in
             MapObjectEditor(context: context, startMoving: startMoving)
                 .presentationDetents([.medium, .large])

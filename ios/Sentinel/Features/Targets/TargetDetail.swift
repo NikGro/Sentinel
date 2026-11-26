@@ -141,11 +141,7 @@ struct TargetDetail: View {
         .listSectionSpacing(.compact)
         .navigationTitle(target.displayName)
         .navigationBarTitleDisplayMode(.inline)
-        .toolbar {
-            ToolbarItem(placement: .primaryAction) {
-                Button("Bearbeiten") { editing = TargetEditorContext(id: entity.id, target: target, isNew: false) }
-            }
-        }
+        .editAction { editing = TargetEditorContext(id: entity.id, target: target, isNew: false) }
         .sheet(item: $editing) { context in
             TargetEditor(context: context)
         }

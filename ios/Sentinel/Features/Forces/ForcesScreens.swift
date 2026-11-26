@@ -245,11 +245,7 @@ struct VehicleDetail: View {
         }
         .navigationTitle(vehicle.data.funkrufname)
         .navigationBarTitleDisplayMode(.inline)
-        .toolbar {
-            ToolbarItem(placement: .primaryAction) {
-                Button("Bearbeiten") { editor = VehicleEditorContext(id: vehicle.id, vehicle: vehicle.data, isNew: false) }
-            }
-        }
+        .editAction { editor = VehicleEditorContext(id: vehicle.id, vehicle: vehicle.data, isNew: false) }
         .sheet(item: $editor) { context in
             VehicleEditor(context: context)
         }
