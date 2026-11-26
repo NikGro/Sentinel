@@ -44,7 +44,8 @@ final class LocalSettings {
         hiddenLayers = Set(defaults.stringArray(forKey: "ebenen.ausgeblendet") ?? [])
         disabledReachModes = Set(defaults.stringArray(forKey: "wegzeit.aus") ?? [])
         hiddenTargetKinds = Set(defaults.stringArray(forKey: "ziele.ausgeblendet") ?? [])
-        showsCoverage = defaults.bool(forKey: "bestreifung.anzeigen")
+        // Bestreifung als Ebenen-Schalter abgelöst durch die Standortspur (Objekt im Plus-Menü); immer aus.
+        showsCoverage = false
         coverageSince = defaults.double(forKey: "bestreifung.seit")
         mapStyle = MapStyleChoice(rawValue: defaults.string(forKey: "karte.stil") ?? "") ?? .standard
         showsTraffic = defaults.bool(forKey: "karte.verkehr")

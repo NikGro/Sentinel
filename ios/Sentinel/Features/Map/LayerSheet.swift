@@ -14,21 +14,6 @@ struct LayerSheet: View {
         @Bindable var settings = settings
         NavigationStack {
             List {
-                Section {
-                    Toggle("Bestreifte Wege", systemImage: "road.lanes", isOn: Binding(
-                        get: { settings.showsCoverage },
-                        set: { on in
-                            settings.showsCoverage = on
-                            // Ausschalten setzt die Bestreifung zurück; eingeschaltet zählt sie ab jetzt neu.
-                            if !on { lage.resetCoverage() }
-                        }
-                    ))
-                } header: {
-                    Text("Bestreifung")
-                } footer: {
-                    Text("Zeigt die gefahrenen Wege der eigenen Kräfte ab dem Einschalten. Ausschalten setzt die Bestreifung für alle zurück.")
-                }
-
                 Section("Ziele") {
                     ForEach(ZielArt.allCases) { art in
                         Toggle(isOn: Binding(

@@ -13,6 +13,8 @@ struct AddMenu: View {
         case transitMap
         /// Aufgezeichnete Verläufe auf der Karte zeigen.
         case history
+        /// Eigene Standortspur ab jetzt als Objekt auf der Karte.
+        case ownTrack
     }
 
     /// Was angeboten wird: im Einsatz alles, beim Paket ohne Fahndungswerkzeuge, bei dauerhaften Orten nur Markierungen.
@@ -73,7 +75,7 @@ struct AddChooser: View {
                     }
                     group("Markierung", [.shape(.marker), .shape(.text), .shape(.linie), .shape(.pfeil), .shape(.flaeche), .shape(.kreis)])
                     if scope == .all, includesHistory {
-                        group("Auswertung", [.history])
+                        group("Auswertung", [.ownTrack, .history])
                     }
                 }
                 .padding(16)
@@ -141,6 +143,7 @@ extension AddMenu.Action {
         case .target(let art): art.title
         case .transitMap: "ÖPNV"
         case .history: "Standortverlauf"
+        case .ownTrack: "Standortspur"
         }
     }
 
@@ -150,6 +153,7 @@ extension AddMenu.Action {
         case .target(let art): art.symbolName
         case .transitMap: "tram.fill"
         case .history: "point.bottomleft.forward.to.point.topright.scurvepath"
+        case .ownTrack: "scribble.variable"
         }
     }
 }
@@ -228,7 +232,7 @@ struct SearchPinCard: View {
                 let kind: PlaceableKind = switch action {
                 case .shape(let shape): .shape(shape)
                 case .target(let art): .target(art)
-                case .transitMap, .history: .shape(.haltestelle)
+                case .transitMap, .history, .ownTrack: .shape(.haltestelle)
                 }
                 Task {
                     try? await Task.sleep(for: .milliseconds(350))

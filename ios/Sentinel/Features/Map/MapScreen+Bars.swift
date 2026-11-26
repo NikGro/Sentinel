@@ -124,6 +124,8 @@ extension MapScreen {
                     switch action {
                     case .transitMap:
                         showsTransitMap = true
+                    case .ownTrack:
+                        createOwnTrack()
                     case .history:
                         // Direkt in den Verlauf; Spuren kommen dort über das Plus dazu.
                         if route.isActive { model.stopNavigation() }
@@ -141,6 +143,23 @@ extension MapScreen {
         }
         .padding(.trailing, Theme.barInset)
         .padding(.top, topAreaHeight + Theme.barSpacing)
+    }
+
+    /// Standortspur: zeigt ab jetzt den eigenen Weg als Objekt auf der Karte (läuft mit, bis es gelöscht wird).
+    /// Antippen an beliebiger Stelle öffnet das Objekt mit Bearbeiten und Löschen.
+    func createOwnTrack() {
+        guard let me = lage.me else { return }
+        guard let point = model.myPoint else {
+            model.alerts.post(.info, "Noch kein Standort", "Die Standortspur beginnt, sobald der eigene Standort bekannt ist.")
+            return
+        }
+        var object = MapObject(layerId: settings.defaultLayerId, typ: .verlauf, titel: "Standortspur \(lage.label(of: me.data))", farbe: "#FF375F", punkte: [point])
+        object.spuren = [SpurRef(SpurSubject(art: .member, id: me.id))]
+        object.zeitVon = (Date.now.timeIntervalSince1970 * 1000).rounded()
+        object.zeitBis = nil
+        object.symbol = MapObject.ownTrackSymbol
+        lage.saveMapObject(object, id: LageStore.newId())
+        model.alerts.post(.info, "Standortspur läuft", "Dein Weg wird ab jetzt auf der Karte gezeichnet. Antippen der Spur öffnet sie zum Bearbeiten oder Löschen.")
     }
 
     /// Karte auf alle gezeigten Spuren einpassen.

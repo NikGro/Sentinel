@@ -141,6 +141,13 @@ struct MapObject: LageEntity {
 }
 
 /// Verweis auf eine Spur im gespeicherten Standortverlauf.
+extension MapObject {
+    /// Kennzeichen eines Standortverlaufs, der als „Standortspur“ angelegt wurde (eigener Weg ab dem Anlegen,
+    /// gezeichnet mit Farbverlauf statt nach Quelle).
+    static let ownTrackSymbol = "standortspur"
+    var isOwnTrack: Bool { typ == .verlauf && symbol == Self.ownTrackSymbol }
+}
+
 struct SpurRef: Codable, Equatable, Hashable, Sendable {
     var art: String
     var id: String

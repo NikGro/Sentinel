@@ -140,6 +140,53 @@ struct HistoryLayer: MapContent {
     }
 }
 
+/// Standortspur: deckend gezeichnet (mehrfach gefahrene Wege werden nicht dunkler), Farbe nach Zeit von Blau (alt)
+/// bis Rot (neu); Lücken gestrichelt.
+struct GradientSpurLines: MapContent {
+    let spur: Spur
+
+    /// Teilstücke mit je eigener Farbe; höchstens 48, damit die Karte flüssig bleibt.
+    private var pieces: [(id: Int, coordinates: [CLLocationCoordinate2D], color: Color, gap: Bool)] {
+        let punkte = spur.punkte
+        guard punkte.count >= 2, let first = punkte.first?.date, let last = punkte.last?.date else { return [] }
+        let span = max(last.timeIntervalSince(first), 1)
+        let step = max(1, (punkte.count - 1) / 48)
+        var result: [(Int, [CLLocationCoordinate2D], Color, Bool)] = []
+        var start = 0
+        while start < punkte.count - 1 {
+            if spur.isGap(after: start) {
+                result.append((result.count, [punkte[start].point.coordinate, punkte[start + 1].point.coordinate], .gray, true))
+                start += 1
+                continue
+            }
+            var end = start + 1
+            while end < punkte.count - 1, end - start < step, !spur.isGap(after: end) { end += 1 }
+            let t = punkte[start].date.timeIntervalSince(first) / span
+            let color = Color(hue: 0.62 * (1 - t), saturation: 0.9, brightness: 0.95)
+            result.append((result.count, punkte[start...end].map(\.point.coordinate), color, false))
+            start = end
+        }
+        return result.map { (id: $0.0, coordinates: $0.1, color: $0.2, gap: $0.3) }
+    }
+
+    var body: some MapContent {
+        let parts = pieces
+        ForEach(parts.filter { !$0.gap }, id: \.id) { piece in
+            MapPolyline(coordinates: piece.coordinates)
+                .stroke(.white, style: StrokeStyle(lineWidth: 8, lineCap: .round, lineJoin: .round))
+        }
+        ForEach(parts, id: \.id) { piece in
+            if piece.gap {
+                MapPolyline(coordinates: piece.coordinates)
+                    .stroke(.gray.opacity(0.8), style: StrokeStyle(lineWidth: 3, lineCap: .round, dash: [2, 6]))
+            } else {
+                MapPolyline(coordinates: piece.coordinates)
+                    .stroke(piece.color, style: StrokeStyle(lineWidth: 5, lineCap: .round, lineJoin: .round))
+            }
+        }
+    }
+}
+
 /// Eine Spur: Abschnitte nach Quelle gefärbt, Lücken gestrichelt, Standzeiten und letzter Punkt.
 struct SpurLines: MapContent {
     let spur: Spur
@@ -190,6 +237,8 @@ final class StoredTracks {
     struct Track: Identifiable {
         let id: String
         let spur: Spur
+        /// Standortspur: Farbverlauf entlang der Zeit statt Farben nach Quelle.
+        var gradient = false
     }
 
     private(set) var tracks: [Track] = []
@@ -231,7 +280,7 @@ final class StoredTracks {
             guard let interval = object.data.historyInterval else { continue }
             for subject in object.data.historySubjects {
                 if let spur = try? await client.spur(subject, from: interval.lowerBound, to: interval.upperBound) {
-                    result.append(Track(id: "\(object.id)|\(subject.key)", spur: spur))
+                    result.append(Track(id: "\(object.id)|\(subject.key)", spur: spur, gradient: object.data.isOwnTrack))
                 }
             }
         }
@@ -246,7 +295,11 @@ struct StoredTracksLayer: MapContent {
 
     var body: some MapContent {
         ForEach(state.tracks) { track in
-            SpurLines(spur: track.spur, title: title(track.spur.subject))
+            if track.gradient {
+                GradientSpurLines(spur: track.spur)
+            } else {
+                SpurLines(spur: track.spur, title: title(track.spur.subject))
+            }
         }
         if let selected = state.selected, let spur = state.selectedTrack?.spur, spur.punkte.indices.contains(selected.index) {
             let punkt = spur.sample(index: selected.index, fraction: selected.fraction).punkt
