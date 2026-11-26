@@ -139,7 +139,24 @@ struct LiveRouteLayer: MapContent {
             if best == nil || d < best!.d { best = (i, q, d) }
         }
         guard let best else { return [] }
-        let remaining = [best.point.coordinate] + coordinates[(best.index + 1)...]
+        // Ein Stück in Fahrtrichtung weiter beginnen (unter der Pfeilspitze statt unter seiner Mitte).
+        var start = best.point
+        var index = best.index
+        var left = anchor.lead
+        while left > 0, index + 1 < coordinates.count {
+            let next = MKMapPoint(coordinates[index + 1])
+            let d = start.distance(to: next)
+            if d > left {
+                let f = left / d
+                start = MKMapPoint(x: start.x + (next.x - start.x) * f, y: start.y + (next.y - start.y) * f)
+                break
+            }
+            left -= d
+            start = next
+            index += 1
+        }
+        guard index + 1 < coordinates.count else { return [] }
+        let remaining = [start.coordinate] + coordinates[(index + 1)...]
         return [RouteLine(polyline: MKPolyline(coordinates: remaining, count: remaining.count), specialRights: route.specialRights)]
     }
 }

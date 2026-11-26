@@ -124,6 +124,9 @@ enum QuickLookHeight {
 @Observable
 final class RouteAnchor {
     var coordinate: CLLocationCoordinate2D?
+    /// So viele Meter vor dem eigenen Punkt beginnt die Linie (etwa halbe Pfeillänge): Sie läuft vorne in den
+    /// Navi-Pfeil hinein, hinten in seiner Kerbe steht nichts über.
+    var lead: CLLocationDistance = 0
 }
 
 /// Letzte verlässliche Fahrtrichtung (im Auto bleibt sie an der Ampel stehen, statt dem Kompass zu folgen).

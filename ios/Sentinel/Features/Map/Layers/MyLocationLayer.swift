@@ -68,14 +68,22 @@ struct LiveMyLocationMarker: View {
                 cameraState: cameraState
             )
             // Angeheftet: Straße und Fahrtrichtung direkt am eigenen Standort, nicht in der Bildschirmmitte.
+            // Klein wie die eigene Beschriftung, zweizeilig: Straße und Richtung, darunter die nächste Querstraße.
             if options.showsStreet, let street = locationContext.summary {
-                Text(street)
-                    .font(.footnote.weight(.semibold))
-                    .lineLimit(1)
-                    .padding(.horizontal, 10)
-                    .padding(.vertical, 5)
-                    .glassEffect(.regular, in: .capsule)
-                    .fixedSize()
+                VStack(spacing: 0) {
+                    Text(street)
+                        .font(.caption2.weight(.bold))
+                    if let corner = locationContext.cornerLine {
+                        Text(corner)
+                            .font(.caption2.weight(.semibold))
+                            .foregroundStyle(.secondary)
+                    }
+                }
+                .lineLimit(1)
+                .padding(.horizontal, 8)
+                .padding(.vertical, 3)
+                .glassEffect(.regular, in: .rect(cornerRadius: 10))
+                .fixedSize()
             }
         }
         .opacity(onMap && options.drawnByScreen ? 0 : 1)

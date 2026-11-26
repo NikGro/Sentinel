@@ -45,6 +45,10 @@ final class AppModel {
             guard self.lage.me?.data.aktiv != false else { return }
             self.lage.sendPosition(position)
         }
+        locationContext.crossingProvider = { [weak self] street, near in
+            guard let client = self?.client, let result = try? await client.crossingStreets(street, near: near) else { return nil }
+            return result.strassen.map { (name: $0.name, points: $0.punkte) }
+        }
         lage.onEvent = { [weak self] event in self?.handle(event) }
         alerts.openInstance = { [weak self] id in self?.openInstance(id) }
         lage.onMemberPosition = { [weak self] memberId, position in

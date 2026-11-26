@@ -267,9 +267,7 @@ struct MapScreen: View {
                 if !route.transit || route.transitPlan == nil {
                     LiveRouteLayer(route: route, anchor: routeAnchor)
                 }
-                if route.isActive, !route.walking {
-                    CrossStreetLayer(streets: route.upcomingCrossStreets)
-                }
+                // Querstraßen stehen jetzt als „Ecke …“ am eigenen Punkt (die Schilder entlang der Route erschienen nicht).
                 StoredTracksLayer(state: storedTracks) { model.title(of: $0) }
                 // Angetippte Stelle auf einer Strecke (beim Verlauf zeichnet ihn die Spur selbst).
                 if let tapMarker, selection != nil, storedTracks.selected == nil {
@@ -486,6 +484,9 @@ struct MapScreen: View {
                 if let here, routeAnchor.coordinate.map({ MKMapPoint($0).distance(to: MKMapPoint(here)) > 0.3 }) ?? true {
                     routeAnchor.coordinate = here
                 }
+                // Halbe Länge des Navi-Pfeils (gut 18 Punkte) in Metern bei der aktuellen Zoomstufe.
+                let lead = cameraState.distance / 700 * 18
+                if abs(lead - routeAnchor.lead) > 1 { routeAnchor.lead = lead }
                 try? await Task.sleep(for: .milliseconds(200))
             }
         }

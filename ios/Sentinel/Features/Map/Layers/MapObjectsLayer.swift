@@ -158,10 +158,7 @@ struct AreaLabelLayer: MapContent {
             let layout = AreaLabelLayout(object.data, metersPerPoint: metersPerPoint)
             if layout.width > 30 {
                 Annotation("", coordinate: layout.center, anchor: .center) {
-                    Text(object.data.titel)
-                        .font(.caption.weight(.bold))
-                        .foregroundStyle(Color(hex: object.data.farbe))
-                        .shadow(color: .white.opacity(0.9), radius: 1.5)
+                    OutlinedText(text: object.data.titel, color: Color(hex: object.data.farbe))
                         .lineLimit(2)
                         .multilineTextAlignment(.center)
                         .minimumScaleFactor(0.6)
@@ -172,6 +169,30 @@ struct AreaLabelLayer: MapContent {
                 .annotationTitles(.hidden)
             }
         }
+    }
+}
+
+/// Text in der Farbe der Fläche (deckend) mit festem weißem Rand von gut einem Punkt statt eines weichen Leuchtens:
+/// auf jedem Untergrund lesbar. Der Rand entsteht aus acht leicht versetzten weißen Kopien hinter dem Text.
+struct OutlinedText: View {
+    let text: String
+    let color: Color
+    var width: CGFloat = 1.6
+
+    private static let directions: [(CGFloat, CGFloat)] = [(1, 0), (-1, 0), (0, 1), (0, -1), (0.7, 0.7), (-0.7, 0.7), (0.7, -0.7), (-0.7, -0.7)]
+
+    var body: some View {
+        ZStack {
+            ForEach(Self.directions.indices, id: \.self) { index in
+                let d = Self.directions[index]
+                Text(text)
+                    .foregroundStyle(.white)
+                    .offset(x: d.0 * width, y: d.1 * width)
+            }
+            Text(text)
+                .foregroundStyle(color)
+        }
+        .font(.caption.weight(.bold))
     }
 }
 

@@ -8,6 +8,13 @@ import Observation
 final class LocationContext: NSObject, CLLocationManagerDelegate {
     private(set) var street: String?
     private(set) var heading: String?
+    /// Nächstgelegene Querstraße der aktuellen Straße (vor oder hinter einem), für „Ecke …“.
+    private(set) var corner: String?
+    /// Fragt die Querstraßen einer Straße beim eigenen Server ab (Name, Kreuzungspunkte); setzt das App-Modell.
+    @ObservationIgnored var crossingProvider: ((String, GeoPoint) async -> [(name: String, points: [GeoPoint])]?)?
+    @ObservationIgnored private var crossings: [(name: String, points: [GeoPoint])] = []
+    @ObservationIgnored private var crossingsFor: String?
+    @ObservationIgnored private var crossingsTriedAt = Date.distantPast
     /// Kompassrichtung des Geräts in Grad (nur im Stand), für die Kartenausrichtung „Kurs“.
     private(set) var compassDegrees: CLLocationDirection?
 
@@ -31,6 +38,7 @@ final class LocationContext: NSObject, CLLocationManagerDelegate {
     func update(with location: CLLocation) {
         isMoving = location.course >= 0 && location.speed > 1.5
         if isMoving { setHeading(Self.cardinal(location.course)) }
+        updateCorner(at: location)
         let moved = lastLookup.map { location.distance(from: $0) } ?? .greatestFiniteMagnitude
         guard moved >= Self.minimumDistance, Date.now.timeIntervalSince(lastLookupAt) >= Self.minimumInterval, !geocoder.isGeocoding else { return }
         lastLookup = location
@@ -38,8 +46,44 @@ final class LocationContext: NSObject, CLLocationManagerDelegate {
         geocoder.reverseGeocodeLocation(location, preferredLocale: Locale(identifier: "de_DE")) { [weak self] placemarks, _ in
             let place = placemarks?.first
             let name = place?.thoroughfare ?? place?.name
-            Task { @MainActor in self?.street = name }
+            Task { @MainActor in
+                self?.street = name
+                self?.updateCorner(at: location)
+            }
         }
+    }
+
+    /// Nächste Kreuzung der aktuellen Straße bestimmen; die Querstraßen einer Straße werden einmal geladen.
+    private func updateCorner(at location: CLLocation) {
+        guard let street else {
+            if corner != nil { corner = nil }
+            return
+        }
+        if crossingsFor != street, Date.now.timeIntervalSince(crossingsTriedAt) > 20, let crossingProvider {
+            crossingsTriedAt = .now
+            let here = GeoPoint(location.coordinate)
+            Task { @MainActor in
+                guard let result = await crossingProvider(street, here) else { return }
+                self.crossings = result
+                self.crossingsFor = street
+                self.updateCorner(at: location)
+            }
+        }
+        guard crossingsFor == street else {
+            if corner != nil { corner = nil }
+            return
+        }
+        let here = GeoPoint(location.coordinate)
+        var best: (name: String, distance: Double)?
+        for crossing in crossings where crossing.name != street {
+            for point in crossing.points {
+                let d = here.distance(to: point)
+                if best == nil || d < best!.distance { best = (crossing.name, d) }
+            }
+        }
+        // Nur, wenn die Kreuzung in der Nähe liegt (sonst wäre „Ecke“ irreführend).
+        let next = best.flatMap { $0.distance < 500 ? $0.name : nil }
+        if corner != next { corner = next }
     }
 
     private func setHeading(_ value: String) {
@@ -61,6 +105,9 @@ final class LocationContext: NSObject, CLLocationManagerDelegate {
         let index = Int(((degrees.truncatingRemainder(dividingBy: 360) + 360 + 22.5) / 45).rounded(.down)) % 8
         return names[index]
     }
+
+    /// Zweite Zeile unter dem eigenen Standort, z. B. "Ecke Steinstraße".
+    var cornerLine: String? { street == nil ? nil : corner.map { "Ecke \($0)" } }
 
     /// Zeile unter dem eigenen Standort, z. B. "Mönckebergstraße, Richtung Nordost".
     var summary: String? {
