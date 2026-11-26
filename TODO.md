@@ -23,6 +23,8 @@ statt jede Änderung sofort einzubauen. Erledigtes wandert mit Version ins CHANG
     ein längerer Abschnitt (Neuladen vom Server alle 10 s bzw. gröber gespeicherte Punkte). Stattdessen die eigenen
     GPS-Punkte lokal sofort anhängen und die Linie bis zum eigenen Punkt führen, so dass sie fortlaufend hinter einem
     mitwächst; der Server-Stand ersetzt sie nur beim Neuladen.
+  - Kein Punkt/Griff am Anfang der Standortspur (der Ankerpunkt des Objekts wird als Symbol gezeichnet); die Linie
+    selbst reicht und ist antippbar.
   - Farbkodierung umschaltbar machen: nach Alter (wie jetzt) oder nach Häufigkeit, also wie oft man an einer Stelle
     schon entlanggefahren ist (Strecke in Raster/Abschnitte teilen und Durchfahrten zählen). Umschalter in der
     Objektansicht bzw. beim Bearbeiten der Standortspur.
