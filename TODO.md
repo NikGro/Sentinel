@@ -44,10 +44,17 @@ statt jede Änderung sofort einzubauen. Erledigtes wandert mit Version ins CHANG
 - **Beziehungen vereinfachen:** Statt Bezeichnung mit Vorschlägen, Status, Herkunft und Notiz nur ein Freitextfeld
   für die Art der Beziehung. Bearbeiten (anlegen, ändern, löschen) nur auf der Bearbeiten-Seite eines Ziels; in der
   Detailansicht bzw. Kurzübersicht nur anzeigen (mit Sprung zum verbundenen Ziel).
-- **Baustellen und Sperrungen in Städten:** 0.37 meidet aktuelle Vollsperrungen der Autobahnen (Autobahn GmbH).
-  Für Hamburg gibt es keinen frei erreichbaren Baustellen-Dienst (der alte WFS-Link liefert 404); Mobilithek bzw.
-  Landesportal prüfen. OpenStreetMap-Baustellen (highway=construction) kennt Valhalla bereits, sofern die Kacheln
-  aktuell sind: Alter der Valhalla-Kacheln prüfen und regelmäßig neu bauen.
+- **Sperrungen und Baustellen von TomTom (saubere Lösung, beschlossen 26.11.):** Apples Weg als Vorgabe ist ein
+  Behelf; mit Sonderrechten lässt sich „Apple fährt anders“ nicht von „dort ist gesperrt“ unterscheiden. Stattdessen:
+  - Server fragt alle 2–5 Minuten die TomTom Traffic Incidents API für den Einsatzraum ab (nur ein Rechteck, keine
+    Standorte von Fahndern): Vollsperrungen, Baustellen mit Sperrvermerk, Unfälle mit Sperrung, mit Geometrie.
+  - Gesperrte Abschnitte als Ausschlussflächen bzw. Meidepunkte an Valhalla, zusammen mit den Autobahn-Sperrungen;
+    gilt für normale Routen und mit Sonderrechten gleichermaßen.
+  - Valhalla-Grenzen prüfen und auf dem NAS anheben (max_exclude_polygons_length, max_exclude_locations).
+  - Apple-Vorgabe mit Sonderrechten wieder abschalten; ohne Sonderrechte bleibt sie für Staus.
+  - Vorher: Nutzungsbedingungen und freies Kontingent prüfen (etwa 2.500 Abfragen/Tag), Schlüssel vom Nutzer über das
+    sichere Formular (nicht im Chat); optional HERE als Alternative, offene Hamburger Daten als Ergänzung.
+  - Optional: Sperrungen auf der Karte anzeigen.
 - **Staus mit Sonderrechten:** Ohne Sonderrechte folgt die Route Apples Weg mit Verkehrslage. Mit Sonderrechten
   rechnet nur Valhalla; ein Hinweis bei deutlich schnellerer Apple-Route wäre möglich.
 - **Beziehungen:** Protokollierung von Änderungen gehört zum Ereignisprotokoll in Runde 2 (Datenschutz); bisher
