@@ -493,14 +493,18 @@ struct MapScreen: View {
                 if let here, routeAnchor.coordinate.map({ MKMapPoint($0).distance(to: MKMapPoint(here)) > 0.3 }) ?? true {
                     routeAnchor.coordinate = here
                 }
-                // Halbe Länge des Navi-Pfeils (gut 18 Punkte) in Metern bei der aktuellen Zoomstufe.
-                let lead = cameraState.distance / 700 * 18
+                // Linie beginnt knapp unter der Pfeilspitze: deren Abstand zur Pfeilmitte auf dem Bildschirm (der flach
+                // liegende Pfeil wird mit der Neigung kürzer), in Meter umgerechnet an genau dieser Stelle der Karte.
+                let tip = 14 * cos(cameraState.pitch * .pi / 180)
+                let lead = engine.centerPoint.flatMap { engine.groundDistance(from: $0, up: tip) } ?? cameraState.distance / 700 * 18
                 if abs(lead - routeAnchor.lead) > 1 { routeAnchor.lead = lead }
                 try? await Task.sleep(for: .milliseconds(200))
             }
         }
         .onChange(of: route.isActive) { _, active in
             // Navigation: nah, gekippt, in Blickrichtung folgen. Danach nicht im Fahrmodus hängen bleiben.
+            // Navigation: eigener Pfeil etwas höher, damit das Straßenschild darunter nicht mit Tempo und Limit kollidiert.
+            engine.puckLift = active ? 70 : 0
             if active {
                 pinCamera(.heading)
             } else if followsMe {

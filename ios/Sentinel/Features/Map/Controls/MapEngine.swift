@@ -56,6 +56,12 @@ final class MapEngine {
     @ObservationIgnored private(set) var followPitch: Double = 40
     /// Kamera, die gesetzt wird, sobald die Karte gefunden ist.
     @ObservationIgnored private var pendingCamera: EngineCamera?
+    /// Angeheftet: eigener Punkt so viele Punkte über der Kameramitte (Navigation: Platz für Straßenschild über
+    /// Tempo und Leiste). Weich angefahren.
+    @ObservationIgnored var puckLift: CGFloat = 0
+    @ObservationIgnored private var liftNow: CGFloat = 0
+    /// Versatz der Kameramitte gegenüber dem eigenen Punkt (Kartenpunkte), damit dieser `liftNow` höher erscheint.
+    @ObservationIgnored private var liftShift = CGPoint.zero
     /// Herkunft der Mitte beim Anheften (zur Fehlersuche): Standortsymbol der Karte oder eigene Glättung.
     @ObservationIgnored private(set) var followSource = "–"
 
@@ -276,7 +282,20 @@ final class MapEngine {
         smooth.distance = exp(log(smooth.distance) + (log(followDistance) - log(smooth.distance)) * (1 - exp(-dt / 0.2)))
         smooth.pitch += (followPitch - smooth.pitch) * (1 - exp(-dt / 0.2))
         self.smooth = smooth
-        apply(smooth)
+        // Kameramitte so versetzen, dass der eigene Punkt `liftNow` über der Mitte liegt. Der Versatz hängt nur von
+        // Richtung, Neigung und Abstand ab und wird nach jedem Bild aus der Karte nachgemessen.
+        liftNow += (puckLift - liftNow) * CGFloat(1 - exp(-dt / 0.3))
+        if abs(liftNow) < 0.5 { liftShift = .zero }
+        var camera = smooth
+        let own = MKMapPoint(smooth.center)
+        camera.center = MKMapPoint(x: own.x + liftShift.x, y: own.y + liftShift.y).coordinate
+        apply(camera)
+        if let map, abs(liftNow) >= 0.5 {
+            let mid = map.convert(camera.center, toPointTo: map)
+            let above = MKMapPoint(map.convert(CGPoint(x: mid.x, y: mid.y - liftNow), toCoordinateFrom: map))
+            let centre = MKMapPoint(camera.center)
+            liftShift = CGPoint(x: centre.x - above.x, y: centre.y - above.y)
+        }
         // Angekommen (Mitte nahe am Standort): Ab hier steht der eigene Punkt fest in der Bildmitte.
         if let target, let map {
             // Erst wenn die Mitte auf dem Bildschirm (fast) genau auf dem Standort liegt, sonst sähe man den Punkt
@@ -292,6 +311,15 @@ final class MapEngine {
                 centerPoint = locked
             }
         }
+    }
+
+    /// Bodenabstand in Metern zwischen einer Bildschirmstelle (Fensterkoordinaten) und der Stelle `up` Punkte darüber,
+    /// bei der aktuellen Kamera samt Neigung.
+    func groundDistance(from point: CGPoint, up: CGFloat) -> CLLocationDistance? {
+        guard let map else { return nil }
+        let a = map.convert(point, toCoordinateFrom: nil)
+        let b = map.convert(CGPoint(x: point.x, y: point.y - up), toCoordinateFrom: nil)
+        return MKMapPoint(a).distance(to: MKMapPoint(b))
     }
 
     /// Abstand des Standortsymbols vom Kameramittelpunkt auf dem Bildschirm in Punkten (Messfühler: sitzt es

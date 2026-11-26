@@ -1,5 +1,12 @@
 # Änderungen
 
+## 0.37.1
+
+**Navigation**
+- Routenlinie beginnt direkt an der Pfeilspitze: Der Abstand wird an der Karte gemessen (mit Neigung), statt geschätzt;
+  vorher klaffte eine Lücke zwischen Pfeil und Linie
+- Eigener Pfeil sitzt in der Navigation etwas höher, das Straßenschild darunter überdeckt Tempo und Limit nicht mehr
+
 ## 0.37.0
 
 **Navigation**
