@@ -170,6 +170,8 @@ private struct CompassRose: View {
 struct GlassSegmentedControl<Value: Hashable>: View {
     let items: [(value: Value, symbol: String, title: String)]
     let selection: Value
+    /// Schmal (je Symbol etwa 42 Punkte) statt über die volle Breite, z. B. zwei Schalter nebeneinander.
+    var compact = false
     let select: (Value) -> Void
 
     var body: some View {
@@ -182,9 +184,9 @@ struct GlassSegmentedControl<Value: Hashable>: View {
             }
         }
         .pickerStyle(.segmented)
-        .controlSize(.extraLarge)
-        .frame(maxWidth: .infinity)
-        .frame(height: Theme.barHeight)
+        .controlSize(compact ? .large : .extraLarge)
+        .frame(maxWidth: compact ? CGFloat(items.count) * 42 : .infinity)
+        .frame(height: compact ? 40 : Theme.barHeight)
         .sensoryFeedback(.selection, trigger: selection)
     }
 }

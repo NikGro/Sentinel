@@ -22,7 +22,8 @@ struct TransitAheadPicker: View {
             GlassSegmentedControl(
                 items: [(0, "tram.fill", "Zum Fahrzeug"), (1, "1.circle.fill", "1 Halt voraus"), (2, "2.circle.fill", "2 Halte voraus"),
                         (3, "3.circle.fill", "3 Halte voraus"), (-1, "arrow.triangle.2.circlepath", "Überschlagend")],
-                selection: route.target == .leapfrog ? -1 : (route.target?.stopsAhead ?? 0)
+                selection: route.target == .leapfrog ? -1 : (route.target?.stopsAhead ?? 0),
+                compact: true
             ) { choice in
                 // Nur das Ziel wechselt; Sonderrechte bleiben, wie sie waren.
                 let special = route.specialRights
@@ -47,7 +48,8 @@ struct LeadPicker: View {
         if let base = route.target?.base, model.supportsLead(base) {
             GlassSegmentedControl(
                 items: [(false, "scope", "Zum Ziel"), (true, "arrow.up.forward.circle.fill", "Vorlauf: Kreuzung vor dem Ziel")],
-                selection: route.target?.isLead ?? false
+                selection: route.target?.isLead ?? false,
+                compact: true
             ) { lead in
                 let special = route.specialRights
                 model.navigate(to: lead ? .lead(base) : base)
@@ -159,17 +161,12 @@ struct NavigationBottomBar: View {
                 .glassEffect(.regular.tint(.red).interactive(), in: .capsule)
             }
 
-            // Ziel im ÖPNV: zum Fahrzeug oder Halte voraus. Fahrendes Ziel sonst: direkt oder im Vorlauf.
-            TransitAheadPicker()
-            LeadPicker()
-
-            // Dieselbe Dreier-Auswahl wie auf der Karte: Auto, zu Fuß, ÖPNV.
-            GlassSegmentedControl(
-                items: Fortbewegung.allCases.map { ($0, $0.symbolName, $0.title) },
-                selection: route.transit ? .oepnv : (route.walking ? .fuss : .fahrzeug)
-            ) { mode in
-                route.transit = mode == .oepnv
-                route.walking = mode != .fahrzeug
+            // Schmal nebeneinander, damit das Fenster nicht höher wird: links das Verkehrsmittel (wie auf der Karte),
+            // rechts die Navigationsart (ÖPNV-Ziel: Fahrzeug oder Halte voraus; fahrendes Ziel: direkt, Vorlauf,
+            // parallel). Passt es nicht in eine Zeile, untereinander.
+            ViewThatFits(in: .horizontal) {
+                HStack(spacing: 8) { navigationPickers }
+                VStack(spacing: 8) { navigationPickers }
             }
 
             if route.transit {
@@ -195,6 +192,20 @@ struct NavigationBottomBar: View {
         .glassEffect(.regular, in: .rect(cornerRadius: 22))
     }
 
+    @ViewBuilder private var navigationPickers: some View {
+        // Dieselbe Dreier-Auswahl wie auf der Karte: Auto, zu Fuß, ÖPNV.
+        GlassSegmentedControl(
+            items: Fortbewegung.allCases.map { ($0, $0.symbolName, $0.title) },
+            selection: route.transit ? .oepnv : (route.walking ? .fuss : .fahrzeug),
+            compact: true
+        ) { mode in
+            route.transit = mode == .oepnv
+            route.walking = mode != .fahrzeug
+        }
+        Spacer(minLength: 0)
+        TransitAheadPicker()
+        LeadPicker()
+    }
 }
 
 /// Fahrspuren am nächsten Manöver; die zu nutzenden hell, die übrigen gedämpft.
