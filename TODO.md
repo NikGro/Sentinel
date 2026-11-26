@@ -11,8 +11,11 @@ statt jede Änderung sofort einzubauen. Erledigtes wandert mit Version ins CHANG
   innerhalb einer Gruppe nach Typ (Fahrzeuge, Personen, Objekte). Jede Gruppe hat einen eigenen Schalter zum Ein- und
   Ausblenden auf der Karte, der die Schalter der einzelnen Ziele nicht verändert: Ist die Gruppe aus, ist alles darin
   verborgen; schaltet man sie (auch Tage später) wieder ein, erscheinen genau die Ziele, die vorher an waren (z. B. 1
-  von 3 Fahrzeugen und 2 von 2 Personen). Sichtbar = Gruppe an und Ziel an. Offen: ob ein Ziel in mehreren Gruppen
-  sein darf, Gruppen je Instanz oder serverweit, Anzeige in Sentinel Web.
+  von 3 Fahrzeugen und 2 von 2 Personen). Sichtbar = Gruppe an und Ziel an.
+  - Ein Ziel ist in höchstens einer Gruppe.
+  - Gruppieren ist freiwillig: Ziele lassen sich frei einer Gruppe zuordnen und wieder herausnehmen; ungruppierte Ziele
+    stehen wie bisher nach Typ in der Hauptansicht, die Gruppen daneben.
+  - Noch offen: Gruppen je Instanz oder serverweit, Anzeige in Sentinel Web.
 - **Standortquelle: „Ort beibehalten“ und „Von Hand“ zusammenführen:** Ein einziger Punkt „Von Hand“. Er öffnet den
   gewohnten Dialog zum Setzen eines Punkts, mit dem aktuellen Ort des Ziels schon vorausgewählt: direkt „Übernehmen“
   oder neu wählen. Der Schalter hat dann drei Stellungen (von Hand, Tracker, A).
