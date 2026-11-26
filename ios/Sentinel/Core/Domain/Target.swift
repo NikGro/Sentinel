@@ -63,6 +63,8 @@ struct Target: LageEntity {
     var quelle: LocationSource?
     /// Standortverlauf aufzeichnen.
     var aufzeichnung: Bool = true
+    /// Gruppe im Ziele-Tab (höchstens eine); `nil` ungruppiert.
+    var gruppeId: String?
 
     init(art: ZielArt = .person, bezeichnung: String = "", vorname: String = "", nachname: String = "") {
         self.art = art
@@ -74,7 +76,7 @@ struct Target: LageEntity {
     private enum CodingKeys: String, CodingKey {
         case art, bezeichnung, vorname, nachname, geburtsdatum, geburtsort, staatsangehoerigkeit, anschrift, merkmale, fotoBlob
         case kennzeichen, fahrzeugBeschreibung, fahrzeugFotoBlob, sachverhalt, hinweise, massnahmen, trackerId, standort, anhaenge
-        case bindung, quelle, aufzeichnung
+        case bindung, quelle, aufzeichnung, gruppeId
     }
 
     init(from decoder: Decoder) throws {
@@ -102,6 +104,7 @@ struct Target: LageEntity {
         bindung = try? c.decodeIfPresent(TargetBinding.self, forKey: .bindung)
         quelle = try? c.decodeIfPresent(LocationSource.self, forKey: .quelle)
         aufzeichnung = (try? c.decodeIfPresent(Bool.self, forKey: .aufzeichnung)) ?? true
+        gruppeId = try? c.decodeIfPresent(String.self, forKey: .gruppeId)
     }
 
     /// Zweite Zeile unter dem Namen: beim Zielfahrzeug die Bezeichnung (der Name ist das Kennzeichen), sonst ein
@@ -296,4 +299,10 @@ extension Target {
 
     /// Kann dieses Ziel eine dynamische Standortquelle haben (Tracker, A-Position)? Zielpersonen und Zielfahrzeuge.
     var supportsDynamicSource: Bool { art != .objekt }
+}
+
+/// Gruppe von Zielen im Ziele-Tab, je Instanz ein- und ausblendbar.
+struct TargetGroup: LageEntity {
+    static let kind = "targetGroup"
+    var name: String
 }

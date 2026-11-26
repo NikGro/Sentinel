@@ -306,12 +306,14 @@ struct OperationState: Codable, Equatable, Sendable {
     var fahrzeuge: [String]?
     /// Ziele, die in dieser Instanz für alle sichtbar sind; die Ziele selbst gelten instanzübergreifend.
     var ziele: [String]?
+    /// Ausgeblendete Zielgruppen dieser Instanz.
+    var gruppenAus: [String] = []
     var rev: Int = 0
 
     init() {}
 
     private enum CodingKeys: String, CodingKey {
-        case funkkanal, titel, hinweise, a, ueberschlagen, sos, fahrzeuge, ziele, rev
+        case funkkanal, titel, hinweise, a, ueberschlagen, sos, fahrzeuge, ziele, gruppenAus, rev
     }
 
     init(from decoder: Decoder) throws {
@@ -324,6 +326,7 @@ struct OperationState: Codable, Equatable, Sendable {
         sos = try c.decodeIfPresent(APosition.self, forKey: .sos)
         fahrzeuge = try c.decodeIfPresent([String].self, forKey: .fahrzeuge)
         ziele = try c.decodeIfPresent([String].self, forKey: .ziele)
+        gruppenAus = (try? c.decodeIfPresent([String].self, forKey: .gruppenAus)) ?? []
         rev = try c.decodeIfPresent(Int.self, forKey: .rev) ?? 0
     }
 }

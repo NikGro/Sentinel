@@ -5,31 +5,8 @@ statt jede Änderung sofort einzubauen. Erledigtes wandert mit Version ins CHANG
 
 ## Geplant
 
-### Nach 0.37 offen
+### Nach 0.38 offen
 
-- **Titelbilder quadratisch:** Titelbilder von Zielpersonen, Zielfahrzeugen und Zielobjekten in Detailansicht,
-  Kurzübersicht und Listen quadratisch statt hochkant (jetzt etwa 110 × 140).
-- **Straßenansicht (Look Around) nur bei festen Orten:** Nur bei Zielobjekten und festen Pins/Markierungen, nicht bei
-  Zielpersonen und Zielfahrzeugen (deren aktuelle Position). Prüfen, ob durch die Umstellung auf Beziehungen schon
-  erledigt (TargetDetail zeigt die Karte bisher bei Anschrift oder Zielobjekt).
-- **Adresssuche mit Autovervollständigung beim Zielobjekt:** Wie in der Navigation, aber ohne Objekte aus der Lage als
-  Vorschläge; nur Anschriften, Firmen/Orte und ÖPNV-Stationen (MKLocalSearchCompleter). Gewählte Anschrift setzt
-  Adresse und Standort des Zielobjekts; alternativ weiterhin von Hand setzen.
-- **Navigation endet in der richtigen Straße:** Bei einer Zieladresse (z. B. Musterstraße 3) an der Musterstraße auf
-  Höhe der 3 ankommen, nicht in einer Nachbarstraße, die in Luftlinie näher am Gebäude liegt. Umsetzung: den
-  Straßennamen der Zieladresse an Valhalla mitgeben (Zielort mit `street`, damit er auf der passenden Straße einrastet),
-  ggf. Zielpunkt vorher auf die benannte Straße legen (Straßenverzeichnis); Test mit Eckgrundstück.
-- **Ziel-Pin während der Navigation:** Auf dem Ziel (z. B. Zielobjekt oder gesuchte Adresse) bleibt ein Pin sichtbar,
-  bis die Navigation beendet ist.
-- **Routenlinie bei Wende-Anweisung zeigt direkt nach hinten:** Fährt man falsch und die Route sagt „in 100 m wenden“,
-  beginnt die blaue Linie schon hinter dem Pfeil statt erst nach vorn bis zur Wendestelle und dann zurück.
-  - Ursache (Code): `LiveRouteLayer` (OverlayLayers.swift) setzt den Linienanfang auf das nächstgelegene Teilstück der
-    Route in einem Fenster von 400 Punkten ab dem Fortschritt. Bei einer Wende läuft der Rückweg dicht neben dem Hinweg
-    (Gegenfahrbahn, wenige Meter); der nächste Punkt liegt dann oft schon auf dem Rückweg, alles davor wird abgeschnitten.
-  - Behebung: Fortschritt nur vorwärts und nur so weit, wie man seit dem letzten Bild gefahren sein kann (Strecke
-    entlang der Route begrenzen), und Teilstücke bevorzugen, deren Richtung zur eigenen Fahrtrichtung passt; alternativ
-    die Position entlang der Route aus dem Navigationskern (Ferrostar) übernehmen statt selbst zu suchen. Test mit einer
-    Route hin und zurück auf derselben Straße.
 - **SOS als kritischer Alarm:** Drückt ein Fahnder SOS, soll bei allen anderen außerhalb der App eine Mitteilung mit
   Alarmpriorität kommen, leise (etwa 10 % Lautstärke), aber immer hörbar, auch im Stumm- und Fokus-Modus.
   - Stand: Die App schickt bei SOS schon eine lokale Mitteilung als „Dringend“ (time-sensitive), sofern sie im
@@ -41,48 +18,6 @@ statt jede Änderung sofort einzubauen. Erledigtes wandert mit Version ins CHANG
     Konto echter Push (APNs), wenn die App ganz beendet ist.
   - Vorgehen: Antrag bei Apple prüfen (Behördennutzung begründen); bis dahin die bestehende Mitteilung mit
     eigenem, gut hörbarem Ton und Wiederholung absichern.
-- **Schalter in der Navi-Leiste flacher:** Der Dreier-Schalter (zu Fuß, Auto, ÖPNV) und, wo vorhanden, der Schalter
-  für die Navigationsart (Zum Ziel/Vorlauf/Parallel bzw. ÖPNV-Halte) bei gleicher Optik weniger hoch, wie der
-  Verkehrsmittel-Schalter in der normalen Kartenansicht: Der verschiebbare Knopf eher breit als hoch, nicht andersherum.
-- **Ziele in Gruppen:** Der Ziele-Tab arbeitet grundsätzlich mit Gruppen (z. B. je Verfahren oder Personenkreis),
-  innerhalb einer Gruppe nach Typ (Fahrzeuge, Personen, Objekte). Jede Gruppe hat einen eigenen Schalter zum Ein- und
-  Ausblenden auf der Karte, der die Schalter der einzelnen Ziele nicht verändert: Ist die Gruppe aus, ist alles darin
-  verborgen; schaltet man sie (auch Tage später) wieder ein, erscheinen genau die Ziele, die vorher an waren (z. B. 1
-  von 3 Fahrzeugen und 2 von 2 Personen). Sichtbar = Gruppe an und Ziel an.
-  - Ein Ziel ist in höchstens einer Gruppe.
-  - Gruppieren ist freiwillig: Ziele lassen sich frei einer Gruppe zuordnen und wieder herausnehmen; ungruppierte Ziele
-    stehen wie bisher nach Typ in der Hauptansicht, die Gruppen daneben.
-  - Noch offen: Gruppen je Instanz oder serverweit, Anzeige in Sentinel Web.
-- **Standortquelle als drei Knöpfe:** Nur noch „Von Hand“, „A-Position“ und „GPS-Tracker“ („Ort beibehalten“ geht in
-  „Von Hand“ auf). Statt Schalter plus Zeile mit eigenem Knopf darunter drei Knöpfe mit Symbol nebeneinander; der aktive
-  ist hervorgehoben.
-  - Antippen eines anderen Knopfs wechselt die Quelle: „Von Hand“ öffnet den gewohnten Dialog zum Setzen eines Punkts
-    mit dem aktuellen Ort des Ziels vorausgewählt (direkt „Übernehmen“ oder neu wählen), „GPS-Tracker“ die
-    Tracker-Auswahl (solange keiner verbunden ist), „A-Position“ gilt sofort.
-  - Erneutes Antippen des aktiven Knopfs: Standort neu setzen bzw. anderen Tracker wählen.
-  - Kurzer Stand darunter oder im Knopf (z. B. „vor 9 Std.“, Trackername), platzsparend.
-- **Standortspur überarbeiten:**
-  - Wächst teilweise noch stückig nach: Das Ende fließend mit dem eigenen Punkt verbinden (z. B. ein laufend
-    nachgeführtes letztes Stück bis zum aktuell gezeichneten Punkt), damit keine Lücke und kein Ruckeln entsteht.
-  - Leicht durchscheinend (etwa 75 % deckend), ohne weiße Ränder.
-  - Farbe als durchgehender Verlauf statt in Blöcken (je Stück abgestuft).
-  - Umschalter Alter/Häufigkeit unter „Bearbeiten“ (Einstellungen der Spur), nicht in der Objektansicht.
-  - Häufigkeit über alle Fahnder: Fahren mehrere mit eingeschalteter Spur über dieselbe Stelle, zählt das zusammen
-    auf derselben Farbskala.
-- **Beziehungen vereinfachen:** Statt Bezeichnung mit Vorschlägen, Status, Herkunft und Notiz nur ein Freitextfeld
-  für die Art der Beziehung. Bearbeiten (anlegen, ändern, löschen) nur auf der Bearbeiten-Seite eines Ziels; in der
-  Detailansicht bzw. Kurzübersicht nur anzeigen (mit Sprung zum verbundenen Ziel).
-- **Sperrungen und Baustellen von TomTom (saubere Lösung, beschlossen 26.11.):** Apples Weg als Vorgabe ist ein
-  Behelf; mit Sonderrechten lässt sich „Apple fährt anders“ nicht von „dort ist gesperrt“ unterscheiden. Stattdessen:
-  - Server fragt alle 2–5 Minuten die TomTom Traffic Incidents API für den Einsatzraum ab (nur ein Rechteck, keine
-    Standorte von Fahndern): Vollsperrungen, Baustellen mit Sperrvermerk, Unfälle mit Sperrung, mit Geometrie.
-  - Gesperrte Abschnitte als Ausschlussflächen bzw. Meidepunkte an Valhalla, zusammen mit den Autobahn-Sperrungen;
-    gilt für normale Routen und mit Sonderrechten gleichermaßen.
-  - Valhalla-Grenzen prüfen und auf dem NAS anheben (max_exclude_polygons_length, max_exclude_locations).
-  - Apple-Vorgabe mit Sonderrechten wieder abschalten; ohne Sonderrechte bleibt sie für Staus.
-  - Vorher: Nutzungsbedingungen und freies Kontingent prüfen (etwa 2.500 Abfragen/Tag), Schlüssel vom Nutzer über das
-    sichere Formular (nicht im Chat); optional HERE als Alternative, offene Hamburger Daten als Ergänzung.
-  - Optional: Sperrungen auf der Karte anzeigen.
 - **Staus mit Sonderrechten:** Ohne Sonderrechte folgt die Route Apples Weg mit Verkehrslage. Mit Sonderrechten
   rechnet nur Valhalla; ein Hinweis bei deutlich schnellerer Apple-Route wäre möglich.
 - **Beziehungen:** Protokollierung von Änderungen gehört zum Ereignisprotokoll in Runde 2 (Datenschutz); bisher

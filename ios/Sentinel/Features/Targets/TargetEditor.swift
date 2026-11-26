@@ -72,12 +72,26 @@ struct TargetEditor: View {
                 case .objekt:
                     Section("Objekt") {
                         TextField("Objekt, z. B. Mehrfamilienhaus, Firmengebäude", text: $target.bezeichnung)
-                        TextField("Anschrift", text: $target.anschrift, axis: .vertical)
-                            .lineLimit(1...3)
+                        // Vorschläge während der Eingabe; ein gewählter Vorschlag setzt auch den Standort.
+                        AddressCompletionField(address: $target.anschrift, near: target.standort?.point ?? model.myPoint) { point in
+                            target.standort = TimedPoint(point)
+                            target.quelle = .hand
+                        }
                     }
                 }
 
                 legacySection
+
+                if !lage.targetGroups.isEmpty {
+                    Section {
+                        Picker("Gruppe", selection: $target.gruppeId) {
+                            Text("Keine").tag(String?.none)
+                            ForEach(lage.sortedTargetGroups) { group in
+                                Text(group.data.name).tag(Optional(group.id))
+                            }
+                        }
+                    }
+                }
 
                 // Halter, Fahrer, Bewohner, Anschrift: als eigene Ziele angelegt und hier verbunden.
                 if context.isNew {

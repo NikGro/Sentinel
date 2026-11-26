@@ -20,7 +20,6 @@ struct TargetDetail: View {
     @Environment(LageStore.self) private var lage
     @Environment(\.dismiss) private var dismiss
     @State private var editing: TargetEditorContext?
-    @State private var relationEditing: RelationEditorContext?
 
     var body: some View {
         if let target = lage.targets[targetId] {
@@ -50,7 +49,7 @@ struct TargetDetail: View {
                                 .foregroundStyle(Theme.target)
                         }
                     }
-                    .frame(width: 110, height: 140)
+                    .frame(width: 120, height: 120)
                     .clipShape(.rect(cornerRadius: 12))
 
                     VStack(alignment: .leading, spacing: 6) {
@@ -100,7 +99,7 @@ struct TargetDetail: View {
             }
             }
 
-            RelationsSection(targetId: entity.id, editing: $relationEditing)
+            RelationsSection(targetId: entity.id, editing: .constant(nil))
 
             if target.art == .objekt {
                 Section("Anschrift") {
@@ -143,7 +142,6 @@ struct TargetDetail: View {
         .navigationTitle(target.displayName)
         .navigationBarTitleDisplayMode(.inline)
         .editAction { editing = TargetEditorContext(id: entity.id, target: target, isNew: false) }
-        .relationEditor($relationEditing, ownId: entity.id)
         .sheet(item: $editing) { context in
             TargetEditor(context: context)
         }

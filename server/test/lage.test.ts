@@ -323,3 +323,22 @@ test('Beziehungen: zwischen bestehenden Zielen, ohne Doppel, verschwinden mit de
   lage.del(fahnder('a'), 'target', 'f1');
   assert.equal(lage.list('relation').length, 0);
 });
+
+test('Zielgruppen: Ausblenden je Instanz lässt die Sichtbarkeit der Ziele unberührt, Löschen ungruppiert', () => {
+  const lage = newLage();
+  lage.put(fahnder('a'), 'targetGroup', 'g1', { name: 'Verfahren 1' });
+  lage.put(fahnder('a'), 'target', 'p1', { art: 'person', vorname: 'A', gruppeId: 'g1' });
+  lage.put(fahnder('a'), 'target', 'p2', { art: 'person', vorname: 'B', gruppeId: 'fehlt' });
+  assert.equal(lage.get('target', 'p2')?.data.gruppeId, null, 'unbekannte Gruppe wird verworfen');
+  const zieleVorher = [...lage.operation.ziele];
+  lage.command(fahnder('a'), 'gruppe.sichtbar', { gruppeId: 'g1', sichtbar: false });
+  assert.deepEqual(lage.operation.gruppenAus, ['g1']);
+  assert.deepEqual(lage.operation.ziele, zieleVorher, 'Sichtbarkeit der Ziele bleibt');
+  lage.command(fahnder('a'), 'gruppe.sichtbar', { gruppeId: 'g1', sichtbar: true });
+  assert.deepEqual(lage.operation.gruppenAus, []);
+  lage.command(fahnder('a'), 'gruppe.sichtbar', { gruppeId: 'g1', sichtbar: false });
+  lage.del(fahnder('a'), 'targetGroup', 'g1');
+  assert.equal(lage.get('target', 'p1')?.data.gruppeId, null);
+  assert.deepEqual(lage.operation.gruppenAus, []);
+  assert.ok(Array.isArray(lage.snapshot().targetGroups));
+});

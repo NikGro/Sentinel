@@ -31,6 +31,8 @@ final class LageStore {
     private(set) var trackers: [String: Versioned<Tracker>] = [:]
     /// Beziehungen zwischen Zielen (instanzübergreifend wie die Ziele).
     private(set) var relations: [String: Versioned<Relation>] = [:]
+    /// Zielgruppen (instanzübergreifend; ein- und ausgeblendet je Instanz).
+    private(set) var targetGroups: [String: Versioned<TargetGroup>] = [:]
     private(set) var layers: [String: Versioned<Layer>] = [:]
     private(set) var rooms: [String: Versioned<ChatRoom>] = [:]
     private(set) var messages: [Versioned<ChatMessage>] = []
@@ -78,6 +80,7 @@ final class LageStore {
         targets = [:]
         trackers = [:]
         relations = [:]
+        targetGroups = [:]
         layers = [:]
         rooms = [:]
         messages = []
@@ -163,6 +166,39 @@ final class LageStore {
     /// Ziel in dieser Instanz für alle ein- oder ausblenden.
     func setTargetShown(_ id: String, _ shown: Bool) {
         command("ziel.sichtbar", args: TargetShownArgs(zielId: id, sichtbar: shown))
+    }
+
+    /// Ist die Zielgruppe in dieser Instanz eingeblendet?
+    func isGroupShown(_ id: String) -> Bool {
+        !operation.gruppenAus.contains(id)
+    }
+
+    private struct GroupShownArgs: Encodable {
+        let gruppeId: String
+        let sichtbar: Bool
+    }
+
+    /// Gruppe ein- oder ausblenden; die Schalter der einzelnen Ziele bleiben, wie sie sind.
+    func setGroupShown(_ id: String, _ shown: Bool) {
+        command("gruppe.sichtbar", args: GroupShownArgs(gruppeId: id, sichtbar: shown))
+    }
+
+    /// Auf der Karte sichtbar: Ziel eingeblendet und (falls gruppiert) seine Gruppe auch.
+    func isTargetVisible(_ id: String) -> Bool {
+        guard isTargetShown(id) else { return false }
+        guard let group = targets[id]?.data.gruppeId, targetGroups[group] != nil else { return true }
+        return isGroupShown(group)
+    }
+
+    var sortedTargetGroups: [Versioned<TargetGroup>] {
+        targetGroups.values.sorted { $0.data.name.localizedStandardCompare($1.data.name) == .orderedAscending }
+    }
+
+    /// Ziel einer Gruppe zuordnen bzw. herausnehmen (`nil`).
+    func setGroup(_ groupId: String?, of targetId: String) {
+        guard var data = targets[targetId]?.data else { return }
+        data.gruppeId = groupId
+        put(data, id: targetId)
     }
 
     /// Ist das Fahrzeug in dieser Instanz im Einsatz?
@@ -482,6 +518,7 @@ final class LageStore {
             targets = index(snapshot.targets)
             trackers = index(snapshot.trackers)
             relations = index(snapshot.relations)
+            targetGroups = index(snapshot.targetGroups)
             layers = index(snapshot.layers)
             rooms = index(snapshot.rooms)
             messages = snapshot.messages
@@ -497,6 +534,7 @@ final class LageStore {
         case .putTarget(let entity): targets[entity.id] = entity
         case .putTracker(let entity): trackers[entity.id] = entity
         case .putRelation(let entity): relations[entity.id] = entity
+        case .putTargetGroup(let entity): targetGroups[entity.id] = entity
         case .putLayer(let entity): layers[entity.id] = entity
         case .putRoom(let entity): rooms[entity.id] = entity
         case .putInstance(let entity): instances[entity.id] = entity
@@ -539,6 +577,7 @@ final class LageStore {
             targets[id] = nil
             relations = relations.filter { $0.value.data.von != id && $0.value.data.nach != id }
         case Relation.kind: relations[id] = nil
+        case TargetGroup.kind: targetGroups[id] = nil
         case Tracker.kind:
             trackers[id] = nil
             trackerPositions[id] = nil

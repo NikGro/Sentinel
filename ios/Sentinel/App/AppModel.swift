@@ -50,6 +50,20 @@ final class AppModel {
             return result.strassen.map { (name: $0.name, points: $0.punkte) }
         }
         leadPlanner.crossings = locationContext.crossingProvider
+        route.destinationStreet = { [weak self] target in
+            guard let self else { return nil }
+            switch target {
+            case .target(let id):
+                guard let data = self.lage.targets[id]?.data, data.art == .objekt else { return nil }
+                return AddressStreet.street(of: data.anschrift)
+            case .point(_, let title):
+                return AddressStreet.street(of: title)
+            case .object(let id):
+                return self.lage.mapObjects[id].flatMap { AddressStreet.street(of: $0.data.titel) }
+            default:
+                return nil
+            }
+        }
         route.parallelHint = { [weak self] target in
             guard let self, case .parallel(let base) = target else { return nil }
             return self.leadPlanner.parallelHint(for: base, to: self.resolve(target)?.point)

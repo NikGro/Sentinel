@@ -179,11 +179,8 @@ struct NavigationBottomBar: View {
 
             // Schmal nebeneinander, damit das Fenster nicht höher wird: links das Verkehrsmittel (wie auf der Karte),
             // rechts die Navigationsart (ÖPNV-Ziel: Fahrzeug oder Halte voraus; fahrendes Ziel: direkt, Vorlauf,
-            // parallel). Passt es nicht in eine Zeile, untereinander.
-            ViewThatFits(in: .horizontal) {
-                HStack(spacing: 8) { navigationPickers }
-                VStack(spacing: 8) { navigationPickers }
-            }
+            // parallel).
+            HStack(spacing: 8) { navigationPickers }
 
             // Die Symbole allein sind nicht selbsterklärend: gewählte Art in Worten darunter.
             if let approach = route.target?.approach, approach != .direct {
@@ -226,7 +223,6 @@ struct NavigationBottomBar: View {
             route.transit = mode == .oepnv
             route.walking = mode != .fahrzeug
         }
-        Spacer(minLength: 0)
         TransitAheadPicker()
         LeadPicker()
     }

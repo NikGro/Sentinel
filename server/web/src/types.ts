@@ -107,6 +107,12 @@ export interface Target {
   trackerId: string | null;
   /** Standortquelle: von Hand, Tracker oder der A-Position folgend. */
   quelle?: 'hand' | 'tracker' | 'a' | null;
+  /** Gruppe im Ziele-Tab; `null` ungruppiert. */
+  gruppeId?: string | null;
+}
+
+export interface TargetGroup {
+  name: string;
 }
 
 /** Beziehung zwischen zwei Zielen; von beiden Seiten sichtbar, mit Status und Herkunft (keine gesicherte Tatsache). */
@@ -173,6 +179,8 @@ export interface Operation {
   fahrzeuge?: string[];
   /** Ziele, die in dieser Instanz sichtbar sind (Ziele gelten instanzübergreifend). */
   ziele?: string[];
+  /** Ausgeblendete Zielgruppen dieser Instanz (die Sichtbarkeit der einzelnen Ziele bleibt davon unberührt). */
+  gruppenAus?: string[];
   rev: number;
 }
 
@@ -183,6 +191,7 @@ export interface KindMap {
   annotation: MapObject;
   target: Target;
   relation: Relation;
+  targetGroup: TargetGroup;
   tracker: Tracker;
   layer: Layer;
   room: Room;
@@ -203,6 +212,7 @@ export interface AdminStatus {
   tracker: { h02Port: number; unbekannt: { kennung: string; zuletzt: number }[]; paj: { aktiv: boolean; fehler: string | null } };
   argus: { verfuegbar: boolean; projekte: { name: string; tage: string[]; erzeugt: string }[] };
   routing: boolean;
+  sperrungen?: { tomtom: boolean; tomtomAbschnitte: number; tomtomStand: number | null; tomtomFehler: string | null; autobahn: number };
   oepnv: { linien: number; stand: number | null; fehler: string | null };
   release: { version: string; build: string; datum: string; groesse: number } | null;
   sidestoreQuelle: string;

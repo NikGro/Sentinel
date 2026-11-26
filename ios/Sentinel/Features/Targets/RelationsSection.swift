@@ -1,12 +1,12 @@
 import SwiftUI
 
 // Beziehungen zwischen Zielen: Personen, Fahrzeuge und Objekte sind eigene Ziele und werden hier verbunden
-// (z. B. Halter, Fahrer, Bewohner). Von beiden Seiten gleich sichtbar und bearbeitbar.
+// (z. B. Halter, Fahrer, Bewohner). Von beiden Seiten sichtbar; bearbeitet wird auf der Bearbeiten-Seite eines Ziels.
 
 /// Abschnitt „Beziehungen“ in der Detailansicht und im Editor eines Ziels.
 struct RelationsSection: View {
     let targetId: String
-    /// In der Detailansicht führt ein Tippen zum verbundenen Ziel; im Editor öffnet es die Beziehung.
+    /// Detailansicht: nur anzeigen, Tippen führt zum verbundenen Ziel. Editor (`false`): anlegen, ändern, löschen.
     var opensTargets = true
 
     @Environment(LageStore.self) private var lage
@@ -16,6 +16,7 @@ struct RelationsSection: View {
 
     var body: some View {
         let relations = lage.relatedTargets(of: targetId)
+        if !opensTargets || !relations.isEmpty {
         Section {
             if relations.isEmpty {
                 // Fehlende Beziehung heißt nur „nicht zugeordnet“, nicht „ohne Personenbezug“.
@@ -25,13 +26,18 @@ struct RelationsSection: View {
             ForEach(relations) { item in
                 row(item.relation, other: item.other)
             }
-            Button("Beziehung hinzufügen", systemImage: "link.badge.plus") {
-                editing = RelationEditorContext(id: LageStore.newId(), relation: Relation(von: targetId, nach: ""), isNew: true)
+            if !opensTargets {
+                Button("Beziehung hinzufügen", systemImage: "link.badge.plus") {
+                    editing = RelationEditorContext(id: LageStore.newId(), relation: Relation(von: targetId, nach: ""), isNew: true)
+                }
             }
         } header: {
             Text("Beziehungen")
         } footer: {
-            Text("Personen, Fahrzeuge und Objekte werden als eigene Ziele angelegt und hier verbunden.")
+            if !opensTargets {
+                Text("Personen, Fahrzeuge und Objekte werden als eigene Ziele angelegt und hier verbunden.")
+            }
+        }
         }
     }
 
@@ -44,13 +50,6 @@ struct RelationsSection: View {
                     .environment(\.quickLookActions, nil)
             } label: {
                 label
-            }
-            .swipeActions {
-                Button("Bearbeiten", systemImage: "pencil") { edit(relation) }
-                    .tint(Theme.accent)
-            }
-            .contextMenu {
-                Button("Beziehung bearbeiten", systemImage: "pencil") { edit(relation) }
             }
         } else {
             Button { edit(relation) } label: {
@@ -99,7 +98,7 @@ private struct RelationLabel: View {
     }
 
     private var details: String {
-        [relation.bezeichnung.isEmpty ? "Verbunden" : relation.bezeichnung, other.art.title, relation.status.title, relation.herkunft]
+        [relation.bezeichnung.isEmpty ? "Verbunden" : relation.bezeichnung, other.art.title]
             .filter { !$0.isEmpty }
             .joined(separator: " · ")
     }
@@ -131,7 +130,6 @@ struct RelationEditor: View {
         _otherId = State(initialValue: context.relation.other(than: ownId))
     }
 
-    private var own: Target? { lage.targets[ownId]?.data }
     private var other: Versioned<Target>? { otherId.isEmpty ? nil : lage.targets[otherId] }
 
     var body: some View {
@@ -155,8 +153,6 @@ struct RelationEditor: View {
                 if !context.isNew {
                     Section {
                         Button("Beziehung löschen", systemImage: "trash", role: .destructive) { showsDelete = true }
-                    } footer: {
-                        Text("Endet eine Beziehung, besser den Status „Beendet“ setzen: Dann bleibt sie nachvollziehbar.")
                     }
                 }
             }
@@ -232,36 +228,13 @@ struct RelationEditor: View {
             .sorted { $0.data.displayName.localizedStandardCompare($1.data.displayName) == .orderedAscending }
     }
 
+    /// Nur die Art der Beziehung als Freitext.
     @ViewBuilder private func details(other: Target) -> some View {
         Section {
-            TextField("Bezeichnung, z. B. Halter", text: $relation.bezeichnung)
-            if let own {
-                ScrollView(.horizontal, showsIndicators: false) {
-                    HStack(spacing: 8) {
-                        ForEach(Relation.suggestions(own: own.art, other: other.art), id: \.self) { suggestion in
-                            Button(suggestion) { relation.bezeichnung = suggestion }
-                                .buttonStyle(.bordered)
-                                .buttonBorderShape(.capsule)
-                                .tint(relation.bezeichnung == suggestion ? Theme.accent : .secondary)
-                                .controlSize(.small)
-                        }
-                    }
-                }
-            }
+            TextField("z. B. Halter, Fahrer, Bewohner", text: $relation.bezeichnung, axis: .vertical)
+                .lineLimit(1...3)
         } header: {
             Text("Art der Beziehung")
-        } footer: {
-            Text("Gilt für beide Seiten, z. B. „Halter“ zwischen Person und Fahrzeug.")
-        }
-        Section {
-            Picker("Status", selection: $relation.status) {
-                ForEach(Relation.Status.allCases) { Text($0.title).tag($0) }
-            }
-            TextField("Herkunft, z. B. Halterabfrage, Observation", text: $relation.herkunft)
-            TextField("Notiz", text: $relation.notiz, axis: .vertical)
-                .lineLimit(2...6)
-        } footer: {
-            Text("Eine Beziehung gilt nicht automatisch als gesichert: Status und Herkunft halten fest, wie belastbar sie ist.")
         }
     }
 

@@ -4,6 +4,7 @@ import type { FastifyInstance } from 'fastify';
 import { z } from 'zod';
 import { findCrossingStreets, findIntersections } from '../oepnv.js';
 import type { Meiden } from '../reach/closures.js';
+import { MAX_MEIDEPUNKTE } from '../reach/route.js';
 import { findCrossStreets } from '../reach/crossings.js';
 import { speedLimitAt } from '../reach/speedlimit.js';
 import { REACH_MODES } from '../reach/reach.js';
@@ -145,7 +146,10 @@ export function registerNavigationRoutes(app: FastifyInstance, services: Service
     const sperrungen: Meiden[] = [];
     if (anfrage.costing === 'auto') {
       services.closures.refreshIfStale();
-      sperrungen.push(...services.closures.near([locations[0]!, locations[locations.length - 1]!]));
+      services.incidents.refreshIfStale();
+      const ends = [locations[0]!, locations[locations.length - 1]!];
+      // Sperrungen in der Stadt (TomTom) zuerst, dann Autobahnen; zusammen höchstens so viele, wie Valhalla annimmt.
+      sperrungen.push(...services.incidents.near(ends, MAX_MEIDEPUNKTE - 30), ...services.closures.near(ends));
     }
     const result = await routes.navigation(anfrage, sentinel?.sonderrechte ?? false, sperrungen, parallel);
     if (!result) throw new HttpError(404, 'Keine Route gefunden.');

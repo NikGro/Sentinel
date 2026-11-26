@@ -146,6 +146,27 @@ struct MapObjectEditor: View {
                     AttachmentsSection(attachments: Binding(get: { object.anhaenge ?? [] }, set: { object.anhaenge = $0 }))
                 }
 
+                if object.isOwnTrack {
+                    // Einstellung der Standortspur: Farbe nach Alter oder nach Häufigkeit (über alle Fahnder).
+                    Section {
+                        Picker("Farbe nach", selection: Binding(
+                            get: { object.ownTrackByFrequency },
+                            set: { object.symbol = $0 ? MapObject.ownTrackFrequencySymbol : MapObject.ownTrackSymbol }
+                        )) {
+                            Text("Alter").tag(false)
+                            Text("Häufigkeit").tag(true)
+                        }
+                        .pickerStyle(.segmented)
+                    } header: {
+                        Text("Standortspur")
+                    } footer: {
+                        Text(object.ownTrackByFrequency
+                             ? "Blau einmal gefahren, Rot fünfmal und öfter; Fahrten aller Fahnder mit Standortspur zählen zusammen."
+                             : "Blau alt, Rot neu.")
+                    }
+                }
+
+                if !object.isOwnTrack {
                 Section("Farbe") {
                     HStack(spacing: 0) {
                         ForEach(Theme.palette, id: \.hex) { entry in
@@ -168,6 +189,7 @@ struct MapObjectEditor: View {
                         }
                     }
                     .padding(.vertical, 4)
+                }
                 }
 
                 if object.typ == .marker {

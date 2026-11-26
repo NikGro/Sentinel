@@ -1,13 +1,14 @@
 import { useSignal } from '@preact/signals';
 import { useEffect } from 'preact/hooks';
 import { adminStatus, api, attempt, nameOf, refreshStatus, tables } from '../store';
-import { ago, dateTime, Section } from '../ui';
+import { ago, dateTime, Field, Section, TextInput } from '../ui';
 
 /** Zugang, Geräte, App-Verteilung und Protokoll. */
 export function SystemPanel() {
   const status = adminStatus.value;
   const showCode = useSignal(false);
   const audit = useSignal<{ ts: number; actor: string; action: string; detail: string }[]>([]);
+  const tomtomKey = useSignal('');
 
   useEffect(() => {
     void refreshStatus();
@@ -19,6 +20,40 @@ export function SystemPanel() {
 
   return (
     <>
+      <Section title="Sperrungen und Baustellen (TomTom)" hint="Die Navigation meidet aktuelle Sperrungen. Autobahnen kommen von der Autobahn GmbH, Sperrungen in der Stadt von TomTom (Schlüssel der TomTom-Entwickler-API, kostenloses Kontingent reicht). Abgefragt wird nur das Rechteck des Einsatzraums; der Schlüssel wird verschlüsselt gespeichert.">
+        <p>
+          {status.sperrungen?.tomtom
+            ? `TomTom verbunden: ${status.sperrungen.tomtomAbschnitte} gesperrte Abschnitte${status.sperrungen.tomtomStand ? `, Stand ${ago(status.sperrungen.tomtomStand)}` : ''}.`
+            : 'TomTom nicht eingerichtet.'}
+          {status.sperrungen?.tomtomFehler ? <span class="error"> Letzter Fehler: {status.sperrungen.tomtomFehler}</span> : ''}
+          {status.sperrungen ? ` Autobahn: ${status.sperrungen.autobahn} Vollsperrungen.` : ''}
+        </p>
+        {status.sperrungen?.tomtom ? (
+          <button class="quiet" onClick={() => void attempt(() => api('/admin/tomtom', { method: 'DELETE' }).then(refreshStatus), 'TomTom-Schlüssel entfernt.')}>
+            Schlüssel entfernen
+          </button>
+        ) : (
+          <>
+            <Field label="Schlüssel der TomTom-API">
+              <TextInput type="password" value={tomtomKey.value} onInput={(v) => (tomtomKey.value = v)} />
+            </Field>
+            <button
+              class="primary"
+              disabled={tomtomKey.value.trim().length < 10}
+              onClick={() =>
+                void attempt(async () => {
+                  await api('/admin/tomtom', { method: 'PUT', body: { schluessel: tomtomKey.value.trim() } });
+                  tomtomKey.value = '';
+                  await refreshStatus();
+                }, 'TomTom-Schlüssel gespeichert.')
+              }
+            >
+              Speichern
+            </button>
+          </>
+        )}
+      </Section>
+
       <Section title="Zugangscode für Fahnder" hint="Mit diesem Code meldet sich ein Gerät einmalig an. Nach dem Erneuern bleiben bereits angemeldete Geräte verbunden.">
         <div class="row between">
           <code class="code">{showCode.value ? status.zugangscode : '••••••••••'}</code>

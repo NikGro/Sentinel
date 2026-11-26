@@ -16,6 +16,7 @@ export const tables = {
   annotation: signal<Table<'annotation'>>({}),
   target: signal<Table<'target'>>({}),
   relation: signal<Table<'relation'>>({}),
+  targetGroup: signal<Table<'targetGroup'>>({}),
   tracker: signal<Table<'tracker'>>({}),
   layer: signal<Table<'layer'>>({}),
   room: signal<Table<'room'>>({}),
@@ -191,6 +192,14 @@ export const command = (name: string, args: unknown = {}) => send({ t: 'cmd', na
 /** Ist ein Ziel in der geöffneten Instanz sichtbar? Gilt für alle Teilnehmer der Instanz. */
 export const targetShown = (id: string) => operation.value.ziele?.includes(id) ?? true;
 export const setTargetShown = (id: string, sichtbar: boolean) => command('ziel.sichtbar', { zielId: id, sichtbar });
+/** Zielgruppe in dieser Instanz eingeblendet? */
+export const groupShown = (id: string) => !(operation.value.gruppenAus ?? []).includes(id);
+export const setGroupShown = (id: string, sichtbar: boolean) => command('gruppe.sichtbar', { gruppeId: id, sichtbar });
+/** Auf der Karte sichtbar: Ziel an und (falls gruppiert) Gruppe an. */
+export const targetVisible = (id: string) => {
+  const gruppe = tables.target.value[id]?.data.gruppeId;
+  return targetShown(id) && (!gruppe || groupShown(gruppe));
+};
 
 function receive(m: any): void {
   switch (m.t) {
@@ -202,6 +211,7 @@ function receive(m: any): void {
       tables.annotation.value = index(m.annotations);
       tables.target.value = index(m.targets);
       tables.relation.value = index(m.relations ?? []);
+      tables.targetGroup.value = index(m.targetGroups ?? []);
       tables.tracker.value = index(m.trackers);
       tables.layer.value = index(m.layers);
       tables.room.value = index(m.rooms ?? []);

@@ -115,6 +115,9 @@ export function entspannt(body: Record<string, unknown>): Record<string, unknown
   };
 }
 
+/** Höchstzahl der Meidepunkte je Anfrage (Valhalla: `service_limits.max_exclude_locations`, auf dem NAS angehoben). */
+export const MAX_MEIDEPUNKTE = 150;
+
 /** Fahrzeit der ersten Route einer Antwort in Sekunden (unbekannt: unendlich). */
 function dauer(ergebnis: { antwort: unknown } | null): number {
   const d = (ergebnis?.antwort as { routes?: OsrmRoute[] } | undefined)?.routes?.[0]?.duration;
@@ -152,7 +155,7 @@ export class RouteService {
     parallel: Meiden[] = [],
   ): Promise<{ antwort: unknown; sonderrechte: boolean; gemieden: boolean } | null> {
     if (!this.available) return null;
-    const mit = (body: Record<string, unknown>, meiden: Meiden[]) => (meiden.length ? { ...body, exclude_locations: meiden.slice(0, 48) } : body);
+    const mit = (body: Record<string, unknown>, meiden: Meiden[]) => (meiden.length ? { ...body, exclude_locations: meiden.slice(0, MAX_MEIDEPUNKTE) } : body);
     const alle = [...parallel, ...sperrungen];
     const locker = lockererStart(anfrage);
     // Gleichzeitig: mit allen Meidepunkten, ganz ohne (Rückfall, falls ein Meidepunkt nicht einrastet oder es keinen

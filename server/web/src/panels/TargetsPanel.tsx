@@ -1,6 +1,6 @@
 import { useSignal } from '@preact/signals';
-import { del, focusRequest, nameOf, newId, put, setTargetShown, tables, targetShown, tool, trackerPoint } from '../store';
-import { BEZIEHUNG_STATUS, BEZIEHUNG_VORSCHLAEGE, ZIEL_TITEL, type Relation, type Target, type ZielArt } from '../types';
+import { del, focusRequest, groupShown, nameOf, newId, put, setGroupShown, setTargetShown, tables, targetShown, tool, trackerPoint } from '../store';
+import { ZIEL_TITEL, type Entity, type Relation, type Target, type ZielArt } from '../types';
 import { ageOf, ago, Field, ImageField, Section, TextInput } from '../ui';
 
 const LEER: Target = {
@@ -21,6 +21,8 @@ const anzeigename = (t: Target) => {
 export function TargetsPanel() {
   const editing = useSignal<{ id: string; data: Target; neu: boolean } | null>(null);
   const targets = Object.values(tables.target.value).sort((a, b) => anzeigename(a.data).localeCompare(anzeigename(b.data)));
+  const groups = Object.values(tables.targetGroup.value).sort((a, b) => a.data.name.localeCompare(b.data.name, 'de'));
+  const edit = (t: (typeof targets)[number]) => (editing.value = { id: t.id, data: { ...t.data }, neu: false });
 
   if (editing.value) {
     const { id, data, neu } = editing.value;
@@ -44,6 +46,16 @@ export function TargetsPanel() {
             {(Object.keys(ZIEL_TITEL) as ZielArt[]).map((art) => (
               <option key={art} value={art}>
                 {ZIEL_TITEL[art]}
+              </option>
+            ))}
+          </select>
+        </Field>
+        <Field label="Gruppe">
+          <select value={data.gruppeId ?? ''} onChange={(e) => set({ gruppeId: e.currentTarget.value || null })}>
+            <option value="">Keine</option>
+            {Object.values(tables.targetGroup.value).map((g) => (
+              <option key={g.id} value={g.id}>
+                {g.data.name}
               </option>
             ))}
           </select>
@@ -138,32 +150,38 @@ export function TargetsPanel() {
       }
     >
       {targets.length === 0 && <p class="hint">Noch kein Ziel angelegt. Zielpersonen, Zielfahrzeuge und Zielobjekte lassen sich hier oder über die Werkzeugleiste der Karte anlegen.</p>}
-      <ul class="list">
-        {targets.map((t) => {
-          const position = trackerPoint(t.data.trackerId) ?? t.data.standort ?? undefined;
-          const age = ageOf(t.data.geburtsdatum);
-          return (
-            <li key={t.id} class={targetShown(t.id) ? '' : 'ruhend'}>
-              <input type="checkbox" title="In dieser Instanz für alle sichtbar" checked={targetShown(t.id)} onChange={() => setTargetShown(t.id, !targetShown(t.id))} />
-              {t.data.fotoBlob ? <img class="thumb" src={`/api/v1/blobs/${t.data.fotoBlob}`} alt="" /> : <div class="thumb empty">{t.data.art === 'fahrzeug' ? 'ZF' : t.data.art === 'objekt' ? 'ZO' : 'ZP'}</div>}
-              <div class="grow">
-                <b>{anzeigename(t.data)}</b>
-                <small>
-                  {[ZIEL_TITEL[t.data.art], age !== null ? `${age} Jahre` : '', t.data.kennzeichen].filter(Boolean).join(', ')}
-                  {position ? `, Standort ${ago(position.ts)}` : ''}
-                </small>
-                <small class="hint">Geändert von {nameOf(t.updatedBy)}</small>
-              </div>
-              {position && (
-                <button class="quiet" onClick={() => (focusRequest.value = { ...position, at: Date.now() })}>
-                  Zeigen
-                </button>
-              )}
-              <button onClick={() => (editing.value = { id: t.id, data: { ...t.data }, neu: false })}>Bearbeiten</button>
-            </li>
-          );
-        })}
-      </ul>
+      <div class="row">
+        <button
+          onClick={() => {
+            const name = prompt('Name der Gruppe');
+            if (name?.trim()) put('targetGroup', newId(), { name: name.trim() });
+          }}
+        >
+          Gruppe anlegen
+        </button>
+      </div>
+      {groups.map((g) => (
+        <div key={g.id} class={groupShown(g.id) ? '' : 'ruhend'}>
+          <div class="row">
+            <input type="checkbox" title="Gruppe in dieser Instanz einblenden" checked={groupShown(g.id)} onChange={() => setGroupShown(g.id, !groupShown(g.id))} />
+            <b class="grow">{g.data.name}</b>
+            <button
+              class="quiet"
+              onClick={() => {
+                const name = prompt('Gruppe umbenennen', g.data.name);
+                if (name?.trim()) put('targetGroup', g.id, { name: name.trim() });
+              }}
+            >
+              Umbenennen
+            </button>
+            <button class="quiet" onClick={() => confirm(`Gruppe „${g.data.name}“ auflösen? Die Ziele bleiben erhalten.`) && del('targetGroup', g.id)}>
+              Auflösen
+            </button>
+          </div>
+          <TargetList items={targets.filter((t) => t.data.gruppeId === g.id)} onEdit={edit} />
+        </div>
+      ))}
+      <TargetList items={targets.filter((t) => !t.data.gruppeId || !tables.targetGroup.value[t.data.gruppeId])} onEdit={edit} />
     </Section>
   );
 }
@@ -190,24 +208,8 @@ function Relations(props: { targetId: string }) {
             ))}
           </select>
         </Field>
-        <Field label="Bezeichnung, z. B. Halter, Fahrer, Bewohner">
-          <input list="beziehung-vorschlaege" value={data.bezeichnung} maxLength={60} onInput={(e) => set({ bezeichnung: e.currentTarget.value })} />
-          <datalist id="beziehung-vorschlaege">
-            {BEZIEHUNG_VORSCHLAEGE.map((v) => <option key={v} value={v} />)}
-          </datalist>
-        </Field>
-        <div class="grid2">
-          <Field label="Status">
-            <select value={data.status} onChange={(e) => set({ status: e.currentTarget.value as Relation['status'] })}>
-              {(Object.keys(BEZIEHUNG_STATUS) as Relation['status'][]).map((s) => <option key={s} value={s}>{BEZIEHUNG_STATUS[s]}</option>)}
-            </select>
-          </Field>
-          <Field label="Herkunft, z. B. Halterabfrage">
-            <TextInput value={data.herkunft} maxLength={120} onInput={(v) => set({ herkunft: v })} />
-          </Field>
-        </div>
-        <Field label="Notiz">
-          <TextInput value={data.notiz} rows={2} maxLength={1000} onInput={(v) => set({ notiz: v })} />
+        <Field label="Art der Beziehung, z. B. Halter, Fahrer, Bewohner">
+          <TextInput value={data.bezeichnung} maxLength={200} onInput={(v) => set({ bezeichnung: v })} />
         </Field>
         <div class="row">
           <button class="primary" disabled={!other} onClick={() => { if (put('relation', id, data)) editing.value = null; }}>Sichern</button>
@@ -229,7 +231,7 @@ function Relations(props: { targetId: string }) {
             <li key={r.id} class={r.data.status === 'beendet' ? 'ruhend' : ''}>
               <div class="grow">
                 <b>{other ? anzeigename(other.data) : 'Unbekanntes Ziel'}</b>
-                <small>{[r.data.bezeichnung || 'Verbunden', other ? ZIEL_TITEL[other.data.art] : '', BEZIEHUNG_STATUS[r.data.status], r.data.herkunft].filter(Boolean).join(', ')}</small>
+                <small>{[r.data.bezeichnung || 'Verbunden', other ? ZIEL_TITEL[other.data.art] : ''].filter(Boolean).join(', ')}</small>
               </div>
               <button onClick={() => (editing.value = { id: r.id, data: { ...r.data }, neu: false })}>Bearbeiten</button>
             </li>
@@ -240,5 +242,37 @@ function Relations(props: { targetId: string }) {
         <button onClick={() => (editing.value = { id: newId(), neu: true, data: { von: props.targetId, nach: '', bezeichnung: '', notiz: '', status: 'vermutet', herkunft: '' } })}>Beziehung hinzufügen</button>
       </div>
     </div>
+  );
+}
+
+/** Ziele einer Gruppe bzw. ungruppierte Ziele; der Haken blendet das einzelne Ziel ein und aus. */
+function TargetList(props: { items: Entity<Target>[]; onEdit: (t: Entity<Target>) => void }) {
+  return (
+    <ul class="list">
+      {props.items.map((t) => {
+          const position = trackerPoint(t.data.trackerId) ?? t.data.standort ?? undefined;
+          const age = ageOf(t.data.geburtsdatum);
+          return (
+            <li key={t.id} class={targetShown(t.id) ? '' : 'ruhend'}>
+              <input type="checkbox" title="In dieser Instanz für alle sichtbar" checked={targetShown(t.id)} onChange={() => setTargetShown(t.id, !targetShown(t.id))} />
+              {t.data.fotoBlob ? <img class="thumb" src={`/api/v1/blobs/${t.data.fotoBlob}`} alt="" /> : <div class="thumb empty">{t.data.art === 'fahrzeug' ? 'ZF' : t.data.art === 'objekt' ? 'ZO' : 'ZP'}</div>}
+              <div class="grow">
+                <b>{anzeigename(t.data)}</b>
+                <small>
+                  {[ZIEL_TITEL[t.data.art], age !== null ? `${age} Jahre` : '', t.data.kennzeichen].filter(Boolean).join(', ')}
+                  {position ? `, Standort ${ago(position.ts)}` : ''}
+                </small>
+                <small class="hint">Geändert von {nameOf(t.updatedBy)}</small>
+              </div>
+              {position && (
+                <button class="quiet" onClick={() => (focusRequest.value = { ...position, at: Date.now() })}>
+                  Zeigen
+                </button>
+              )}
+              <button onClick={() => props.onEdit(t)}>Bearbeiten</button>
+            </li>
+          );
+        })}
+    </ul>
   );
 }

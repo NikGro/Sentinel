@@ -140,80 +140,95 @@ struct HistoryLayer: MapContent {
     }
 }
 
-/// Standortspur: deckend gezeichnet (mehrfach gefahrene Wege werden nicht dunkler), Farbe nach Zeit von Blau (alt)
-/// bis Rot (neu); Lücken gestrichelt.
+/// Standortspur: zu 75 % deckend, ohne Rand, Farbe als durchgehender Verlauf entlang der Linie, nach Alter (Blau alt,
+/// Rot neu) oder nach Häufigkeit (Blau einmal, Rot ab fünfmal, alle Fahnder zusammen). Lücken gestrichelt; das Ende
+/// hängt am eigenen, gerade gezeichneten Punkt, damit die Spur nicht stückweise hinterherspringt.
 struct GradientSpurLines: MapContent {
     let spur: Spur
-    /// Farbe nach Häufigkeit (wie oft man an einer Stelle schon entlanggefahren ist) statt nach Alter.
+    /// Farbe nach Häufigkeit (wie oft an einer Stelle schon entlanggefahren wurde) statt nach Alter.
     var byFrequency = false
+    /// Durchfahrten je Feld über alle Spuren (alle Fahnder); ohne Angabe nur diese Spur.
+    var sharedCounts: [String: Int]?
+    /// Eigener, gerade gezeichneter Punkt: letztes Stück bis dorthin.
+    var liveEnd: CLLocationCoordinate2D?
+
+    static let opacity = 0.75
 
     /// Farbskala von Blau über Grün und Gelb bis Rot, `t` von 0 bis 1.
     static func color(_ t: Double) -> Color {
         Color(hue: 0.62 * (1 - min(max(t, 0), 1)), saturation: 0.9, brightness: 0.95)
     }
 
-    /// Wie oft jede Strecke zwischen zwei Punkten befahren wurde: Die Spur wird in Felder von etwa 25 m geteilt;
-    /// jede neue Einfahrt in ein Feld zählt als eine Durchfahrt.
-    private var passes: [Int] {
-        let punkte = spur.punkte
-        guard punkte.count >= 2 else { return [] }
-        let latStep = 25.0 / 110_540, lonStep = 25.0 / (111_320 * cos((punkte[0].point.lat) * .pi / 180))
-        let cells = punkte.map { "\(Int(($0.point.lat / latStep).rounded()))|\(Int(($0.point.lon / lonStep).rounded()))" }
-        var count: [String: Int] = [:]
-        var visits = [Int](repeating: 1, count: punkte.count)
-        for i in punkte.indices where i == 0 || cells[i] != cells[i - 1] {
-            count[cells[i], default: 0] += 1
-        }
-        // Jeder Punkt bekommt die Zahl der Durchfahrten seines Felds.
-        for i in punkte.indices { visits[i] = count[cells[i]] ?? 1 }
-        return visits
+    /// Feld von etwa 25 m, in dem ein Punkt liegt (für die Häufigkeit).
+    static func cell(_ point: GeoPoint) -> String {
+        let latStep = 25.0 / 110_540, lonStep = 25.0 / (111_320 * cos(53.5 * .pi / 180))
+        return "\(Int((point.lat / latStep).rounded()))|\(Int((point.lon / lonStep).rounded()))"
     }
 
-    /// Teilstücke mit je eigener Farbe; nach Alter höchstens 48, nach Häufigkeit je Wechsel der Durchfahrten.
-    private var pieces: [(id: Int, coordinates: [CLLocationCoordinate2D], color: Color, gap: Bool)] {
+    /// Durchfahrten je Feld einer Spur: jede neue Einfahrt in ein Feld zählt einmal.
+    static func passes(_ spur: Spur) -> [String: Int] {
+        var count: [String: Int] = [:]
+        var previous: String?
+        for punkt in spur.punkte {
+            let cell = cell(punkt.point)
+            if cell != previous { count[cell, default: 0] += 1 }
+            previous = cell
+        }
+        return count
+    }
+
+    /// Zusammenhängende Abschnitte (ohne Lücke) mit Farbverlauf; Lücken als eigene, gestrichelte Stücke.
+    private var runs: [(id: Int, coordinates: [CLLocationCoordinate2D], gradient: Gradient?)] {
         let punkte = spur.punkte
         guard punkte.count >= 2, let first = punkte.first?.date, let last = punkte.last?.date else { return [] }
         let span = max(last.timeIntervalSince(first), 1)
-        let step = max(1, (punkte.count - 1) / 48)
-        let visits = byFrequency ? passes : []
+        let counts = byFrequency ? (sharedCounts ?? Self.passes(spur)) : [:]
         func colorAt(_ i: Int) -> Color {
-            // Häufigkeit: einmal Blau, ab fünfmal Rot.
-            if byFrequency { return Self.color(Double(min(visits[i], 5) - 1) / 4) }
+            if byFrequency { return Self.color(Double(min(counts[Self.cell(punkte[i].point)] ?? 1, 5) - 1) / 4) }
             return Self.color(punkte[i].date.timeIntervalSince(first) / span)
         }
-        var result: [(Int, [CLLocationCoordinate2D], Color, Bool)] = []
+        var result: [(Int, [CLLocationCoordinate2D], Gradient?)] = []
         var start = 0
         while start < punkte.count - 1 {
             if spur.isGap(after: start) {
-                result.append((result.count, [punkte[start].point.coordinate, punkte[start + 1].point.coordinate], .gray, true))
+                result.append((result.count, [punkte[start].point.coordinate, punkte[start + 1].point.coordinate], nil))
                 start += 1
                 continue
             }
             var end = start + 1
-            if byFrequency {
-                while end < punkte.count - 1, visits[end] == visits[start], !spur.isGap(after: end) { end += 1 }
-            } else {
-                while end < punkte.count - 1, end - start < step, !spur.isGap(after: end) { end += 1 }
+            while end < punkte.count - 1, !spur.isGap(after: end) { end += 1 }
+            var coordinates = punkte[start...end].map(\.point.coordinate)
+            // Farbstopps nach zurückgelegter Strecke, höchstens etwa 64.
+            var along: [Double] = [0]
+            for i in 1..<coordinates.count {
+                along.append(along[i - 1] + MKMapPoint(coordinates[i - 1]).distance(to: MKMapPoint(coordinates[i])))
             }
-            result.append((result.count, punkte[start...end].map(\.point.coordinate), colorAt(start), false))
+            let isLast = end == punkte.count - 1
+            if isLast, let liveEnd, MKMapPoint(liveEnd).distance(to: MKMapPoint(coordinates[coordinates.count - 1])) < 300 {
+                along.append(along[along.count - 1] + MKMapPoint(coordinates[coordinates.count - 1]).distance(to: MKMapPoint(liveEnd)))
+                coordinates.append(liveEnd)
+            }
+            let total = max(along[along.count - 1], 0.001)
+            let step = max(1, (end - start + 1) / 64)
+            var stops: [Gradient.Stop] = []
+            for (offset, i) in (start...end).enumerated() where offset % step == 0 || i == end {
+                stops.append(.init(color: colorAt(i).opacity(Self.opacity), location: along[offset] / total))
+            }
+            if stops.count == 1 { stops.append(.init(color: stops[0].color, location: 1)) }
+            result.append((result.count, coordinates, Gradient(stops: stops)))
             start = end
         }
-        return result.map { (id: $0.0, coordinates: $0.1, color: $0.2, gap: $0.3) }
+        return result.map { (id: $0.0, coordinates: $0.1, gradient: $0.2) }
     }
 
     var body: some MapContent {
-        let parts = pieces
-        ForEach(parts.filter { !$0.gap }, id: \.id) { piece in
-            MapPolyline(coordinates: piece.coordinates)
-                .stroke(.white, style: StrokeStyle(lineWidth: 8, lineCap: .round, lineJoin: .round))
-        }
-        ForEach(parts, id: \.id) { piece in
-            if piece.gap {
-                MapPolyline(coordinates: piece.coordinates)
-                    .stroke(.gray.opacity(0.8), style: StrokeStyle(lineWidth: 3, lineCap: .round, dash: [2, 6]))
+        ForEach(runs, id: \.id) { run in
+            if let gradient = run.gradient {
+                MapPolyline(coordinates: run.coordinates)
+                    .stroke(gradient, style: StrokeStyle(lineWidth: 5, lineCap: .round, lineJoin: .round))
             } else {
-                MapPolyline(coordinates: piece.coordinates)
-                    .stroke(piece.color, style: StrokeStyle(lineWidth: 5, lineCap: .round, lineJoin: .round))
+                MapPolyline(coordinates: run.coordinates)
+                    .stroke(.gray.opacity(0.8), style: StrokeStyle(lineWidth: 3, lineCap: .round, dash: [2, 6]))
             }
         }
     }
@@ -296,6 +311,18 @@ final class StoredTracks {
     }
 
     private(set) var tracks: [Track] = []
+
+    /// Häufigkeit über alle Standortspuren nach Häufigkeit (alle Fahnder): Durchfahrten je Feld zusammengezählt, jede
+    /// Person nur einmal (auch wenn ihre Spur in mehreren Objekten steckt).
+    var sharedFrequency: [String: Int] {
+        var seen = Set<String>()
+        var total: [String: Int] = [:]
+        for track in tracks where track.byFrequency && seen.insert(track.spur.subject.key).inserted {
+            for (cell, count) in GradientSpurLines.passes(withLiveTail(track)) { total[cell, default: 0] += count }
+        }
+        return total
+    }
+
     /// Angetippte Stelle einer Spur: Spur, Punkt und Anteil bis zum nächsten Punkt.
     var selected: (trackId: String, index: Int, fraction: Double)?
 
@@ -346,14 +373,35 @@ final class StoredTracks {
     }
 }
 
+/// Letztes Stück der eigenen Standortspur: vom letzten GPS-Punkt bis zum gerade gezeichneten eigenen Punkt, in der
+/// Farbe des Spurendes. Eigene Ebene, damit nur dieses Stück mehrmals je Sekunde neu gezeichnet wird.
+struct OwnTrailEndLayer: MapContent {
+    let state: StoredTracks
+    let anchor: RouteAnchor
+
+    var body: some MapContent {
+        if let here = anchor.coordinate,
+           let track = state.tracks.first(where: { $0.gradient && $0.spur.subject.key == state.liveSubjectKey }),
+           let last = state.withLiveTail(track).punkte.last,
+           MKMapPoint(last.point.coordinate).distance(to: MKMapPoint(here)) < 300 {
+            let color: Color = track.byFrequency
+                ? GradientSpurLines.color(Double(min(state.sharedFrequency[GradientSpurLines.cell(last.point)] ?? 1, 5) - 1) / 4)
+                : GradientSpurLines.color(1)
+            MapPolyline(coordinates: [last.point.coordinate, here])
+                .stroke(color.opacity(GradientSpurLines.opacity), style: StrokeStyle(lineWidth: 5, lineCap: .round, lineJoin: .round))
+        }
+    }
+}
+
 struct StoredTracksLayer: MapContent {
     let state: StoredTracks
     let title: (SpurSubject) -> String
 
     var body: some MapContent {
+        let shared = state.sharedFrequency
         ForEach(state.tracks) { track in
             if track.gradient {
-                GradientSpurLines(spur: state.withLiveTail(track), byFrequency: track.byFrequency)
+                GradientSpurLines(spur: state.withLiveTail(track), byFrequency: track.byFrequency, sharedCounts: shared)
             } else {
                 SpurLines(spur: track.spur, title: title(track.spur.subject))
             }

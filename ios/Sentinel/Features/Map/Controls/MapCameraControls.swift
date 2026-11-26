@@ -170,7 +170,7 @@ private struct CompassRose: View {
 struct GlassSegmentedControl<Value: Hashable>: View {
     let items: [(value: Value, symbol: String, title: String)]
     let selection: Value
-    /// Schmal (je Symbol etwa 42 Punkte) statt über die volle Breite, z. B. zwei Schalter nebeneinander.
+    /// Flacher, für zwei Schalter nebeneinander in der Navi-Leiste.
     var compact = false
     let select: (Value) -> Void
 
@@ -185,8 +185,10 @@ struct GlassSegmentedControl<Value: Hashable>: View {
         }
         .pickerStyle(.segmented)
         .controlSize(compact ? .large : .extraLarge)
-        .frame(maxWidth: compact ? CGFloat(items.count) * 44 : .infinity)
-        .frame(height: Theme.barHeight)
+        // Schmal: flacher, der Schiebeknopf breiter als hoch (wie der Verkehrsmittel-Schalter auf der Karte); zwei
+        // Schalter teilen sich die Zeile.
+        .frame(maxWidth: .infinity)
+        .frame(height: compact ? 34 : Theme.barHeight)
         .sensoryFeedback(.selection, trigger: selection)
     }
 }

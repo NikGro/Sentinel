@@ -1,9 +1,31 @@
 # Änderungen
 
-## 0.37.3
+## 0.38.0
 
 **Navigation**
-- Eigener Pfeil sitzt wieder etwas tiefer (Mittelweg): 40 statt 70 Punkte über der Mitte
+- Sperrungen und Baustellen in der Stadt von TomTom: Der Server fragt alle drei Minuten die gesperrten Abschnitte im
+  Einsatzraum ab (nur das Rechteck, keine Standorte) und meidet sie, mit und ohne Sonderrechte. Schlüssel in Sentinel
+  Web unter System eintragen. Mit Sonderrechten folgt die Route nicht mehr Apples Weg (der fährt nie mit
+  Sonderrechten); ohne Sonderrechte bleibt Apples Weg für Staus
+- Zieladresse: Die Route endet auf der Straße der Adresse, nicht auf einer Nachbarstraße, die näher am Gebäude liegt
+- Ziel bleibt während der Navigation mit einer Fahne markiert
+- Wende-Anweisung: Die Routenlinie führt erst nach vorn zur Wendestelle, statt direkt nach hinten zu zeigen; auch die
+  Restentfernung springt nicht mehr auf den Rückweg
+- Eigener Pfeil sitzt etwas tiefer (Mittelweg); Schalter der Navi-Leiste flacher und breiter, beide in einer Zeile
+
+**Ziele**
+- Gruppen: Ziele lassen sich frei in Gruppen sortieren (gedrückt halten › Gruppe) und wieder herausnehmen; jede Gruppe
+  hat einen eigenen Schalter für die Karte, der die Schalter der Ziele darin nicht verändert. Auch in Sentinel Web
+- Standortquelle als drei Knöpfe (von Hand, A-Position, GPS-Tracker); erneut antippen setzt den Ort neu bzw. wählt
+  einen anderen Tracker. „Von Hand“ öffnet die Ortswahl mit dem aktuellen Ort vorausgewählt („Ort beibehalten“ entfällt)
+- Beziehungen: nur noch ein Freitext für die Art; anlegen und bearbeiten auf der Bearbeiten-Seite, in der Ansicht nur
+  anzeigen
+- Zielobjekt: Anschrift mit Vorschlägen während der Eingabe (Anschriften, Firmen, Stationen); setzt auch den Standort
+- Titelbilder quadratisch
+
+**Standortspur**
+- Farbe als durchgehender Verlauf, zu 75 % deckend, ohne weißen Rand; das Ende hängt am eigenen Punkt
+- Häufigkeit zählt die Fahrten aller Fahnder mit Standortspur zusammen; Umschalter Alter/Häufigkeit unter Bearbeiten
 
 ## 0.37.2
 

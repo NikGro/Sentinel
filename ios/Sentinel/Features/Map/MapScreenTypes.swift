@@ -127,6 +127,9 @@ final class RouteAnchor {
     /// So viele Meter vor dem eigenen Punkt beginnt die Linie (etwa halbe Pfeillänge): Sie läuft vorne in den
     /// Navi-Pfeil hinein, hinten in seiner Kerbe steht nichts über.
     var lead: CLLocationDistance = 0
+    /// Eigene Fahrtrichtung: Bei einer Wende liegt der Rückweg dicht neben dem Hinweg; die Linie beginnt auf dem
+    /// Stück, das in Fahrtrichtung zeigt.
+    var course: CLLocationDirection?
 }
 
 /// Letzte verlässliche Fahrtrichtung (im Auto bleibt sie an der Ampel stehen, statt dem Kompass zu folgen).

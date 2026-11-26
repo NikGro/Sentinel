@@ -188,6 +188,8 @@ final class RouteFollower {
     @ObservationIgnored private var resolve: (NavigationTarget) -> (point: GeoPoint, title: String)? = { _ in nil }
     /// Parallel-Modus: Position und Fahrtrichtung des Ziels für den Server (der dessen Straße meidet).
     @ObservationIgnored var parallelHint: (@MainActor (NavigationTarget) -> ParallelHint?)?
+    /// Straße der Zieladresse, falls das Ziel eine Anschrift hat.
+    @ObservationIgnored var destinationStreet: (@MainActor (NavigationTarget) -> String?)?
     @ObservationIgnored private var origin: () -> GeoPoint? = { nil }
     @ObservationIgnored private var routedDestination: GeoPoint?
     @ObservationIgnored private var lastRouteAt = Date.distantPast
@@ -329,7 +331,7 @@ final class RouteFollower {
         }
         isCalculating = true
         defer { isCalculating = false }
-        loader.configure(specialRights: specialRights && !walking, walking: walking, parallel: walking ? nil : parallelHint?(target))
+        loader.configure(specialRights: specialRights && !walking, walking: walking, parallel: walking ? nil : parallelHint?(target), destinationStreet: destinationStreet?(target))
         needsRoute = false
         routedDestination = point
         lastRouteAt = .now
@@ -402,7 +404,7 @@ final class RouteFollower {
                 course: course, speed: snapped.speed?.value ?? -1, timestamp: snapped.timestamp
             )
             snappedLocation = location
-            updateProgressIndex(location.coordinate)
+            updateProgressIndex(location.coordinate, course: course >= 0 ? course : nil)
             let primary = visual?.primaryContent
             let next = remainingSteps.dropFirst().first
             let ratio = loader?.trafficRatio ?? 1
@@ -429,20 +431,12 @@ final class RouteFollower {
         }
     }
 
-    private func updateProgressIndex(_ coordinate: CLLocationCoordinate2D) {
+    private func updateProgressIndex(_ coordinate: CLLocationCoordinate2D, course: CLLocationDirection?) {
         guard let coordinates = route?.coordinates, !coordinates.isEmpty else { return }
-        let here = GeoPoint(coordinate)
-        let start = min(progressIndex, coordinates.count - 1)
-        var best = start
-        var bestDistance = CLLocationDistance.greatestFiniteMagnitude
-        for i in start..<min(coordinates.count, start + 300) {
-            let d = GeoPoint(coordinates[i]).distance(to: here)
-            if d < bestDistance {
-                bestDistance = d
-                best = i
-            }
-        }
-        progressIndex = best
+        // Nur vorwärts, nur ein Stück voraus und in Fahrtrichtung: Bei einer Wende läge der Rückweg sonst schon näher.
+        let start = min(progressIndex, max(coordinates.count - 2, 0))
+        guard let best = RouteProjection.project(coordinates, from: start, point: MKMapPoint(coordinate), course: course) else { return }
+        progressIndex = best.index
     }
 
     /// Übergibt das aktuelle Ziel an Apple Karten.
@@ -515,5 +509,40 @@ enum ManeuverSymbol {
         case "uturn", "u-turn": "arrow.uturn.down"
         default: "arrow.up"
         }
+    }
+}
+
+/// Wo man sich auf der Route befindet.
+enum RouteProjection {
+    /// Lot des eigenen Orts auf die Route, gesucht ab `from` und höchstens 250 m entlang der Route voraus. Teilstücke
+    /// gegen die eigene Fahrtrichtung zählen 40 m schlechter: Bei „in 100 m wenden“ läuft der Rückweg dicht neben dem
+    /// Hinweg, die Linie soll trotzdem erst nach vorn zur Wendestelle führen statt direkt nach hinten.
+    static func project(_ coordinates: [CLLocationCoordinate2D], from: Int, point p: MKMapPoint, course: CLLocationDirection?) -> (index: Int, point: MKMapPoint, d: Double)? {
+        guard coordinates.count > 1, from < coordinates.count - 1 else { return nil }
+        var best: (index: Int, point: MKMapPoint, d: Double)?
+        var bestScore = Double.greatestFiniteMagnitude
+        var along = 0.0
+        for i in from..<(coordinates.count - 1) {
+            let a = MKMapPoint(coordinates[i]), b = MKMapPoint(coordinates[i + 1])
+            let dx = b.x - a.x, dy = b.y - a.y
+            let l2 = dx * dx + dy * dy
+            let t = l2 > 0 ? min(max(((p.x - a.x) * dx + (p.y - a.y) * dy) / l2, 0), 1) : 0
+            let q = MKMapPoint(x: a.x + dx * t, y: a.y + dy * t)
+            let d = q.distance(to: p)
+            var score = d
+            if let course, course >= 0, l2 > 0 {
+                let bearing = TrafficGuide.bearing(coordinates[i], coordinates[i + 1])
+                var off = abs(bearing - course).truncatingRemainder(dividingBy: 360)
+                if off > 180 { off = 360 - off }
+                if off > 100 { score += 40 }
+            }
+            if score < bestScore {
+                bestScore = score
+                best = (i, q, d)
+            }
+            along += a.distance(to: b)
+            if along > 250, i > from + 1 { break }
+        }
+        return best
     }
 }

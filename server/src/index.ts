@@ -14,13 +14,14 @@ import { createOverpassClient, OepnvStore } from './oepnv.js';
 import { ReachService } from './reach/reach.js';
 import { RouteService } from './reach/route.js';
 import { ClosureService } from './reach/closures.js';
+import { IncidentService } from './reach/incidents.js';
 import { ReleaseStore } from './release.js';
 import { Vault } from './security.js';
 import { intervalCommand, startH02Listener, type H02Listener } from './trackers/h02.js';
 import { TrackerLink, TrackerStatusStore } from './trackers/status.js';
 import { pajKey, PajPoller, type PajCredentials } from './trackers/paj.js';
 
-export const SERVER_VERSION = '0.37.2';
+export const SERVER_VERSION = '0.38.0';
 const MAX_UNKNOWN_TRACKERS = 50;
 
 /** Baut alle Dienste zusammen. Getrennt von `main`, damit Tests denselben Aufbau mit einer Speicher-Datenbank nutzen. */
@@ -79,6 +80,12 @@ export async function createServices(config: Config, database?: Database): Promi
     trackerStatus,
     trackerLink: new TrackerLink(),
     // Vorerst nur auf Wunsch: Das Verzeichnis des ganzen Einsatzraums sprengte die Speichergrenze des Servers.
+    incidents: new IncidentService(config.oepnvBbox, () => {
+      const env = process.env.SENTINEL_TOMTOM_KEY?.trim();
+      if (env) return env;
+      const sealed = db.getKv('tomtom');
+      return sealed ? vault.open(sealed) : null;
+    }),
     closures: new ClosureService(process.env.SENTINEL_SPERRUNGEN !== 'aus' && config.production),
     streets: new StreetIndex(config.dataDir, config.oepnvBbox, process.env.SENTINEL_STRASSENVERZEICHNIS === 'an' ? overpass : null, process.env.SENTINEL_STRASSENVERZEICHNIS === 'an'),
   };
@@ -122,6 +129,7 @@ async function main(): Promise<void> {
   services.oepnv.refreshIfStale();
   services.streets.refreshIfStale();
   services.closures.refreshIfStale();
+  services.incidents.refreshIfStale();
   // Viertelstündlich prüfen: frische Daten werden nicht neu geladen, ein Fehler (z. B. Overpass überlastet) aber bald wiederholt.
   setInterval(() => {
     services.oepnv.refreshIfStale();

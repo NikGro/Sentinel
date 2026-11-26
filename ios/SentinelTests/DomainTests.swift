@@ -397,3 +397,28 @@ struct DeclutterTests {
         #expect(offsets["c"] == CGSize(width: Declutter.columnOffset, height: Declutter.rowSpacing))
     }
 }
+
+struct AddressStreetTests {
+    @Test func strasseAusAnschrift() {
+        #expect(AddressStreet.street(of: "Musterstraße 3, 22391 Hamburg") == "Musterstraße")
+        #expect(AddressStreet.street(of: "Wellingsbüttler Weg 12a") == "Wellingsbüttler Weg")
+        #expect(AddressStreet.street(of: "Am Markt 1-3") == "Am Markt")
+        #expect(AddressStreet.street(of: "Hauptbahnhof") == nil)
+    }
+}
+
+struct RouteProjectionTests {
+    @Test func wendeLinieFuehrtErstNachVorn() throws {
+        // Route: 100 m nach Norden bis zur Wendestelle, dann 3 m daneben zurück nach Süden (Gegenfahrbahn) und weiter.
+        let north = (0...10).map { CLLocationCoordinate2D(latitude: 53.55 + Double($0) * 0.00009, longitude: 10.0) }
+        let back = (0...20).map { CLLocationCoordinate2D(latitude: 53.5509 - Double($0) * 0.00009, longitude: 10.00004) }
+        let route = north + back
+        // Man fährt nach Norden, 20 m nach dem Start; der Rückweg liegt fast genauso nah.
+        let here = MKMapPoint(CLLocationCoordinate2D(latitude: 53.55018, longitude: 10.00003))
+        let hit = try #require(RouteProjection.project(route, from: 0, point: here, course: 0))
+        #expect(hit.index < 10, "auf dem Hinweg (Index \(hit.index)), nicht auf dem Rückweg")
+        // Fährt man schon zurück (Süden), gilt der Rückweg.
+        let late = try #require(RouteProjection.project(route, from: 10, point: here, course: 180))
+        #expect(late.index >= 10)
+    }
+}

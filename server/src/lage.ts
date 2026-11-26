@@ -78,6 +78,7 @@ const DEFAULT_OPERATION: Operation = {
   sos: null,
   fahrzeuge: [],
   ziele: [],
+  gruppenAus: [],
   rev: 0,
 };
 
@@ -152,6 +153,7 @@ export class Lage extends EventEmitter<{ event: [LageEvent] }> {
         // Früher war „im Einsatz“ ein Merkmal des Fahrzeugs selbst; das gilt als Ausgangsstand je Instanz.
         fahrzeuge: parsed.fahrzeuge ?? this.list('vehicle').filter((v) => v.data.aktiv).map((v) => v.id),
         ziele: parsed.ziele ?? [],
+        gruppenAus: parsed.gruppenAus ?? [],
         rev: parsed.rev ?? 0,
       };
       this.operations.set(inst, op);
@@ -203,6 +205,7 @@ export class Lage extends EventEmitter<{ event: [LageEvent] }> {
       annotations: this.list('annotation', inst),
       targets: this.list('target', inst),
       relations: this.list('relation'),
+      targetGroups: this.list('targetGroup'),
       trackers: this.list('tracker'),
       layers: this.list('layer', inst),
       rooms: this.list('room', inst),
@@ -252,6 +255,7 @@ export class Lage extends EventEmitter<{ event: [LageEvent] }> {
       case 'target': {
         const next = data as EntityData<'target'>;
         normalizeTargetPhotos(next);
+        if (next.gruppeId && !this.get('targetGroup', next.gruppeId)) next.gruppeId = null;
         // Wird der Tracker getrennt oder die Quelle gewechselt, bleibt das Ziel an der letzten Trackerposition stehen.
         const previous = (existing as Entity<'target'> | null)?.data;
         if (previous && sourceOf(previous) === 'tracker' && sourceOf(next) !== 'tracker' && previous.trackerId) {
@@ -363,6 +367,16 @@ export class Lage extends EventEmitter<{ event: [LageEvent] }> {
         break;
       default:
         break;
+    }
+    if (kind === 'targetGroup') {
+      // Gruppe weg: Ihre Ziele werden ungruppiert, die Einstellung „ausgeblendet“ entfällt.
+      for (const t of this.list('target')) {
+        if (t.data.gruppeId === id) this.write('target', '', t.id, { ...t.data, gruppeId: null }, actor.id);
+      }
+      for (const instance of this.list('instance')) {
+        const aus = this.operationOf(instance.id).gruppenAus;
+        if (aus.includes(id)) this.updateOperation(instance.id, { gruppenAus: aus.filter((g) => g !== id) });
+      }
     }
     if (kind === 'target') {
       // Beziehungen hängen an beiden Zielen; ohne eines davon sind sie bedeutungslos.
@@ -663,6 +677,13 @@ export class Lage extends EventEmitter<{ event: [LageEvent] }> {
         if (!this.get('target', zielId)) throw new LageError('unbekannt', 'Ziel nicht gefunden.');
         const others = op.ziele.filter((z) => z !== zielId);
         this.updateOperation(here, { ziele: args.sichtbar ? [...others, zielId] : others });
+        break;
+      }
+      case 'gruppe.sichtbar': {
+        const gruppeId = args.gruppeId as string;
+        if (!this.get('targetGroup', gruppeId)) throw new LageError('unbekannt', 'Gruppe nicht gefunden.');
+        const others = op.gruppenAus.filter((g) => g !== gruppeId);
+        this.updateOperation(here, { gruppenAus: args.sichtbar ? others : [...others, gruppeId] });
         break;
       }
       case 'bestreifung.zuruecksetzen':

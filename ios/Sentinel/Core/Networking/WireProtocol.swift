@@ -27,6 +27,7 @@ struct Snapshot: Decodable, Sendable {
     var annotations: [Versioned<MapObject>]
     var targets: [Versioned<Target>]
     var relations: [Versioned<Relation>]
+    var targetGroups: [Versioned<TargetGroup>]
     var trackers: [Versioned<Tracker>]
     var layers: [Versioned<Layer>]
     var rooms: [Versioned<ChatRoom>]
@@ -48,6 +49,7 @@ struct Snapshot: Decodable, Sendable {
         annotations = try c.lossy(Versioned<MapObject>.self, forKey: .annotations)
         targets = try c.lossy(Versioned<Target>.self, forKey: .targets)
         relations = (try? c.lossy(Versioned<Relation>.self, forKey: .relations)) ?? []
+        targetGroups = (try? c.lossy(Versioned<TargetGroup>.self, forKey: .targetGroups)) ?? []
         trackers = try c.lossy(Versioned<Tracker>.self, forKey: .trackers)
         layers = try c.lossy(Versioned<Layer>.self, forKey: .layers)
         rooms = (try? c.lossy(Versioned<ChatRoom>.self, forKey: .rooms)) ?? []
@@ -61,7 +63,7 @@ struct Snapshot: Decodable, Sendable {
 
     private enum CodingKeys: String, CodingKey {
         case me = "self"
-        case server, online, members, vehicles, annotations, targets, relations, trackers, layers, rooms, messages, operation, positions, trackerPositions, instanz, instances
+        case server, online, members, vehicles, annotations, targets, relations, targetGroups, trackers, layers, rooms, messages, operation, positions, trackerPositions, instanz, instances
     }
 }
 
@@ -92,6 +94,7 @@ enum ServerMessage: Sendable {
     case putMapObject(Versioned<MapObject>)
     case putTarget(Versioned<Target>)
     case putRelation(Versioned<Relation>)
+    case putTargetGroup(Versioned<TargetGroup>)
     case putTracker(Versioned<Tracker>)
     case putLayer(Versioned<Layer>)
     case putRoom(Versioned<ChatRoom>)
@@ -157,6 +160,7 @@ enum WireCodec {
             case Vehicle.kind: return .putVehicle(try decoder.decode(Put<Vehicle>.self, from: data).entity)
             case MapObject.kind: return .putMapObject(try decoder.decode(Put<MapObject>.self, from: data).entity)
             case Target.kind: return .putTarget(try decoder.decode(Put<Target>.self, from: data).entity)
+            case TargetGroup.kind: return .putTargetGroup(try decoder.decode(Put<TargetGroup>.self, from: data).entity)
             case Relation.kind: return .putRelation(try decoder.decode(Put<Relation>.self, from: data).entity)
             case Tracker.kind: return .putTracker(try decoder.decode(Put<Tracker>.self, from: data).entity)
             case Layer.kind: return .putLayer(try decoder.decode(Put<Layer>.self, from: data).entity)

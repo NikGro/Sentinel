@@ -98,7 +98,7 @@ extension MapScreen {
     var targetPins: [SymbolPin] {
         guard !model.editsPermanentLayer else { return [] }
         return lage.sortedTargets.compactMap { target in
-            guard !settings.hiddenTargetKinds.contains(target.data.art.rawValue), lage.isTargetShown(target.id) else { return nil }
+            guard !settings.hiddenTargetKinds.contains(target.data.art.rawValue), lage.isTargetVisible(target.id) else { return nil }
             if let binding = target.data.bindung, binding.art == .fahrzeug || binding.art == .objekt, let id = binding.zielId, lage.targets[id] != nil { return nil }
             guard let position = lage.position(ofTarget: target) else { return nil }
             return SymbolPin(id: target.id, title: targetLabel(target), symbol: target.data.mapSymbol, color: Theme.target, coordinate: position.point.coordinate, selection: .target(target.id))

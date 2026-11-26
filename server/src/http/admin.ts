@@ -63,6 +63,13 @@ export function registerAdminRoutes(app: FastifyInstance, services: Services, gu
       },
       argus: { verfuegbar: argus.available, projekte: argus.projects() },
       routing: reach.routingConfigured,
+      sperrungen: {
+        tomtom: services.incidents.configured,
+        tomtomAbschnitte: services.incidents.count,
+        tomtomStand: services.incidents.loadedAt,
+        tomtomFehler: services.incidents.lastError,
+        autobahn: services.closures.count,
+      },
       oepnv: { linien: services.oepnv.count, stand: services.oepnv.loadedAt, fehler: services.oepnv.lastError },
       karte: mapkit.configured ? 'apple' : 'osm',
       release: releases.current(),
@@ -98,6 +105,26 @@ export function registerAdminRoutes(app: FastifyInstance, services: Services, gu
     if (!body.success) throw new HttpError(400, 'Das neue Passwort braucht mindestens 12 Zeichen.');
     if (!(await auth.changePassword(body.data.aktuell, body.data.neu))) throw new HttpError(403, 'Aktuelles Passwort ist nicht korrekt.');
     reply.clearCookie(SESSION_COOKIE, { path: '/' });
+    return { ok: true };
+  });
+
+  // ───────────── TomTom (Sperrungen) ─────────────
+
+  app.put('/api/v1/admin/tomtom', async (request) => {
+    guards.admin(request);
+    const body = z.object({ schluessel: z.string().trim().min(10).max(200) }).safeParse(request.body);
+    if (!body.success) throw new HttpError(400, 'Schlüssel der TomTom-API angeben.');
+    db.setKv('tomtom', vault.seal(body.data.schluessel));
+    db.audit('zentrale', 'tomtom.eingerichtet');
+    await services.incidents.refresh();
+    return { ok: true, fehler: services.incidents.lastError, abschnitte: services.incidents.count };
+  });
+
+  app.delete('/api/v1/admin/tomtom', async (request) => {
+    guards.admin(request);
+    db.deleteKv('tomtom');
+    services.incidents.replace([]);
+    db.audit('zentrale', 'tomtom.entfernt');
     return { ok: true };
   });
 

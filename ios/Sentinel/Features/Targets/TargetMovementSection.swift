@@ -14,8 +14,6 @@ struct TargetMovementSection: View {
     /// ÖPNV: Fahrzeug auf der ÖPNV-Karte wählen.
     @State private var boardingTransit = false
     @State private var choosingTracker = false
-    /// Zuletzt „Ort beibehalten“ gewählt (gespeichert wird das wie „Von Hand“: fester Ort).
-    @State private var keptHere = false
     @State private var pickingLocation = false
 
     private var target: Target { entity.data }
@@ -34,40 +32,20 @@ struct TargetMovementSection: View {
         // der Schalter und darunter, was gerade gilt (vorher schwebte der Schalter frei über einer eigenen Zeile).
         if target.supportsDynamicSource, boardedIn == nil {
             Section {
-                VStack(alignment: .leading, spacing: 12) {
-                    Picker("Standortquelle", selection: source) {
-                        ForEach(SourceChoice.allCases) { option in
-                            Image(systemName: option.symbolName)
-                                .accessibilityLabel(option.title)
-                                .tag(option)
+                VStack(alignment: .leading, spacing: 8) {
+                    // Drei Knöpfe statt Schalter plus eigener Zeile: Antippen wechselt die Quelle, erneutes Antippen
+                    // der aktiven Quelle setzt den Ort neu bzw. wählt einen anderen Tracker.
+                    HStack(spacing: 8) {
+                        ForEach([LocationSource.hand, .a, .tracker], id: \.self) { option in
+                            SourceButton(source: option, active: target.effectiveSource == option) { choose(option) }
                         }
                     }
-                    .pickerStyle(.segmented)
-                    .controlSize(.large)
-                    HStack(spacing: 10) {
-                        VStack(alignment: .leading, spacing: 1) {
-                            Text(source.wrappedValue.title)
-                                .font(.subheadline.weight(.semibold))
-                            Text(sourceDescription)
-                                .font(.caption)
-                                .foregroundStyle(.secondary)
-                                .lineLimit(1)
-                        }
-                        Spacer()
-                        switch source.wrappedValue {
-                        case .hand:
-                            Button("Ort setzen") { placeByHand() }
-                                .buttonStyle(.glass)
-                        case .tracker:
-                            Button("Tracker wählen") { choosingTracker = true }
-                                .buttonStyle(.glass)
-                        case .keep, .a:
-                            EmptyView()
-                        }
-                    }
-                    .controlSize(.small)
+                    Text(sourceDescription)
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                        .lineLimit(1)
                 }
-                .padding(.vertical, 4)
+                .padding(.vertical, 2)
                 .sheet(isPresented: $choosingTracker) {
                     TrackerChoiceSheet(selected: target.trackerId) { trackerId in
                         save {
@@ -188,44 +166,16 @@ struct TargetMovementSection: View {
         )
     }
 
-    /// Vierer-Schalter der Standortquelle: Ort beibehalten (bleibt, wo das Ziel gerade ist), von Hand setzen
-    /// (Ort wählen), Tracker (fragt nach dem Tracker, solange keiner verbunden ist), A-Position (folgt sofort).
-    private var source: Binding<SourceChoice> {
-        Binding(
-            get: {
-                switch target.effectiveSource {
-                case .hand: keptHere ? .keep : .hand
-                case .tracker: .tracker
-                case .a: .a
-                }
-            },
-            set: { option in
-                keptHere = option == .keep
-                switch option {
-                case .keep:
-                    let here = lage.position(ofTarget: entity)?.point
-                    save {
-                        if let here { $0.standort = TimedPoint(here) }
-                        $0.quelle = .hand
-                    }
-                case .hand:
-                    placeByHand()
-                case .tracker:
-                    if target.trackerId != nil { save { $0.quelle = .tracker } } else { choosingTracker = true }
-                case .a:
-                    save { $0.quelle = .a }
-                }
-            }
-        )
-    }
-
-    private func placeByHand() {
-        if let placeOnMap {
-            save { $0.quelle = .hand }
-            placeOnMap(entity.id)
-            dismiss()
-        } else {
+    /// Von Hand: Dialog zum Setzen eines Punkts, mit dem aktuellen Ort vorausgewählt (direkt übernehmen oder neu
+    /// wählen). Tracker: wechselt zum verbundenen, sonst (oder erneut angetippt) Auswahl. A: gilt sofort.
+    private func choose(_ option: LocationSource) {
+        switch option {
+        case .hand:
             pickingLocation = true
+        case .tracker:
+            if target.effectiveSource != .tracker, target.trackerId != nil { save { $0.quelle = .tracker } } else { choosingTracker = true }
+        case .a:
+            save { $0.quelle = .a }
         }
     }
 
@@ -236,28 +186,33 @@ struct TargetMovementSection: View {
     }
 }
 
-/// Wahl im Vierer-Schalter der Standortquelle.
-private enum SourceChoice: String, CaseIterable, Identifiable {
-    case keep, hand, tracker, a
+/// Knopf der Standortquelle: Symbol und Name, der aktive hervorgehoben.
+private struct SourceButton: View {
+    let source: LocationSource
+    let active: Bool
+    let action: () -> Void
 
-    var id: String { rawValue }
-
-    var title: String {
-        switch self {
-        case .keep: "Ort beibehalten"
-        case .hand: LocationSource.hand.title
-        case .tracker: LocationSource.tracker.title
-        case .a: LocationSource.a.title
+    var body: some View {
+        Button(action: action) {
+            VStack(spacing: 3) {
+                Image(systemName: source.symbolName)
+                    .font(.body.weight(.semibold))
+                Text(source.title)
+                    .font(.caption2.weight(.semibold))
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.8)
+            }
+            .foregroundStyle(active ? Color.white : Color.primary)
+            .frame(maxWidth: .infinity)
+            .frame(height: 50)
+            .background(active ? AnyShapeStyle(Theme.accent) : AnyShapeStyle(Color.secondary.opacity(0.14)), in: .rect(cornerRadius: 12))
+            .contentShape(.rect(cornerRadius: 12))
         }
-    }
-
-    var symbolName: String {
-        switch self {
-        case .keep: "pin.fill"
-        case .hand: LocationSource.hand.symbolName
-        case .tracker: LocationSource.tracker.symbolName
-        case .a: LocationSource.a.symbolName
-        }
+        .buttonStyle(.plain)
+        .accessibilityLabel(source.title)
+        .accessibilityValue(active ? "aktiv" : "")
+        .accessibilityHint(active ? (source == .tracker ? "Anderen Tracker wählen" : source == .hand ? "Standort neu setzen" : "") : "Als Standortquelle wählen")
+        .sensoryFeedback(.selection, trigger: active)
     }
 }
 

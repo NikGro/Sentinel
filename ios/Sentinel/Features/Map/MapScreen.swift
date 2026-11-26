@@ -18,6 +18,8 @@ struct MapScreen: View {
     @State var tapMarker: GeoPoint?
     @State var lastShapeTap: ShapeTap?
     @State var routeAnchor = RouteAnchor()
+    /// Ende der eigenen Standortspur (gerade gezeichneter eigener Punkt).
+    @State var trailAnchor = RouteAnchor()
     @State var courseMemory = CourseMemory()
     @State var quickLookDetent: PresentationDetent = .medium
     @State var tapMode: MapTapMode = .none
@@ -276,8 +278,15 @@ struct MapScreen: View {
                 if !route.transit || route.transitPlan == nil {
                     LiveRouteLayer(route: route, anchor: routeAnchor)
                 }
+                // Ziel der Navigation bleibt markiert, bis sie endet (Haltestellen-Ziele hebt `StopsLayer` hervor).
+                if route.isActive, let destination = route.destination, highlightedStops.isEmpty {
+                    Marker(route.title, systemImage: "flag.checkered", coordinate: destination.coordinate)
+                        .tint(.red)
+                }
                 // Querstraßen stehen jetzt als „Ecke …“ am eigenen Punkt (die Schilder entlang der Route erschienen nicht).
                 StoredTracksLayer(state: storedTracks) { model.title(of: $0) }
+                // Letztes Stück der eigenen Standortspur bis zum gezeichneten Punkt, mehrmals je Sekunde nachgeführt.
+                OwnTrailEndLayer(state: storedTracks, anchor: trailAnchor)
                 // Angetippte Stelle auf einer Strecke (beim Verlauf zeichnet ihn die Spur selbst).
                 if let tapMarker, selection != nil, storedTracks.selected == nil {
                     Annotation("", coordinate: tapMarker.coordinate, anchor: .center) {
@@ -482,6 +491,20 @@ struct MapScreen: View {
         .task(id: stopCircles.map { FahndungStore.stopsKey($0.point, radius: $0.radius) }.joined(separator: ";")) {
             await fahndung.loadStops(for: stopCircles)
         }
+        // Standortspur: Ende am eigenen Punkt, fünfmal je Sekunde (nur dieses kurze Stück wird neu gezeichnet).
+        .task(id: storedTracks.tracks.contains { $0.gradient && $0.spur.subject.key == storedTracks.liveSubjectKey }) {
+            guard storedTracks.tracks.contains(where: { $0.gradient && $0.spur.subject.key == storedTracks.liveSubjectKey }) else {
+                trailAnchor.coordinate = nil
+                return
+            }
+            while !Task.isCancelled {
+                let here = engine.followedCoordinate ?? route.displayLocation(raw: location.current)?.coordinate
+                if let here, trailAnchor.coordinate.map({ MKMapPoint($0).distance(to: MKMapPoint(here)) > 0.3 }) ?? true {
+                    trailAnchor.coordinate = here
+                }
+                try? await Task.sleep(for: .milliseconds(200))
+            }
+        }
         // Routenlinie: Beginn unter dem eigenen Punkt, fünfmal je Sekunde nachgeführt (nur die Linie wird neu gezeichnet).
         .task(id: route.isActive) {
             guard route.isActive else {
@@ -498,6 +521,8 @@ struct MapScreen: View {
                 let tip = 14 * cos(cameraState.pitch * .pi / 180)
                 let lead = engine.centerPoint.flatMap { engine.groundDistance(from: $0, up: tip) } ?? cameraState.distance / 700 * 18
                 if abs(lead - routeAnchor.lead) > 1 { routeAnchor.lead = lead }
+                let course = myCourse
+                if (course == nil) != (routeAnchor.course == nil) || abs((course ?? 0) - (routeAnchor.course ?? 0)) > 3 { routeAnchor.course = course }
                 try? await Task.sleep(for: .milliseconds(200))
             }
         }

@@ -236,6 +236,8 @@ const target = z.object({
    * von Hand gesetzt, vom verbundenen Tracker oder der A-Position folgend (wer die A hat, sieht das Ziel).
    */
   quelle: z.enum(['hand', 'tracker', 'a']).nullish().transform((v) => v ?? null),
+  /** Gruppe im Ziele-Tab (höchstens eine); `null` heißt ungruppiert. */
+  gruppeId: optionalId,
   /** Von Hand gesetzter Standort; ein verbundener Tracker hat Vorrang. */
   standort: geoPoint.extend({ ts: timestamp }).nullish().transform((v) => v ?? null),
   aufzeichnung: z.boolean().default(true),
@@ -253,14 +255,19 @@ const relation = z
   .object({
     von: id,
     nach: id,
-    /** Z. B. Halter, Fahrer, Bewohner; leer heißt „verbunden“ ohne nähere Angabe. */
-    bezeichnung: optionalText(60),
+    /** Art der Beziehung als Freitext, z. B. Halter, Fahrer, Bewohner; leer heißt „verbunden“. */
+    bezeichnung: optionalText(200),
     notiz: optionalText(1000),
     status: z.enum(['vermutet', 'bestaetigt', 'beendet']).default('vermutet'),
     /** Woher die Angabe stammt, z. B. „Halterabfrage“, „Observation“, „Hinweisgeber“. */
     herkunft: optionalText(120),
   })
   .refine((r) => r.von !== r.nach, 'Ein Ziel kann nicht mit sich selbst verbunden sein');
+
+/** Gruppe von Zielen (z. B. je Verfahren). Ein- und Ausblenden je Instanz über `Operation.gruppenAus`. */
+const targetGroup = z.object({
+  name: text(60).min(1),
+});
 
 const tracker = z.object({
   name: text(60).min(1),
@@ -312,7 +319,7 @@ const message = z
   })
   .refine((m) => m.text.length > 0 || m.anhang !== null, 'Nachricht ist leer');
 
-export const ENTITY_SCHEMAS = { member, vehicle, annotation, target, relation, tracker, layer, room, message, instance } as const;
+export const ENTITY_SCHEMAS = { member, vehicle, annotation, target, relation, targetGroup, tracker, layer, room, message, instance } as const;
 
 /** Objektarten, die zu einer Instanz gehören. Alle anderen gelten instanzübergreifend. */
 /** Instanzbezogene Arten. Ziele gelten seit 0.19 instanzübergreifend; welche eine Instanz zeigt, steht in `Operation.ziele`. */
@@ -373,6 +380,11 @@ export interface Operation {
   fahrzeuge: string[];
   /** Ziele, die in dieser Instanz für alle sichtbar sind. Die Ziele selbst gelten instanzübergreifend. */
   ziele: string[];
+  /**
+   * Ausgeblendete Zielgruppen dieser Instanz. Ihre Ziele sind dann verborgen, ohne dass sich die Sichtbarkeit der
+   * einzelnen Ziele (`ziele`) ändert: Wird die Gruppe wieder eingeblendet, erscheinen genau die vorher sichtbaren.
+   */
+  gruppenAus: string[];
   rev: number;
 }
 
@@ -404,6 +416,7 @@ export const commandArgs = {
   'tracker.intervall': z.object({ trackerId: id, sekunden: z.number().int().min(10).max(3600) }),
   'fahrzeug.aktivieren': z.object({ fahrzeugId: id, aktiv: z.boolean() }),
   'ziel.sichtbar': z.object({ zielId: id, sichtbar: z.boolean() }),
+  'gruppe.sichtbar': z.object({ gruppeId: id, sichtbar: z.boolean() }),
   'bestreifung.zuruecksetzen': z.object({}).optional(),
   'lage.zuruecksetzen': z.object({ ziele: z.boolean().default(false) }),
   'instanz.erstellen': z.object({ id, name: text(60).min(1), beschreibung: text(500).optional().default(''), art: z.enum(['einsatz', 'paket']).default('einsatz') }),

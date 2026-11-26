@@ -16,17 +16,19 @@ final class NaviRequestLoader: URLRequestLoading, @unchecked Sendable {
     private var usedSpecialRights = false
     private var ratio: Double = 1
     private var parallel: ParallelHint?
+    private var destinationStreet: String?
     private var avoided = false
 
     init(token: String) {
         self.token = token
     }
 
-    func configure(specialRights: Bool, walking: Bool, parallel: ParallelHint? = nil) {
+    func configure(specialRights: Bool, walking: Bool, parallel: ParallelHint? = nil, destinationStreet: String? = nil) {
         lock.withLock {
             self.specialRights = specialRights
             self.walking = walking
             self.parallel = parallel
+            self.destinationStreet = destinationStreet
         }
     }
 
@@ -40,7 +42,7 @@ final class NaviRequestLoader: URLRequestLoading, @unchecked Sendable {
     var trafficRatio: Double { lock.withLock { ratio } }
 
     func loadData(with urlRequest: URLRequest) async throws -> (Data, URLResponse) {
-        let (specialRights, walking, parallel) = lock.withLock { (self.specialRights, self.walking, self.parallel) }
+        let (specialRights, walking, parallel, street) = lock.withLock { (self.specialRights, self.walking, self.parallel, self.destinationStreet) }
         var request = urlRequest
         request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
         request.timeoutInterval = 20
@@ -54,14 +56,22 @@ final class NaviRequestLoader: URLRequestLoading, @unchecked Sendable {
         }
         json["sentinel"] = sentinel
         if walking { json["costing"] = "pedestrian" }
+        // Zieladresse: auf der Straße der Adresse ankommen, nicht auf einer Nachbarstraße, die in Luftlinie näher am
+        // Gebäude liegt (Valhalla rastet den Zielort dann auf der Straße mit diesem Namen ein).
+        if let street, var locations = json["locations"] as? [[String: Any]], !locations.isEmpty {
+            locations[locations.count - 1]["street"] = street
+            json["locations"] = locations
+        }
 
-        // Immer die direkt gerechnete Route; mit dem Auto zusätzlich Apples Weg mit Verkehrslage, Sperrungen und
-        // Baustellen (Apple kennt sie, Valhalla nicht) als Vorgabe. Beides läuft gleichzeitig.
+        // Immer die direkt gerechnete Route; ohne Sonderrechte mit dem Auto zusätzlich Apples Weg mit Verkehrslage
+        // (Staus) als Vorgabe. Beides läuft gleichzeitig.
         var plain = request
         plain.httpBody = try JSONSerialization.data(withJSONObject: json)
         async let direct = send(plain)
         var guide: TrafficGuide?
-        if !walking, parallel == nil, let locations = json["locations"] as? [[String: Any]], locations.count >= 2 {
+        // Mit Sonderrechten nicht: Apple fährt nie mit Sonderrechten, die Abweichung sagt dann nichts über Sperrungen;
+        // die kennt der Server selbst (TomTom, Autobahn GmbH).
+        if !specialRights, !walking, parallel == nil, let locations = json["locations"] as? [[String: Any]], locations.count >= 2 {
             guide = await TrafficGuide.make(from: locations[0], to: locations[locations.count - 1])
         }
         let (data, response) = try await direct
@@ -312,4 +322,15 @@ struct ParallelHint: Equatable, Sendable {
     var point: GeoPoint
     var heading: Double
     var meters: Double
+}
+
+enum AddressStreet {
+    /// Straßenname aus einer Anschrift („Musterstraße 3, 22391 Hamburg“ → „Musterstraße“); `nil` ohne Hausnummer
+    /// (dann ist es eher ein Ortsname oder eine Firma).
+    static func street(of address: String) -> String? {
+        let first = address.split(separator: ",").first.map(String.init)?.trimmingCharacters(in: .whitespaces) ?? ""
+        guard let match = first.firstMatch(of: /^(.+?)\s+\d+\s*[a-zA-Z]?(\s*[-\/]\s*\d+\s*[a-zA-Z]?)?$/) else { return nil }
+        let street = String(match.1).trimmingCharacters(in: .whitespaces)
+        return street.count >= 3 ? street : nil
+    }
 }

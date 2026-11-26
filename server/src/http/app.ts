@@ -29,6 +29,7 @@ import { registerTrackerRoutes } from './trackers.js';
 import { registerTransitRoutes } from './transit.js';
 import { registerPublicRoutes } from './public.js';
 import type { ClosureService } from '../reach/closures.js';
+import type { IncidentService } from '../reach/incidents.js';
 
 export const SESSION_COOKIE = 'sentinel_sitzung';
 
@@ -60,6 +61,8 @@ export interface Services {
   streets: StreetIndex;
   /** Aktuelle Vollsperrungen (Autobahn), die die Navigation meidet. */
   closures: ClosureService;
+  /** Aktuelle Sperrungen von TomTom (auch innerorts), sofern ein Schlüssel hinterlegt ist. */
+  incidents: IncidentService;
 }
 
 export class HttpError extends Error {
