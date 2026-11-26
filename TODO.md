@@ -39,9 +39,14 @@ statt jede Änderung sofort einzubauen. Erledigtes wandert mit Version ins CHANG
   - Gruppieren ist freiwillig: Ziele lassen sich frei einer Gruppe zuordnen und wieder herausnehmen; ungruppierte Ziele
     stehen wie bisher nach Typ in der Hauptansicht, die Gruppen daneben.
   - Noch offen: Gruppen je Instanz oder serverweit, Anzeige in Sentinel Web.
-- **Standortquelle: „Ort beibehalten“ und „Von Hand“ zusammenführen:** Ein einziger Punkt „Von Hand“. Er öffnet den
-  gewohnten Dialog zum Setzen eines Punkts, mit dem aktuellen Ort des Ziels schon vorausgewählt: direkt „Übernehmen“
-  oder neu wählen. Der Schalter hat dann drei Stellungen (von Hand, Tracker, A).
+- **Standortquelle als drei Knöpfe:** Nur noch „Von Hand“, „A-Position“ und „GPS-Tracker“ („Ort beibehalten“ geht in
+  „Von Hand“ auf). Statt Schalter plus Zeile mit eigenem Knopf darunter drei Knöpfe mit Symbol nebeneinander; der aktive
+  ist hervorgehoben.
+  - Antippen eines anderen Knopfs wechselt die Quelle: „Von Hand“ öffnet den gewohnten Dialog zum Setzen eines Punkts
+    mit dem aktuellen Ort des Ziels vorausgewählt (direkt „Übernehmen“ oder neu wählen), „GPS-Tracker“ die
+    Tracker-Auswahl (solange keiner verbunden ist), „A-Position“ gilt sofort.
+  - Erneutes Antippen des aktiven Knopfs: Standort neu setzen bzw. anderen Tracker wählen.
+  - Kurzer Stand darunter oder im Knopf (z. B. „vor 9 Std.“, Trackername), platzsparend.
 - **Standortspur überarbeiten:**
   - Wächst teilweise noch stückig nach: Das Ende fließend mit dem eigenen Punkt verbinden (z. B. ein laufend
     nachgeführtes letztes Stück bis zum aktuell gezeichneten Punkt), damit keine Lücke und kein Ruckeln entsteht.
