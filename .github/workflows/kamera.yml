@@ -3,10 +3,19 @@ name: Kamera-Test
 # Prüft die Kamera beim Anheften automatisch im Simulator (Zoomen, Drehen, Wischen, Folgen beim Fahren) und nimmt
 # den Bildschirm dabei als Video auf. Ergebnis: Testbericht, Video, Bildschirmfotos und die Messdatei der App
 # (kamera.jsonl, eine Zeile je Kamerabewegung) als Artefakt „Kamera-…“. Blockiert den Bau der App nicht.
+# Läuft nur, wenn sich die Kartensteuerung oder der Test selbst ändert, und nur auf Arbeitszweigen (main übernimmt
+# den dort geprüften Stand). Von Hand jederzeit startbar.
 on:
   push:
-    branches: [main, "claude/**"]
-    paths: ["ios/**", ".github/workflows/kamera.yml"]
+    branches: ["claude/**"]
+    paths:
+      - "ios/Sentinel/Features/Map/Controls/MapEngine.swift"
+      - "ios/Sentinel/Features/Map/Controls/CameraProbe.swift"
+      - "ios/Sentinel/Features/Map/Controls/MapCameraControls.swift"
+      - "ios/Sentinel/Features/Map/Layers/MyLocationLayer.swift"
+      - "ios/Sentinel/Features/Map/MapScreen*.swift"
+      - "ios/SentinelUITests/KameraTests.swift"
+      - ".github/workflows/kamera.yml"
   workflow_dispatch:
 
 permissions:
@@ -28,6 +37,15 @@ jobs:
       - uses: actions/checkout@v5
         with:
           persist-credentials: false
+
+      # Derselbe Zwischenspeicher wie beim Testen der App (gleiche Simulator-Bauweise).
+      - uses: actions/cache@v4
+        with:
+          path: |
+            ios/build/SourcePackages
+            ios/build/DerivedData
+          key: ios-test-${{ hashFiles('ios/project.yml') }}-kamera-${{ github.sha }}
+          restore-keys: ios-test-${{ hashFiles('ios/project.yml') }}-
 
       - name: Werkzeuge
         run: |
@@ -51,6 +69,7 @@ jobs:
             -project Sentinel.xcodeproj -scheme Sentinel \
             -destination "platform=iOS Simulator,name=${{ steps.sim.outputs.device }}" \
             -derivedDataPath build/DerivedData \
+            -clonedSourcePackagesDirPath build/SourcePackages \
             CODE_SIGNING_ALLOWED=NO 2>&1 | tee build-kamera.log | xcbeautify --quiet
 
       - name: Kamera-Test mit Videoaufnahme
@@ -69,6 +88,7 @@ jobs:
               -project Sentinel.xcodeproj -scheme Sentinel \
               -destination "platform=iOS Simulator,name=${{ steps.sim.outputs.device }}" \
               -derivedDataPath build/DerivedData \
+              -clonedSourcePackagesDirPath build/SourcePackages \
               -resultBundlePath build/Kamera-$T.xcresult \
               -only-testing:SentinelUITests/KameraTests/$T \
               CODE_SIGNING_ALLOWED=NO 2>&1 | tee -a build-kamera-test.log | xcbeautify || STATUS=$?
