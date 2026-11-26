@@ -19,11 +19,20 @@ enum NavigationTarget: Equatable, Hashable, Sendable {
     /// Nicht zum Fahrzeug selbst, sondern `stops` Halte vor dem ÖPNV-Fahrzeug, in dem das Ziel sitzt; rückt mit dem
     /// Fahrzeug mit.
     indirect case ahead(NavigationTarget, stops: Int)
+    /// Vorlauf: nicht zum Ziel selbst, sondern zur nächsten Kreuzung vor ihm in seiner Fahrtrichtung; ist es daran
+    /// vorbei, geht es zur nächsten.
+    indirect case lead(NavigationTarget)
 
-    /// Das eigentliche Ziel, ohne „Halte voraus“.
+    /// Das eigentliche Ziel, ohne „Halte voraus“ bzw. Vorlauf.
     var base: NavigationTarget {
         if case .ahead(let base, _) = self { return base.base }
+        if case .lead(let base) = self { return base.base }
         return self
+    }
+
+    var isLead: Bool {
+        if case .lead = self { return true }
+        return false
     }
 
     var stopsAhead: Int {

@@ -38,6 +38,25 @@ struct TransitAheadPicker: View {
     }
 }
 
+/// Fahrendes Ziel mit Live-Standort (nicht im ÖPNV): direkt zum Ziel oder im Vorlauf zur nächsten Kreuzung vor ihm.
+struct LeadPicker: View {
+    @Environment(AppModel.self) private var model
+    @Environment(RouteFollower.self) private var route
+
+    var body: some View {
+        if let base = route.target?.base, model.supportsLead(base) {
+            GlassSegmentedControl(
+                items: [(false, "scope", "Zum Ziel"), (true, "arrow.up.forward.circle.fill", "Vorlauf: Kreuzung vor dem Ziel")],
+                selection: route.target?.isLead ?? false
+            ) { lead in
+                let special = route.specialRights
+                model.navigate(to: lead ? .lead(base) : base)
+                route.specialRights = special
+            }
+        }
+    }
+}
+
 /// Oberer Teil der Navi-Ansicht: nächstes Manöver mit Entfernung, wie in einer Navi-App.
 struct NavigationBanner: View {
     @Environment(RouteFollower.self) private var route
@@ -140,8 +159,9 @@ struct NavigationBottomBar: View {
                 .glassEffect(.regular.tint(.red).interactive(), in: .capsule)
             }
 
-            // Ziel im ÖPNV: zum Fahrzeug oder Halte voraus.
+            // Ziel im ÖPNV: zum Fahrzeug oder Halte voraus. Fahrendes Ziel sonst: direkt oder im Vorlauf.
             TransitAheadPicker()
+            LeadPicker()
 
             // Dieselbe Dreier-Auswahl wie auf der Karte: Auto, zu Fuß, ÖPNV.
             GlassSegmentedControl(

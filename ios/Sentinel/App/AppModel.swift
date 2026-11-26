@@ -49,6 +49,7 @@ final class AppModel {
             guard let client = self?.client, let result = try? await client.crossingStreets(street, near: near) else { return nil }
             return result.strassen.map { (name: $0.name, points: $0.punkte) }
         }
+        leadPlanner.crossings = locationContext.crossingProvider
         lage.onEvent = { [weak self] event in self?.handle(event) }
         alerts.openInstance = { [weak self] id in self?.openInstance(id) }
         lage.onMemberPosition = { [weak self] memberId, position in
@@ -274,6 +275,19 @@ final class AppModel {
 
     /// Beim überschlagenden Anfahren: das eigentliche Ziel im ÖPNV (Ziel, Fahnder, A oder Fahrzeug), für die Auswahl
     /// im Navi-Fenster und den Kurs auf dem Server. `nil` heißt: über die A.
+    /// Vorlauf-Navigation: Fahrtrichtung und Straße des Ziels, nächste Kreuzung davor.
+    @ObservationIgnored let leadPlanner = LeadPlanner()
+
+    /// Vorlauf ist sinnvoll bei Zielen mit Live-Standort, die nicht im ÖPNV sitzen (dort gibt es „Halte voraus“).
+    func supportsLead(_ target: NavigationTarget) -> Bool {
+        guard transitCourse(of: target) == nil else { return false }
+        switch target {
+        case .target(let id): return lage.targets[id].map { lage.isLive($0) } ?? false
+        case .vehicle, .member, .aPosition: return true
+        default: return false
+        }
+    }
+
     var leapfrogBase: NavigationTarget?
 
     /// Startet die dynamische Routenführung zu einem (auch bewegten) Ziel.
@@ -365,6 +379,11 @@ final class AppModel {
             // Fahrzeug schon angekommen oder Fahrt unbekannt: dann zum Ziel selbst.
             guard let stop = transitCourse(of: base)?.stop(ahead: stops) else { return resolve(base) }
             return (stop.point, "Haltestelle \(stop.name)")
+        case .lead(let base):
+            // Richtung oder Straße noch unbekannt (z. B. kurz nach dem Start): vorerst zum Ziel selbst.
+            guard let here = resolve(base) else { return nil }
+            guard let crossing = leadPlanner.crossing(for: base, at: here.point) else { return here }
+            return (crossing.point, "Kreuzung \(crossing.name) vor \(here.title)")
         }
     }
 }
