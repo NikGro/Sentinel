@@ -1,5 +1,17 @@
 # Änderungen
 
+## 0.37.2
+
+**Navigation**
+- Baustellen und Sperrungen in der Stadt: Apples Weg (kennt aktuelle Sperrungen, Baustellen und Staus) wurde verworfen,
+  sobald er länger war als die direkte Route, also genau dann, wenn Apple um eine Sperrung herumführt. Jetzt gilt er
+  dann, und wo Apple von der direkten Route abweicht, setzt die App eigene Durchfahrtspunkte, damit auch kurze
+  Umleitungen eingehalten werden. Mit Sonderrechten folgt die Route Apple, wenn Apple einen deutlichen Umweg fährt
+- Wenden statt Umweg: Erzwang die Fahrtrichtung am Start einen weiten Umweg (etwa eine halbe Stunde statt einer
+  Minute mit Wenden), gilt jetzt die Route mit Wenden
+- Parallel-Modus: Ist der Weg neben der Straße des Ziels viel länger als direkt, wird direkt geführt (nur Sperrungen
+  bleiben gemieden)
+
 ## 0.37.1
 
 **Navigation**

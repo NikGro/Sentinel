@@ -135,23 +135,22 @@ export function registerNavigationRoutes(app: FastifyInstance, services: Service
     requireRouting();
     const { sentinel, ...anfrage } = parse(naviBody, request.body, 'Ungültige Routenanfrage.');
     const locations = anfrage.locations;
-    const meiden: Meiden[] = [];
-    let parallel = false;
+    const parallel: Meiden[] = [];
     if (sentinel?.parallel && services.streets.ready) {
       const { lat, lon, kurs, meter } = sentinel.parallel;
       const ahead = services.streets.pointsAhead({ lat, lon }, kurs, meter);
       // Ohne Fahrtrichtung: Die Straße des Ziels gilt in beiden Richtungen als belegt.
-      for (const p of ahead?.punkte ?? []) meiden.push({ lat: p.lat, lon: p.lon, radius: 5 });
-      parallel = meiden.length > 0;
+      for (const p of ahead?.punkte ?? []) parallel.push({ lat: p.lat, lon: p.lon, radius: 5 });
     }
+    const sperrungen: Meiden[] = [];
     if (anfrage.costing === 'auto') {
       services.closures.refreshIfStale();
-      meiden.push(...services.closures.near([locations[0]!, locations[locations.length - 1]!]));
+      sperrungen.push(...services.closures.near([locations[0]!, locations[locations.length - 1]!]));
     }
-    const result = await routes.navigation(anfrage, sentinel?.sonderrechte ?? false, meiden);
+    const result = await routes.navigation(anfrage, sentinel?.sonderrechte ?? false, sperrungen, parallel);
     if (!result) throw new HttpError(404, 'Keine Route gefunden.');
     reply.header('x-sentinel-sonderrechte', result.sonderrechte ? '1' : '0');
-    reply.header('x-sentinel-parallel', parallel && result.gemieden ? '1' : '0');
+    reply.header('x-sentinel-parallel', result.gemieden ? '1' : '0');
     return result.antwort;
   });
 

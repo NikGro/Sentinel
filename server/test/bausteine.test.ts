@@ -292,8 +292,10 @@ test('Navigation: kein Weg beim ersten Versuch, dann mit gelockertem Einrasten (
     locations: [{ lat: 53.55, lon: 10, heading: 90, heading_tolerance: 30 }, { lat: 53.56, lon: 10.01, radius: 5 }],
   }, false);
   assert.ok(result);
-  assert.equal(bodies.length, 2);
-  const retry = bodies[1]!.locations as Record<string, unknown>[];
+  // Daneben läuft die Variante ohne Fahrtrichtung am Start (Wenden erlaubt); entscheidend ist der gelockerte Versuch.
+  const retryBody = bodies.find((b) => (b.locations as Record<string, unknown>[])[0]!.search_cutoff === 2000);
+  assert.ok(retryBody);
+  const retry = retryBody.locations as Record<string, unknown>[];
   assert.equal(retry[0]!.heading, undefined);
   assert.equal(retry[0]!.search_cutoff, 2000);
   assert.equal(retry[1]!.radius, 0);

@@ -115,6 +115,21 @@ export function entspannt(body: Record<string, unknown>): Record<string, unknown
   };
 }
 
+/** Fahrzeit der ersten Route einer Antwort in Sekunden (unbekannt: unendlich). */
+function dauer(ergebnis: { antwort: unknown } | null): number {
+  const d = (ergebnis?.antwort as { routes?: OsrmRoute[] } | undefined)?.routes?.[0]?.duration;
+  return typeof d === 'number' ? d : Number.POSITIVE_INFINITY;
+}
+
+/** Dieselbe Anfrage ohne Fahrtrichtung am Start; `null`, wenn der Start keine hat. */
+export function lockererStart(anfrage: Record<string, unknown>): Record<string, unknown> | null {
+  const locations = Array.isArray(anfrage.locations) ? (anfrage.locations as Record<string, unknown>[]) : [];
+  const start = locations[0];
+  if (!start || (start.heading === undefined && start.preferred_side === undefined)) return null;
+  const { heading: _h, heading_tolerance: _t, preferred_side: _p, ...rest } = start;
+  return { ...anfrage, locations: [rest, ...locations.slice(1)] };
+}
+
 export class RouteService {
   constructor(
     private readonly valhallaUrl: string,
@@ -130,14 +145,43 @@ export class RouteService {
    * unverändert weitergereicht, ergänzt um deutsche Anweisungen. Mit Sonderrechten werden beide Varianten
    * gerechnet und die regelwidrige nur genommen, wenn sie spürbar schneller ist.
    */
-  async navigation(anfrage: Record<string, unknown>, sonderrechte: boolean, meiden: Meiden[] = []): Promise<{ antwort: unknown; sonderrechte: boolean; gemieden: boolean } | null> {
+  async navigation(
+    anfrage: Record<string, unknown>,
+    sonderrechte: boolean,
+    sperrungen: Meiden[] = [],
+    parallel: Meiden[] = [],
+  ): Promise<{ antwort: unknown; sonderrechte: boolean; gemieden: boolean } | null> {
     if (!this.available) return null;
-    // Gesperrte Strecken und (im Parallel-Modus) die Straße des Ziels meiden. Findet Valhalla damit keinen Weg (oder
-    // rastet ein Meidepunkt nicht ein), gilt die Route ohne: lieber durch eine Sperrung geführt als gar nicht.
-    if (meiden.length > 0) {
-      const mit = await this.navigation({ ...anfrage, exclude_locations: meiden.slice(0, 48) }, sonderrechte);
-      if (mit) return { ...mit, gemieden: true };
+    const mit = (body: Record<string, unknown>, meiden: Meiden[]) => (meiden.length ? { ...body, exclude_locations: meiden.slice(0, 48) } : body);
+    const alle = [...parallel, ...sperrungen];
+    const locker = lockererStart(anfrage);
+    // Gleichzeitig: mit allen Meidepunkten, ganz ohne (Rückfall, falls ein Meidepunkt nicht einrastet oder es keinen
+    // Weg damit gibt) und ohne Fahrtrichtung am Start (darf sofort wenden).
+    const [streng, ohne, lockerMit] = await Promise.all([
+      alle.length ? this.berechnen(mit(anfrage, alle), sonderrechte) : null,
+      this.berechnen(anfrage, sonderrechte),
+      locker ? this.berechnen(mit(locker, alle), sonderrechte) : null,
+    ]);
+    let wahl = streng ?? ohne;
+    let gemieden = streng !== null && parallel.length > 0;
+    // Parallel-Modus: Ist der Weg neben der Straße des Ziels viel länger als direkt, lohnt er nicht (Landstraße,
+    // keine Parallelstraße): dann nur die Sperrungen meiden.
+    if (gemieden && ohne && dauer(streng) > dauer(ohne) * 1.6 + 240) {
+      wahl = sperrungen.length ? (await this.berechnen(mit(anfrage, sperrungen), sonderrechte)) ?? ohne : ohne;
+      gemieden = false;
     }
+    // Wenden statt Umweg: Die Fahrtrichtung am Start zwingt Valhalla geradeaus weiter. Ist die Route ohne diese
+    // Vorgabe viel kürzer (etwa eine Minute mit Wenden statt einer halben Stunde Umweg), gilt sie.
+    if (lockerMit && wahl && wahl !== ohne && dauer(wahl) > dauer(lockerMit) * 1.5 + 180) wahl = lockerMit;
+    if (wahl === ohne && locker && ohne) {
+      const lockerOhne = await this.berechnen(locker, sonderrechte);
+      if (lockerOhne && dauer(ohne) > dauer(lockerOhne) * 1.5 + 180) wahl = lockerOhne;
+    }
+    return wahl ? { ...wahl, gemieden } : null;
+  }
+
+  /** Eine Anfrage an Valhalla, mit Sonderrechten in beiden Varianten. */
+  private async berechnen(anfrage: Record<string, unknown>, sonderrechte: boolean): Promise<{ antwort: unknown; sonderrechte: boolean } | null> {
     const basis: Record<string, unknown> = {
       ...anfrage,
       language: 'de-DE',
@@ -166,7 +210,7 @@ export class RouteService {
     const holen = async (body: Record<string, unknown>) => (await einmal(body)) ?? (await einmal(entspannt(body)));
     if (!sonderrechte || basis.costing !== 'auto') {
       const antwort = await holen(basis);
-      return antwort ? { antwort, sonderrechte: false, gemieden: false } : null;
+      return antwort ? { antwort, sonderrechte: false } : null;
     }
     const optionen = (basis.costing_options as Record<string, Record<string, unknown>>) ?? {};
     const mitSonderrechten = {
@@ -178,12 +222,12 @@ export class RouteService {
     const dauerSchnell = schnell?.routes?.[0]?.duration;
     if (schnell && (!normal || (typeof dauerNormal === 'number' && typeof dauerSchnell === 'number' && sonderrechteLohnen(dauerNormal, dauerSchnell)))) {
       for (const route of schnell.routes ?? []) beschleunigen(route);
-      return { antwort: schnell, sonderrechte: true, gemieden: false };
+      return { antwort: schnell, sonderrechte: true };
     }
     if (!normal) return null;
     // Auch auf der regelkonformen Strecke darf schneller gefahren werden.
     for (const route of normal.routes ?? []) beschleunigen(route);
-    return { antwort: normal, sonderrechte: false, gemieden: false };
+    return { antwort: normal, sonderrechte: false };
   }
 
   /** Liefert `null`, wenn kein Weg gefunden wurde oder der Dienst nicht antwortet. */

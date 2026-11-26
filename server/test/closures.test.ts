@@ -56,3 +56,22 @@ test('Navigation: Meidepunkte gehen an Valhalla, ohne Weg damit gilt die Route o
   assert.ok(bodies.some((b) => Array.isArray(b.exclude_locations)));
   assert.ok(bodies.some((b) => !b.exclude_locations));
 });
+
+test('Navigation: Wenden statt Umweg, wenn die Fahrtrichtung am Start einen weiten Umweg erzwingt', async () => {
+  const fetchFn = (async (_url: string, init?: RequestInit) => {
+    const body = JSON.parse(String(init?.body)) as { locations: Record<string, unknown>[] };
+    // Mit Fahrtrichtung: 30 Minuten Umweg; ohne (sofort wenden): eine Minute.
+    const duration = body.locations[0]!.heading !== undefined ? 1800 : 60;
+    return new Response(JSON.stringify({ routes: [{ duration, distance: duration * 10 }] }));
+  }) as typeof fetch;
+  const routes = new RouteService('http://valhalla', fetchFn);
+  const anfrage = { costing: 'auto', locations: [{ lat: 53.5, lon: 10, heading: 90, heading_tolerance: 45 }, { lat: 53.501, lon: 10 }] };
+  const result = await routes.navigation(anfrage, false);
+  assert.equal((result?.antwort as { routes: { duration: number }[] }).routes[0]!.duration, 60);
+  // Kleiner Unterschied: Fahrtrichtung bleibt maßgeblich.
+  const nah = new RouteService('http://valhalla', (async (_u: string, init?: RequestInit) => {
+    const body = JSON.parse(String(init?.body)) as { locations: Record<string, unknown>[] };
+    return new Response(JSON.stringify({ routes: [{ duration: body.locations[0]!.heading !== undefined ? 200 : 150, distance: 1 }] }));
+  }) as typeof fetch);
+  assert.equal(((await nah.navigation(anfrage, false))?.antwort as { routes: { duration: number }[] }).routes[0]!.duration, 200);
+});

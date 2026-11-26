@@ -201,6 +201,26 @@ struct NavigationTests {
         #expect(vias.allSatisfy { abs(($0["heading"] as? Int ?? 0) - 90) <= 1 })
     }
 
+    @Test func verkehrsvorgabeFolgtKurzerUmleitung() {
+        // Direkte Route geradeaus nach Osten (gut 1 km); Apple fährt in der Mitte einen Bogen 150 m nach Norden
+        // (Baustelle). Ohne eigenen Punkt im Bogen führe die Route wieder mitten hindurch.
+        let direct = (0...10).map { CLLocationCoordinate2D(latitude: 53.55, longitude: 9.9 + Double($0) * 0.0015) }
+        var apple = Array(direct[0...4])
+        apple += [CLLocationCoordinate2D(latitude: 53.5513, longitude: 9.906), CLLocationCoordinate2D(latitude: 53.5513, longitude: 9.909)]
+        apple += Array(direct[6...10])
+        let vias = TrafficGuide.vias(along: apple, avoiding: direct)
+        #expect(vias.contains { ($0["lat"] as? Double ?? 0) > 53.551 }, "Punkt im Umleitungsbogen")
+        // Ohne Abweichung (und so kurz) keine Punkte.
+        #expect(TrafficGuide.vias(along: direct, avoiding: direct).isEmpty)
+    }
+
+    @Test func polylineSechsStellen() {
+        // Bekanntes Beispiel: (38.5, -120.2), (40.7, -120.95), (43.252, -126.453) mit Faktor 1e6.
+        let points = NaviRequestLoader.decodePolyline6("_izlhA~rlgdF_{geC~ywl@_kwzCn`{nI")
+        #expect(points.count == 3)
+        #expect(abs(points[0].latitude - 38.5) < 1e-6 && abs(points[2].longitude + 126.453) < 1e-6)
+    }
+
     @Test func dauerAlsUhrzeit() {
         #expect(Format.clock(65) == "1:05")
         #expect(Format.clock(0) == "0:00")

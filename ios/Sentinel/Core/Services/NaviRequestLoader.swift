@@ -55,23 +55,27 @@ final class NaviRequestLoader: URLRequestLoading, @unchecked Sendable {
         json["sentinel"] = sentinel
         if walking { json["costing"] = "pedestrian" }
 
-        // Immer die direkt gerechnete Route; ohne Sonderrechte mit dem Auto zusätzlich Apples verkehrsabhängigen Weg
-        // als Vorgabe. Beides läuft gleichzeitig.
+        // Immer die direkt gerechnete Route; mit dem Auto zusätzlich Apples Weg mit Verkehrslage, Sperrungen und
+        // Baustellen (Apple kennt sie, Valhalla nicht) als Vorgabe. Beides läuft gleichzeitig.
         var plain = request
         plain.httpBody = try JSONSerialization.data(withJSONObject: json)
         async let direct = send(plain)
         var guide: TrafficGuide?
-        if !specialRights, !walking, parallel == nil, let locations = json["locations"] as? [[String: Any]], locations.count >= 2 {
+        if !walking, parallel == nil, let locations = json["locations"] as? [[String: Any]], locations.count >= 2 {
             guide = await TrafficGuide.make(from: locations[0], to: locations[locations.count - 1])
         }
         let (data, response) = try await direct
-        if let guide, !guide.vias.isEmpty, var locations = json["locations"] as? [[String: Any]] {
-            locations.insert(contentsOf: guide.vias, at: 1)
+        // Durchfahrtspunkte entlang Apples Weg, zusätzlich dicht dort, wo Apple von der direkten Route abweicht: Eine
+        // kurze Umleitung um eine Baustelle läge sonst zwischen zwei weit auseinanderliegenden Punkten und Valhalla
+        // führe wieder mitten hindurch.
+        let vias = guide?.vias(avoiding: Self.coordinates(data)) ?? []
+        if let guide, !vias.isEmpty, var locations = json["locations"] as? [[String: Any]] {
+            locations.insert(contentsOf: vias, at: 1)
             var guidedJSON = json
             guidedJSON["locations"] = locations
             var guided = request
             guided.httpBody = try JSONSerialization.data(withJSONObject: guidedJSON)
-            if let result = try? await send(guided), Self.isPlausible(result.0, comparedTo: data, guide: guide) {
+            if let result = try? await send(guided), Self.isPlausible(result.0, comparedTo: data, guide: guide, specialRights: specialRights) {
                 record(result.1, data: result.0, guide: guide)
                 return result
             }
@@ -80,14 +84,19 @@ final class NaviRequestLoader: URLRequestLoading, @unchecked Sendable {
         return (data, response)
     }
 
-    /// Die Route mit Apples Vorgabe gilt nur, wenn sie nicht spürbar länger ist als ohne Vorgabe und als Apples eigene
-    /// Route. Ein Durchfahrtspunkt auf der falschen Fahrbahn führt sonst zu Schleifen und Wenden.
-    static func isPlausible(_ guided: Data, comparedTo direct: Data, guide: TrafficGuide) -> Bool {
+    /// Gilt die Route mit Apples Vorgabe?
+    /// - Sie muss Apples eigenem Weg entsprechen (nicht spürbar länger), sonst ist ein Durchfahrtspunkt auf der falschen
+    ///   Fahrbahn gelandet (Schleifen), und darf nicht öfter wenden als die direkte Route.
+    /// - Ohne Sonderrechte: Ist sie länger als die direkte Route, gilt sie trotzdem, wenn Apple selbst einen Umweg
+    ///   fährt: Dann umfährt Apple eine Sperrung, Baustelle oder einen Stau (vorher wurde genau das verworfen).
+    /// - Mit Sonderrechten folgt die Route Apple nur bei deutlichem Umweg (dann ist vorn etwas gesperrt); sonst bleibt
+    ///   die schnellere Route mit Sonderrechten.
+    static func isPlausible(_ guided: Data, comparedTo direct: Data, guide: TrafficGuide, specialRights: Bool = false) -> Bool {
         guard let guidedDistance = distance(guided), let directDistance = distance(direct) else { return false }
-        // Wendet die Route mit Vorgabe öfter als die direkte, ist ein Durchfahrtspunkt in einer Neben- oder Sackgasse
-        // gelandet (hinein und wieder heraus): dann lieber die direkte Route.
         if uTurns(guided) > uTurns(direct) { return false }
-        return guidedDistance <= directDistance * 1.10 + 120 && guidedDistance <= guide.distance * 1.10 + 120
+        guard guidedDistance <= guide.distance * 1.10 + 120 else { return false }
+        if specialRights { return guide.distance > directDistance * 1.35 + 300 }
+        return guidedDistance <= directDistance * 1.10 + 120 || guide.distance >= directDistance * 1.05
     }
 
     /// Anzahl der Wendemanöver in einer Route (OSRM-Format: Richtung „uturn“).
@@ -129,12 +138,47 @@ final class NaviRequestLoader: URLRequestLoading, @unchecked Sendable {
     }
 
     static func distance(_ data: Data) -> Double? { routeObject(data)?["distance"] as? Double }
+
+    /// Linienzug der ersten Route (OSRM-Format: Polyline mit sechs Nachkommastellen oder GeoJSON).
+    static func coordinates(_ data: Data) -> [CLLocationCoordinate2D] {
+        guard let geometry = routeObject(data)?["geometry"] else { return [] }
+        if let encoded = geometry as? String { return decodePolyline6(encoded) }
+        if let json = geometry as? [String: Any], let points = json["coordinates"] as? [[Double]] {
+            return points.compactMap { $0.count >= 2 ? CLLocationCoordinate2D(latitude: $0[1], longitude: $0[0]) : nil }
+        }
+        return []
+    }
+
+    static func decodePolyline6(_ encoded: String) -> [CLLocationCoordinate2D] {
+        let bytes = Array(encoded.utf8)
+        var index = 0, lat = 0, lon = 0
+        var result: [CLLocationCoordinate2D] = []
+        func next() -> Int? {
+            var value = 0, shift = 0
+            while index < bytes.count {
+                let byte = Int(bytes[index]) - 63
+                index += 1
+                value |= (byte & 0x1f) << shift
+                shift += 5
+                if byte < 0x20 { return (value & 1) != 0 ? ~(value >> 1) : value >> 1 }
+            }
+            return nil
+        }
+        while index < bytes.count {
+            guard let dLat = next(), let dLon = next() else { break }
+            lat += dLat
+            lon += dLon
+            result.append(CLLocationCoordinate2D(latitude: Double(lat) / 1e6, longitude: Double(lon) / 1e6))
+        }
+        return result
+    }
     static func duration(_ data: Data) -> Double? { routeObject(data)?["duration"] as? Double }
 }
 
 /// Apples Route mit Verkehrslage als Folge von Durchfahrtspunkten für den eigenen Server.
 struct TrafficGuide {
-    var vias: [[String: Any]]
+    /// Apples Weg.
+    var path: [CLLocationCoordinate2D]
     var distance: CLLocationDistance
     var travelTime: TimeInterval
 
@@ -160,7 +204,7 @@ struct TrafficGuide {
             return first
         }
         guard let route else { return nil }
-        return TrafficGuide(vias: vias(along: route.polyline), distance: route.distance, travelTime: route.expectedTravelTime)
+        return TrafficGuide(path: coordinates(of: route.polyline), distance: route.distance, travelTime: route.expectedTravelTime)
     }
 
     private static func coordinate(_ location: [String: Any]) -> CLLocationCoordinate2D? {
@@ -168,40 +212,86 @@ struct TrafficGuide {
         return CLLocationCoordinate2D(latitude: lat, longitude: lon)
     }
 
-    /// Punkte in gleichmäßigem Abstand, jeweils mit Fahrtrichtung, damit der Server die richtige Richtungsfahrbahn wählt.
-    static func vias(along polyline: MKPolyline) -> [[String: Any]] {
-        let count = polyline.pointCount
-        guard count > 2 else { return [] }
+    func vias(avoiding direct: [CLLocationCoordinate2D]) -> [[String: Any]] {
+        Self.vias(along: path, avoiding: direct)
+    }
+
+    static func coordinates(of polyline: MKPolyline) -> [CLLocationCoordinate2D] {
         let points = polyline.points()
-        var coordinates: [CLLocationCoordinate2D] = []
-        coordinates.reserveCapacity(count)
-        for i in 0..<count { coordinates.append(points[i].coordinate) }
+        return (0..<polyline.pointCount).map { points[$0].coordinate }
+    }
 
-        var total: CLLocationDistance = 0
-        for i in 1..<count { total += distance(coordinates[i - 1], coordinates[i]) }
-        guard total > spacing * 1.5 else { return [] }
+    static func vias(along polyline: MKPolyline) -> [[String: Any]] {
+        vias(along: coordinates(of: polyline), avoiding: [])
+    }
 
-        var result: [[String: Any]] = []
-        var travelled: CLLocationDistance = 0
-        var nextMark = spacing
-        for i in 1..<count {
-            let segment = distance(coordinates[i - 1], coordinates[i])
-            travelled += segment
-            // Nicht zu nah an Start und Ziel, dort entscheidet ohnehin der Standort.
-            guard travelled >= nextMark, total - travelled > 400 else { continue }
-            nextMark = travelled + spacing
-            result.append([
+    /// Punkte in gleichmäßigem Abstand, jeweils mit Fahrtrichtung, damit der Server die richtige Richtungsfahrbahn wählt.
+    /// Weicht Apples Weg von der direkten Route ab (mehr als 60 m entfernt), kommt in jede Abweichung ein eigener Punkt:
+    /// So folgt die Route auch kurzen Umleitungen um Baustellen und Sperrungen.
+    static func vias(along coordinates: [CLLocationCoordinate2D], avoiding direct: [CLLocationCoordinate2D]) -> [[String: Any]] {
+        let count = coordinates.count
+        guard count > 2 else { return [] }
+
+        var along: [CLLocationDistance] = [0]
+        for i in 1..<count { along.append(along[i - 1] + distance(coordinates[i - 1], coordinates[i])) }
+        let total = along[count - 1]
+
+        func via(_ i: Int) -> (at: CLLocationDistance, location: [String: Any]) {
+            let from = coordinates[max(i - 1, 0)], to = coordinates[i == 0 ? 1 : i]
+            return (along[i], [
                 "lat": coordinates[i].latitude,
                 "lon": coordinates[i].longitude,
                 "type": "through",
-                "heading": Int(bearing(coordinates[i - 1], coordinates[i]).rounded()) % 360,
+                "heading": Int(bearing(from, to).rounded()) % 360,
                 "heading_tolerance": 45,
                 // Nur Straßen direkt am Punkt: sonst rastet er auf einer parallelen Neben- oder Sackgasse ein.
                 "radius": 20,
             ])
-            if result.count >= 20 { break }
         }
-        return result
+
+        // Abweichungen: zusammenhängende Abschnitte weit weg von der direkten Route, je ein Punkt in der Mitte.
+        var detours: [(at: CLLocationDistance, location: [String: Any])] = []
+        if direct.count > 1 {
+            let directPoints = direct.map(MKMapPoint.init)
+            var runStart: Int?
+            for i in 0..<count {
+                let off = Self.distance(from: MKMapPoint(coordinates[i]), to: directPoints) > 60
+                if off, runStart == nil { runStart = i }
+                if (!off || i == count - 1), let start = runStart {
+                    let end = off ? i : i - 1
+                    let middle = (start + end) / 2
+                    if along[middle] > 30, total - along[middle] > 30 { detours.append(via(middle)) }
+                    runStart = nil
+                }
+            }
+        }
+
+        // Gleichmäßige Punkte, nicht zu nah an Start, Ziel und den Abweichungspunkten.
+        var regular: [(at: CLLocationDistance, location: [String: Any])] = []
+        if total > spacing * 1.5 {
+            var nextMark = spacing
+            for i in 1..<count where along[i] >= nextMark && total - along[i] > 400 {
+                nextMark = along[i] + spacing
+                if detours.contains(where: { abs($0.at - along[i]) < 300 }) { continue }
+                regular.append(via(i))
+            }
+        }
+        // Höchstens 20 (der Server nimmt 25 Orte); Abweichungen gehen vor.
+        let chosen = Array(detours.prefix(20)) + Array(regular.prefix(max(0, 20 - detours.count)))
+        return chosen.sorted { $0.at < $1.at }.map(\.location)
+    }
+
+    /// Kürzester Abstand eines Punkts zu einem Linienzug in Metern.
+    static func distance(from p: MKMapPoint, to line: [MKMapPoint]) -> CLLocationDistance {
+        var best = CLLocationDistance.greatestFiniteMagnitude
+        for i in 1..<line.count {
+            let a = line[i - 1], b = line[i]
+            let dx = b.x - a.x, dy = b.y - a.y
+            let l2 = dx * dx + dy * dy
+            let t = l2 > 0 ? min(max(((p.x - a.x) * dx + (p.y - a.y) * dy) / l2, 0), 1) : 0
+            best = min(best, p.distance(to: MKMapPoint(x: a.x + dx * t, y: a.y + dy * t)))
+        }
+        return best
     }
 
     static func distance(_ a: CLLocationCoordinate2D, _ b: CLLocationCoordinate2D) -> CLLocationDistance {
