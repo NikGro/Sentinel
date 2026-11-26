@@ -145,7 +145,10 @@ extension MapObject {
     /// Kennzeichen eines Standortverlaufs, der als „Standortspur“ angelegt wurde (eigener Weg ab dem Anlegen,
     /// gezeichnet mit Farbverlauf statt nach Quelle).
     static let ownTrackSymbol = "standortspur"
-    var isOwnTrack: Bool { typ == .verlauf && symbol == Self.ownTrackSymbol }
+    /// Standortspur, eingefärbt nach Häufigkeit statt nach Alter.
+    static let ownTrackFrequencySymbol = "standortspur.haeufigkeit"
+    var isOwnTrack: Bool { typ == .verlauf && symbol.hasPrefix(Self.ownTrackSymbol) }
+    var ownTrackByFrequency: Bool { symbol == Self.ownTrackFrequencySymbol }
 }
 
 struct SpurRef: Codable, Equatable, Hashable, Sendable {

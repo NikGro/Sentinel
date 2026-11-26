@@ -25,7 +25,8 @@ extension MapScreen {
 
     /// Antippbare Griffe. Prognosezellen (mit Kennwert) bekommen keinen, sonst würde die Karte überladen.
     var handles: [ObjectHandle] {
-        visibleObjects.filter { $0.data.wert == nil && !$0.data.punkte.isEmpty && $0.data.typ.hasHandle }.map { object in
+        // Die Standortspur hat keinen eigenen Punkt: Die Linie selbst ist das Objekt und antippbar.
+        visibleObjects.filter { $0.data.wert == nil && !$0.data.punkte.isEmpty && $0.data.typ.hasHandle && !$0.data.isOwnTrack }.map { object in
             ObjectHandle(
                 id: object.id,
                 object: object.data,

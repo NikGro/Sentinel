@@ -258,6 +258,20 @@ struct MapObjectInfo: View {
                     ForEach(object.historySubjects) { subject in
                         Text(model.title(of: subject))
                     }
+                    if object.isOwnTrack, editable {
+                        Picker("Farbe nach", selection: Binding(
+                            get: { object.ownTrackByFrequency },
+                            set: { byFrequency in
+                                guard var current = lage.mapObjects[id]?.data else { return }
+                                current.symbol = byFrequency ? MapObject.ownTrackFrequencySymbol : MapObject.ownTrackSymbol
+                                lage.saveMapObject(current, id: id)
+                            }
+                        )) {
+                            Text("Alter").tag(false)
+                            Text("Häufigkeit").tag(true)
+                        }
+                        .pickerStyle(.segmented)
+                    }
                     Button("Im Verlauf öffnen", systemImage: "point.bottomleft.forward.to.point.topright.scurvepath") {
                         model.openHistory(of: object)
                         dismiss()

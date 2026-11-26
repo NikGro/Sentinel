@@ -198,6 +198,14 @@ struct MapScreen: View {
                 await storedTracks.load(objects(.verlauf), client: model.client)
             }
         }
+        // Standortspur: eigene GPS-Punkte sofort anhängen (wächst fortlaufend hinter einem, nicht erst beim Laden).
+        .onChange(of: location.current?.timestamp) {
+            guard let me = lage.me, let current = location.current,
+                  objects(.verlauf).contains(where: { $0.data.isOwnTrack && $0.data.spuren?.contains(where: { $0.art == "member" && $0.id == me.id }) == true })
+            else { return }
+            storedTracks.liveSubjectKey = SpurSubject(art: .member, id: me.id).key
+            storedTracks.appendLive(current)
+        }
         .onChange(of: model.historyIntervalRequest) { _, interval in
             guard let interval else { return }
             history.customFrom = interval.lowerBound
