@@ -16,6 +16,13 @@ statt jede Änderung sofort einzubauen. Erledigtes wandert mit Version ins CHANG
   anlegen (Person, Fahrzeug, Objekt/Anschrift) und Beziehungen herstellen (z. B. Halter, Fahrer, Bewohner), von beiden
   Seiten sichtbar und bearbeitbar. Datenmodell nach dem „Universellen Beziehungsmodell“ unten (eigenständige
   Beziehungsdatensätze, Herkunft/Status), ohne die übrigen Datenschutz-Bausteine vorwegzunehmen.
+- **Baustellen, Sperrungen und Staus in der Navigation**: Das Routing (Valhalla, OpenStreetMap ohne Live-Daten) kennt
+  keine aktuellen Sperrungen; die Karte zeigt Apples Verkehrslage, die Route ignoriert sie. Umsetzung: aktuelle
+  Sperrungen/Baustellen aus offenen Quellen laden (Autobahn-API des Bundes für Autobahnen, Mobilithek/
+  Mobilitätsdatenplattform bzw. Länderportale für Baustellen und Sperrungen in Städten; prüfen, was für Hamburg frei
+  verfügbar ist) und Valhalla als Ausschlussflächen bzw. zu meidende Stellen mitgeben. Staus: Apples Routenvorschlag
+  (MapKit, mit Verkehrslage) als Vergleich, bei deutlich schnellerer Apple-Route Hinweis bzw. Umfahrung; ohne
+  Standortdaten an Dritte über das Nötige hinaus (Datenschutz prüfen).
 - **UI-Abnahme**: Die Oberfläche einmal gesamt mit den Design-Skills prüfen (Frontend-Design, Design-Kritik,
   Barrierefreiheit, UX-Bewertung) und Befunde umsetzen.
 
