@@ -504,7 +504,7 @@ struct MapScreen: View {
         .onChange(of: route.isActive) { _, active in
             // Navigation: nah, gekippt, in Blickrichtung folgen. Danach nicht im Fahrmodus hängen bleiben.
             // Navigation: eigener Pfeil etwas höher, damit das Straßenschild darunter nicht mit Tempo und Limit kollidiert.
-            engine.puckLift = active ? 70 : 0
+            engine.puckLift = active ? 40 : 0
             if active {
                 pinCamera(.heading)
             } else if followsMe {

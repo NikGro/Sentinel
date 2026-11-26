@@ -1,5 +1,10 @@
 # Änderungen
 
+## 0.37.3
+
+**Navigation**
+- Eigener Pfeil sitzt wieder etwas tiefer (Mittelweg): 40 statt 70 Punkte über der Mitte
+
 ## 0.37.2
 
 **Navigation**
