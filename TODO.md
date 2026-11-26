@@ -19,8 +19,10 @@ statt jede Änderung sofort einzubauen. Erledigtes wandert mit Version ins CHANG
 ### Karte, Kompass und Navigation
 
 - **Standortspur nachbessern** (0.35):
-  - Wird nur stückweise gezeichnet: Lücken in der Linie prüfen (Teilstücke, Aktualisierung alle 10 s, Lückenregel
-    der Spur, Punktauswahl des Servers) und durchgehend zeichnen.
+  - Wächst nur ruckweise: Beim Fahren endet die Linie ein Stück hinter einem, nach einer Weile erscheint auf einmal
+    ein längerer Abschnitt (Neuladen vom Server alle 10 s bzw. gröber gespeicherte Punkte). Stattdessen die eigenen
+    GPS-Punkte lokal sofort anhängen und die Linie bis zum eigenen Punkt führen, so dass sie fortlaufend hinter einem
+    mitwächst; der Server-Stand ersetzt sie nur beim Neuladen.
   - Farbkodierung umschaltbar machen: nach Alter (wie jetzt) oder nach Häufigkeit, also wie oft man an einer Stelle
     schon entlanggefahren ist (Strecke in Raster/Abschnitte teilen und Durchfahrten zählen). Umschalter in der
     Objektansicht bzw. beim Bearbeiten der Standortspur.
