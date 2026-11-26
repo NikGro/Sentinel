@@ -7,6 +7,14 @@ statt jede Änderung sofort einzubauen. Erledigtes wandert mit Version ins CHANG
 
 ### Nach 0.37 offen
 
+- **Standortspur überarbeiten:**
+  - Wächst teilweise noch stückig nach: Das Ende fließend mit dem eigenen Punkt verbinden (z. B. ein laufend
+    nachgeführtes letztes Stück bis zum aktuell gezeichneten Punkt), damit keine Lücke und kein Ruckeln entsteht.
+  - Leicht durchscheinend (etwa 75 % deckend), ohne weiße Ränder.
+  - Farbe als durchgehender Verlauf statt in Blöcken (je Stück abgestuft).
+  - Umschalter Alter/Häufigkeit unter „Bearbeiten“ (Einstellungen der Spur), nicht in der Objektansicht.
+  - Häufigkeit über alle Fahnder: Fahren mehrere mit eingeschalteter Spur über dieselbe Stelle, zählt das zusammen
+    auf derselben Farbskala.
 - **Beziehungen vereinfachen:** Statt Bezeichnung mit Vorschlägen, Status, Herkunft und Notiz nur ein Freitextfeld
   für die Art der Beziehung. Bearbeiten (anlegen, ändern, löschen) nur auf der Bearbeiten-Seite eines Ziels; in der
   Detailansicht bzw. Kurzübersicht nur anzeigen (mit Sprung zum verbundenen Ziel).
