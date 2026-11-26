@@ -97,6 +97,8 @@ struct LayersAdminScreen: View {
     @Environment(LageStore.self) private var lage
     @State private var state = AdminState()
     @State private var importing: Versioned<Instance>?
+    /// Ebene, deren Objekte nach Rückfrage gelöscht werden.
+    @State private var clearing: Versioned<Layer>?
 
     var body: some View {
         Form {
@@ -114,6 +116,16 @@ struct LayersAdminScreen: View {
                             Image(systemName: layer.data.symbolName)
                         }
                         Spacer()
+                        // Leeren bei jeder Ebene außer den dauerhaften Orten (die werden nur über das Hauptmenü bearbeitet).
+                        if layer.id != Layer.dauerhaftId, objectCount(layer.id) > 0 {
+                            Menu {
+                                Button("Ebene leeren", systemImage: "trash", role: .destructive) { clearing = layer }
+                            } label: {
+                                Image(systemName: "ellipsis.circle")
+                                    .font(.title3)
+                            }
+                            .accessibilityLabel("Weitere Aktionen für \(layer.data.name)")
+                        }
                         if layer.id != Layer.lageId, layer.id != Layer.dauerhaftId {
                             Button(layer.data.isLive ? "Zurückziehen" : "Laden") {
                                 var next = layer.data
@@ -128,6 +140,10 @@ struct LayersAdminScreen: View {
                     .swipeActions {
                         if layer.id != Layer.lageId, layer.id != Layer.dauerhaftId {
                             Button("Löschen", systemImage: "trash", role: .destructive) { lage.delete(Layer.self, id: layer.id) }
+                        }
+                        if layer.id != Layer.dauerhaftId, objectCount(layer.id) > 0 {
+                            Button("Leeren", systemImage: "eraser") { clearing = layer }
+                                .tint(.orange)
                         }
                     }
                 }
@@ -187,6 +203,17 @@ struct LayersAdminScreen: View {
             }
         } message: {
             Text("Alle Objekte des Pakets werden in „\(lage.currentInstance?.data.name ?? "")“ kopiert und sind danach eigenständige Objekte dieser Instanz. Das lässt sich nicht rückgängig machen.")
+        }
+        .alert("„\(clearing?.data.name ?? "")“ leeren?", isPresented: Binding(get: { clearing != nil }, set: { if !$0 { clearing = nil } })) {
+            Button("Abbrechen", role: .cancel) {}
+            Button("Alle \(clearing.map { objectCount($0.id) } ?? 0) Objekte löschen", role: .destructive) {
+                guard let layerId = clearing?.id, layerId != Layer.dauerhaftId else { return }
+                for object in lage.mapObjects.values where object.data.layerId == layerId {
+                    lage.deleteMapObject(id: object.id)
+                }
+            }
+        } message: {
+            Text("Alle Objekte dieser Ebene werden für alle in der Instanz gelöscht. Die Ebene selbst bleibt. Das lässt sich nicht rückgängig machen.")
         }
         .modifier(FailureAlert(state: state))
     }
