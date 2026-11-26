@@ -133,6 +133,13 @@ struct SearchSheet: View {
     }
 
     @ViewBuilder private var addressContent: some View {
+        // Zuerst Passendes aus der Lage (Ziele, Kräfte, Marker, Flächen, Linien …), dann die Adressen.
+        if query.trimmingCharacters(in: .whitespaces).count >= 2 {
+            ObjectTargetList(filter: query.trimmingCharacters(in: .whitespaces), compact: true) { target in
+                navigate(target)
+                dismiss()
+            }
+        }
         if let failure = search.failure {
             Label(failure, systemImage: "exclamationmark.triangle")
                 .foregroundStyle(.orange)
@@ -284,6 +291,8 @@ struct SearchSheet: View {
 /// Auswahlliste aller ansteuerbaren Objekte. Die A-Position steht immer oben, wenn jemand sie hält.
 struct ObjectTargetList: View {
     let filter: String
+    /// In der Adresssuche: nur passende Objekte der Lage als eine kurze Gruppe über den Adressen.
+    var compact = false
     let select: (NavigationTarget) -> Void
 
     @Environment(AppModel.self) private var model
@@ -302,6 +311,14 @@ struct ObjectTargetList: View {
     }
 
     var body: some View {
+        if compact {
+            section("In der Lage", entries: memberEntries + vehicleEntries + targetEntries + objectEntries, limit: 8)
+        } else {
+            fullList
+        }
+    }
+
+    @ViewBuilder private var fullList: some View {
         if let holder = lage.aHolder, !lage.holdsA {
             Section {
                 Button {
@@ -373,10 +390,11 @@ struct ObjectTargetList: View {
     }
 
     @ViewBuilder
-    private func section(_ title: String, entries: [Entry]) -> some View {
+    private func section(_ title: String, entries: [Entry], limit: Int = .max) -> some View {
         let filtered = entries
             .filter { filter.isEmpty || $0.title.localizedCaseInsensitiveContains(filter) || $0.subtitle.localizedCaseInsensitiveContains(filter) }
             .sorted { (distance(to: $0.point) ?? .greatestFiniteMagnitude) < (distance(to: $1.point) ?? .greatestFiniteMagnitude) }
+            .prefix(limit)
         if !filtered.isEmpty {
             Section(title) {
                 ForEach(filtered) { entry in
@@ -439,7 +457,10 @@ struct ObjectTargetList: View {
 
     private var objectEntries: [Entry] {
         lage.mapObjects.values.compactMap { object in
-            guard [.fahndungsraum, .marker, .oepnvfahrzeug].contains(object.data.typ), !object.data.isExpired(), lage.layers[object.data.layerId]?.data.isLive == true,
+            // Navigierbar ist alles mit einem Ort; in der Adresssuche auch Linien, Flächen, Haltestellen usw. nach Namen.
+            let types: [MapObject.Shape] = compact ? MapObject.Shape.allCases.filter { $0 != .verlauf } : [.fahndungsraum, .marker, .oepnvfahrzeug]
+            guard types.contains(object.data.typ), !object.data.isExpired(), lage.layers[object.data.layerId]?.data.isLive == true,
+                  !compact || !object.data.titel.isEmpty,
                   !settings.hiddenLayers.contains(object.data.layerId) else { return nil }
             let point = lage.position(ofObject: object.data)
             let title = object.data.titel.isEmpty ? object.data.typ.title : object.data.titel
