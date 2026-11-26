@@ -18,6 +18,10 @@ statt jede Änderung sofort einzubauen. Erledigtes wandert mit Version ins CHANG
 
 ### Karte, Kompass und Navigation
 
+- **Suche findet eigene Objekte**: In der Navi-Suchleiste auch nach Objekten der Lage suchen können, die auf der Karte
+  angezeigt werden: Zielpersonen, Zielobjekte, Zielfahrzeuge, Marker/Pins, Flächen, ÖPNV-Linien usw., jeweils nach
+  ihrem Namen bzw. namensgebenden Feld (Titel, Name, Kennzeichen, Funkrufname). Treffer oben vor den Adressen, mit
+  Symbol und Art; Antippen zeigt das Objekt bzw. führt hin.
 - **Standortspur nachbessern** (0.35):
   - Wächst nur ruckweise: Beim Fahren endet die Linie ein Stück hinter einem, nach einer Weile erscheint auf einmal
     ein längerer Abschnitt (Neuladen vom Server alle 10 s bzw. gröber gespeicherte Punkte). Stattdessen die eigenen
