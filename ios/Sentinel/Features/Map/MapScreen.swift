@@ -284,7 +284,7 @@ struct MapScreen: View {
                 if showsHistory {
                     HistoryLayer(state: history) { model.title(of: $0) }
                 }
-                StopsLayer(stops: lage.operation.ueberschlagen.naechste, mine: lage.myLeapfrogStop, line: lage.aHolder?.data.oepnv.map { NearbyStop.Line(ref: $0.linie, typ: "", farbe: nil) })
+                StopsLayer(stops: highlightedStops, line: lage.aHolder?.data.oepnv.map { NearbyStop.Line(ref: $0.linie, typ: "", farbe: nil) })
                 SymbolLayer(pins: (vehiclePins + targetPins).filter { !layout.hidden.contains($0.id) }, offsets: layout.offsets) { tapMarker = nil; present($0, low: false) }
                 ForcesLayer(pins: forcePins.filter { !layout.hidden.contains($0.id) }, offsets: layout.offsets) { tapMarker = nil; present($0, low: false) }
                 ClusterLayer(clusters: layout.clusters) { zoom(into: $0) }

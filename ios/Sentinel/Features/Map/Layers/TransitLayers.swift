@@ -3,31 +3,41 @@ import SwiftUI
 
 // ÖPNV auf der Karte: Haltestellen, Linienschilder im HVV-Stil, Strecken und Fahrzeuge.
 
+/// Haltestelle, zu der man gerade navigiert (überschlagend die eigene, oder „Halte voraus“ vor einem Fahrzeug).
+struct HighlightedStop: Equatable {
+    let point: GeoPoint
+    let name: String
+    /// Steht dort schon ein Haltestellensymbol auf der Karte? Dann nur hervorheben statt ein zweites zu setzen.
+    let onMap: Bool
+}
+
+/// Hebt die Ziel-Haltestelle der laufenden Navigation hervor: Steht sie schon auf der Karte, nur ein grüner Ring
+/// darum; sonst ein eigenes Symbol, das mit dem Ende der Navigation bzw. beim Weiterrücken wieder verschwindet.
+/// Keine Nummern und keine dauerhaften Marker mehr.
 struct StopsLayer: MapContent {
-    let stops: [LeapfrogStop]
-    let mine: LeapfrogStop?
-    /// Linie der A, für dasselbe Haltestellensymbol wie überall.
+    let stops: [HighlightedStop]
     var line: NearbyStop.Line?
 
     var body: some MapContent {
-        ForEach(Array(stops.enumerated()), id: \.offset) { index, stop in
+        ForEach(Array(stops.enumerated()), id: \.offset) { _, stop in
             Annotation(stop.name, coordinate: stop.point.coordinate, anchor: .center) {
-                VStack(spacing: 2) {
-                    StationSymbol(lines: line.map { [$0] } ?? [])
-                        .padding(2)
-                        .overlay { if stop == mine { Capsule().stroke(.green, lineWidth: 3) } }
-                        .overlay(alignment: .topTrailing) {
-                            Text("\(index + 1)")
-                                .font(.system(size: 10, weight: .heavy))
-                                .foregroundStyle(.white)
-                                .frame(width: 16, height: 16)
-                                .background(stop == mine ? Color.green : Color.blue, in: .circle)
-                                .offset(x: 7, y: -7)
-                        }
-                    Text(stop.name)
-                        .font(.caption2.weight(.semibold))
-                        .padding(.horizontal, 4)
-                        .background(.thinMaterial, in: .capsule)
+                if stop.onMap {
+                    Circle()
+                        .stroke(.green, lineWidth: 4)
+                        .frame(width: 34, height: 34)
+                        .shadow(color: .black.opacity(0.3), radius: 2)
+                        .allowsHitTesting(false)
+                } else {
+                    VStack(spacing: 2) {
+                        StationSymbol(lines: line.map { [$0] } ?? [])
+                            .padding(2)
+                            .overlay { Capsule().stroke(.green, lineWidth: 3) }
+                        Text(stop.name)
+                            .font(.caption2.weight(.semibold))
+                            .padding(.horizontal, 4)
+                            .background(.thinMaterial, in: .capsule)
+                    }
+                    .allowsHitTesting(false)
                 }
             }
             .annotationTitles(.hidden)

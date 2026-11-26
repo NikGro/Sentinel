@@ -121,6 +121,31 @@ extension MapScreen {
         }
     }
 
+    /// Ziel-Haltestelle der laufenden Navigation (überschlagend oder „Halte voraus“), sonst keine.
+    var highlightedStops: [HighlightedStop] {
+        guard route.isActive, let target = route.target else { return [] }
+        let stop: (point: GeoPoint, name: String)?
+        switch target {
+        case .leapfrog:
+            stop = lage.myLeapfrogStop.map { ($0.point, $0.name) }
+        case .ahead:
+            stop = route.destination.map { ($0, route.title) }
+        default:
+            stop = nil
+        }
+        guard let stop else { return [] }
+        return [HighlightedStop(point: stop.point, name: stop.name, onMap: stopSymbolExists(near: stop.point))]
+    }
+
+    /// Steht nahe der Stelle schon ein Haltestellensymbol (angelegte Haltestelle, Halte einer ÖPNV-Strecke oder
+    /// Haltestellen im Umkreis)?
+    func stopSymbolExists(near point: GeoPoint) -> Bool {
+        let radius = 30.0
+        if objects(.haltestelle).contains(where: { $0.data.anchor.distance(to: point) < radius }) { return true }
+        if objects(.oepnvlinie).contains(where: { $0.data.showsStops && $0.data.punkte.contains { $0.distance(to: point) < radius } }) { return true }
+        return nearbyStops.contains { $0.point.distance(to: point) < radius }
+    }
+
     var nearbyStops: [NearbyStop] {
         var seen = Set<String>()
         return stopCircles.flatMap { fahndung.nearbyStops[FahndungStore.stopsKey($0.point, radius: $0.radius)] ?? [] }
