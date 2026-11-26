@@ -7,6 +7,9 @@ statt jede Änderung sofort einzubauen. Erledigtes wandert mit Version ins CHANG
 
 ### Nach 0.38 offen
 
+- **Kurzübersicht: Kopfzeile mit Hintergrund:** Hochgewischt und gescrollt läuft der Inhalt sichtbar unter Titel und
+  runden Knöpfen hindurch (überlagert sich mit Foto und Text). Hinter die Kopfzeile ein Hintergrund, der nach unten
+  per Verlauf transparent wird, wie in der Kopfzeile des Mehr-Menüs (QuickLookHeader).
 - **Zielobjekt: Standort nur über die Anschrift im Editor:** In der Detailansicht bzw. Kurzübersicht eines Zielobjekts
   entfällt der Knopf „Standort neu setzen“ (von Hand); der Ort kommt über das Anschriftenfeld mit Vorschlägen auf der
   Bearbeiten-Seite.
