@@ -7,6 +7,15 @@ statt jede Änderung sofort einzubauen. Erledigtes wandert mit Version ins CHANG
 
 ### Nach 0.37 offen
 
+- **Routenlinie bei Wende-Anweisung zeigt direkt nach hinten:** Fährt man falsch und die Route sagt „in 100 m wenden“,
+  beginnt die blaue Linie schon hinter dem Pfeil statt erst nach vorn bis zur Wendestelle und dann zurück.
+  - Ursache (Code): `LiveRouteLayer` (OverlayLayers.swift) setzt den Linienanfang auf das nächstgelegene Teilstück der
+    Route in einem Fenster von 400 Punkten ab dem Fortschritt. Bei einer Wende läuft der Rückweg dicht neben dem Hinweg
+    (Gegenfahrbahn, wenige Meter); der nächste Punkt liegt dann oft schon auf dem Rückweg, alles davor wird abgeschnitten.
+  - Behebung: Fortschritt nur vorwärts und nur so weit, wie man seit dem letzten Bild gefahren sein kann (Strecke
+    entlang der Route begrenzen), und Teilstücke bevorzugen, deren Richtung zur eigenen Fahrtrichtung passt; alternativ
+    die Position entlang der Route aus dem Navigationskern (Ferrostar) übernehmen statt selbst zu suchen. Test mit einer
+    Route hin und zurück auf derselben Straße.
 - **SOS als kritischer Alarm:** Drückt ein Fahnder SOS, soll bei allen anderen außerhalb der App eine Mitteilung mit
   Alarmpriorität kommen, leise (etwa 10 % Lautstärke), aber immer hörbar, auch im Stumm- und Fokus-Modus.
   - Stand: Die App schickt bei SOS schon eine lokale Mitteilung als „Dringend“ (time-sensitive), sofern sie im
