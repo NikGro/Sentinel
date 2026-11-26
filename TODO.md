@@ -7,6 +7,20 @@ statt jede Änderung sofort einzubauen. Erledigtes wandert mit Version ins CHANG
 
 ### Nach 0.37 offen
 
+- **Titelbilder quadratisch:** Titelbilder von Zielpersonen, Zielfahrzeugen und Zielobjekten in Detailansicht,
+  Kurzübersicht und Listen quadratisch statt hochkant (jetzt etwa 110 × 140).
+- **Straßenansicht (Look Around) nur bei festen Orten:** Nur bei Zielobjekten und festen Pins/Markierungen, nicht bei
+  Zielpersonen und Zielfahrzeugen (deren aktuelle Position). Prüfen, ob durch die Umstellung auf Beziehungen schon
+  erledigt (TargetDetail zeigt die Karte bisher bei Anschrift oder Zielobjekt).
+- **Adresssuche mit Autovervollständigung beim Zielobjekt:** Wie in der Navigation, aber ohne Objekte aus der Lage als
+  Vorschläge; nur Anschriften, Firmen/Orte und ÖPNV-Stationen (MKLocalSearchCompleter). Gewählte Anschrift setzt
+  Adresse und Standort des Zielobjekts; alternativ weiterhin von Hand setzen.
+- **Navigation endet in der richtigen Straße:** Bei einer Zieladresse (z. B. Musterstraße 3) an der Musterstraße auf
+  Höhe der 3 ankommen, nicht in einer Nachbarstraße, die in Luftlinie näher am Gebäude liegt. Umsetzung: den
+  Straßennamen der Zieladresse an Valhalla mitgeben (Zielort mit `street`, damit er auf der passenden Straße einrastet),
+  ggf. Zielpunkt vorher auf die benannte Straße legen (Straßenverzeichnis); Test mit Eckgrundstück.
+- **Ziel-Pin während der Navigation:** Auf dem Ziel (z. B. Zielobjekt oder gesuchte Adresse) bleibt ein Pin sichtbar,
+  bis die Navigation beendet ist.
 - **Routenlinie bei Wende-Anweisung zeigt direkt nach hinten:** Fährt man falsch und die Route sagt „in 100 m wenden“,
   beginnt die blaue Linie schon hinter dem Pfeil statt erst nach vorn bis zur Wendestelle und dann zurück.
   - Ursache (Code): `LiveRouteLayer` (OverlayLayers.swift) setzt den Linienanfang auf das nächstgelegene Teilstück der
