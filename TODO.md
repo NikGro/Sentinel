@@ -7,6 +7,9 @@ statt jede Änderung sofort einzubauen. Erledigtes wandert mit Version ins CHANG
 
 ### Nach 0.37 offen
 
+- **Beziehungen vereinfachen:** Statt Bezeichnung mit Vorschlägen, Status, Herkunft und Notiz nur ein Freitextfeld
+  für die Art der Beziehung. Bearbeiten (anlegen, ändern, löschen) nur auf der Bearbeiten-Seite eines Ziels; in der
+  Detailansicht bzw. Kurzübersicht nur anzeigen (mit Sprung zum verbundenen Ziel).
 - **Baustellen und Sperrungen in Städten:** 0.37 meidet aktuelle Vollsperrungen der Autobahnen (Autobahn GmbH).
   Für Hamburg gibt es keinen frei erreichbaren Baustellen-Dienst (der alte WFS-Link liefert 404); Mobilithek bzw.
   Landesportal prüfen. OpenStreetMap-Baustellen (highway=construction) kennt Valhalla bereits, sofern die Kacheln
