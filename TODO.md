@@ -7,6 +7,15 @@ statt jede Änderung sofort einzubauen. Erledigtes wandert mit Version ins CHANG
 
 ### Nach 0.38 offen
 
+- **Zielobjekt: Standort nur über die Anschrift im Editor:** In der Detailansicht bzw. Kurzübersicht eines Zielobjekts
+  entfällt der Knopf „Standort neu setzen“ (von Hand); der Ort kommt über das Anschriftenfeld mit Vorschlägen auf der
+  Bearbeiten-Seite.
+- **Textfelder leeren:** In allen Textfeldern beim Bearbeiten ein X-Knopf, der das ganze Feld mit einem Tipp leert
+  (sichtbar, solange das Feld aktiv ist und Text enthält).
+- **Insassen: Aussteigen statt Hinführen:** Beim Zielfahrzeug steht neben jedem Insassen bisher ein Hinführen-Knopf;
+  doppelt, denn man kann zum Fahrzeug navigieren. Stattdessen ein Knopf „Aussteigen“ (Person steigt aus, bleibt am
+  aktuellen Ort des Fahrzeugs stehen). Wichtig, weil man die Person auf der Karte nicht antippen kann, solange sie im
+  Fahrzeug sitzt.
 - **SOS als kritischer Alarm:** Drückt ein Fahnder SOS, soll bei allen anderen außerhalb der App eine Mitteilung mit
   Alarmpriorität kommen, leise (etwa 10 % Lautstärke), aber immer hörbar, auch im Stumm- und Fokus-Modus.
   - Stand: Die App schickt bei SOS schon eine lokale Mitteilung als „Dringend“ (time-sensitive), sofern sie im
