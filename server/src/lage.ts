@@ -202,6 +202,7 @@ export class Lage extends EventEmitter<{ event: [LageEvent] }> {
       vehicles: this.list('vehicle'),
       annotations: this.list('annotation', inst),
       targets: this.list('target', inst),
+      relations: this.list('relation'),
       trackers: this.list('tracker'),
       layers: this.list('layer', inst),
       rooms: this.list('room', inst),
@@ -258,6 +259,16 @@ export class Lage extends EventEmitter<{ event: [LageEvent] }> {
           const standortUnchanged = JSON.stringify(next.standort) === JSON.stringify(previous.standort);
           if (p && standortUnchanged) data = { ...next, standort: { lat: p.lat, lon: p.lon, ts: p.ts } };
         }
+        break;
+      }
+      case 'relation': {
+        const next = data as EntityData<'relation'>;
+        if (!this.get('target', next.von) || !this.get('target', next.nach)) throw new LageError('ungueltig', 'Ziel der Beziehung existiert nicht.');
+        // Je Paar nur eine Beziehung je Bezeichnung (sonst doppelt angelegt).
+        const twin = this.list('relation').find((r) => r.id !== id && r.data.status !== 'beendet' && next.status !== 'beendet'
+          && r.data.bezeichnung === next.bezeichnung
+          && ((r.data.von === next.von && r.data.nach === next.nach) || (r.data.von === next.nach && r.data.nach === next.von)));
+        if (twin) throw new LageError('ungueltig', 'Diese Beziehung besteht schon.');
         break;
       }
       case 'annotation': {
@@ -354,6 +365,10 @@ export class Lage extends EventEmitter<{ event: [LageEvent] }> {
         break;
     }
     if (kind === 'target') {
+      // Beziehungen hängen an beiden Zielen; ohne eines davon sind sie bedeutungslos.
+      for (const r of this.list('relation')) {
+        if (r.data.von === id || r.data.nach === id) this.remove('relation', '', r.id);
+      }
       for (const instance of this.list('instance')) {
         const ziele = this.operationOf(instance.id).ziele;
         if (ziele.includes(id)) this.updateOperation(instance.id, { ziele: ziele.filter((z) => z !== id) });

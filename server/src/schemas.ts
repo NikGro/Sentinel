@@ -241,6 +241,27 @@ const target = z.object({
   aufzeichnung: z.boolean().default(true),
 });
 
+/** Übliche Bezeichnungen einer Beziehung; frei ergänzbar. */
+export const BEZIEHUNG_VORSCHLAEGE = ['Halter', 'Fahrer', 'Insasse', 'Regelmäßiger Nutzer', 'Bewohner', 'Eigentümer', 'Regelmäßiger Aufenthaltsort', 'Zulassungsanschrift', 'Kontaktperson'] as const;
+
+/**
+ * Beziehung zwischen zwei Zielen (Person, Fahrzeug, Objekt) als eigener Datensatz: von beiden Seiten sichtbar und
+ * bearbeitbar. Eine Beziehung ist keine gesicherte Tatsache: `status` und `herkunft` halten fest, wie belastbar
+ * sie ist und woher sie stammt. Endet sie, bleibt sie als „beendet“ nachvollziehbar stehen.
+ */
+const relation = z
+  .object({
+    von: id,
+    nach: id,
+    /** Z. B. Halter, Fahrer, Bewohner; leer heißt „verbunden“ ohne nähere Angabe. */
+    bezeichnung: optionalText(60),
+    notiz: optionalText(1000),
+    status: z.enum(['vermutet', 'bestaetigt', 'beendet']).default('vermutet'),
+    /** Woher die Angabe stammt, z. B. „Halterabfrage“, „Observation“, „Hinweisgeber“. */
+    herkunft: optionalText(120),
+  })
+  .refine((r) => r.von !== r.nach, 'Ein Ziel kann nicht mit sich selbst verbunden sein');
+
 const tracker = z.object({
   name: text(60).min(1),
   anbieter: z.enum(['sinotrack', 'paj']),
@@ -291,7 +312,7 @@ const message = z
   })
   .refine((m) => m.text.length > 0 || m.anhang !== null, 'Nachricht ist leer');
 
-export const ENTITY_SCHEMAS = { member, vehicle, annotation, target, tracker, layer, room, message, instance } as const;
+export const ENTITY_SCHEMAS = { member, vehicle, annotation, target, relation, tracker, layer, room, message, instance } as const;
 
 /** Objektarten, die zu einer Instanz gehören. Alle anderen gelten instanzübergreifend. */
 /** Instanzbezogene Arten. Ziele gelten seit 0.19 instanzübergreifend; welche eine Instanz zeigt, steht in `Operation.ziele`. */

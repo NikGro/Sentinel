@@ -15,6 +15,7 @@ export const tables = {
   vehicle: signal<Table<'vehicle'>>({}),
   annotation: signal<Table<'annotation'>>({}),
   target: signal<Table<'target'>>({}),
+  relation: signal<Table<'relation'>>({}),
   tracker: signal<Table<'tracker'>>({}),
   layer: signal<Table<'layer'>>({}),
   room: signal<Table<'room'>>({}),
@@ -200,6 +201,7 @@ function receive(m: any): void {
       tables.vehicle.value = index(m.vehicles);
       tables.annotation.value = index(m.annotations);
       tables.target.value = index(m.targets);
+      tables.relation.value = index(m.relations ?? []);
       tables.tracker.value = index(m.trackers);
       tables.layer.value = index(m.layers);
       tables.room.value = index(m.rooms ?? []);

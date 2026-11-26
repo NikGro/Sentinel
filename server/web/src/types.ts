@@ -109,6 +109,19 @@ export interface Target {
   quelle?: 'hand' | 'tracker' | 'a' | null;
 }
 
+/** Beziehung zwischen zwei Zielen; von beiden Seiten sichtbar, mit Status und Herkunft (keine gesicherte Tatsache). */
+export interface Relation {
+  von: string;
+  nach: string;
+  bezeichnung: string;
+  notiz: string;
+  status: 'vermutet' | 'bestaetigt' | 'beendet';
+  herkunft: string;
+}
+
+export const BEZIEHUNG_STATUS: Record<Relation['status'], string> = { vermutet: 'Vermutet', bestaetigt: 'Bestätigt', beendet: 'Beendet' };
+export const BEZIEHUNG_VORSCHLAEGE = ['Halter', 'Fahrer', 'Insasse', 'Regelmäßiger Nutzer', 'Bewohner', 'Eigentümer', 'Regelmäßiger Aufenthaltsort', 'Zulassungsanschrift', 'Kontaktperson'];
+
 export interface Tracker {
   name: string;
   anbieter: 'sinotrack' | 'paj';
@@ -169,6 +182,7 @@ export interface KindMap {
   vehicle: Vehicle;
   annotation: MapObject;
   target: Target;
+  relation: Relation;
   tracker: Tracker;
   layer: Layer;
   room: Room;

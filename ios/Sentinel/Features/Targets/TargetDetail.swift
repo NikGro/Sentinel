@@ -99,7 +99,9 @@ struct TargetDetail: View {
             }
             }
 
-            if !target.anschrift.isEmpty || target.art == .objekt {
+            RelationsSection(targetId: entity.id)
+
+            if target.art == .objekt {
                 Section("Anschrift") {
                     if !target.anschrift.isEmpty {
                         Text(target.anschrift)
@@ -108,9 +110,15 @@ struct TargetDetail: View {
                     LookAroundCard(address: target.anschrift, point: lage.position(ofTarget: entity)?.point)
                 }
             }
+            if target.art != .objekt, !target.anschrift.isEmpty {
+                Section("Frühere Angabe") {
+                    LabeledContent("Anschrift", value: target.anschrift)
+                        .textSelection(.enabled)
+                }
+            }
             if !target.kennzeichen.isEmpty {
                 Section {
-                    LabeledContent(target.art == .person ? "Genutztes Fahrzeug" : "Kennzeichen") {
+                    LabeledContent(target.art == .person ? "Früher: genutztes Fahrzeug" : "Kennzeichen") {
                         Text(target.kennzeichen)
                             .font(.body.monospaced().weight(.semibold))
                     }

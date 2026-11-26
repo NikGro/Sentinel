@@ -1,6 +1,6 @@
 import { useSignal } from '@preact/signals';
 import { del, focusRequest, nameOf, newId, put, setTargetShown, tables, targetShown, tool, trackerPoint } from '../store';
-import { ZIEL_TITEL, type Target, type ZielArt } from '../types';
+import { BEZIEHUNG_STATUS, BEZIEHUNG_VORSCHLAEGE, ZIEL_TITEL, type Relation, type Target, type ZielArt } from '../types';
 import { ageOf, ago, Field, ImageField, Section, TextInput } from '../ui';
 
 const LEER: Target = {
@@ -70,17 +70,28 @@ export function TargetsPanel() {
             )}
           </div>
         </div>
-        <div class="grid2">
-          {text('vorname', 'Vorname')}
-          {text('nachname', 'Nachname')}
-          <Field label={`Geburtsdatum${ageOf(data.geburtsdatum) !== null ? ` (${ageOf(data.geburtsdatum)} Jahre)` : ''}`}>
-            <input type="date" value={data.geburtsdatum ?? ''} onInput={(e) => set({ geburtsdatum: e.currentTarget.value || null })} />
-          </Field>
-          {text('geburtsort', 'Geburtsort')}
-        </div>
-        {text('staatsangehoerigkeit', 'Staatsangehörigkeit')}
-        {text('anschrift', 'Anschrift', 2)}
-        {text('kennzeichen', 'Kennzeichen')}
+        {data.art === 'person' && (
+          <>
+            <div class="grid2">
+              {text('vorname', 'Vorname')}
+              {text('nachname', 'Nachname')}
+              <Field label={`Geburtsdatum${ageOf(data.geburtsdatum) !== null ? ` (${ageOf(data.geburtsdatum)} Jahre)` : ''}`}>
+                <input type="date" value={data.geburtsdatum ?? ''} onInput={(e) => set({ geburtsdatum: e.currentTarget.value || null })} />
+              </Field>
+              {text('geburtsort', 'Geburtsort')}
+            </div>
+            {text('staatsangehoerigkeit', 'Staatsangehörigkeit')}
+          </>
+        )}
+        {data.art === 'objekt' && text('anschrift', 'Anschrift', 2)}
+        {data.art === 'fahrzeug' && text('kennzeichen', 'Kennzeichen')}
+        {/* Frühere Freitextangaben (Halter, Wohnanschrift, genutztes Fahrzeug) bleiben lesbar, bis sie als Beziehung angelegt sind. */}
+        {data.art !== 'objekt' && data.anschrift && text('anschrift', 'Frühere Angabe Anschrift (bitte als Beziehung zu einem Zielobjekt anlegen)', 2)}
+        {data.art !== 'person' && (data.vorname || data.nachname) && (
+          <p class="hint">Frühere Angabe Person: {[data.vorname, data.nachname].filter(Boolean).join(' ')}. Bitte als Zielperson anlegen und verbinden.</p>
+        )}
+        {data.art === 'person' && data.kennzeichen && text('kennzeichen', 'Frühere Angabe Kennzeichen (bitte als Zielfahrzeug anlegen und verbinden)')}
+        {neu ? <p class="hint">Beziehungen zu anderen Zielen lassen sich nach dem Sichern herstellen.</p> : <Relations targetId={id} />}
         <ImageField label="Titelbild (weitere Fotos in der App)" blobId={data.fotoBlob} onChange={(fotoBlob) => set({ fotoBlob })} />
         {text('hinweise', 'Notizen: Merkmale, Sachverhalt, Hinweise, Maßnahmen', 10)}
         <Field label="GPS-Tracker">
@@ -154,5 +165,80 @@ export function TargetsPanel() {
         })}
       </ul>
     </Section>
+  );
+}
+
+/** Beziehungen eines Ziels zu anderen Zielen, von beiden Seiten gleich sichtbar und bearbeitbar. */
+function Relations(props: { targetId: string }) {
+  const editing = useSignal<{ id: string; data: Relation; neu: boolean } | null>(null);
+  const relations = Object.values(tables.relation.value).filter((r) => r.data.von === props.targetId || r.data.nach === props.targetId);
+  const others = Object.values(tables.target.value).filter((t) => t.id !== props.targetId).sort((a, b) => anzeigename(a.data).localeCompare(anzeigename(b.data)));
+  const otherOf = (r: Relation) => tables.target.value[r.von === props.targetId ? r.nach : r.von];
+
+  if (editing.value) {
+    const { id, data, neu } = editing.value;
+    const set = (patch: Partial<Relation>) => (editing.value = { id, neu, data: { ...data, ...patch } });
+    const other = data.von === props.targetId ? data.nach : data.von;
+    return (
+      <div class="field">
+        <span>{neu ? 'Neue Beziehung' : 'Beziehung bearbeiten'}</span>
+        <Field label="Verbunden mit">
+          <select value={other} onChange={(e) => set({ nach: e.currentTarget.value, von: props.targetId })}>
+            <option value="">Ziel wählen</option>
+            {others.map((t) => (
+              <option key={t.id} value={t.id}>{`${ZIEL_TITEL[t.data.art]}: ${anzeigename(t.data)}`}</option>
+            ))}
+          </select>
+        </Field>
+        <Field label="Bezeichnung, z. B. Halter, Fahrer, Bewohner">
+          <input list="beziehung-vorschlaege" value={data.bezeichnung} maxLength={60} onInput={(e) => set({ bezeichnung: e.currentTarget.value })} />
+          <datalist id="beziehung-vorschlaege">
+            {BEZIEHUNG_VORSCHLAEGE.map((v) => <option key={v} value={v} />)}
+          </datalist>
+        </Field>
+        <div class="grid2">
+          <Field label="Status">
+            <select value={data.status} onChange={(e) => set({ status: e.currentTarget.value as Relation['status'] })}>
+              {(Object.keys(BEZIEHUNG_STATUS) as Relation['status'][]).map((s) => <option key={s} value={s}>{BEZIEHUNG_STATUS[s]}</option>)}
+            </select>
+          </Field>
+          <Field label="Herkunft, z. B. Halterabfrage">
+            <TextInput value={data.herkunft} maxLength={120} onInput={(v) => set({ herkunft: v })} />
+          </Field>
+        </div>
+        <Field label="Notiz">
+          <TextInput value={data.notiz} rows={2} maxLength={1000} onInput={(v) => set({ notiz: v })} />
+        </Field>
+        <div class="row">
+          <button class="primary" disabled={!other} onClick={() => { if (put('relation', id, data)) editing.value = null; }}>Sichern</button>
+          <button class="quiet" onClick={() => (editing.value = null)}>Abbrechen</button>
+          {!neu && <button class="danger" onClick={() => { if (confirm('Beziehung löschen?') && del('relation', id)) editing.value = null; }}>Löschen</button>}
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div class="field">
+      <span>Beziehungen</span>
+      {relations.length === 0 && <p class="hint">Nicht zugeordnet. Personen, Fahrzeuge und Objekte werden als eigene Ziele angelegt und hier verbunden.</p>}
+      <ul class="list">
+        {relations.map((r) => {
+          const other = otherOf(r.data);
+          return (
+            <li key={r.id} class={r.data.status === 'beendet' ? 'ruhend' : ''}>
+              <div class="grow">
+                <b>{other ? anzeigename(other.data) : 'Unbekanntes Ziel'}</b>
+                <small>{[r.data.bezeichnung || 'Verbunden', other ? ZIEL_TITEL[other.data.art] : '', BEZIEHUNG_STATUS[r.data.status], r.data.herkunft].filter(Boolean).join(', ')}</small>
+              </div>
+              <button onClick={() => (editing.value = { id: r.id, data: { ...r.data }, neu: false })}>Bearbeiten</button>
+            </li>
+          );
+        })}
+      </ul>
+      <div class="row">
+        <button onClick={() => (editing.value = { id: newId(), neu: true, data: { von: props.targetId, nach: '', bezeichnung: '', notiz: '', status: 'vermutet', herkunft: '' } })}>Beziehung hinzufügen</button>
+      </div>
+    </div>
   );
 }

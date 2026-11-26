@@ -307,3 +307,19 @@ test('Echte ÖPNV-Fahrten: Zuordnung über Halte-ID, Lebensdauer folgt der Versp
   assert.equal(data?.fahrt?.echtzeit, true);
   assert.equal(data?.fahrt?.stand, now);
 });
+
+test('Beziehungen: zwischen bestehenden Zielen, ohne Doppel, verschwinden mit dem Ziel', () => {
+  const lage = newLage();
+  lage.put(fahnder('a'), 'target', 'p1', { art: 'person', vorname: 'Max', nachname: 'Muster' });
+  lage.put(fahnder('a'), 'target', 'f1', { art: 'fahrzeug', kennzeichen: 'HH X 1' });
+  const r = lage.put(fahnder('a'), 'relation', 'r1', { von: 'f1', nach: 'p1', bezeichnung: 'Halter', herkunft: 'Halterabfrage' });
+  assert.equal((r.data as { status: string }).status, 'vermutet');
+  assert.ok(lage.snapshot().relations.some((x) => x.id === 'r1'));
+  // Gleiche Beziehung in Gegenrichtung ist ein Doppel; andere Bezeichnung nicht.
+  assert.throws(() => lage.put(fahnder('a'), 'relation', 'r2', { von: 'p1', nach: 'f1', bezeichnung: 'Halter' }), /besteht schon/);
+  lage.put(fahnder('a'), 'relation', 'r3', { von: 'p1', nach: 'f1', bezeichnung: 'Fahrer' });
+  assert.throws(() => lage.put(fahnder('a'), 'relation', 'r4', { von: 'p1', nach: 'p1' }), LageError);
+  assert.throws(() => lage.put(fahnder('a'), 'relation', 'r5', { von: 'p1', nach: 'fehlt' }), /existiert nicht/);
+  lage.del(fahnder('a'), 'target', 'f1');
+  assert.equal(lage.list('relation').length, 0);
+});

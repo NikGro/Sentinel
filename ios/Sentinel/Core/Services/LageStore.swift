@@ -29,6 +29,8 @@ final class LageStore {
     private(set) var mapObjects: [String: Versioned<MapObject>] = [:]
     private(set) var targets: [String: Versioned<Target>] = [:]
     private(set) var trackers: [String: Versioned<Tracker>] = [:]
+    /// Beziehungen zwischen Zielen (instanzübergreifend wie die Ziele).
+    private(set) var relations: [String: Versioned<Relation>] = [:]
     private(set) var layers: [String: Versioned<Layer>] = [:]
     private(set) var rooms: [String: Versioned<ChatRoom>] = [:]
     private(set) var messages: [Versioned<ChatMessage>] = []
@@ -75,6 +77,7 @@ final class LageStore {
         mapObjects = [:]
         targets = [:]
         trackers = [:]
+        relations = [:]
         layers = [:]
         rooms = [:]
         messages = []
@@ -478,6 +481,7 @@ final class LageStore {
             mapObjects = index(snapshot.annotations)
             targets = index(snapshot.targets)
             trackers = index(snapshot.trackers)
+            relations = index(snapshot.relations)
             layers = index(snapshot.layers)
             rooms = index(snapshot.rooms)
             messages = snapshot.messages
@@ -492,6 +496,7 @@ final class LageStore {
         case .putMapObject(let entity): mapObjects[entity.id] = entity
         case .putTarget(let entity): targets[entity.id] = entity
         case .putTracker(let entity): trackers[entity.id] = entity
+        case .putRelation(let entity): relations[entity.id] = entity
         case .putLayer(let entity): layers[entity.id] = entity
         case .putRoom(let entity): rooms[entity.id] = entity
         case .putInstance(let entity): instances[entity.id] = entity
@@ -530,7 +535,10 @@ final class LageStore {
             positions[id] = nil
         case Vehicle.kind: vehicles[id] = nil
         case MapObject.kind: mapObjects[id] = nil
-        case Target.kind: targets[id] = nil
+        case Target.kind:
+            targets[id] = nil
+            relations = relations.filter { $0.value.data.von != id && $0.value.data.nach != id }
+        case Relation.kind: relations[id] = nil
         case Tracker.kind:
             trackers[id] = nil
             trackerPositions[id] = nil
@@ -568,4 +576,17 @@ enum LageEvent {
     case instanceNotice(InstanceNotice)
     /// Ein überwachtes Ziel hat einen Geofence verlassen oder betreten.
     case geofence(GeofenceAlarm)
+
+    // MARK: Beziehungen
+
+    /// Beziehungen eines Ziels mit dem jeweils anderen Ziel; laufende zuerst, beendete zuletzt.
+    func relations(of targetId: String) -> [RelatedTarget] {
+        relations.values
+            .filter { $0.data.von == targetId || $0.data.nach == targetId }
+            .compactMap { r in targets[r.data.other(than: targetId)].map { RelatedTarget(relation: r, other: $0) } }
+            .sorted { a, b in
+                if (a.relation.data.status == .beendet) != (b.relation.data.status == .beendet) { return b.relation.data.status == .beendet }
+                return a.other.data.displayName.localizedStandardCompare(b.other.data.displayName) == .orderedAscending
+            }
+    }
 }

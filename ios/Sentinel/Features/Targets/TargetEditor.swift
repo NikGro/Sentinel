@@ -5,6 +5,8 @@ import SwiftUI
 
 struct TargetEditor: View {
     let context: TargetEditorContext
+    /// Nach dem Sichern, mit der Kennung des Ziels (z. B. um ein neu angelegtes Ziel gleich zu verbinden).
+    var onSave: ((String) -> Void)?
 
     @Environment(AppModel.self) private var model
     @Environment(LageStore.self) private var lage
@@ -19,8 +21,9 @@ struct TargetEditor: View {
     /// Gewählte Art beim Einsteigen: öffnet die Auswahl des Fahrzeugs bzw. Objekts.
     @State private var boarding: TargetBinding.Art?
 
-    init(context: TargetEditorContext) {
+    init(context: TargetEditorContext, onSave: ((String) -> Void)? = nil) {
         self.context = context
+        self.onSave = onSave
         var target = context.target
         target.normalize()
         _target = State(initialValue: target)
@@ -57,11 +60,6 @@ struct TargetEditor: View {
                         }
                         TextField("Geburtsort", text: $target.geburtsort)
                         TextField("Staatsangehörigkeit", text: $target.staatsangehoerigkeit)
-                        TextField("Anschrift", text: $target.anschrift, axis: .vertical)
-                            .lineLimit(1...3)
-                        TextField("Kennzeichen eines genutzten Fahrzeugs", text: $target.kennzeichen)
-                            .textInputAutocapitalization(.characters)
-                            .autocorrectionDisabled()
                     }
                 case .fahrzeug:
                     Section("Fahrzeug") {
@@ -70,22 +68,24 @@ struct TargetEditor: View {
                             .textInputAutocapitalization(.characters)
                             .autocorrectionDisabled()
                     }
-                    Section("Halter oder Fahrer (optional)") {
-                        TextField("Vorname", text: $target.vorname)
-                        TextField("Nachname", text: $target.nachname)
-                        TextField("Anschrift", text: $target.anschrift, axis: .vertical)
-                            .lineLimit(1...3)
-                    }
                 case .objekt:
                     Section("Objekt") {
                         TextField("Objekt, z. B. Mehrfamilienhaus, Firmengebäude", text: $target.bezeichnung)
                         TextField("Anschrift", text: $target.anschrift, axis: .vertical)
                             .lineLimit(1...3)
                     }
-                    Section("Bewohner oder Verantwortliche (optional)") {
-                        TextField("Vorname", text: $target.vorname)
-                        TextField("Nachname", text: $target.nachname)
+                }
+
+                legacySection
+
+                // Halter, Fahrer, Bewohner, Anschrift: als eigene Ziele angelegt und hier verbunden.
+                if context.isNew {
+                    Section("Beziehungen") {
+                        Text("Nach dem Sichern lassen sich Personen, Fahrzeuge und Objekte verbinden.")
+                            .foregroundStyle(.secondary)
                     }
+                } else {
+                    RelationsSection(targetId: context.id, opensTargets: false)
                 }
 
                 if target.art == .person {
@@ -211,6 +211,36 @@ struct TargetEditor: View {
         target.bindung = TargetBinding(art: art, zielId: id)
     }
 
+    /// Frühere Freitextangaben (Halter beim Fahrzeug, Wohnanschrift und genutztes Fahrzeug bei der Person, Bewohner
+    /// beim Objekt) bleiben sichtbar und lassen sich leeren, sobald sie als Beziehung angelegt sind.
+    @ViewBuilder private var legacySection: some View {
+        let address = target.art != .objekt && !target.anschrift.isEmpty
+        let person = target.art != .person && !(target.vorname.isEmpty && target.nachname.isEmpty)
+        let plate = target.art == .person && !target.kennzeichen.isEmpty
+        if address || person || plate {
+            Section {
+                if person {
+                    LabeledContent("Person", value: [target.vorname, target.nachname].filter { !$0.isEmpty }.joined(separator: " "))
+                }
+                if address {
+                    LabeledContent("Anschrift", value: target.anschrift)
+                }
+                if plate {
+                    LabeledContent("Genutztes Fahrzeug", value: target.kennzeichen)
+                }
+                Button("Frühere Angaben entfernen", systemImage: "eraser", role: .destructive) {
+                    if person { target.vorname = ""; target.nachname = "" }
+                    if address { target.anschrift = "" }
+                    if plate { target.kennzeichen = "" }
+                }
+            } header: {
+                Text("Frühere Angaben")
+            } footer: {
+                Text("Bitte als eigenes Ziel anlegen und unter „Beziehungen“ verbinden, danach hier entfernen.")
+            }
+        }
+    }
+
     private var notesPrompt: String {
         switch target.art {
         case .person: "Merkmale, Kleidung, Sachverhalt, Hinweise, Eigensicherung, Maßnahmen …"
@@ -320,6 +350,9 @@ struct TargetEditor: View {
         result.birthDate = birthDate
         result.fahrzeugFotoBlob = nil
         result.fotoBlob = result.anhaenge.first(where: { $0.art == .bild })?.blobId
-        if lage.put(result, id: context.id) { dismiss() }
+        if lage.put(result, id: context.id) {
+            onSave?(context.id)
+            dismiss()
+        }
     }
 }
