@@ -18,6 +18,11 @@ statt jede Änderung sofort einzubauen. Erledigtes wandert mit Version ins CHANG
 
 ### Karte, Kompass und Navigation
 
+- **Eigener Punkt genau auf der Position**: Mittelpunkt des Kreises (mit Fahrzeug-/Fußgängersymbol) soll exakt auf dem
+  Standort liegen; Beschriftungen nur darunter angereiht. Bisher wird die Mitte aus Symbol und Beschriftungen gebildet
+  (Anker `.center` der ganzen Gruppe, auch beim selbst gezeichneten Punkt angeheftet), dadurch sitzt der Kreis zu hoch.
+- **Straßenschild im Stil der eigenen Beschriftung**: Das Schild mit Straße/Richtung und „Ecke …“ nicht als
+  Liquid-Glass-Kasten, sondern im selben schlichten Stil wie das Label mit Spitzname bzw. Funkrufname darüber.
 - **Navigation zu einem Zielfahrzeug mit drei Modi** (wie der Schalter beim ÖPNV): normal, parallel, Vorlauf. Nur
   sinnvoll mit Live-Standort samt Richtung (Tracker oder A-Position), nicht bei von Hand gesetztem Standort.
   - *Vorlauf* (zuerst umsetzen, gut machbar): Straße des Ziels über den Straßenindex/Valhalla bestimmen, in
