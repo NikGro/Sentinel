@@ -30,43 +30,44 @@ struct TargetMovementSection: View {
     }
 
     var body: some View {
-        // Erst die Standortquelle direkt unter „Hinführen“, dann der Dreier-Schalter für das Verkehrsmittel. Beide
-        // gleich bedienbar: ein Schalter mit drei Symbolen, darunter, was gerade gilt.
+        // Erst die Standortquelle, dann das Verkehrsmittel. Beide gleich aufgebaut: eine Karte mit Überschrift, darin
+        // der Schalter und darunter, was gerade gilt (vorher schwebte der Schalter frei über einer eigenen Zeile).
         if target.supportsDynamicSource, boardedIn == nil {
             Section {
-                Picker("Standortquelle", selection: source) {
-                    ForEach(SourceChoice.allCases) { option in
-                        Image(systemName: option.symbolName)
-                            .accessibilityLabel(option.title)
-                            .tag(option)
+                VStack(alignment: .leading, spacing: 12) {
+                    Picker("Standortquelle", selection: source) {
+                        ForEach(SourceChoice.allCases) { option in
+                            Image(systemName: option.symbolName)
+                                .accessibilityLabel(option.title)
+                                .tag(option)
+                        }
                     }
+                    .pickerStyle(.segmented)
+                    .controlSize(.large)
+                    HStack(spacing: 10) {
+                        VStack(alignment: .leading, spacing: 1) {
+                            Text(source.wrappedValue.title)
+                                .font(.subheadline.weight(.semibold))
+                            Text(sourceDescription)
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
+                                .lineLimit(1)
+                        }
+                        Spacer()
+                        switch source.wrappedValue {
+                        case .hand:
+                            Button("Ort setzen") { placeByHand() }
+                                .buttonStyle(.glass)
+                        case .tracker:
+                            Button("Tracker wählen") { choosingTracker = true }
+                                .buttonStyle(.glass)
+                        case .keep, .a:
+                            EmptyView()
+                        }
+                    }
+                    .controlSize(.small)
                 }
-                .pickerStyle(.segmented)
-                .controlSize(.extraLarge)
-                .listRowBackground(Color.clear)
-                .listRowInsets(EdgeInsets())
-                HStack(spacing: 10) {
-                    VStack(alignment: .leading, spacing: 1) {
-                        Text("Standortquelle: \(source.wrappedValue.title)")
-                            .font(.subheadline.weight(.semibold))
-                        Text(sourceDescription)
-                            .font(.caption)
-                            .foregroundStyle(.secondary)
-                            .lineLimit(1)
-                    }
-                    Spacer()
-                    switch source.wrappedValue {
-                    case .hand:
-                        Button("Ort setzen") { placeByHand() }
-                            .buttonStyle(.glass)
-                    case .tracker:
-                        Button("Tracker wählen") { choosingTracker = true }
-                            .buttonStyle(.glass)
-                    case .keep, .a:
-                        EmptyView()
-                    }
-                }
-                .controlSize(.small)
+                .padding(.vertical, 4)
                 .sheet(isPresented: $choosingTracker) {
                     TrackerChoiceSheet(selected: target.trackerId) { trackerId in
                         save {
@@ -83,6 +84,8 @@ struct TargetMovementSection: View {
                         }
                     }
                 }
+            } header: {
+                Text("Standort")
             }
         }
 
@@ -97,9 +100,8 @@ struct TargetMovementSection: View {
                     }
                 }
                 .pickerStyle(.segmented)
-                .controlSize(.extraLarge)
-                .listRowBackground(Color.clear)
-                .listRowInsets(EdgeInsets())
+                .controlSize(.large)
+                .padding(.vertical, 4)
                 .fullScreenCover(isPresented: $boardingTransit) {
                     // ÖPNV wie bei den eigenen Kräften: Fahrt auf der ÖPNV-Karte wählen, sie kommt in die Lage.
                     TransitExplorer(start: lage.position(ofTarget: entity)?.point ?? model.myPoint ?? GeoPoint(lat: 53.5511, lon: 9.9937), boardInto: { id in
@@ -115,6 +117,8 @@ struct TargetMovementSection: View {
                         pick: { id in save { $0.bindung = TargetBinding(art: art, zielId: id) } }
                     )
                 }
+            } header: {
+                Text("Unterwegs")
             } footer: {
                 if let boardedIn {
                     Text("Sitzt in: \(boardedIn). Der Standort folgt dem Fahrzeug.")

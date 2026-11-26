@@ -11,6 +11,8 @@
 - Übereinanderliegende Symbole (z. B. Person, Fahrzeug und Anschrift am selben Ort) stehen als ordentliche Spalte
   neben dem Ort, mit Platz für die Namen, statt im Ring ineinander; jedes ist zuverlässig antippbar
 - Kopfzeile der Kurzübersicht: lange Namen umbrechen statt abschneiden, weniger Leerraum zum Inhalt
+- Ziel: Standortquelle und „Unterwegs“ je als eine Karte mit Überschrift, Schalter und Stand darunter, statt frei
+  schwebender Schalter über einer eigenen Zeile
 - Beziehung anlegen: Das Fenster schloss sich bei Änderungen an der Liste von selbst; jetzt bleibt es offen
 
 ## 0.37.0
