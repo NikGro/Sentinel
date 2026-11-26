@@ -30,6 +30,8 @@ struct QuickLookSheet: View {
                 }
             }
             .environment(\.quickLookActions, actions)
+            // Kein großer Leerraum zwischen Kopfzeile und Inhalt.
+            .contentMargins(.top, 6, for: .scrollContent)
             // Variante 2: Kopfzeile mit kleinen runden Knöpfen statt Navigationsleiste; so bleibt die Karte in der
             // niedrigen Höhe fast frei und die wichtigsten Angaben stehen trotzdem oben.
             .toolbar(.hidden, for: .navigationBar)

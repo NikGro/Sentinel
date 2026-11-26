@@ -322,14 +322,29 @@ enum Declutter {
         return groups
     }
 
+    /// Abstand der Symbole untereinander: Symbol (40) samt Name darunter (gut 16) und etwas Luft.
+    static let rowSpacing: Double = 60
+    /// Seitlicher Abstand der Spalte vom echten Ort, damit Punkt und Linien sichtbar bleiben.
+    static let columnOffset: Double = 46
+
+    /// Übereinanderliegende Symbole als ordentliche Spalte rechts neben dem echten Ort (ab sechs links und rechts),
+    /// jeweils mit Platz für den Namen darunter. Ein Ring ließ Namen und Symbole ineinanderlaufen.
     static func offsets(_ items: [(id: String, coordinate: CLLocationCoordinate2D)], metersPerPoint: Double) -> [String: CGSize] {
-        let groups = groups(items, metersPerPoint: metersPerPoint)
+        // Symbole mit Namen brauchen mehr Platz als die Symbole selbst: schon ab 44 Punkten Nähe gilt als verdeckt.
+        let groups = groups(items, metersPerPoint: metersPerPoint, points: 44)
         var result: [String: CGSize] = [:]
         for group in groups where group.count > 1 {
-            let radius = 24.0 + Double(group.count) * 3
-            for (index, item) in group.enumerated() {
-                let angle = Double(index) / Double(group.count) * 2 * .pi - .pi / 2
-                result[item.id] = CGSize(width: cos(angle) * radius, height: sin(angle) * radius)
+            // Feste Reihenfolge, damit beim Zoomen nichts die Plätze tauscht.
+            let sorted = group.sorted { $0.id < $1.id }
+            let columns: [[String]] = sorted.count <= 5
+                ? [sorted.map(\.id)]
+                : [Array(sorted.prefix((sorted.count + 1) / 2)).map(\.id), Array(sorted.dropFirst((sorted.count + 1) / 2)).map(\.id)]
+            for (columnIndex, column) in columns.enumerated() {
+                let x = columnIndex == 0 ? columnOffset : -columnOffset
+                for (row, id) in column.enumerated() {
+                    let y = (Double(row) - Double(column.count - 1) / 2) * rowSpacing
+                    result[id] = CGSize(width: x, height: y)
+                }
             }
         }
         return result

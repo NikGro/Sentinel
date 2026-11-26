@@ -139,6 +139,10 @@ struct Displaced<Content: View>: View {
             content()
                 .offset(offset)
         }
+        // Die Fläche der Kartenanzeige muss das verschobene Symbol ganz umfassen, sonst kommen Tipps am Rand nicht an
+        // (die Karte prüft Treffer nur innerhalb der Anzeige).
+        .padding(.horizontal, abs(offset.width))
+        .padding(.vertical, abs(offset.height))
         .animation(.snappy, value: offset)
     }
 }

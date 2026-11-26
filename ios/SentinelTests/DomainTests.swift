@@ -363,3 +363,17 @@ struct TransitSmootherTests {
     }
 }
 
+
+struct DeclutterTests {
+    @Test func uebereinanderliegendeSymboleAlsSpalte() {
+        let here = CLLocationCoordinate2D(latitude: 53.6, longitude: 10.1)
+        let items = [("c", here), ("a", here), ("b", here), ("fern", CLLocationCoordinate2D(latitude: 53.7, longitude: 10.1))]
+            .map { (id: $0.0, coordinate: $0.1) }
+        let offsets = Declutter.offsets(items, metersPerPoint: 0.5)
+        #expect(offsets["fern"] == nil)
+        // Rechts neben dem Ort, in fester Reihenfolge untereinander, mit Platz für den Namen.
+        #expect(offsets["a"] == CGSize(width: Declutter.columnOffset, height: -Declutter.rowSpacing))
+        #expect(offsets["b"] == CGSize(width: Declutter.columnOffset, height: 0))
+        #expect(offsets["c"] == CGSize(width: Declutter.columnOffset, height: Declutter.rowSpacing))
+    }
+}

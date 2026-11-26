@@ -7,6 +7,12 @@
   vorher klaffte eine Lücke zwischen Pfeil und Linie
 - Eigener Pfeil sitzt in der Navigation etwas höher, das Straßenschild darunter überdeckt Tempo und Limit nicht mehr
 
+**Karte und Kurzübersicht**
+- Übereinanderliegende Symbole (z. B. Person, Fahrzeug und Anschrift am selben Ort) stehen als ordentliche Spalte
+  neben dem Ort, mit Platz für die Namen, statt im Ring ineinander; jedes ist zuverlässig antippbar
+- Kopfzeile der Kurzübersicht: lange Namen umbrechen statt abschneiden, weniger Leerraum zum Inhalt
+- Beziehung anlegen: Das Fenster schloss sich bei Änderungen an der Liste von selbst; jetzt bleibt es offen
+
 ## 0.37.0
 
 **Navigation**

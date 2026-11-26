@@ -68,7 +68,7 @@ struct QuickLookHeader: View {
             }
             .padding(.horizontal, 18)
             .padding(.top, 16)
-            .padding(.bottom, 8)
+            .padding(.bottom, 4)
         } else {
             HStack(spacing: 12) {
                 badge
@@ -78,7 +78,7 @@ struct QuickLookHeader: View {
             }
             .padding(.horizontal, 18)
             .padding(.top, 16)
-            .padding(.bottom, 8)
+            .padding(.bottom, 4)
         }
     }
 
@@ -93,9 +93,12 @@ struct QuickLookHeader: View {
 
     private var titles: some View {
         VStack(alignment: .leading, spacing: 1) {
+            // Lange Namen umbrechen statt abschneiden (drei Knöpfe lassen wenig Breite).
             Text(title)
                 .font(.headline)
-                .lineLimit(1)
+                .lineLimit(2)
+                .minimumScaleFactor(0.85)
+                .fixedSize(horizontal: false, vertical: true)
                 .accessibilityAddTraits(.isHeader)
             if !subtitle.isEmpty {
                 Text(subtitle)

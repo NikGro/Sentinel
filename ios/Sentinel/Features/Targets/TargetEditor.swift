@@ -20,6 +20,7 @@ struct TargetEditor: View {
     @State private var locationFailure: String?
     /// Gewählte Art beim Einsteigen: öffnet die Auswahl des Fahrzeugs bzw. Objekts.
     @State private var boarding: TargetBinding.Art?
+    @State private var relationEditing: RelationEditorContext?
 
     init(context: TargetEditorContext, onSave: ((String) -> Void)? = nil) {
         self.context = context
@@ -85,7 +86,7 @@ struct TargetEditor: View {
                             .foregroundStyle(.secondary)
                     }
                 } else {
-                    RelationsSection(targetId: context.id, opensTargets: false)
+                    RelationsSection(targetId: context.id, opensTargets: false, editing: $relationEditing)
                 }
 
                 if target.art == .person {
@@ -125,6 +126,7 @@ struct TargetEditor: View {
                     dismiss()
                 }
             }
+            .relationEditor($relationEditing, ownId: context.id)
             .sheet(isPresented: $showsPicker) {
                 LocationPickerSheet(title: "Standort wählen", initial: target.standort?.point ?? lage.targets[context.id].flatMap { lage.position(ofTarget: $0)?.point }) { point in
                     target.standort = TimedPoint(point)

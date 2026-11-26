@@ -10,7 +10,9 @@ struct RelationsSection: View {
     var opensTargets = true
 
     @Environment(LageStore.self) private var lage
-    @State private var editing: RelationEditorContext?
+    /// Das Fenster hängt an der umgebenden Liste, nicht am Abschnitt: Ein Fenster an einem Listenabschnitt schloss sich,
+    /// sobald die Liste neu aufgebaut wurde (z. B. beim Anlegen eines Ziels oder einer Beziehung).
+    @Binding var editing: RelationEditorContext?
 
     var body: some View {
         let relations = lage.relatedTargets(of: targetId)
@@ -30,9 +32,6 @@ struct RelationsSection: View {
             Text("Beziehungen")
         } footer: {
             Text("Personen, Fahrzeuge und Objekte werden als eigene Ziele angelegt und hier verbunden.")
-        }
-        .sheet(item: $editing) { context in
-            RelationEditor(ownId: targetId, context: context)
         }
     }
 
@@ -275,5 +274,14 @@ struct RelationEditor: View {
             result.nach = otherId
         }
         if lage.put(result, id: context.id) { dismiss() }
+    }
+}
+
+extension View {
+    /// Fenster zum Anlegen und Bearbeiten von Beziehungen, an der umgebenden Liste befestigt.
+    func relationEditor(_ editing: Binding<RelationEditorContext?>, ownId: String) -> some View {
+        sheet(item: editing) { context in
+            RelationEditor(ownId: ownId, context: context)
+        }
     }
 }
