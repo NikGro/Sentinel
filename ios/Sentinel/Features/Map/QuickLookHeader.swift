@@ -57,39 +57,64 @@ struct QuickLookHeader: View {
     let navigate: (() -> Void)?
     let actions: QuickLookActions
     let close: () -> Void
+    @Environment(\.dynamicTypeSize) private var typeSize
 
     var body: some View {
-        HStack(spacing: 12) {
-            Image(systemName: symbol)
-                .font(.body.weight(.bold))
-                .foregroundStyle(.white)
-                .frame(width: 40, height: 40)
-                .background(tint.gradient, in: .circle)
-                .accessibilityHidden(true)
-            VStack(alignment: .leading, spacing: 1) {
-                Text(title)
-                    .font(.headline)
-                    .lineLimit(1)
-                if !subtitle.isEmpty {
-                    Text(subtitle)
-                        .font(.subheadline)
-                        .foregroundStyle(.secondary)
-                        .lineLimit(2)
-                }
+        // Bei sehr großer Schrift passen Titel und Knöpfe nicht in eine Zeile: Knöpfe darunter.
+        if typeSize.isAccessibilitySize {
+            VStack(alignment: .leading, spacing: 10) {
+                HStack(spacing: 12) { badge; titles }
+                HStack(spacing: 12) { buttons }
             }
-            .accessibilityElement(children: .combine)
-            Spacer(minLength: 4)
-            if let navigate {
-                RoundButton(symbol: "location.fill", label: "Hinführen", prominent: true, action: navigate)
+            .padding(.horizontal, 18)
+            .padding(.top, 16)
+            .padding(.bottom, 8)
+        } else {
+            HStack(spacing: 12) {
+                badge
+                titles
+                Spacer(minLength: 4)
+                buttons
             }
-            if actions.canEdit {
-                RoundButton(symbol: "pencil", label: "Bearbeiten") { actions.editRequests += 1 }
-            }
-            RoundButton(symbol: "xmark", label: "Schließen", action: close)
+            .padding(.horizontal, 18)
+            .padding(.top, 16)
+            .padding(.bottom, 8)
         }
-        .padding(.horizontal, 18)
-        .padding(.top, 16)
-        .padding(.bottom, 8)
+    }
+
+    private var badge: some View {
+        Image(systemName: symbol)
+            .font(.body.weight(.bold))
+            .foregroundStyle(.white)
+            .frame(width: 40, height: 40)
+            .background(tint.gradient, in: .circle)
+            .accessibilityHidden(true)
+    }
+
+    private var titles: some View {
+        VStack(alignment: .leading, spacing: 1) {
+            Text(title)
+                .font(.headline)
+                .lineLimit(1)
+                .accessibilityAddTraits(.isHeader)
+            if !subtitle.isEmpty {
+                Text(subtitle)
+                    .font(.subheadline)
+                    .foregroundStyle(.secondary)
+                    .lineLimit(2)
+            }
+        }
+        .accessibilityElement(children: .combine)
+    }
+
+    @ViewBuilder private var buttons: some View {
+        if let navigate {
+            RoundButton(symbol: "location.fill", label: "Hinführen", prominent: true, action: navigate)
+        }
+        if actions.canEdit {
+            RoundButton(symbol: "pencil", label: "Bearbeiten") { actions.editRequests += 1 }
+        }
+        RoundButton(symbol: "xmark", label: "Schließen", action: close)
     }
 }
 

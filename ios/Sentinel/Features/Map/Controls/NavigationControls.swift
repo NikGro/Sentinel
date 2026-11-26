@@ -185,6 +185,14 @@ struct NavigationBottomBar: View {
                 VStack(spacing: 8) { navigationPickers }
             }
 
+            // Die Symbole allein sind nicht selbsterklärend: gewählte Art in Worten darunter.
+            if let approach = route.target?.approach, approach != .direct {
+                Text(approach == .lead ? "Vorlauf: zur Kreuzung vor dem Ziel" : "Parallel: über eine Nebenstrecke zur Kreuzung vor dem Ziel")
+                    .font(.caption.weight(.semibold))
+                    .foregroundStyle(.secondary)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+            }
+
             if route.transit {
                 TransitPlanCard()
             }

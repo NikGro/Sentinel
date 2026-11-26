@@ -1,5 +1,26 @@
 # Änderungen
 
+## 0.37.0
+
+**Navigation**
+- Parallel-Modus: Bei fahrenden Zielen in der Navi-Leiste neben „Zum Ziel“ und „Vorlauf“. Geführt wird zur Kreuzung
+  vor dem Ziel über eine Nebenstrecke, die Straße des Ziels bis dorthin meidet der Server. Gibt es keine Nebenstrecke,
+  steht ein Hinweis in der Leiste und die Route führt direkt
+- Sperrungen: Aktuelle Vollsperrungen der Autobahnen (Fahrbahnen und Anschlussstellen, offene Daten der Autobahn GmbH)
+  werden alle 20 Minuten geladen und bei der Route gemieden
+- Navi-Leiste kompakter: Verkehrsmittel und Navigationsart schmal nebeneinander, die gewählte Art steht in Worten darunter
+
+**Ziele**
+- Beziehungen statt fester Felder: Personen, Fahrzeuge und Objekte sind eigene Ziele und werden verbunden (z. B.
+  Halter, Fahrer, Bewohner), mit Status (vermutet, bestätigt, beendet), Herkunft und Notiz; von beiden Seiten sichtbar
+  und bearbeitbar, in der App und in Sentinel Web. Halter beim Fahrzeug, Wohnanschrift und genutztes Fahrzeug bei
+  der Person entfallen als Eingabe; frühere Angaben bleiben sichtbar, bis sie übertragen und entfernt sind
+
+**Oberfläche**
+- Kurzübersichten (Variante 2): Kopfzeile mit Symbol, Titel und kleinen runden Knöpfen (Hinführen, Bearbeiten,
+  Schließen) statt Navigationsleiste und großem Hinführen-Knopf; bei sehr großer Schrift Knöpfe unter dem Titel
+- UI-Abnahme: Schalter der Navi-Leiste mit 44 Punkten Trefferfläche, Titel der Kurzübersicht als Überschrift für VoiceOver
+
 ## 0.36.0
 
 **Karte**

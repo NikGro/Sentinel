@@ -5,26 +5,16 @@ statt jede Änderung sofort einzubauen. Erledigtes wandert mit Version ins CHANG
 
 ## Geplant
 
-### Nächste Runde (0.37, beschlossen am 26.11.)
+### Nach 0.37 offen
 
-- **Parallel-Modus** der Navigation zum Zielfahrzeug (siehe unten).
-- **Kurzübersichten als Variante 2** (siehe unten).
-- **Navi-Leiste kompakter**: Die Schalter für Verkehrsmittel und Navigationsart (Zum Ziel/Vorlauf bzw. ÖPNV-Halte)
-  liegen übereinander und sind unnötig breit; schmaler machen und nebeneinander, damit das Fenster nicht höher wird.
-- **Beziehungen zwischen Zielen (Bedienung)**: Beim Zielfahrzeug keine Personalien und Anschrift mehr von Hand, bei der
-  Zielperson keine Wohnanschrift und Fahrzeuge mehr von Hand. Stattdessen jedes Ding als eigenes Ziel seines Typs
-  anlegen (Person, Fahrzeug, Objekt/Anschrift) und Beziehungen herstellen (z. B. Halter, Fahrer, Bewohner), von beiden
-  Seiten sichtbar und bearbeitbar. Datenmodell nach dem „Universellen Beziehungsmodell“ unten (eigenständige
-  Beziehungsdatensätze, Herkunft/Status), ohne die übrigen Datenschutz-Bausteine vorwegzunehmen.
-- **Baustellen, Sperrungen und Staus in der Navigation**: Das Routing (Valhalla, OpenStreetMap ohne Live-Daten) kennt
-  keine aktuellen Sperrungen; die Karte zeigt Apples Verkehrslage, die Route ignoriert sie. Umsetzung: aktuelle
-  Sperrungen/Baustellen aus offenen Quellen laden (Autobahn-API des Bundes für Autobahnen, Mobilithek/
-  Mobilitätsdatenplattform bzw. Länderportale für Baustellen und Sperrungen in Städten; prüfen, was für Hamburg frei
-  verfügbar ist) und Valhalla als Ausschlussflächen bzw. zu meidende Stellen mitgeben. Staus: Apples Routenvorschlag
-  (MapKit, mit Verkehrslage) als Vergleich, bei deutlich schnellerer Apple-Route Hinweis bzw. Umfahrung; ohne
-  Standortdaten an Dritte über das Nötige hinaus (Datenschutz prüfen).
-- **UI-Abnahme**: Die Oberfläche einmal gesamt mit den Design-Skills prüfen (Frontend-Design, Design-Kritik,
-  Barrierefreiheit, UX-Bewertung) und Befunde umsetzen.
+- **Baustellen und Sperrungen in Städten:** 0.37 meidet aktuelle Vollsperrungen der Autobahnen (Autobahn GmbH).
+  Für Hamburg gibt es keinen frei erreichbaren Baustellen-Dienst (der alte WFS-Link liefert 404); Mobilithek bzw.
+  Landesportal prüfen. OpenStreetMap-Baustellen (highway=construction) kennt Valhalla bereits, sofern die Kacheln
+  aktuell sind: Alter der Valhalla-Kacheln prüfen und regelmäßig neu bauen.
+- **Staus mit Sonderrechten:** Ohne Sonderrechte folgt die Route Apples Weg mit Verkehrslage. Mit Sonderrechten
+  rechnet nur Valhalla; ein Hinweis bei deutlich schnellerer Apple-Route wäre möglich.
+- **Beziehungen:** Protokollierung von Änderungen gehört zum Ereignisprotokoll in Runde 2 (Datenschutz); bisher
+  stehen nur „zuletzt geändert von“ und Status/Herkunft am Datensatz.
 
 ### Beobachten
 
@@ -39,19 +29,10 @@ statt jede Änderung sofort einzubauen. Erledigtes wandert mit Version ins CHANG
 
 ### Karte, Kompass und Navigation
 
-- **Navigation zu einem Zielfahrzeug, Parallel-Modus** (Vorlauf gibt es seit 0.36):
-  - *Parallel* (machbar, heuristisch): Route zu einem Punkt seitlich voraus berechnen und die Straße des Ziels für
-    Valhalla sperren (Ausschlussfläche entlang seiner Straße), regelmäßig neu. Gibt es keine Parallelstraße (Umweg zu
-    groß, z. B. Landstraße), automatisch normal navigieren.
 - **App-Absturz während aktiver Navigation (0.9: mögliche Ursache abgesichert):** Dafür ist ein Absturzbericht nötig, zu finden unter Einstellungen › Datenschutz & Sicherheit › Analyse & Verbesserungen › Analysedaten › „Sentinel-…“.
 
 ### Marker und Oberfläche
 
-- **Kurzübersichten als Variante 2** (Skizzen vom 23.11.): Statt der Fenster mit großen „Schließen“/„Bearbeiten“-
-  Knöpfen überall schwebende Glaskarten mit kleinen runden Knöpfen (Hinführen blau, Bearbeiten, Schließen) für
-  Marker, Objekte, Zielpersonen, Zielfahrzeuge, ÖPNV-Linien und den GPS-Verlauf. Umsetzung als iOS-26-Fenster mit
-  Stufen: niedrig schwebend als Karte, hochgezogen halbe Höhe bzw. fast Vollbild mit allen Angaben; Karte dahinter
-  in der niedrigen Stufe bedienbar.
 - **Zielperson: Karte friert ein (0.13: ÖPNV-Positionsberechnung als wahrscheinliche Ursache stark beschleunigt):** Offene Rückfrage, welches Symbol genau gemeint ist: im Plus-Menü, im Editor („Unterwegs“) oder auf der Karte. Mit 0.13 erneut prüfen.
 
 

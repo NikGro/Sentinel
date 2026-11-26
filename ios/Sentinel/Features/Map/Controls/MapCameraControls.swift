@@ -185,8 +185,8 @@ struct GlassSegmentedControl<Value: Hashable>: View {
         }
         .pickerStyle(.segmented)
         .controlSize(compact ? .large : .extraLarge)
-        .frame(maxWidth: compact ? CGFloat(items.count) * 42 : .infinity)
-        .frame(height: compact ? 40 : Theme.barHeight)
+        .frame(maxWidth: compact ? CGFloat(items.count) * 44 : .infinity)
+        .frame(height: Theme.barHeight)
         .sensoryFeedback(.selection, trigger: selection)
     }
 }
