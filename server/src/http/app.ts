@@ -28,6 +28,7 @@ import { registerSpurRoutes } from './spur.js';
 import { registerTrackerRoutes } from './trackers.js';
 import { registerTransitRoutes } from './transit.js';
 import { registerPublicRoutes } from './public.js';
+import type { ClosureService } from '../reach/closures.js';
 
 export const SESSION_COOKIE = 'sentinel_sitzung';
 
@@ -57,6 +58,8 @@ export interface Services {
   trackerLink: TrackerLink;
   /** Lokales Straßenverzeichnis für schnelle Kreuzungssuche. */
   streets: StreetIndex;
+  /** Aktuelle Vollsperrungen (Autobahn), die die Navigation meidet. */
+  closures: ClosureService;
 }
 
 export class HttpError extends Error {

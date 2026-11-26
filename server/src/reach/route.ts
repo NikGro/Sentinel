@@ -1,4 +1,5 @@
 import type { GeoPoint } from '../geo.js';
+import type { Meiden } from './closures.js';
 
 /**
  * Routenberechnung auf dem eigenen Wegenetz (Valhalla), wahlweise mit Sonderrechten.
@@ -129,8 +130,14 @@ export class RouteService {
    * unverändert weitergereicht, ergänzt um deutsche Anweisungen. Mit Sonderrechten werden beide Varianten
    * gerechnet und die regelwidrige nur genommen, wenn sie spürbar schneller ist.
    */
-  async navigation(anfrage: Record<string, unknown>, sonderrechte: boolean): Promise<{ antwort: unknown; sonderrechte: boolean } | null> {
+  async navigation(anfrage: Record<string, unknown>, sonderrechte: boolean, meiden: Meiden[] = []): Promise<{ antwort: unknown; sonderrechte: boolean; gemieden: boolean } | null> {
     if (!this.available) return null;
+    // Gesperrte Strecken und (im Parallel-Modus) die Straße des Ziels meiden. Findet Valhalla damit keinen Weg (oder
+    // rastet ein Meidepunkt nicht ein), gilt die Route ohne: lieber durch eine Sperrung geführt als gar nicht.
+    if (meiden.length > 0) {
+      const mit = await this.navigation({ ...anfrage, exclude_locations: meiden.slice(0, 48) }, sonderrechte);
+      if (mit) return { ...mit, gemieden: true };
+    }
     const basis: Record<string, unknown> = {
       ...anfrage,
       language: 'de-DE',
@@ -159,7 +166,7 @@ export class RouteService {
     const holen = async (body: Record<string, unknown>) => (await einmal(body)) ?? (await einmal(entspannt(body)));
     if (!sonderrechte || basis.costing !== 'auto') {
       const antwort = await holen(basis);
-      return antwort ? { antwort, sonderrechte: false } : null;
+      return antwort ? { antwort, sonderrechte: false, gemieden: false } : null;
     }
     const optionen = (basis.costing_options as Record<string, Record<string, unknown>>) ?? {};
     const mitSonderrechten = {
@@ -171,12 +178,12 @@ export class RouteService {
     const dauerSchnell = schnell?.routes?.[0]?.duration;
     if (schnell && (!normal || (typeof dauerNormal === 'number' && typeof dauerSchnell === 'number' && sonderrechteLohnen(dauerNormal, dauerSchnell)))) {
       for (const route of schnell.routes ?? []) beschleunigen(route);
-      return { antwort: schnell, sonderrechte: true };
+      return { antwort: schnell, sonderrechte: true, gemieden: false };
     }
     if (!normal) return null;
     // Auch auf der regelkonformen Strecke darf schneller gefahren werden.
     for (const route of normal.routes ?? []) beschleunigen(route);
-    return { antwort: normal, sonderrechte: false };
+    return { antwort: normal, sonderrechte: false, gemieden: false };
   }
 
   /** Liefert `null`, wenn kein Weg gefunden wurde oder der Dienst nicht antwortet. */

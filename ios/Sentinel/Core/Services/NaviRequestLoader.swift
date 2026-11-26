@@ -15,17 +15,23 @@ final class NaviRequestLoader: URLRequestLoading, @unchecked Sendable {
     private var walking = false
     private var usedSpecialRights = false
     private var ratio: Double = 1
+    private var parallel: ParallelHint?
+    private var avoided = false
 
     init(token: String) {
         self.token = token
     }
 
-    func configure(specialRights: Bool, walking: Bool) {
+    func configure(specialRights: Bool, walking: Bool, parallel: ParallelHint? = nil) {
         lock.withLock {
             self.specialRights = specialRights
             self.walking = walking
+            self.parallel = parallel
         }
     }
+
+    /// Hat der Server die Straße des Ziels bei der zuletzt geladenen Route gemieden (Parallel-Modus)?
+    var lastRouteAvoidedTargetStreet: Bool { lock.withLock { avoided } }
 
     /// Wurde die zuletzt geladene Route mit Sonderrechten gerechnet?
     var lastRouteUsedSpecialRights: Bool { lock.withLock { usedSpecialRights } }
@@ -34,7 +40,7 @@ final class NaviRequestLoader: URLRequestLoading, @unchecked Sendable {
     var trafficRatio: Double { lock.withLock { ratio } }
 
     func loadData(with urlRequest: URLRequest) async throws -> (Data, URLResponse) {
-        let (specialRights, walking) = lock.withLock { (self.specialRights, self.walking) }
+        let (specialRights, walking, parallel) = lock.withLock { (self.specialRights, self.walking, self.parallel) }
         var request = urlRequest
         request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
         request.timeoutInterval = 20
@@ -42,7 +48,11 @@ final class NaviRequestLoader: URLRequestLoading, @unchecked Sendable {
         guard let body = request.httpBody, var json = (try? JSONSerialization.jsonObject(with: body)) as? [String: Any] else {
             return try await send(request)
         }
-        json["sentinel"] = ["sonderrechte": specialRights]
+        var sentinel: [String: Any] = ["sonderrechte": specialRights]
+        if let parallel {
+            sentinel["parallel"] = ["lat": parallel.point.lat, "lon": parallel.point.lon, "kurs": parallel.heading, "meter": parallel.meters]
+        }
+        json["sentinel"] = sentinel
         if walking { json["costing"] = "pedestrian" }
 
         // Immer die direkt gerechnete Route; ohne Sonderrechte mit dem Auto zusätzlich Apples verkehrsabhängigen Weg
@@ -51,7 +61,7 @@ final class NaviRequestLoader: URLRequestLoading, @unchecked Sendable {
         plain.httpBody = try JSONSerialization.data(withJSONObject: json)
         async let direct = send(plain)
         var guide: TrafficGuide?
-        if !specialRights, !walking, let locations = json["locations"] as? [[String: Any]], locations.count >= 2 {
+        if !specialRights, !walking, parallel == nil, let locations = json["locations"] as? [[String: Any]], locations.count >= 2 {
             guide = await TrafficGuide.make(from: locations[0], to: locations[locations.count - 1])
         }
         let (data, response) = try await direct
@@ -97,7 +107,9 @@ final class NaviRequestLoader: URLRequestLoading, @unchecked Sendable {
     }
 
     private func record(_ response: URLResponse, data: Data, guide: TrafficGuide?) {
-        let special = (response as? HTTPURLResponse)?.value(forHTTPHeaderField: "x-sentinel-sonderrechte") == "1"
+        let http = response as? HTTPURLResponse
+        let special = http?.value(forHTTPHeaderField: "x-sentinel-sonderrechte") == "1"
+        let avoidedStreet = http?.value(forHTTPHeaderField: "x-sentinel-parallel") == "1"
         var nextRatio = 1.0
         if let guide, let duration = Self.duration(data), duration > 0 {
             // Nicht unter die Zeit ohne Verkehr gehen und Ausreißer begrenzen.
@@ -105,6 +117,7 @@ final class NaviRequestLoader: URLRequestLoading, @unchecked Sendable {
         }
         lock.withLock {
             usedSpecialRights = special
+            avoided = avoidedStreet
             ratio = nextRatio
         }
     }
@@ -202,4 +215,11 @@ struct TrafficGuide {
         let x = cos(lat1) * sin(lat2) - sin(lat1) * cos(lat2) * cos(dLon)
         return (atan2(y, x) * 180 / .pi + 360).truncatingRemainder(dividingBy: 360)
     }
+}
+
+/// Parallel-Modus: Position und Fahrtrichtung des Ziels; der Server meidet seine Straße auf `meters` voraus.
+struct ParallelHint: Equatable, Sendable {
+    var point: GeoPoint
+    var heading: Double
+    var meters: Double
 }

@@ -50,6 +50,10 @@ final class AppModel {
             return result.strassen.map { (name: $0.name, points: $0.punkte) }
         }
         leadPlanner.crossings = locationContext.crossingProvider
+        route.parallelHint = { [weak self] target in
+            guard let self, case .parallel(let base) = target else { return nil }
+            return self.leadPlanner.parallelHint(for: base, to: self.resolve(target)?.point)
+        }
         lage.onEvent = { [weak self] event in self?.handle(event) }
         alerts.openInstance = { [weak self] id in self?.openInstance(id) }
         lage.onMemberPosition = { [weak self] memberId, position in
@@ -379,7 +383,7 @@ final class AppModel {
             // Fahrzeug schon angekommen oder Fahrt unbekannt: dann zum Ziel selbst.
             guard let stop = transitCourse(of: base)?.stop(ahead: stops) else { return resolve(base) }
             return (stop.point, "Haltestelle \(stop.name)")
-        case .lead(let base):
+        case .lead(let base), .parallel(let base):
             // Richtung oder Straße noch unbekannt (z. B. kurz nach dem Start): vorerst zum Ziel selbst.
             guard let here = resolve(base) else { return nil }
             guard let crossing = leadPlanner.crossing(for: base, at: here.point) else { return here }

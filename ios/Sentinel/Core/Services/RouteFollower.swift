@@ -22,17 +22,29 @@ enum NavigationTarget: Equatable, Hashable, Sendable {
     /// Vorlauf: nicht zum Ziel selbst, sondern zur nächsten Kreuzung vor ihm in seiner Fahrtrichtung; ist es daran
     /// vorbei, geht es zur nächsten.
     indirect case lead(NavigationTarget)
+    /// Parallel: ebenfalls zur Kreuzung vor dem Ziel, aber über eine Nebenstrecke; die Straße des Ziels bis dorthin
+    /// wird gemieden, damit man nicht hinter ihm herfährt (der Server sucht die Straße und meidet sie).
+    indirect case parallel(NavigationTarget)
 
     /// Das eigentliche Ziel, ohne „Halte voraus“ bzw. Vorlauf.
     var base: NavigationTarget {
         if case .ahead(let base, _) = self { return base.base }
         if case .lead(let base) = self { return base.base }
+        if case .parallel(let base) = self { return base.base }
         return self
     }
 
-    var isLead: Bool {
-        if case .lead = self { return true }
-        return false
+    /// Art der Anfahrt an ein fahrendes Ziel: direkt, im Vorlauf oder parallel.
+    var approach: Approach {
+        switch self {
+        case .lead: .lead
+        case .parallel: .parallel
+        default: .direct
+        }
+    }
+
+    enum Approach: Hashable {
+        case direct, lead, parallel
     }
 
     var stopsAhead: Int {
@@ -47,6 +59,8 @@ struct RouteResult {
     var distance: CLLocationDistance
     /// Wurde gegen Einbahnstraßen oder Abbiegeverbote geführt? Nur dann, wenn es spürbar Zeit spart.
     var usesSpecialRights: Bool
+    /// Parallel-Modus: Wurde die Straße des Ziels gemieden? Sonst gab es keinen sinnvollen Weg daneben.
+    var avoidsTargetStreet = false
 }
 
 /// Kreuzende oder einmündende Straße an der Route, `meter` ab Routenbeginn.
@@ -172,6 +186,8 @@ final class RouteFollower {
     @ObservationIgnored private var cancellables = Set<AnyCancellable>()
     @ObservationIgnored private var loop: Task<Void, Never>?
     @ObservationIgnored private var resolve: (NavigationTarget) -> (point: GeoPoint, title: String)? = { _ in nil }
+    /// Parallel-Modus: Position und Fahrtrichtung des Ziels für den Server (der dessen Straße meidet).
+    @ObservationIgnored var parallelHint: (@MainActor (NavigationTarget) -> ParallelHint?)?
     @ObservationIgnored private var origin: () -> GeoPoint? = { nil }
     @ObservationIgnored private var routedDestination: GeoPoint?
     @ObservationIgnored private var lastRouteAt = Date.distantPast
@@ -313,7 +329,7 @@ final class RouteFollower {
         }
         isCalculating = true
         defer { isCalculating = false }
-        loader.configure(specialRights: specialRights && !walking, walking: walking)
+        loader.configure(specialRights: specialRights && !walking, walking: walking, parallel: walking ? nil : parallelHint?(target))
         needsRoute = false
         routedDestination = point
         lastRouteAt = .now
@@ -342,7 +358,8 @@ final class RouteFollower {
         self.route = RouteResult(
             coordinates: route.geometry.map { CLLocationCoordinate2D(latitude: $0.lat, longitude: $0.lng) },
             distance: route.distance,
-            usesSpecialRights: loader?.lastRouteUsedSpecialRights ?? false
+            usesSpecialRights: loader?.lastRouteUsedSpecialRights ?? false,
+            avoidsTargetStreet: loader?.lastRouteAvoidedTargetStreet ?? false
         )
         progressIndex = 0
         let coordinates = self.route?.coordinates ?? []

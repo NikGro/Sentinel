@@ -3,6 +3,7 @@ import { join } from 'node:path';
 import { distanceMeters, type GeoPoint } from './geo.js';
 import type { OverpassClient } from './oepnv.js';
 import { bestStreetMatches, normalizeStreet } from './streets.js';
+import { bearing as bearingDeg } from './reach/closures.js';
 
 /**
  * Lokales Straßenverzeichnis des Einsatzraums: alle benannten Straßen mit ihren Knoten, einmal je Woche von
@@ -182,6 +183,51 @@ export class StreetIndex {
       .sort((x, y) => distanceMeters(x.punkte[0]!, near) - distanceMeters(y.punkte[0]!, near))
       .slice(0, 60);
     return { a: name, strassen };
+  }
+
+  /**
+   * Parallel-Modus: Meidepunkte auf der Straße, auf der ein Ziel fährt, vom Ziel aus in Fahrtrichtung bis `meters`.
+   * Die Straße ist die nächstgelegene benannte am Ziel; die Punkte liegen jeweils mitten zwischen zwei Knoten, damit
+   * sie nicht auf einer Kreuzung (und damit auf der Querstraße) einrasten. `null`, wenn keine Straße nah genug ist.
+   */
+  pointsAhead(from: GeoPoint, heading: number, meters: number): { strasse: string; punkte: GeoPoint[] } | null {
+    let best: { way: number; distance: number } | null = null;
+    for (let w = 0; w < this.ways.length; w++) {
+      const nodes = this.ways[w]!.nodes;
+      // Schnell aussortieren: Straßen, deren erster Knoten weit weg liegt (Straßenzüge sind selten länger als 3 km).
+      const first = this.nodes.get(nodes[0]!);
+      if (!first || Math.abs(first.lat - from.lat) > 0.03 || Math.abs(first.lon - from.lon) > 0.045) continue;
+      for (let i = 1; i < nodes.length; i++) {
+        const a = this.nodes.get(nodes[i - 1]!);
+        const b = this.nodes.get(nodes[i]!);
+        if (!a || !b) continue;
+        // Grobe Vorauswahl, dann Abstand zur Strecke über ihre Mitte und Enden.
+        if (Math.abs(a.lat - from.lat) > 0.01 || Math.abs(a.lon - from.lon) > 0.015) continue;
+        const mid = { lat: (a.lat + b.lat) / 2, lon: (a.lon + b.lon) / 2 };
+        const distance = Math.min(distanceMeters(a, from), distanceMeters(b, from), distanceMeters(mid, from));
+        if (distance < 40 && (!best || distance < best.distance)) best = { way: w, distance };
+      }
+    }
+    if (!best) return null;
+    const name = this.names[this.ways[best.way]!.name]!;
+    const punkte: GeoPoint[] = [];
+    for (const wayIndex of this.waysNamed(name, from)) {
+      const nodes = this.ways[wayIndex]!.nodes;
+      for (let i = 1; i < nodes.length; i++) {
+        const a = this.nodes.get(nodes[i - 1]!);
+        const b = this.nodes.get(nodes[i]!);
+        if (!a || !b || distanceMeters(a, b) < 12) continue;
+        const mid = { lat: (a.lat + b.lat) / 2, lon: (a.lon + b.lon) / 2 };
+        const d = distanceMeters(from, mid);
+        if (d < 25 || d > meters) continue;
+        let off = Math.abs(bearingDeg(from, mid) - heading) % 360;
+        if (off > 180) off = 360 - off;
+        if (off > 60) continue;
+        if (punkte.every((p) => distanceMeters(p, mid) > 60)) punkte.push(mid);
+      }
+    }
+    punkte.sort((x, y) => distanceMeters(x, from) - distanceMeters(y, from));
+    return { strasse: name, punkte: punkte.slice(0, 15) };
   }
 
   /** Kreuzung zweier Straßen (unscharf), nächste zuerst. */

@@ -29,3 +29,17 @@ test('Straßenverzeichnis: Querstraßen und Kreuzungen ohne Overpass, auch mit T
   assert.equal(hit?.punkte[0]?.lat, 53.652);
   assert.equal(streets.intersection('Hegbark', 'Wenzelplatz', near)?.b, 'Wentzelplatz');
 });
+
+test('Parallel-Modus: Meidepunkte nur auf der Straße des Ziels und nur voraus', () => {
+  const streets = index();
+  // Ziel kurz hinter Knoten 1 auf dem Heegbarg, Richtung Nordost.
+  const ahead = streets.pointsAhead({ lat: 53.6501, lon: 10.0801 }, 35, 600);
+  assert.equal(ahead?.strasse, 'Heegbarg');
+  assert.ok((ahead?.punkte.length ?? 0) >= 1);
+  // Alle Punkte liegen zwischen Knoten des Heegbargs, keiner auf einer Kreuzung.
+  for (const p of ahead!.punkte) assert.ok(p.lat > 53.65 && p.lat < 53.652);
+  // In Gegenrichtung liegt nichts voraus.
+  assert.equal(streets.pointsAhead({ lat: 53.6519, lon: 10.0829 }, 35 + 180, 600)?.punkte.filter((p) => p.lat > 53.652).length, 0);
+  // Weit weg von jeder Straße: keine Angabe.
+  assert.equal(streets.pointsAhead({ lat: 53.7, lon: 10.2 }, 0, 600), null);
+});

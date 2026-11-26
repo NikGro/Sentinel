@@ -13,6 +13,7 @@ import { MapKitTokens } from './mapkit.js';
 import { createOverpassClient, OepnvStore } from './oepnv.js';
 import { ReachService } from './reach/reach.js';
 import { RouteService } from './reach/route.js';
+import { ClosureService } from './reach/closures.js';
 import { ReleaseStore } from './release.js';
 import { Vault } from './security.js';
 import { intervalCommand, startH02Listener, type H02Listener } from './trackers/h02.js';
@@ -78,6 +79,7 @@ export async function createServices(config: Config, database?: Database): Promi
     trackerStatus,
     trackerLink: new TrackerLink(),
     // Vorerst nur auf Wunsch: Das Verzeichnis des ganzen Einsatzraums sprengte die Speichergrenze des Servers.
+    closures: new ClosureService(process.env.SENTINEL_SPERRUNGEN !== 'aus' && config.production),
     streets: new StreetIndex(config.dataDir, config.oepnvBbox, process.env.SENTINEL_STRASSENVERZEICHNIS === 'an' ? overpass : null, process.env.SENTINEL_STRASSENVERZEICHNIS === 'an'),
   };
 }
@@ -119,6 +121,7 @@ async function main(): Promise<void> {
   const trackerListener = startTrackerListener(services);
   services.oepnv.refreshIfStale();
   services.streets.refreshIfStale();
+  services.closures.refreshIfStale();
   // Viertelstündlich prüfen: frische Daten werden nicht neu geladen, ein Fehler (z. B. Overpass überlastet) aber bald wiederholt.
   setInterval(() => {
     services.oepnv.refreshIfStale();

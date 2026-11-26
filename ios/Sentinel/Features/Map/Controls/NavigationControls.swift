@@ -39,7 +39,8 @@ struct TransitAheadPicker: View {
     }
 }
 
-/// Fahrendes Ziel mit Live-Standort (nicht im ÖPNV): direkt zum Ziel oder im Vorlauf zur nächsten Kreuzung vor ihm.
+/// Fahrendes Ziel mit Live-Standort (nicht im ÖPNV): direkt zum Ziel, im Vorlauf zur nächsten Kreuzung vor ihm oder
+/// parallel dorthin (über eine Nebenstrecke, ohne hinter ihm herzufahren).
 struct LeadPicker: View {
     @Environment(AppModel.self) private var model
     @Environment(RouteFollower.self) private var route
@@ -47,12 +48,20 @@ struct LeadPicker: View {
     var body: some View {
         if let base = route.target?.base, model.supportsLead(base) {
             GlassSegmentedControl(
-                items: [(false, "scope", "Zum Ziel"), (true, "arrow.up.forward.circle.fill", "Vorlauf: Kreuzung vor dem Ziel")],
-                selection: route.target?.isLead ?? false,
+                items: [
+                    (NavigationTarget.Approach.direct, "scope", "Zum Ziel"),
+                    (.lead, "arrow.up.forward.circle.fill", "Vorlauf: Kreuzung vor dem Ziel"),
+                    (.parallel, "road.lanes", "Parallel: Nebenstrecke zur Kreuzung vor dem Ziel"),
+                ],
+                selection: route.target?.approach ?? .direct,
                 compact: true
-            ) { lead in
+            ) { approach in
                 let special = route.specialRights
-                model.navigate(to: lead ? .lead(base) : base)
+                switch approach {
+                case .direct: model.navigate(to: base)
+                case .lead: model.navigate(to: .lead(base))
+                case .parallel: model.navigate(to: .parallel(base))
+                }
                 route.specialRights = special
             }
         }
@@ -143,6 +152,13 @@ struct NavigationBottomBar: View {
                         .font(.caption.weight(.semibold))
                         .foregroundStyle(.secondary)
                         .lineLimit(1)
+                    if route.target?.approach == .parallel, let result = route.route, !result.avoidsTargetStreet {
+                        // Ehrlich sagen, wenn es keine Nebenstrecke gab: Dann führt die Route über die Straße des Ziels.
+                        Label("Keine Nebenstrecke, Route über die Straße des Ziels", systemImage: "exclamationmark.triangle.fill")
+                            .font(.caption2.weight(.semibold))
+                            .foregroundStyle(.orange)
+                            .lineLimit(2)
+                    }
                 }
                 Spacer(minLength: 0)
                 Button {

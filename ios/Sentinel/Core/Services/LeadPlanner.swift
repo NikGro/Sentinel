@@ -37,6 +37,14 @@ final class LeadPlanner {
         return Self.next(crossings: track.crossings, street: track.street, from: point, heading: heading)
     }
 
+    /// Parallel-Modus: letzte Position und Fahrtrichtung des Ziels, Strecke bis zur Kreuzung davor (mindestens 300 m,
+    /// damit auch ohne Kreuzung ein Stück der Straße gemieden wird).
+    func parallelHint(for target: NavigationTarget, to crossing: GeoPoint?) -> ParallelHint? {
+        guard let track = tracks[target], let last = track.points.last, let heading = Self.heading(track.points) else { return nil }
+        let meters = min(max((crossing.map { last.point.distance(to: $0) } ?? 300) - 30, 300), 1500)
+        return ParallelHint(point: last.point, heading: heading, meters: meters)
+    }
+
     /// Nächste Kreuzung voraus: 40 m bis 1,5 km entfernt, höchstens 50° neben der Fahrtrichtung.
     static func next(crossings: [(name: String, points: [GeoPoint])], street: String?, from point: GeoPoint, heading: Double) -> (point: GeoPoint, name: String)? {
         var best: (point: GeoPoint, name: String, distance: Double)?

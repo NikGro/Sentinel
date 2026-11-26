@@ -3,6 +3,7 @@ import { join } from 'node:path';
 import type { FastifyInstance } from 'fastify';
 import { z } from 'zod';
 import { findCrossingStreets, findIntersections } from '../oepnv.js';
+import type { Meiden } from '../reach/closures.js';
 import { findCrossStreets } from '../reach/crossings.js';
 import { speedLimitAt } from '../reach/speedlimit.js';
 import { REACH_MODES } from '../reach/reach.js';
@@ -30,7 +31,13 @@ const naviBody = z
       .array(z.object({ lat: z.number().min(-90).max(90), lon: z.number().min(-180).max(180) }).passthrough())
       .min(2)
       .max(25),
-    sentinel: z.object({ sonderrechte: z.boolean() }).optional(),
+    sentinel: z
+      .object({
+        sonderrechte: z.boolean(),
+        /** Parallel-Modus: Position und Fahrtrichtung des Ziels; dessen Straße wird bis `meter` voraus gemieden. */
+        parallel: z.object({ lat: z.number().min(-90).max(90), lon: z.number().min(-180).max(180), kurs: z.number().min(0).max(360), meter: z.number().min(50).max(2000) }).optional(),
+      })
+      .optional(),
   })
   .passthrough();
 
@@ -127,9 +134,24 @@ export function registerNavigationRoutes(app: FastifyInstance, services: Service
     guards.actor(request);
     requireRouting();
     const { sentinel, ...anfrage } = parse(naviBody, request.body, 'Ungültige Routenanfrage.');
-    const result = await routes.navigation(anfrage, sentinel?.sonderrechte ?? false);
+    const locations = anfrage.locations;
+    const meiden: Meiden[] = [];
+    let parallel = false;
+    if (sentinel?.parallel && services.streets.ready) {
+      const { lat, lon, kurs, meter } = sentinel.parallel;
+      const ahead = services.streets.pointsAhead({ lat, lon }, kurs, meter);
+      // Ohne Fahrtrichtung: Die Straße des Ziels gilt in beiden Richtungen als belegt.
+      for (const p of ahead?.punkte ?? []) meiden.push({ lat: p.lat, lon: p.lon, radius: 5 });
+      parallel = meiden.length > 0;
+    }
+    if (anfrage.costing === 'auto') {
+      services.closures.refreshIfStale();
+      meiden.push(...services.closures.near([locations[0]!, locations[locations.length - 1]!]));
+    }
+    const result = await routes.navigation(anfrage, sentinel?.sonderrechte ?? false, meiden);
     if (!result) throw new HttpError(404, 'Keine Route gefunden.');
     reply.header('x-sentinel-sonderrechte', result.sonderrechte ? '1' : '0');
+    reply.header('x-sentinel-parallel', parallel && result.gemieden ? '1' : '0');
     return result.antwort;
   });
 
