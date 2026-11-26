@@ -34,18 +34,28 @@ final class LeadPlanner {
         tracks[target] = track
 
         guard let heading = Self.heading(track.points) else { return nil }
+        return Self.next(crossings: track.crossings, street: track.street, from: point, heading: heading)
+    }
+
+    /// Nächste Kreuzung voraus: 40 m bis 1,5 km entfernt, höchstens 50° neben der Fahrtrichtung.
+    static func next(crossings: [(name: String, points: [GeoPoint])], street: String?, from point: GeoPoint, heading: Double) -> (point: GeoPoint, name: String)? {
         var best: (point: GeoPoint, name: String, distance: Double)?
-        for crossing in track.crossings where crossing.name != track.street {
+        for crossing in crossings where crossing.name != street {
             for candidate in crossing.points {
                 let d = point.distance(to: candidate)
                 guard d > 40, d < 1500 else { continue }
-                var off = abs(Self.bearing(point, candidate) - heading).truncatingRemainder(dividingBy: 360)
+                var off = abs(bearing(point, candidate) - heading).truncatingRemainder(dividingBy: 360)
                 if off > 180 { off = 360 - off }
                 guard off < 50 else { continue }
                 if best == nil || d < best!.distance { best = (candidate, crossing.name, d) }
             }
         }
         return best.map { ($0.point, $0.name) }
+    }
+
+    /// Fahrtrichtung aus der Bewegung der letzten mindestens 30 m (für Tests offen).
+    static func heading(of points: [GeoPoint]) -> Double? {
+        heading(points.map { ($0, Date.now) })
     }
 
     func reset() {

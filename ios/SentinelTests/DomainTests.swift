@@ -323,3 +323,43 @@ struct SpurTests {
     }
 }
 
+struct VorlaufTests {
+    @MainActor @Test func naechsteKreuzungVorausInFahrtrichtung() throws {
+        // Ziel fährt nach Norden; Kreuzungen hinter ihm, seitlich und voraus.
+        let here = GeoPoint(lat: 53.5500, lon: 10.0000)
+        let crossings: [(name: String, points: [GeoPoint])] = [
+            ("Hinterweg", [GeoPoint(lat: 53.5490, lon: 10.0000)]),
+            ("Seitenstraße", [GeoPoint(lat: 53.5500, lon: 10.0030)]),
+            ("Fernweg", [GeoPoint(lat: 53.5540, lon: 10.0000)]),
+            ("Nahweg", [GeoPoint(lat: 53.5510, lon: 10.0001)]),
+        ]
+        let next = try #require(LeadPlanner.next(crossings: crossings, street: "Hauptstraße", from: here, heading: 0))
+        #expect(next.name == "Nahweg")
+        // In Gegenrichtung (Süden) liegt der Hinterweg voraus.
+        #expect(LeadPlanner.next(crossings: crossings, street: "Hauptstraße", from: here, heading: 180)?.name == "Hinterweg")
+    }
+
+    @MainActor @Test func fahrtrichtungAusDenLetztenPositionen() throws {
+        let points = (0..<6).map { GeoPoint(lat: 53.55 + Double($0) * 0.0001, lon: 10.0 + Double($0) * 0.0001) }
+        let heading = try #require(LeadPlanner.heading(of: points))
+        #expect(abs(heading - 31) < 5, "Nordost, etwa 31°: \(heading)")
+        #expect(LeadPlanner.heading(of: [GeoPoint(lat: 53.55, lon: 10.0)]) == nil)
+    }
+}
+
+struct TransitSmootherTests {
+    @MainActor @Test func neueEchtzeitSpringtNichtZurueck() throws {
+        let path = (0...100).map { GeoPoint(lat: 53.55 + Double($0) * 0.0002, lon: 10.0) }
+        let stops = [path[0], path[100]]
+        let start = 1_700_000_000_000.0
+        let early = try #require(TransitSimulation.motion(stops, path: path, times: [start, start + 600_000], typ: "bus"))
+        // Neue Echtzeit: zwei Minuten Verspätung, das Fahrzeug läge rechnerisch weiter hinten.
+        let late = try #require(TransitSimulation.motion(stops, path: path, times: [start + 120_000, start + 720_000], typ: "bus"))
+        let smoother = TransitSmoother()
+        let t = Date(timeIntervalSince1970: (start + 300_000) / 1000)
+        let before = smoother.point(id: "x", motion: early, at: t)
+        let after = smoother.point(id: "x", motion: late, at: t.addingTimeInterval(0.1))
+        #expect(after.lat >= before.lat - 1e-9, "fährt nicht rückwärts")
+    }
+}
+
