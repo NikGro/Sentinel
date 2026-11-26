@@ -7,6 +7,9 @@ statt jede Änderung sofort einzubauen. Erledigtes wandert mit Version ins CHANG
 
 ### Nach 0.37 offen
 
+- **Schalter in der Navi-Leiste flacher:** Der Dreier-Schalter (zu Fuß, Auto, ÖPNV) und, wo vorhanden, der Schalter
+  für die Navigationsart (Zum Ziel/Vorlauf/Parallel bzw. ÖPNV-Halte) bei gleicher Optik weniger hoch, wie der
+  Verkehrsmittel-Schalter in der normalen Kartenansicht: Der verschiebbare Knopf eher breit als hoch, nicht andersherum.
 - **Ziele in Gruppen:** Der Ziele-Tab arbeitet grundsätzlich mit Gruppen (z. B. je Verfahren oder Personenkreis),
   innerhalb einer Gruppe nach Typ (Fahrzeuge, Personen, Objekte). Jede Gruppe hat einen eigenen Schalter zum Ein- und
   Ausblenden auf der Karte, der die Schalter der einzelnen Ziele nicht verändert: Ist die Gruppe aus, ist alles darin
