@@ -18,6 +18,12 @@ statt jede Änderung sofort einzubauen. Erledigtes wandert mit Version ins CHANG
 
 ### Karte, Kompass und Navigation
 
+- **Standortspur nachbessern** (0.35):
+  - Wird nur stückweise gezeichnet: Lücken in der Linie prüfen (Teilstücke, Aktualisierung alle 10 s, Lückenregel
+    der Spur, Punktauswahl des Servers) und durchgehend zeichnen.
+  - Farbkodierung umschaltbar machen: nach Alter (wie jetzt) oder nach Häufigkeit, also wie oft man an einer Stelle
+    schon entlanggefahren ist (Strecke in Raster/Abschnitte teilen und Durchfahrten zählen). Umschalter in der
+    Objektansicht bzw. beim Bearbeiten der Standortspur.
 - **Eigener Punkt genau auf der Position**: Mittelpunkt des Kreises (mit Fahrzeug-/Fußgängersymbol) soll exakt auf dem
   Standort liegen; Beschriftungen nur darunter angereiht. Bisher wird die Mitte aus Symbol und Beschriftungen gebildet
   (Anker `.center` der ganzen Gruppe, auch beim selbst gezeichneten Punkt angeheftet), dadurch sitzt der Kreis zu hoch.
