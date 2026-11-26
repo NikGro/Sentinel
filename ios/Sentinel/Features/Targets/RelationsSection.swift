@@ -13,7 +13,7 @@ struct RelationsSection: View {
     @State private var editing: RelationEditorContext?
 
     var body: some View {
-        let relations = lage.relations(of: targetId)
+        let relations = lage.relatedTargets(of: targetId)
         Section {
             if relations.isEmpty {
                 // Fehlende Beziehung heißt nur „nicht zugeordnet“, nicht „ohne Personenbezug“.

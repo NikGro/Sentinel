@@ -556,6 +556,24 @@ final class LageStore {
         Dictionary(list.map { ($0.id, $0) }, uniquingKeysWith: { _, new in new })
     }
 
+    // MARK: Beziehungen
+
+    /// Beziehungen eines Ziels mit dem jeweils anderen Ziel; laufende zuerst, beendete zuletzt.
+    func relatedTargets(of targetId: String) -> [RelatedTarget] {
+        relations.values
+            .filter { $0.data.von == targetId || $0.data.nach == targetId }
+            .compactMap { r in targets[r.data.other(than: targetId)].map { RelatedTarget(relation: r, other: $0) } }
+            .sorted(by: Self.relationOrder)
+    }
+
+    /// Laufende vor beendeten, sonst nach Name.
+    private static func relationOrder(_ a: RelatedTarget, _ b: RelatedTarget) -> Bool {
+        let endedA = a.relation.data.status == .beendet
+        let endedB = b.relation.data.status == .beendet
+        if endedA != endedB { return endedB }
+        return a.other.data.displayName.localizedStandardCompare(b.other.data.displayName) == .orderedAscending
+    }
+
     #if DEBUG
     /// Lädt eine Beispiel-Lage ohne Serververbindung (Oberflächentests).
     func loadDemo(_ snapshot: Data) {
@@ -576,17 +594,4 @@ enum LageEvent {
     case instanceNotice(InstanceNotice)
     /// Ein überwachtes Ziel hat einen Geofence verlassen oder betreten.
     case geofence(GeofenceAlarm)
-
-    // MARK: Beziehungen
-
-    /// Beziehungen eines Ziels mit dem jeweils anderen Ziel; laufende zuerst, beendete zuletzt.
-    func relations(of targetId: String) -> [RelatedTarget] {
-        relations.values
-            .filter { $0.data.von == targetId || $0.data.nach == targetId }
-            .compactMap { r in targets[r.data.other(than: targetId)].map { RelatedTarget(relation: r, other: $0) } }
-            .sorted { a, b in
-                if (a.relation.data.status == .beendet) != (b.relation.data.status == .beendet) { return b.relation.data.status == .beendet }
-                return a.other.data.displayName.localizedStandardCompare(b.other.data.displayName) == .orderedAscending
-            }
-    }
 }
