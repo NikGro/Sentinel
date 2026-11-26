@@ -7,6 +7,17 @@ statt jede Änderung sofort einzubauen. Erledigtes wandert mit Version ins CHANG
 
 ### Nach 0.37 offen
 
+- **SOS als kritischer Alarm:** Drückt ein Fahnder SOS, soll bei allen anderen außerhalb der App eine Mitteilung mit
+  Alarmpriorität kommen, leise (etwa 10 % Lautstärke), aber immer hörbar, auch im Stumm- und Fokus-Modus.
+  - Stand: Die App schickt bei SOS schon eine lokale Mitteilung als „Dringend“ (time-sensitive), sofern sie im
+    Hintergrund noch läuft (Standort im Hintergrund hält sie meist wach). Sie durchbricht Fokus, aber nicht den
+    Stummschalter.
+  - Immer hörbar mit eigener Lautstärke geht nur als „kritischer Hinweis“ (Critical Alert, `criticalSoundVolume` z. B.
+    0.1). Dafür braucht die App eine Berechtigung, die Apple nur auf Antrag vergibt (Behörden, Gesundheit, Sicherheit),
+    und ein bezahltes Entwicklerkonto; mit SideStore und kostenlosem Konto nicht möglich. Ebenso fehlt ohne bezahltes
+    Konto echter Push (APNs), wenn die App ganz beendet ist.
+  - Vorgehen: Antrag bei Apple prüfen (Behördennutzung begründen); bis dahin die bestehende Mitteilung mit
+    eigenem, gut hörbarem Ton und Wiederholung absichern.
 - **Schalter in der Navi-Leiste flacher:** Der Dreier-Schalter (zu Fuß, Auto, ÖPNV) und, wo vorhanden, der Schalter
   für die Navigationsart (Zum Ziel/Vorlauf/Parallel bzw. ÖPNV-Halte) bei gleicher Optik weniger hoch, wie der
   Verkehrsmittel-Schalter in der normalen Kartenansicht: Der verschiebbare Knopf eher breit als hoch, nicht andersherum.
