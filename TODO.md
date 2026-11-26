@@ -7,6 +7,9 @@ statt jede Änderung sofort einzubauen. Erledigtes wandert mit Version ins CHANG
 
 ### Nach 0.37 offen
 
+- **Standortquelle: „Ort beibehalten“ und „Von Hand“ zusammenführen:** Ein einziger Punkt „Von Hand“. Er öffnet den
+  gewohnten Dialog zum Setzen eines Punkts, mit dem aktuellen Ort des Ziels schon vorausgewählt: direkt „Übernehmen“
+  oder neu wählen. Der Schalter hat dann drei Stellungen (von Hand, Tracker, A).
 - **Standortspur überarbeiten:**
   - Wächst teilweise noch stückig nach: Das Ende fließend mit dem eigenen Punkt verbinden (z. B. ein laufend
     nachgeführtes letztes Stück bis zum aktuell gezeichneten Punkt), damit keine Lücke und kein Ruckeln entsteht.
