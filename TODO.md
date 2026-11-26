@@ -46,6 +46,8 @@ statt jede Änderung sofort einzubauen. Erledigtes wandert mit Version ins CHANG
   transparent) mit festem Rand von wenigen Pixeln statt Glow.
 - **Zielperson: Karte friert ein (0.13: ÖPNV-Positionsberechnung als wahrscheinliche Ursache stark beschleunigt):** Offene Rückfrage, welches Symbol genau gemeint ist: im Plus-Menü, im Editor („Unterwegs“) oder auf der Karte. Mit 0.13 erneut prüfen.
 
+- **Standortspur als eigenständiges Objekt:** Die bisherige Funktion, den eigenen Standortverlauf über einen Layer ein- und auszuschalten, aus den Layern entfernen. Stattdessen kann eine **Standortspur** als normales Kartenobjekt angelegt werden. Ab dem Anlegen zeichnet Sentinel den eigenen Standort fortlaufend als Spur auf; die Aufzeichnung läuft, solange das Objekt besteht. Die Darstellung soll deutlich weniger transparent sein als bisher, dabei aber eine feste, gleichbleibende Deckkraft behalten: Auch wenn dieselbe Strecke mehrfach gefahren wird, darf sie durch Überlagerung weder dunkler noch undurchsichtiger werden. Die Spur erhält stattdessen einen Farbverlauf entlang einer Farbskala. Ein Antippen an beliebiger Stelle der Spur wählt das gesamte Standortspur-Objekt aus und öffnet dessen gewohnte Objektansicht mit Bearbeiten- und Löschen-Funktion. Beim Löschen wird das Objekt entfernt und zugleich die weitere Aufzeichnung beendet. Die Standortspur ist damit – wie andere Objekte – gezielt anlegbar, auswählbar und löschbar und kein dauerhafter Layer-Schalter mehr.
+
 ### Codebase-Qualität
 
 - **Laufende Bereinigung:** `MapScreen` ist inzwischen auf fünf Dateien verteilt (Hauptdatei gut 400 Zeilen). Offen
