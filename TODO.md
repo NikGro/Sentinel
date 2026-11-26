@@ -25,8 +25,6 @@ statt jede Änderung sofort einzubauen. Erledigtes wandert mit Version ins CHANG
   Beschriftung/Funkrufname) und zweizeilig: darunter „Ecke <Querstraße>“, die nächstgelegene Querstraße (vor oder hinter
   einem), z. B. „Nordschleswiger Straße Richtung Nord“ / „Ecke Straßburger Straße“. Ersetzt die Querstraßen-Schilder
   entlang der Route, die auf dem Gerät nicht erscheinen (prüfen, warum `CrossStreetLayer` nichts zeigt).
-- (Fix liegt auf dem Arbeitszweig, kommt mit der nächsten Version) Sehr schneller Wisch löste angeheftet nicht, wenn
-  zwischen Beginn und Ende keine Bewegung gemeldet wurde (Kamera-Test 0.33).
 - **Navigation zu einem Zielfahrzeug mit drei Modi** (wie der Schalter beim ÖPNV): normal, parallel, Vorlauf. Nur
   sinnvoll mit Live-Standort samt Richtung (Tracker oder A-Position), nicht bei von Hand gesetztem Standort.
   - *Vorlauf* (zuerst umsetzen, gut machbar): Straße des Ziels über den Straßenindex/Valhalla bestimmen, in
