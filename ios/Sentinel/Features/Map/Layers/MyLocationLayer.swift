@@ -59,16 +59,35 @@ struct LiveMyLocationMarker: View {
     var onMap = false
 
     var body: some View {
-        VStack(spacing: 4) {
-            MyLocationMarker(
-                style: style,
-                caption: lage.me.map { lage.label(of: $0.data) } ?? "",
-                holdsA: lage.holdsA,
-                course: locationService.current?.course ?? -1,
-                cameraState: cameraState
-            )
-            // Angeheftet: Straße und Fahrtrichtung direkt am eigenen Standort, nicht in der Bildschirmmitte.
-            // Klein wie die eigene Beschriftung, zweizeilig: Straße und Richtung, darunter die nächste Querstraße.
+        // Nur der Kreis (bzw. Pfeil) bestimmt die Größe: Seine Mitte liegt genau auf dem Standort. Beschriftungen
+        // hängen darunter, ohne die Mitte zu verschieben (vorher lag die Mitte der ganzen Gruppe auf dem Standort).
+        MyLocationMarker(
+            style: style,
+            holdsA: lage.holdsA,
+            course: locationService.current?.course ?? -1,
+            cameraState: cameraState
+        )
+        .overlay(alignment: .bottom) {
+            labels
+                .fixedSize()
+                .alignmentGuide(.bottom) { d in d[.top] }
+                .allowsHitTesting(false)
+        }
+        .opacity(onMap && options.drawnByScreen ? 0 : 1)
+    }
+
+    /// Wie die anderen einen sehen (Spitzname, im Fahrzeug der Funkrufname, im ÖPNV mit Linie), angeheftet darunter
+    /// Straße und Richtung sowie die nächste Querstraße, alles im selben schlichten Stil.
+    @ViewBuilder private var labels: some View {
+        let caption = style == .navigation ? "" : (lage.me.map { lage.label(of: $0.data) } ?? "")
+        VStack(spacing: 2) {
+            if !caption.isEmpty {
+                Text(caption)
+                    .font(.caption2.weight(.bold))
+                    .padding(.horizontal, 5)
+                    .padding(.vertical, 1)
+                    .background(.thinMaterial, in: .capsule)
+            }
             if options.showsStreet, let street = locationContext.summary {
                 VStack(spacing: 0) {
                     Text(street)
@@ -79,14 +98,13 @@ struct LiveMyLocationMarker: View {
                             .foregroundStyle(.secondary)
                     }
                 }
-                .lineLimit(1)
-                .padding(.horizontal, 8)
-                .padding(.vertical, 3)
-                .glassEffect(.regular, in: .rect(cornerRadius: 10))
-                .fixedSize()
+                .padding(.horizontal, 6)
+                .padding(.vertical, 1)
+                .background(.thinMaterial, in: .rect(cornerRadius: 7))
             }
         }
-        .opacity(onMap && options.drawnByScreen ? 0 : 1)
+        .lineLimit(1)
+        .offset(y: -4)
     }
 
     private var style: MyLocationLayer.Style { .of(lage, navigating: route.isActive) }
@@ -96,7 +114,6 @@ struct LiveMyLocationMarker: View {
 /// Fortbewegung wie im Dreier-Umschalter (in der Navigation mit Fahrtrichtungspfeil), darunter die eigene Beschriftung.
 private struct MyLocationMarker: View {
     let style: MyLocationLayer.Style
-    var caption = ""
     let holdsA: Bool
     let course: CLLocationDirection
     let cameraState: MapCameraState
@@ -122,17 +139,6 @@ private struct MyLocationMarker: View {
                             .offset(x: 2, y: -2)
                     }
                 }
-            // Wie die anderen einen sehen: Spitzname, im Fahrzeug der Funkrufname, im ÖPNV mit Linie.
-            if !caption.isEmpty {
-                Text(caption)
-                    .font(.caption2.weight(.bold))
-                    .lineLimit(1)
-                    .padding(.horizontal, 5)
-                    .padding(.vertical, 1)
-                    .background(.thinMaterial, in: .capsule)
-                    .fixedSize()
-                    .offset(y: -6)
-            }
         }
         .accessibilityElement()
         .accessibilityLabel(accessibilityText)
