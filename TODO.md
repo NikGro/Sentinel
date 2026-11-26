@@ -18,30 +18,7 @@ statt jede Änderung sofort einzubauen. Erledigtes wandert mit Version ins CHANG
 
 ### Karte, Kompass und Navigation
 
-- **Suche findet eigene Objekte**: In der Navi-Suchleiste auch nach Objekten der Lage suchen können, die auf der Karte
-  angezeigt werden: Zielpersonen, Zielobjekte, Zielfahrzeuge, Marker/Pins, Flächen, ÖPNV-Linien usw., jeweils nach
-  ihrem Namen bzw. namensgebenden Feld (Titel, Name, Kennzeichen, Funkrufname). Treffer oben vor den Adressen, mit
-  Symbol und Art; Antippen zeigt das Objekt bzw. führt hin.
-- **Standortspur nachbessern** (0.35):
-  - Wächst nur ruckweise: Beim Fahren endet die Linie ein Stück hinter einem, nach einer Weile erscheint auf einmal
-    ein längerer Abschnitt (Neuladen vom Server alle 10 s bzw. gröber gespeicherte Punkte). Stattdessen die eigenen
-    GPS-Punkte lokal sofort anhängen und die Linie bis zum eigenen Punkt führen, so dass sie fortlaufend hinter einem
-    mitwächst; der Server-Stand ersetzt sie nur beim Neuladen.
-  - Kein Punkt/Griff am Anfang der Standortspur (der Ankerpunkt des Objekts wird als Symbol gezeichnet); die Linie
-    selbst reicht und ist antippbar.
-  - Farbkodierung umschaltbar machen: nach Alter (wie jetzt) oder nach Häufigkeit, also wie oft man an einer Stelle
-    schon entlanggefahren ist (Strecke in Raster/Abschnitte teilen und Durchfahrten zählen). Umschalter in der
-    Objektansicht bzw. beim Bearbeiten der Standortspur.
-- **Eigener Punkt genau auf der Position**: Mittelpunkt des Kreises (mit Fahrzeug-/Fußgängersymbol) soll exakt auf dem
-  Standort liegen; Beschriftungen nur darunter angereiht. Bisher wird die Mitte aus Symbol und Beschriftungen gebildet
-  (Anker `.center` der ganzen Gruppe, auch beim selbst gezeichneten Punkt angeheftet), dadurch sitzt der Kreis zu hoch.
-- **Straßenschild im Stil der eigenen Beschriftung**: Das Schild mit Straße/Richtung und „Ecke …“ nicht als
-  Liquid-Glass-Kasten, sondern im selben schlichten Stil wie das Label mit Spitzname bzw. Funkrufname darüber.
-- **Navigation zu einem Zielfahrzeug mit drei Modi** (wie der Schalter beim ÖPNV): normal, parallel, Vorlauf. Nur
-  sinnvoll mit Live-Standort samt Richtung (Tracker oder A-Position), nicht bei von Hand gesetztem Standort.
-  - *Vorlauf* (zuerst umsetzen, gut machbar): Straße des Ziels über den Straßenindex/Valhalla bestimmen, in
-    Fahrtrichtung die nächste (bzw. übernächste) Kreuzung suchen und dorthin navigieren; ist das Ziel daran vorbei,
-    zur nächsten Kreuzung neu berechnen. Annahme: Das Ziel fährt geradeaus weiter.
+- **Navigation zu einem Zielfahrzeug, Parallel-Modus** (Vorlauf gibt es seit 0.36):
   - *Parallel* (machbar, heuristisch): Route zu einem Punkt seitlich voraus berechnen und die Straße des Ziels für
     Valhalla sperren (Ausschlussfläche entlang seiner Straße), regelmäßig neu. Gibt es keine Parallelstraße (Umweg zu
     groß, z. B. Landstraße), automatisch normal navigieren.
@@ -55,13 +32,6 @@ statt jede Änderung sofort einzubauen. Erledigtes wandert mit Version ins CHANG
   Stufen: niedrig schwebend als Karte, hochgezogen halbe Höhe bzw. fast Vollbild mit allen Angaben; Karte dahinter
   in der niedrigen Stufe bedienbar.
 - **Zielperson: Karte friert ein (0.13: ÖPNV-Positionsberechnung als wahrscheinliche Ursache stark beschleunigt):** Offene Rückfrage, welches Symbol genau gemeint ist: im Plus-Menü, im Editor („Unterwegs“) oder auf der Karte. Mit 0.13 erneut prüfen.
-
-
-### Codebase-Qualität
-
-- **Laufende Bereinigung:** `MapScreen` ist inzwischen auf fünf Dateien verteilt (Hauptdatei gut 400 Zeilen). Offen
-  bleiben App-Tests über den UI-Rundgang hinaus, z. B. für die ÖPNV-Bewegung (`TransitSimulation`) und das
-  Überschlagen.
 
 
 ### Sicherheit, Administration und Datenschutz

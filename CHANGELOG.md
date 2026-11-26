@@ -1,5 +1,22 @@
 # Änderungen
 
+## 0.36.0
+
+**Karte**
+- Eigener Punkt: Die Mitte des Kreises liegt genau auf dem Standort, Beschriftungen stehen darunter (vorher lag die
+  Mitte der ganzen Gruppe auf dem Standort, der Kreis saß zu hoch)
+- Straßenschild mit Richtung und „Ecke …“ im selben schlichten Stil wie die eigene Beschriftung
+- Standortspur wächst fortlaufend mit den eigenen GPS-Punkten statt ruckweise, ohne Punkt am Anfang; Farbe in der
+  Objektansicht umschaltbar nach Alter oder Häufigkeit (wie oft man dort schon entlanggefahren ist)
+- Suche: Passendes aus der Lage (Ziele, Kräfte, Marker, Flächen, Linien, Haltestellen …) steht in der Adresssuche oben
+
+**Navigation**
+- Vorlauf: Bei fahrenden Zielen mit Live-Standort in der Navi-Leiste umschaltbar zwischen „Zum Ziel“ und „Vorlauf“;
+  geführt wird zur nächsten Kreuzung vor dem Ziel in seiner Fahrtrichtung, ist es daran vorbei, zur nächsten
+
+**Tests**
+- Vorlauf (Kreuzung voraus, Fahrtrichtung) und ÖPNV-Glätter (kein Zurückspringen bei neuer Echtzeit)
+
 ## 0.35.0
 
 **Karte und Navigation**
