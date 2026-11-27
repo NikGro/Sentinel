@@ -1,0 +1,127 @@
+# Neue iOS-App (Neubau): SwiftUI mit Liquid Glass, eigene Karte (MapLibre), gemeinsamer Kern (Kotlin Multiplatform).
+# Das .xcodeproj wird mit `xcodegen generate` erzeugt; der Kern vorher mit `./gradlew -p kern assembleSentinelKernReleaseXCFramework`.
+name: Sentinel
+options:
+  bundleIdPrefix: de.nglab
+  deploymentTarget:
+    iOS: "26.0"
+  developmentLanguage: de
+  createIntermediateGroups: true
+
+settings:
+  base:
+    MARKETING_VERSION: "0.50.0"
+    CURRENT_PROJECT_VERSION: "1"
+    SWIFT_VERSION: "6.0"
+    SWIFT_STRICT_CONCURRENCY: minimal
+    SWIFT_DEFAULT_ACTOR_ISOLATION: MainActor
+    ENABLE_USER_SCRIPT_SANDBOXING: YES
+
+packages:
+  MapLibre:
+    url: https://github.com/maplibre/maplibre-gl-native-distribution
+    from: 6.10.0
+
+targets:
+  Sentinel:
+    type: application
+    platform: iOS
+    sources:
+      - path: Sentinel
+    dependencies:
+      - package: MapLibre
+        product: MapLibre
+      - framework: ../kern/build/XCFrameworks/release/SentinelKern.xcframework
+        embed: false
+      - target: SentinelStatus
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: de.nglab.sentinel
+        PRODUCT_NAME: Sentinel
+        TARGETED_DEVICE_FAMILY: "1"
+        ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
+        ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME: AccentColor
+        GENERATE_INFOPLIST_FILE: NO
+        OTHER_LDFLAGS: ["$(inherited)", "-lsqlite3"]
+        CODE_SIGN_STYLE: Manual
+        CODE_SIGNING_ALLOWED: NO
+        CODE_SIGNING_REQUIRED: NO
+    info:
+      path: Sentinel/Resources/Info.plist
+      properties:
+        CFBundleDisplayName: SENTINEL
+        CFBundleDevelopmentRegion: de
+        CFBundleShortVersionString: $(MARKETING_VERSION)
+        CFBundleVersion: $(CURRENT_PROJECT_VERSION)
+        LSRequiresIPhoneOS: true
+        UILaunchScreen: {}
+        UIApplicationSceneManifest:
+          UIApplicationSupportsMultipleScenes: false
+        UISupportedInterfaceOrientations:
+          - UIInterfaceOrientationPortrait
+        UIBackgroundModes:
+          - location
+        ITSAppUsesNonExemptEncryption: false
+        NSSupportsLiveActivities: true
+        MLNMapboxMetricsEnabledSettingShownInApp: true
+        NSLocationWhenInUseUsageDescription: Ihr Standort wird mit dem Einsatzteam auf der Lagekarte geteilt.
+        NSLocationAlwaysAndWhenInUseUsageDescription: Ihr Standort wird auch im Hintergrund mit dem Einsatzteam geteilt, solange Sie im Dienst sind.
+        NSCameraUsageDescription: Für Fotos von Profil, Fahrzeug und Ziel.
+        NSMicrophoneUsageDescription: Für die Spracheingabe des Navigationsziels.
+        NSSpeechRecognitionUsageDescription: Das gesprochene Navigationsziel wird auf dem Gerät in Text umgewandelt.
+        NSFaceIDUsageDescription: Schützt die App vor unbefugtem Zugriff.
+        NSAppTransportSecurity:
+          NSAllowsArbitraryLoads: false
+
+  SentinelStatus:
+    type: app-extension
+    platform: iOS
+    sources:
+      - path: SentinelStatus
+      - path: Sentinel/Dienste/SharingActivity.swift
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: de.nglab.sentinel.status
+        PRODUCT_NAME: SentinelStatus
+        TARGETED_DEVICE_FAMILY: "1"
+        GENERATE_INFOPLIST_FILE: NO
+        SKIP_INSTALL: YES
+        SWIFT_DEFAULT_ACTOR_ISOLATION: nonisolated
+        CODE_SIGN_STYLE: Manual
+        CODE_SIGNING_ALLOWED: NO
+        CODE_SIGNING_REQUIRED: NO
+    info:
+      path: SentinelStatus/Info.plist
+      properties:
+        CFBundleDisplayName: SENTINEL
+        CFBundleShortVersionString: $(MARKETING_VERSION)
+        CFBundleVersion: $(CURRENT_PROJECT_VERSION)
+        NSExtension:
+          NSExtensionPointIdentifier: com.apple.widgetkit-extension
+
+  SentinelUITests:
+    type: bundle.ui-testing
+    platform: iOS
+    sources:
+      - path: SentinelUITests
+    dependencies:
+      - target: Sentinel
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: de.nglab.sentinel.uitests
+        GENERATE_INFOPLIST_FILE: YES
+        CODE_SIGNING_ALLOWED: NO
+        TEST_TARGET_NAME: Sentinel
+
+schemes:
+  Sentinel:
+    build:
+      targets:
+        Sentinel: all
+        SentinelUITests: [test]
+    run:
+      config: Debug
+    test:
+      config: Debug
+      targets:
+        - SentinelUITests

@@ -9,9 +9,6 @@ import de.nglab.sentinel.dienst.Ort
 import de.nglab.sentinel.dienst.Standort
 import de.nglab.sentinel.dienst.StandortDienst
 import de.nglab.sentinel.kern.lage.Lage
-import de.nglab.sentinel.dienst.Ort
-import de.nglab.sentinel.dienst.Standort
-import de.nglab.sentinel.dienst.StandortDienst
 import de.nglab.sentinel.kern.lage.LageEreignis
 import de.nglab.sentinel.kern.netz.Api
 import de.nglab.sentinel.kern.netz.Verbindung

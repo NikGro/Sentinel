@@ -99,9 +99,9 @@ object Kartenbilder {
                 val rand = px(5f)
                 style.addImage(
                     name, b,
-                    listOf(org.maplibre.android.style.types.ImageStretches(rand, b.width - rand)),
-                    listOf(org.maplibre.android.style.types.ImageStretches(rand, b.height - rand)),
-                    org.maplibre.android.style.types.ImageContent(rand, rand, b.width - rand, b.height - rand),
+                    listOf(org.maplibre.android.maps.ImageStretches(rand, b.width - rand)),
+                    listOf(org.maplibre.android.maps.ImageStretches(rand, b.height - rand)),
+                    org.maplibre.android.maps.ImageContent(rand, rand, b.width - rand, b.height - rand),
                 )
             }
             name.startsWith("sym-") -> Symbol.entries.firstOrNull { it.bildname == name }?.let { style.addImage(name, zeichen(it.bild(), 22f, Color.WHITE)) }
