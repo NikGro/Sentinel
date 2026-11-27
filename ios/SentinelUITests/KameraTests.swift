@@ -17,6 +17,12 @@ final class KameraTests: XCTestCase {
         if name.contains("Unruhe") { app.launchEnvironment["SENTINEL_UNRUHE"] = "1" }
         XCUIDevice.shared.location = XCUILocation(location: CLLocation(latitude: position.latitude, longitude: position.longitude))
         app.launch()
+        // iOS startet die App für den Standort im Hintergrund selbst wieder, dann ohne die Startargumente des Tests (zeigt
+        // die Anmeldung). Landet der Test dort, die App beenden und mit den Testargumenten neu starten.
+        if app.textFields["Serveradresse"].waitForExistence(timeout: 4) {
+            app.terminate()
+            app.launch()
+        }
         addUIInterruptionMonitor(withDescription: "Systemabfrage") { alert in
             for label in ["Beim Verwenden der App erlauben", "Allow While Using App", "Einmal erlauben", "Allow Once"] where alert.buttons[label].exists {
                 alert.buttons[label].tap()
