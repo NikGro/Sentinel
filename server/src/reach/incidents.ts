@@ -87,6 +87,11 @@ export class IncidentService {
     return !!this.key();
   }
 
+  /** Schlüssel der TomTom-API (auch für die Verkehrskacheln der Karte). */
+  schluessel(): string | null {
+    return this.key();
+  }
+
   get count(): number {
     return this.abschnitte.length;
   }

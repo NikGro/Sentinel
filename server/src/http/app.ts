@@ -28,6 +28,8 @@ import { registerSpurRoutes } from './spur.js';
 import { registerTrackerRoutes } from './trackers.js';
 import { registerTransitRoutes } from './transit.js';
 import { registerPublicRoutes } from './public.js';
+import { registerKartenRoutes } from '../karte/routen.js';
+import { registerSucheRoutes } from './suche.js';
 import type { ClosureService } from '../reach/closures.js';
 import type { IncidentService } from '../reach/incidents.js';
 
@@ -197,6 +199,8 @@ export async function buildApp(services: Services): Promise<FastifyInstance> {
   registerSpurRoutes(app, services, guards);
   registerProfileRoutes(app, services, guards);
   registerAdminRoutes(app, services, guards);
+  registerSucheRoutes(app, services, guards);
+  registerKartenRoutes(app, { dir: services.config.karteDir || null, publicUrl: services.config.publicUrl, verkehrSchluessel: () => services.incidents.schluessel() });
 
   if (existsSync(config.webDir)) {
     await app.register(fastifyStatic, { root: config.webDir, index: 'index.html', maxAge: '1h', immutable: false });

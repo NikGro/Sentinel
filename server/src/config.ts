@@ -25,6 +25,10 @@ export interface Config {
   readonly overpassUrl: string;
   /** Einsatzraum für ÖPNV-Linien: Süd, West, Nord, Ost. */
   readonly oepnvBbox: [number, number, number, number];
+  /** Eigene Karte: Ordner mit Kacheln (`tiles/`) und Schriften (`fonts/`); leer = keine eigene Karte. */
+  readonly karteDir: string;
+  /** Ortssuche (Photon) im internen Netz, z. B. http://Sentinel-Photon:2322; leer = keine eigene Suche. */
+  readonly photonUrl: string;
   readonly production: boolean;
 }
 
@@ -66,6 +70,8 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): Config {
       keyId: env.SENTINEL_MAPKIT_KEY_ID ?? '',
       keyFile: env.SENTINEL_MAPKIT_KEY_FILE ?? '',
     },
+    karteDir: env.SENTINEL_KARTE_DIR ?? '',
+    photonUrl: (env.SENTINEL_PHOTON_URL ?? '').replace(/\/+$/, ''),
     overpassUrl: env.SENTINEL_OVERPASS_URL ?? 'https://overpass-api.de/api/interpreter',
     oepnvBbox: parseBbox(env.SENTINEL_OEPNV_BBOX ?? '53.30,9.55,53.90,10.45'),
     production,
