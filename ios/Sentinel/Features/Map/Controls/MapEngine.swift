@@ -45,6 +45,8 @@ final class MapEngine {
     @ObservationIgnored fileprivate weak var anchor: UIView?
     @ObservationIgnored private(set) weak var map: MKMapView?
     @ObservationIgnored private var helper: EngineHelper?
+    /// Für Karten, die über einer anderen liegen (ÖPNV-Ansicht über der Lagekarte): die oberste Karte nehmen.
+    @ObservationIgnored var prefersTopmostMap = false
     /// Ereignisse für Messfühler und Bildschirm.
     @ObservationIgnored var onEvent: ((MapEngineEvent) -> Void)?
     /// Eigener Standort (für das Anheften).
@@ -203,22 +205,17 @@ final class MapEngine {
         var found: MKMapView?
         for _ in 0..<8 {
             guard let candidate = ancestor else { break }
-            // Nur eine Karte, die keiner anderen Steuerung gehört (die erste davon, wie bisher): Liegt eine zweite Karte
-            // über der Lagekarte (ÖPNV-Ansicht), griff die Steuerung sonst nach der Lagekarte darunter. Die eigene Karte
-            // ließ sich dann nicht bewegen, und die Lagekarte hatte danach zwei Steuerungen (Wischen viel zu schnell).
-            // Nicht die zuletzt gezeichnete nehmen: Die Lagekarte enthält weitere Kartenansichten.
-            let free = Self.allMaps(in: candidate).filter { map in
-                guard let owner = Self.owners.object(forKey: map) else { return true }
-                return owner === self
-            }
-            if let hit = free.first {
+            // Normalerweise die erste Karte (wie immer). Eine Ansicht, die über der Lagekarte liegt (ÖPNV), nimmt die
+            // oberste: Sonst griff ihre Steuerung nach der Lagekarte darunter; die eigene Karte ließ sich nicht bewegen
+            // und die Lagekarte hatte danach zwei Steuerungen (Wischen viel zu schnell).
+            let maps = Self.allMaps(in: candidate)
+            if let hit = prefersTopmostMap ? maps.last : maps.first {
                 found = hit
                 break
             }
             ancestor = candidate.superview
         }
         guard let found else { return }
-        Self.owners.setObject(self, forKey: found)
         map = found
         let helper = self.helper ?? EngineHelper(engine: self)
         self.helper = helper
@@ -683,9 +680,6 @@ final class MapEngine {
     }
 
     // MARK: Hilfen
-
-    /// Welche Steuerung zu welcher Karte gehört (schwach gehalten: verschwindet mit Karte bzw. Steuerung).
-    private static let owners = NSMapTable<MKMapView, MapEngine>.weakToWeakObjects()
 
     /// Alle Karten unterhalb einer Ansicht, in Reihenfolge der Ansichten.
     private static func allMaps(in view: UIView) -> [MKMapView] {

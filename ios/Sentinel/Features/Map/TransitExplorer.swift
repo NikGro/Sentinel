@@ -52,7 +52,12 @@ struct TransitExplorer: View {
     }
 
     /// Eigene Kartensteuerung wie auf der Lagekarte (gleiches Gefühl beim Verschieben, Zoomen, Drehen).
-    @State private var engine = MapEngine()
+    /// Liegt über der Lagekarte: Die Steuerung nimmt die oberste Karte, also diese.
+    @State private var engine: MapEngine = {
+        let engine = MapEngine()
+        engine.prefersTopmostMap = true
+        return engine
+    }()
     @State private var cameraState = MapCameraState()
     @State private var region: MKCoordinateRegion?
     @State private var segments: [LiveSegment] = []
