@@ -7,6 +7,9 @@ statt jede Änderung sofort einzubauen. Erledigtes wandert mit Version ins CHANG
 
 ### Nach 0.41 offen
 
+- **Aussteigen/Verlassen als richtiger Knopf:** Bei Zielpersonen in einem Zielfahrzeug bzw. Zielobjekt ist es derzeit
+  nur ein rotes Symbol ohne Knopfform. Stattdessen ein erkennbarer Knopf (natives Design, rot getönt, z. B. umrandet oder
+  gefüllt, rund bzw. Kapsel mit Symbol), weiterhin ohne Glas-/Leuchteffekt, Trefferfläche 44 pt.
 - **Unsichtbare ÖPNV-Linie fängt Tipps ab:** Setzt man ein Ziel in einen Bus, entsteht dafür eine ÖPNV-Strecke als
   Objekt (Fahrt mit Fahrzeug), deren Linienverlauf ausgeblendet ist. Ein Tipp auf eine leere Stelle der Karte öffnete
   trotzdem den Dialog dieser Buslinie.
