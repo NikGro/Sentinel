@@ -7,6 +7,18 @@ statt jede Änderung sofort einzubauen. Erledigtes wandert mit Version ins CHANG
 
 ### Nach 0.42 offen
 
+- **Standort außer Dienst und Schließen der App:** Nach dem Verlassen aller Instanzen fragt SENTINEL im Hintergrund
+  weiter den Standort ab, und die App lässt sich durch Hochwischen nicht vollständig schließen (sie kommt wieder).
+  - Vermutete Ursachen (Code prüfen): `LocationService` nutzt `CLLocationUpdate.liveUpdates` mit
+    `CLBackgroundActivitySession`; iOS startet Apps mit solchen Sitzungen nach dem Beenden im Hintergrund neu und setzt die
+    Abfrage fort, bis die App sie beendet. Beim Neustart im Hintergrund entsteht keine Szene, also läuft
+    `updateSharing(onDuty:)` (aus `RootView`) nicht und nichts beendet die Abfrage. Außerdem: Kompass in
+    `LocationContext` läuft dauerhaft (`startUpdatingHeading` schon beim Start), Kartenebenen mit eigenem Standort.
+  - Behebung: Dienststatus beim Start ohne Szene prüfen (im `AppModel`, nicht erst in der Ansicht) und außer Dienst
+    sofort alles beenden; beim Verlassen der letzten Instanz Abfrage, Hintergrund-Sitzung und Kompass stoppen. Nach dem
+    Hochwischen darf iOS die App nur neu starten, wenn man im Dienst ist. Mit einem Test absichern (Instanz verlassen,
+    danach keine Standortabfrage mehr).
+
 - **Performance prüfen (0.40: nur gezielt, Messung steht aus):** Kartenbildschirm messen (Instruments: Time Profiler, SwiftUI-Updates, Hitches). Kandidaten:
   `MapScreen` baut bei jeder Standort- und Kameraänderung viel neu; Ebenen auf eigene beobachtbare Objekte aufteilen
   (wie Routenlinie/Spurende); teure Berechnungen (Clustern/Auseinanderrücken, Spur-Farbverläufe, Häufigkeit über alle
