@@ -7,6 +7,8 @@ statt jede Änderung sofort einzubauen. Erledigtes wandert mit Version ins CHANG
 
 ### Nach 0.38 offen
 
+- **ÖPNV-Ziel: Auswahl schmaler:** Im Schalter der Navi-Leiste bei einem ÖPNV-Fahrzeug die Stellung „3 Halte voraus“
+  streichen; nur noch Fahrzeug, 1 Halt voraus, 2 Halte voraus und Überschlagen (TransitAheadPicker).
 - **Standortspur: gleichbleibende Dicke, standardmäßig Häufigkeit:**
   - Die Spur springt zwischen verschiedenen Dicken. Einheitlich und eher dick (z. B. 7 pt) zeichnen. Ursache prüfen:
     Kandidaten sind das laufend neu angelegte Linienobjekt (bei jedem GPS-Punkt wird die Spur neu erzeugt, alte und
