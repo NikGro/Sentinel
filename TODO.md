@@ -7,6 +7,9 @@ statt jede Änderung sofort einzubauen. Erledigtes wandert mit Version ins CHANG
 
 ### Nach 0.38 offen
 
+- **Chat vorerst ausblenden:** Den Chat-Tab (und Chat-Hinweise/Mitteilungen) in der App nicht mehr anzeigen, ohne ihn
+  zu löschen: Code und Server bleiben, z. B. über einen Schalter, damit er sich später wieder einblenden lässt.
+  Sentinel Web entsprechend.
 - **Ziele-Tab: Gruppen als eigene Seiten:** In der Liste steht eine Gruppe nur als eine Zeile (Symbol, Farbe, Titel,
   Anzahl und Schalter für die Karte), nicht mit ihrem Inhalt. Beim Anlegen/Bearbeiten Titel, Symbol und Farbe wählbar
   (wie bei Markierungen: Palette und Symbolraster). Antippen öffnet eine Seite, aufgebaut wie der Ziele-Tab
