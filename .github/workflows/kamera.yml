@@ -109,6 +109,13 @@ jobs:
           grep -hE "(error|failed|XCTAssert|Test Case .* (passed|failed))" build-kamera-test.log | sort -u > build/kamera/ergebnis.txt || true
           cat build/kamera/ergebnis.txt || true
           ls -la build/kamera
+          # Bildschirmstruktur der App bei Fehlschlägen (zeigt, welche Ansicht stattdessen zu sehen war).
+          find build/kamera/fotos -name "*.txt" | while read -r f; do
+            if head -c 400 "$f" | grep -q "Application"; then
+              echo "===== STRUKTUR $f"
+              head -n 60 "$f" | cut -c1-200
+            fi
+          done | head -n 400
           # Absturzberichte der App lesbar ins Protokoll (Ausnahme und abgestürzter Faden).
           find build/kamera/fotos -name "*.ips" | while read -r f; do
             echo "===== ABSTURZ $f"
