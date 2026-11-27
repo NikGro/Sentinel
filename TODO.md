@@ -7,6 +7,10 @@ statt jede Änderung sofort einzubauen. Erledigtes wandert mit Version ins CHANG
 
 ### Nach 0.38 offen
 
+- **Ziele-Tab: Auswahlmodus für Gruppen:** Statt Gruppe je Ziel über das Kontextmenü: Gedrückt halten startet den
+  Auswahlmodus (Häkchen an den Zeilen), oben erscheinen die üblichen Knöpfe, u. a. ein runder „…“-Knopf mit „Alle
+  auswählen“, „Zur Gruppe hinzufügen“ (bestehende oder neue Gruppe) und, wenn Ausgewählte in einer Gruppe sind, „Aus
+  Gruppe entfernen“; dazu „Fertig“ zum Beenden.
 - **ÖPNV-Ziel: Auswahl schmaler:** Im Schalter der Navi-Leiste bei einem ÖPNV-Fahrzeug die Stellung „3 Halte voraus“
   streichen; nur noch Fahrzeug, 1 Halt voraus, 2 Halte voraus und Überschlagen (TransitAheadPicker).
 - **Standortspur: gleichbleibende Dicke, standardmäßig Häufigkeit:**
