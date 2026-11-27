@@ -7,6 +7,11 @@ statt jede Änderung sofort einzubauen. Erledigtes wandert mit Version ins CHANG
 
 ### Nach 0.38 offen
 
+- **Ziele-Tab: Gruppen als eigene Seiten:** In der Liste steht eine Gruppe nur als eine Zeile (Symbol, Farbe, Titel,
+  Anzahl und Schalter für die Karte), nicht mit ihrem Inhalt. Beim Anlegen/Bearbeiten Titel, Symbol und Farbe wählbar
+  (wie bei Markierungen: Palette und Symbolraster). Antippen öffnet eine Seite, aufgebaut wie der Ziele-Tab
+  (Abschnitte Fahrzeuge, Personen, Objekte, mit den Schaltern je Ziel), mit Zurück zur Hauptansicht; der Auswahlmodus
+  gilt dort genauso. Bestehende Bausteine verwenden (TabHeader, TargetRow, Listenstil).
 - **Ziele-Tab: Auswahlmodus für Gruppen:** Statt Gruppe je Ziel über das Kontextmenü: Gedrückt halten startet den
   Auswahlmodus (Häkchen an den Zeilen), oben erscheinen die üblichen Knöpfe, u. a. ein runder „…“-Knopf mit „Alle
   auswählen“, „Zur Gruppe hinzufügen“ (bestehende oder neue Gruppe) und, wenn Ausgewählte in einer Gruppe sind, „Aus
