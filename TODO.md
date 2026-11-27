@@ -7,6 +7,17 @@ statt jede Änderung sofort einzubauen. Erledigtes wandert mit Version ins CHANG
 
 ### Nach 0.39 offen
 
+- **Aussteigen-Knopf schlicht:** Bei den Insassen nur das Symbol (ohne Text), rot, natives Design ohne Glas-/Leucht-
+  effekt (z. B. einfacher Knopf mit `figure.walk.departure` in Rot, Barrierefreiheits-Name „Aussteigen“).
+- **Antippen auf der Karte trifft weiter nicht immer das richtige Objekt:** Systematisch prüfen: welche Ebenen fangen
+  Tipps ab (Symbole, verschobene Symbole mit vergrößerter Trefferfläche, Flächen/Linien über `ShapeTap`, Haltestellen,
+  Cluster, eigener Punkt), in welcher Reihenfolge, und ob die vergrößerten Flächen verschobener Symbole Nachbarn
+  verdecken. Ziel: Tipp trifft immer das sichtbar oberste bzw. nächstgelegene Objekt; bei Mehrdeutigkeit kurze Auswahl.
+  Mit UI-Test abdecken (übereinanderliegende Symbole, Symbol auf Fläche, Symbol auf Linie).
+- **Performance prüfen:** Kartenbildschirm messen (Instruments: Time Profiler, SwiftUI-Updates, Hitches). Kandidaten:
+  `MapScreen` baut bei jeder Standort- und Kameraänderung viel neu; Ebenen auf eigene beobachtbare Objekte aufteilen
+  (wie Routenlinie/Spurende); teure Berechnungen (Clustern/Auseinanderrücken, Spur-Farbverläufe, Häufigkeit über alle
+  Spuren, ÖPNV-Fahrzeuge mit 30 Hz) zwischenspeichern; Anzahl der Annotationen begrenzen.
 - **Standortspur weiter uneinheitlich dick:** Meist stabil schmal, aber z. B. nach dem Abbiegen wird ein Stück, dann die
   ganze Spur dick, dann alles dünn, dann wieder normal.
   - Vermutete Ursachen (Code): Die eigene Spur wird bei jedem GPS-Punkt als neues Linienobjekt mit Farbverlauf angelegt
