@@ -218,9 +218,11 @@ private struct SelectableTargetRow: View {
         .onTapGesture {
             if selection.isActive { selection.toggle(target.id) } else { open(target.id) }
         }
-        .onLongPressGesture(minimumDuration: 0.45) {
+        .onLongPressGesture(minimumDuration: 0.3) {
             if selection.isActive { selection.toggle(target.id) } else { selection.begin(with: target.id) }
         }
+        // Spürbar, wenn der Auswahlmodus startet.
+        .sensoryFeedback(.impact(weight: .medium), trigger: selection.isActive) { _, active in active }
         .swipeActions(edge: .trailing, allowsFullSwipe: true) {
             if !selection.isActive {
                 Button("Löschen", systemImage: "trash", role: .destructive) {
@@ -303,11 +305,12 @@ private struct SelectionStatusRow: View {
             Text(selection.ids.count == 1 ? "1 Ziel ausgewählt" : "\(selection.ids.count) Ziele ausgewählt")
                 .font(.subheadline.weight(.semibold))
             Spacer()
+            // Wie „Fertig“ (blau gefüllt, gleiche Höhe), nur rund.
             SelectionMenu(selection: selection, visible: visible)
                 .labelStyle(.iconOnly)
-                .font(.system(size: 17, weight: .semibold))
-                .frame(width: 36, height: 36)
-                .glassEffect(.regular.interactive(), in: .circle)
+                .buttonStyle(.borderedProminent)
+                .buttonBorderShape(.circle)
+                .controlSize(.small)
             Button("Fertig") { selection.end() }
                 .buttonStyle(.borderedProminent)
                 .controlSize(.small)

@@ -13,6 +13,7 @@
   gemeinsamen Baustein)
 - Kurzübersicht: Kopfzeile in der niedrigen Stufe reines Liquid Glass, Hintergrund nur aufgezogen
 - Dynamic Island: rotes Standortsymbol in allen Formen statt eines roten Punkts mit Hof
+- Auswahlmodus: „…“ wie „Fertig“ (blau, rund), Haptik beim Start, Gedrückthalten kürzer (0,3 s)
 - Start: Live-Aktivität nicht mehr schon beim App-Start anfassen (ließ die App im Kamera-Test beim zweiten Start nicht
   hochkommen); eine liegengebliebene wird beim Start der Übertragung übernommen
 

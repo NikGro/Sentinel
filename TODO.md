@@ -7,10 +7,6 @@ statt jede Änderung sofort einzubauen. Erledigtes wandert mit Version ins CHANG
 
 ### Nach 0.41 offen
 
-- **Auswahlmodus im Ziele-Tab, Feinschliff:**
-  - „…“-Knopf neben „Fertig“ optisch wie „Fertig“ (gleiche Farbe, gefüllt blau, gleiche Höhe), nur rund statt breit.
-  - Haptisches Feedback beim Gedrückthalten, wenn der Auswahlmodus startet (`sensoryFeedback(.impact)` o. Ä.).
-  - Gedrückthalten kürzer: etwa 0,3 s statt 0,45 s.
 - **Performance prüfen (0.40: nur gezielt, Messung steht aus):** Kartenbildschirm messen (Instruments: Time Profiler, SwiftUI-Updates, Hitches). Kandidaten:
   `MapScreen` baut bei jeder Standort- und Kameraänderung viel neu; Ebenen auf eigene beobachtbare Objekte aufteilen
   (wie Routenlinie/Spurende); teure Berechnungen (Clustern/Auseinanderrücken, Spur-Farbverläufe, Häufigkeit über alle
