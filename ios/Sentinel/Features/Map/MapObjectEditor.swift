@@ -138,6 +138,7 @@ struct MapObjectEditor: View {
 
                 Section {
                     TextField(object.typ == .text ? "Text" : "Bezeichnung", text: $object.titel)
+                        .clearable($object.titel)
                     TextField("Notiz", text: $object.notiz, axis: .vertical)
                         .lineLimit(1...5)
                         .clearable($object.notiz)
@@ -227,6 +228,7 @@ struct MapObjectEditor: View {
                                 .keyboardType(.numberPad)
                                 .multilineTextAlignment(.trailing)
                                 .frame(width: 64)
+                                .clearable($radiusText)
                             Text("m")
                                 .foregroundStyle(.secondary)
                         }
@@ -241,6 +243,7 @@ struct MapObjectEditor: View {
                     Section("Radius in Metern") {
                         TextField("Radius", text: $radiusText)
                             .keyboardType(.numberPad)
+                            .clearable($radiusText)
                     }
                 }
 
@@ -357,6 +360,7 @@ private struct GeofenceSection: View {
                         .keyboardType(.numberPad)
                         .multilineTextAlignment(.trailing)
                         .frame(width: 80)
+                        .clearable($radiusText)
                     Text("m").foregroundStyle(.secondary)
                 }
             }

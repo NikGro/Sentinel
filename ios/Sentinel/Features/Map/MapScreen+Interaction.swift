@@ -54,8 +54,16 @@ extension MapScreen {
     /// Versatz für übereinanderliegende Symbole (Kräfte, Fahrzeuge, Ziele, Marker).
     /// Herausgezoomt Cluster, nah dran auseinandergerückte Punkte.
     var clusterLayout: ClusterLayout {
+        // Abhängigkeit von der abgestuften Zoomstufe: Bei spürbarem Zoomen wird sofort neu aufgeteilt.
+        _ = cameraState.zoomStep
         let items = forcePins.map { ($0.id, $0.coordinate) } + (vehiclePins + targetPins).map { ($0.id, $0.coordinate) } + handles.map { ($0.id, $0.coordinate) }
-        return ClusterLayout(items.map { (id: $0.0, coordinate: $0.1) }, metersPerPoint: cameraState.distance / 700, heading: cameraState.heading)
+        // Art je Symbol für die Farbe der Cluster.
+        var kinds: [String: String] = [:]
+        for pin in forcePins { kinds[pin.id] = "kraft" }
+        for pin in vehiclePins { kinds[pin.id] = "kraft" }
+        for pin in targetPins { kinds[pin.id] = "ziel" }
+        for handle in handles { kinds[handle.id] = "marker:" + handle.object.farbe.uppercased() }
+        return ClusterLayout(items.map { (id: $0.0, coordinate: $0.1) }, metersPerPoint: cameraState.distance / 700, heading: cameraState.heading, kinds: kinds)
     }
 
     /// Cluster angetippt: so weit hineinzoomen, dass alle Punkte darin zu sehen sind.

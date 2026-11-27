@@ -71,7 +71,7 @@ struct TargetMovementSection: View {
             Section {
                 Picker("Unterwegs", selection: mobility) {
                     // Symbole wie im Dreier-Umschalter der Kräfte.
-                    ForEach([TargetBinding.Art.fuss, .fahrzeug, .oepnv]) { art in
+                    ForEach([TargetBinding.Art.fuss, .fahrzeug, .oepnv, .objekt]) { art in
                         Image(systemName: art.symbolName)
                             .accessibilityLabel(art.title)
                             .tag(art)
@@ -99,7 +99,7 @@ struct TargetMovementSection: View {
                 Text("Unterwegs")
             } footer: {
                 if let boardedIn {
-                    Text("Sitzt in: \(boardedIn). Der Standort folgt dem Fahrzeug.")
+                    Text(target.bindung?.art == .objekt ? "Im Gebäude: \(boardedIn). Der Standort folgt dem Gebäude." : "Sitzt in: \(boardedIn). Der Standort folgt dem Fahrzeug.")
                 } else if target.bindung?.art == .fahrzeug {
                     Text("Sitzt in einem anderen, nicht angelegten Fahrzeug. Der Standort kommt aus der Standortquelle.")
                 }
@@ -108,7 +108,7 @@ struct TargetMovementSection: View {
 
         let inside = lage.passengers(of: entity.id)
         if target.art != .person, !inside.isEmpty {
-            Section("Insassen") {
+            Section(target.art == .objekt ? "Im Gebäude" : "Insassen") {
                 ForEach(inside) { passenger in
                     HStack {
                         Label(passenger.data.displayName, systemImage: Fortbewegung.fuss.symbolName)
@@ -125,7 +125,7 @@ struct TargetMovementSection: View {
                                 .contentShape(.rect)
                         }
                         .buttonStyle(.borderless)
-                        .accessibilityLabel("\(passenger.data.displayName) aussteigen lassen")
+                        .accessibilityLabel(target.art == .objekt ? "\(passenger.data.displayName) verlässt das Gebäude" : "\(passenger.data.displayName) aussteigen lassen")
                     }
                 }
             }
@@ -152,6 +152,7 @@ struct TargetMovementSection: View {
                 switch target.bindung?.art {
                 case .fahrzeug?: .fahrzeug
                 case .oepnv?: .oepnv
+                case .objekt?: .objekt
                 default: .fuss
                 }
             },

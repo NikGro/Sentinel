@@ -48,19 +48,22 @@ struct SharingLiveActivity: Widget {
                         .foregroundStyle(.secondary)
                 }
             } compactLeading: {
-                // Zugeklappt: links roter Punkt mit Namen, rechts „Standort“: eindeutig statt eines Pfeilsymbols.
-                HStack(spacing: 4) {
-                    LiveDot(size: 9)
-                    Text("SENTINEL")
-                        .font(.caption2.weight(.heavy))
-                        .foregroundStyle(.red)
-                }
+                // Zugeklappt: links rotes Standortsymbol, rechts „SENTINEL“.
+                Image(systemName: "location.fill")
+                    .font(.system(size: 13, weight: .bold))
+                    .foregroundStyle(.red)
+                    .padding(.leading, 2)
             } compactTrailing: {
-                Text("Standort")
-                    .font(.caption2.weight(.semibold))
-                    .foregroundStyle(.white)
+                Text("SENTINEL")
+                    .font(.system(size: 12, weight: .heavy))
+                    .foregroundStyle(.red)
+                    .padding(.trailing, 2)
             } minimal: {
-                LiveDot(size: 10)
+                // Losgelöste kleine Blase (wenn noch etwas anderes läuft): eindeutiges rotes Standortsymbol statt eines
+                // Punkts mit Hof, der wie eine Aufnahme wirkte.
+                Image(systemName: "location.fill")
+                    .font(.system(size: 13, weight: .bold))
+                    .foregroundStyle(.red)
             }
             .keylineTint(.red)
         }

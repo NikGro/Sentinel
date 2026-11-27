@@ -1,5 +1,19 @@
 # Änderungen
 
+## 0.41.0
+
+- Zielperson betritt Gebäude: vierte Stellung „Gebäude“ im Schalter „Unterwegs“ mit Auswahl der Zielobjekte; beim
+  Zielobjekt stehen die Personen unter „Im Gebäude“ mit Symbol zum Verlassen
+- „Unterwegs“ nur noch in der Übersicht, nicht zusätzlich auf der Bearbeiten-Seite
+- Cluster: lösen sich beim Zoomen sofort auf bzw. bilden sich sofort (vorher erst mit dem nächsten GPS-Punkt), ebenso der
+  Abstand auseinandergerückter Symbole; Farbe nach Inhalt (Ziele rot, Kräfte blau-violett, Markierungen in ihrer Farbe,
+  gemischt neutral)
+- Ortswahl („Standort setzen“): dieselben Vorschläge wie die Suche auf der Karte (Anschriften, Kreuzungen, Orte, Firmen)
+- Textfelder: genau ein X zum Leeren (das app-weite System-X ist entfernt, alle Felder ohne eigenes X nutzen einen
+  gemeinsamen Baustein)
+- Kurzübersicht: Kopfzeile in der niedrigen Stufe reines Liquid Glass, Hintergrund nur aufgezogen
+- Dynamic Island: rotes Standortsymbol in allen Formen statt eines roten Punkts mit Hof
+
 ## 0.40.0
 
 - Standort nur im Dienst: Beim Verlassen der Instanz enden Standortübertragung und Live-Aktivität; liegengebliebene

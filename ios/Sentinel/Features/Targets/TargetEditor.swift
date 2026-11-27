@@ -18,8 +18,6 @@ struct TargetEditor: View {
     @State private var showsPicker = false
     @State private var isGeocoding = false
     @State private var locationFailure: String?
-    /// Gewählte Art beim Einsteigen: öffnet die Auswahl des Fahrzeugs bzw. Objekts.
-    @State private var boarding: TargetBinding.Art?
     @State private var relationEditing: RelationEditorContext?
 
     init(context: TargetEditorContext, onSave: ((String) -> Void)? = nil) {
@@ -47,10 +45,13 @@ struct TargetEditor: View {
                 case .person:
                     Section("Person") {
                         TextField("Vorname", text: $target.vorname)
+                            .clearable($target.vorname)
                         TextField("Nachname", text: $target.nachname)
+                            .clearable($target.nachname)
                         HStack {
                             TextField("Geburtsdatum (TT.MM.JJJJ)", text: $birthText)
                                 .keyboardType(.numbersAndPunctuation)
+                                .clearable($birthText)
                             if let birthDate, let age = Target.age(of: birthDate) {
                                 Text("\(age) Jahre")
                                     .foregroundStyle(.secondary)
@@ -60,18 +61,23 @@ struct TargetEditor: View {
                             }
                         }
                         TextField("Geburtsort", text: $target.geburtsort)
+                            .clearable($target.geburtsort)
                         TextField("Staatsangehörigkeit", text: $target.staatsangehoerigkeit)
+                            .clearable($target.staatsangehoerigkeit)
                     }
                 case .fahrzeug:
                     Section("Fahrzeug") {
                         TextField("Fahrzeug, z. B. BMW 3er dunkelblau", text: $target.bezeichnung)
+                            .clearable($target.bezeichnung)
                         TextField("Kennzeichen", text: $target.kennzeichen)
                             .textInputAutocapitalization(.characters)
                             .autocorrectionDisabled()
+                            .clearable($target.kennzeichen)
                     }
                 case .objekt:
                     Section("Objekt") {
                         TextField("Objekt, z. B. Mehrfamilienhaus, Firmengebäude", text: $target.bezeichnung)
+                            .clearable($target.bezeichnung)
                         // Vorschläge während der Eingabe; ein gewählter Vorschlag setzt auch den Standort.
                         AddressCompletionField(address: $target.anschrift, near: target.standort?.point ?? model.myPoint) { point in
                             target.standort = TimedPoint(point)
@@ -103,9 +109,7 @@ struct TargetEditor: View {
                     RelationsSection(targetId: context.id, opensTargets: false, editing: $relationEditing)
                 }
 
-                if target.art == .person {
-                    bindingSection
-                }
+                // „Unterwegs“ (zu Fuß, Fahrzeug, ÖPNV, Gebäude) steht nur in der Übersicht, schnell erreichbar.
 
                 AttachmentsSection(attachments: $target.anhaenge, marksTitlePhoto: true)
 
@@ -151,82 +155,6 @@ struct TargetEditor: View {
         }
     }
 
-    // MARK: Unterwegs
-
-    /// Zu Fuß setzt sofort; ÖPNV, Fahrzeug und Gebäude fragen wie bei den Kräften, wohin die Person einsteigt.
-    private var bindingArt: Binding<TargetBinding.Art> {
-        Binding(
-            get: { target.bindung?.art ?? .fuss },
-            set: { art in
-                if art == .fuss { target.bindung = nil } else { boarding = art }
-            }
-        )
-    }
-
-    /// Bezugspunkt für die Sortierung: Standort der Person, sonst der eigene.
-    private var personPoint: GeoPoint? { target.standort?.point ?? lage.targets[context.id].flatMap { lage.position(ofTarget: $0)?.point } ?? model.myPoint }
-
-    private func candidates(for art: TargetBinding.Art) -> [BoardingCandidate] {
-        lage.boardingCandidates(for: art, excluding: context.id, near: personPoint)
-    }
-
-    /// Wohin die Person gerade eingestiegen ist, als lesbare Zeile.
-    private var boardedTitle: String? {
-        guard let binding = target.bindung, binding.art != .fuss else { return nil }
-        guard let id = binding.zielId else { return binding.art == .fahrzeug ? "Anderes Fahrzeug" : nil }
-        if let other = lage.targets[id] { return other.data.displayName }
-        if let object = lage.mapObjects[id]?.data { return object.titel.isEmpty ? (object.linie?.ref ?? "ÖPNV-Fahrzeug") : object.titel }
-        return nil
-    }
-
-    @ViewBuilder private var bindingSection: some View {
-        Section {
-            Picker("Unterwegs", selection: bindingArt) {
-                ForEach(TargetBinding.Art.allCases) { art in
-                    Image(systemName: art.symbolName)
-                        .accessibilityLabel(art.title)
-                        .tag(art)
-                }
-            }
-            .pickerStyle(.segmented)
-            if let art = target.bindung?.art, art != .fuss {
-                Button { boarding = art } label: {
-                    LabeledContent {
-                        Text("Ändern")
-                    } label: {
-                        Label(boardedTitle ?? "Noch nicht gewählt", systemImage: art.symbolName)
-                    }
-                }
-                .tint(.primary)
-            }
-        } header: {
-            Text("Unterwegs")
-        } footer: {
-            Text("Wie bei den Kräften: Im Fahrzeug, im ÖPNV oder im Gebäude folgt die Person dessen Standort und erscheint auf der Karte nicht mehr einzeln.")
-        }
-        .sheet(item: $boarding) { art in
-            let create: (() -> Void)? = art == .fahrzeug || art == .objekt ? { createAndBoard(art) } : nil
-            BoardingSheet(
-                art: art,
-                candidates: candidates(for: art),
-                selected: target.bindung?.art == art ? target.bindung?.zielId : nil,
-                otherSelected: target.bindung?.art == .fahrzeug && target.bindung?.zielId == nil,
-                pick: { id in target.bindung = TargetBinding(art: art, zielId: id) },
-                createNew: create
-            )
-        }
-    }
-
-    /// Legt ein neues Zielfahrzeug bzw. Zielobjekt am Standort der Person an und setzt die Person hinein.
-    private func createAndBoard(_ art: TargetBinding.Art) {
-        let id = LageStore.newId()
-        var other = Target(art: art == .fahrzeug ? .fahrzeug : .objekt)
-        let name = target.displayName
-        other.bezeichnung = art == .fahrzeug ? "Fahrzeug von \(name)" : "Gebäude von \(name)"
-        if let point = personPoint { other.standort = TimedPoint(point) }
-        lage.put(other, id: id)
-        target.bindung = TargetBinding(art: art, zielId: id)
-    }
 
     /// Frühere Freitextangaben (Halter beim Fahrzeug, Wohnanschrift und genutztes Fahrzeug bei der Person, Bewohner
     /// beim Objekt) bleiben sichtbar und lassen sich leeren, sobald sie als Beziehung angelegt sind.

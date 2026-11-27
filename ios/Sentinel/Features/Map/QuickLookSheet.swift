@@ -9,6 +9,8 @@ struct QuickLookSheet: View {
     let moveObject: (String) -> Void
     /// Angetippte Stelle eines Standortverlaufs (Werte dort).
     var trackPoint: TrackPoint?
+    /// Niedrige Stufe (schwebende Glaskarte): Kopfzeile ohne eigenen Hintergrund, reines Glas.
+    var isLow = false
 
     @Environment(AppModel.self) private var model
     @Environment(LageStore.self) private var lage
@@ -43,6 +45,7 @@ struct QuickLookSheet: View {
                     subtitle: header.subtitle,
                     navigate: navigation.map { target in { model.navigate(to: target); dismiss() } },
                     actions: actions,
+                    showsBackground: !isLow,
                     close: { dismiss() }
                 )
             }

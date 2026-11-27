@@ -128,6 +128,7 @@ struct MobilitySheet: View {
             TextField("Linie suchen, z. B. U3, 269, RB81", text: $query)
                 .textInputAutocapitalization(.characters)
                 .autocorrectionDisabled()
+                .clearable($query)
         } footer: {
             Text(query.isEmpty ? "Ohne Eingabe werden Linien an Haltestellen in der Nähe vorgeschlagen." : "Jede Fahrtrichtung erscheint einzeln.")
         }

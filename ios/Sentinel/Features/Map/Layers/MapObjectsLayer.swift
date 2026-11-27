@@ -249,6 +249,8 @@ struct MapCluster: Identifiable {
     let coordinate: CLLocationCoordinate2D
     let memberIds: [String]
     let members: [CLLocationCoordinate2D]
+    /// Farbe nach Inhalt: nur Ziele rot, nur Kräfte in Kräftefarbe, nur Markierungen einer Farbe in dieser, sonst neutral.
+    var color: Color = ClusterLayout.mixedColor
 }
 
 struct ClusterLayout {
@@ -268,7 +270,18 @@ struct ClusterLayout {
 
     init() {}
 
-    init(_ items: [(id: String, coordinate: CLLocationCoordinate2D)], metersPerPoint: Double, heading: Double = 0) {
+    /// Farbe gemischter Cluster.
+    static let mixedColor = Color(hex: "#5E6A7D")
+
+    static func color(for kinds: Set<String>) -> Color {
+        guard kinds.count == 1, let kind = kinds.first else { return mixedColor }
+        if kind == "ziel" { return Theme.target }
+        if kind == "kraft" { return Theme.force }
+        if kind.hasPrefix("marker:") { return Color(hex: String(kind.dropFirst(7))) }
+        return mixedColor
+    }
+
+    init(_ items: [(id: String, coordinate: CLLocationCoordinate2D)], metersPerPoint: Double, heading: Double = 0, kinds: [String: String] = [:]) {
         guard metersPerPoint >= Self.clusterFromMetersPerPoint else {
             offsets = Declutter.offsets(items, metersPerPoint: metersPerPoint)
             // Bildschirmversatz in Meter umrechnen, gedreht um die Kartenausrichtung (oben = Blickrichtung).
@@ -290,7 +303,8 @@ struct ClusterLayout {
             let lon = group.map(\.coordinate.longitude).reduce(0, +) / Double(group.count)
             let ids = group.map(\.id).sorted()
             clusters.append(MapCluster(id: ids.joined(separator: "|"), coordinate: CLLocationCoordinate2D(latitude: lat, longitude: lon),
-                                       memberIds: ids, members: group.map(\.coordinate)))
+                                       memberIds: ids, members: group.map(\.coordinate),
+                                       color: Self.color(for: Set(ids.map { kinds[$0] ?? "" }))))
             hidden.formUnion(ids)
         }
     }
@@ -308,7 +322,7 @@ struct ClusterLayer: MapContent {
                     .font(.system(size: 15, weight: .heavy, design: .rounded))
                     .foregroundStyle(.white)
                     .frame(width: 38, height: 38)
-                    .background(Theme.force.gradient, in: .circle)
+                    .background(cluster.color.gradient, in: .circle)
                     .overlay(Circle().stroke(.white, lineWidth: 2.5))
                     .shadow(color: .black.opacity(0.3), radius: 3, y: 1)
                     .onTapGesture { onSelect(cluster) }

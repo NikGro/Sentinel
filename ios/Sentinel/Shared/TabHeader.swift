@@ -98,8 +98,8 @@ extension String {
 }
 
 extension View {
-    /// Mehrzeiliges Textfeld: X zum Leeren, solange das Feld aktiv ist und Text enthält (einzeilige Felder haben das
-    /// System-X).
+    /// Textfeld mit X zum Leeren, solange das Feld aktiv ist und Text enthält. Ein Baustein für alle Felder ohne eigenes
+    /// X (Suchfelder haben ihres; ein app-weites System-X führte dort zu zwei).
     func clearable(_ text: Binding<String>) -> some View {
         modifier(ClearableField(text: text))
     }
@@ -110,7 +110,7 @@ private struct ClearableField: ViewModifier {
     @FocusState private var focused: Bool
 
     func body(content: Content) -> some View {
-        HStack(alignment: .top, spacing: 6) {
+        HStack(alignment: .firstTextBaseline, spacing: 6) {
             content
                 .focused($focused)
             if focused, !text.isEmpty {

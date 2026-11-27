@@ -185,6 +185,7 @@ struct RelationEditor: View {
         Section {
             TextField("Suchen: Name, Kennzeichen, Anschrift", text: $query)
                 .autocorrectionDisabled()
+                .clearable($query)
         }
         Section("Neu anlegen und verbinden") {
             ForEach(ZielArt.allCases) { art in

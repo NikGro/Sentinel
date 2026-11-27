@@ -96,6 +96,7 @@ struct TransitObjectSection: View {
             TextField("Liniennummer suchen, z. B. 369, U3, S1", text: $query)
                 .autocorrectionDisabled()
                 .textInputAutocapitalization(.characters)
+                .clearable($query)
             if isLoading { ProgressView() }
             ForEach(hits) { hit in
                 Button {

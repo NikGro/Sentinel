@@ -121,7 +121,7 @@ struct MapScreen: View {
             }, moveObject: { objectId in
                 self.selection = nil
                 tapMode = .moving(objectId: objectId)
-            }, trackPoint: selectedTrackPoint)
+            }, trackPoint: selectedTrackPoint, isLow: quickLookDetent == QuickLookHeight.low)
             .presentationDetents([QuickLookHeight.low, .medium, .large], selection: $quickLookDetent)
             .presentationBackgroundInteraction(.enabled(upThrough: .medium))
         }

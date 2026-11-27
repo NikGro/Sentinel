@@ -56,6 +56,8 @@ struct QuickLookHeader: View {
     /// `nil`: kein Navigieren (kein Standort oder kein einzelner Zielort).
     let navigate: (() -> Void)?
     let actions: QuickLookActions
+    /// Deckender Hintergrund mit Verlauf nur bei aufgezogenem Fenster; in der niedrigen Stufe reines Liquid Glass.
+    var showsBackground = true
     let close: () -> Void
     @Environment(\.dynamicTypeSize) private var typeSize
 
@@ -65,6 +67,7 @@ struct QuickLookHeader: View {
             // Gescrollter Inhalt läuft sauber darunter weg statt sichtbar unter Titel und Knöpfen.
             .background(alignment: .top) {
                 // Dieselbe Farbe wie die Liste darunter (passt sich im Fenster der erhöhten Ebene an).
+                if showsBackground {
                 Rectangle()
                     .fill(Color(.systemGroupedBackground))
                     .mask {
@@ -77,7 +80,10 @@ struct QuickLookHeader: View {
                     .padding(.bottom, -22)
                     .ignoresSafeArea(edges: .top)
                     .allowsHitTesting(false)
+                    .transition(.opacity)
+                }
             }
+            .animation(.easeInOut(duration: 0.2), value: showsBackground)
     }
 
     @ViewBuilder private var content: some View {

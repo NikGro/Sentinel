@@ -385,6 +385,7 @@ struct TrackersAdminScreen: View {
 
             Section {
                 TextField("Name, z. B. ST-901 Nr. 3", text: $addName)
+                    .clearable($addName)
                 Picker("Anbieter", selection: $addProvider) {
                     Text("SinoTrack (direkt)").tag("sinotrack")
                     Text("PAJ").tag("paj")
@@ -393,12 +394,14 @@ struct TrackersAdminScreen: View {
                     .keyboardType(addProvider == "paj" ? .numberPad : .asciiCapable)
                     .autocorrectionDisabled()
                     .textInputAutocapitalization(.never)
+                    .clearable($addId)
                 if addProvider == "paj" {
                     TextField("E-Mail des PAJ-Kontos", text: $addEmail)
                         .keyboardType(.emailAddress)
                         .textContentType(.username)
                         .autocorrectionDisabled()
                         .textInputAutocapitalization(.never)
+                        .clearable($addEmail)
                     SecureField("Passwort des PAJ-Kontos", text: $addPassword)
                         .textContentType(.password)
                 }
@@ -484,6 +487,7 @@ struct TrackersAdminScreen: View {
                             .keyboardType(.emailAddress)
                             .textContentType(.username)
                             .textInputAutocapitalization(.never)
+                            .clearable($pajEmail)
                         SecureField("Passwort", text: $pajPassword)
                             .textContentType(.password)
                         Button("Verbinden") {

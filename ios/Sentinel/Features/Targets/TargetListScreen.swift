@@ -388,6 +388,7 @@ struct TargetGroupEditor: View {
             Form {
                 Section {
                     TextField("Name, z. B. Verfahren Nord", text: $group.name)
+                        .clearable($group.name)
                 }
                 Section("Farbe") {
                     HStack(spacing: 0) {

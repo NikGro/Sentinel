@@ -17,12 +17,17 @@ final class MapCameraState {
     /// Mittelpunkt der Kamera; liest nur der Pfeil im Fahrmodus, der damit flüssig mitläuft.
     private(set) var center = CLLocationCoordinate2D(latitude: 53.55, longitude: 10.0)
     @ObservationIgnored private(set) var distance: CLLocationDistance = 2500
+    /// Abgestufte Zoomstufe (Achtel-Oktaven des Abstands), beobachtet: ändert sich nur bei spürbarem Zoomen. Daran hängt
+    /// die Aufteilung in Cluster und auseinandergerückte Symbole, die sonst erst beim nächsten GPS-Punkt nachzog.
+    private(set) var zoomStep = 0
 
     func update(_ camera: MapCamera) {
         if camera.centerCoordinate.latitude != center.latitude || camera.centerCoordinate.longitude != center.longitude {
             center = camera.centerCoordinate
         }
         distance = camera.distance
+        let step = Int((log2(max(camera.distance, 1)) * 8).rounded())
+        if step != zoomStep { zoomStep = step }
         exactHeading = camera.heading
         exactPitch = camera.pitch
         // Nur merkliche Änderungen weitergeben, sonst würden Kompass und Kippknopf ständig neu gezeichnet.

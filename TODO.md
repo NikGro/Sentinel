@@ -5,44 +5,8 @@ statt jede Änderung sofort einzubauen. Erledigtes wandert mit Version ins CHANG
 
 ## Geplant
 
-### Nach 0.40 offen
+### Nach 0.41 offen
 
-- **Cluster und Auseinanderrücken reagieren träge auf Zoomen:**
-  - Ursache (Code): Die Aufteilung (Cluster bzw. Abstände) wird aus `cameraState.distance` berechnet, das bewusst nicht
-    beobachtet wird (`@ObservationIgnored`, sonst würde der ganze Kartenbildschirm bei jedem Bild neu gebaut). Neu
-    berechnet wird sie deshalb erst, wenn zufällig etwas anderes den Bildschirm auffrischt (z. B. der nächste
-    GPS-Punkt, etwa einmal je Sekunde); so wirkt es verzögert.
-  - Behebung: eine beobachtete, gestufte Zoomstufe (z. B. Abstand auf Achtel-Oktaven gerundet) einführen, die sich nur
-    bei spürbarer Zoomänderung ändert und die Aufteilung sofort neu berechnen lässt; Cluster/Symbole in eine eigene Ebene
-    auslagern, damit nur sie neu gebaut wird. Übergang weich animieren.
-- **Cluster farbig nach Inhalt:** Nur Ziele: rot (Zielfarbe); nur Kräfte/Fahrzeuge: Kräftefarbe; nur Markierungen:
-  deren Farbe, falls einheitlich; gemischt: neutrale Universalfarbe (z. B. Grau/Dunkelblau).
-- **Zielperson betritt Gebäude:** Der Schalter „Unterwegs“ (zu Fuß, Fahrzeug, ÖPNV) bekommt eine vierte Stellung
-  „Gebäude“. Antippen öffnet wie beim Fahrzeug die Auswahl der verfügbaren Zielobjekte (nächstgelegene zuerst); die
-  Person steckt dann im Gebäude (Standort folgt ihm, kein eigenes Symbol, Name in der Beschriftung des Objekts). Beim
-  Zielobjekt stehen die Personen darin unter „Insassen“ bzw. „Im Gebäude“ mit dem roten Symbol zum Verlassen (wie
-  „Aussteigen“ beim Fahrzeug). Das Datenmodell kennt die Bindung an ein Objekt schon (`bindung.art = objekt`).
-- **„Unterwegs“ nur an einer Stelle:** Der Schalter erscheint bei der Zielperson zusätzlich auf der Bearbeiten-Seite
-  (`bindingSection` im TargetEditor). Ausnahme von „alles Bearbeiten unter Bearbeiten“, weil schnell erreichbar sein
-  muss: nur in der Übersicht (Detailansicht/Kurzübersicht), im Editor entfernen.
-- **Kopfzeile der Kurzübersicht nur groß mit Hintergrund:** In der niedrigen Stufe (schwebende Glaskarte) soll die
-  Kopfzeile reines Liquid Glass sein, ohne den deckenden Hintergrund mit Verlauf (der dort als dunkler Balken wirkt).
-  Den Hintergrund nur zeigen, wenn das Fenster weiter aufgezogen ist (mittlere/große Stufe bzw. sobald der Inhalt
-  gescrollt wird): Stufe an den QuickLookHeader weitergeben (`quickLookDetent`) oder an der Scrollposition festmachen.
-- **X zum Leeren doppelt:** Seit 0.39 haben alle einzeiligen Textfelder app-weit das System-X
-  (`UITextField.appearance().clearButtonMode`); Suchfelder mit eigenem X zeigen dadurch zwei (z. B. Suche in „Standort
-  setzen“). Alle Stellen prüfen, die schon ein eigenes Leeren haben (SearchField in TabHeader.swift, SearchSheet,
-  TransitExplorer, HistoryMode, PillPicker, PlacementBar, Ortswahl, AddressCompletionField), und je Feld genau ein X:
-  entweder das System-X global abschalten und gezielt `.clearable` nutzen, oder in diesen Feldern das eigene X
-  entfernen. Bevorzugt: kein globales Appearance, sondern ein einheitlicher Baustein für alle Felder.
-- **Dynamic Island sieht komisch aus:** Läuft daneben etwas anderes (z. B. die Standortanzeige des Systems oder eine
-  andere App), zeigt iOS unsere Live-Aktivität nur in der Minimal-Form als losgelöste Blase rechts: derzeit ein roter
-  Punkt mit rotem Hof in einem schwarzen Kreis, der wie ein Aufnahme- oder Fehlersymbol wirkt. Minimal-Form klarer
-  gestalten (z. B. rotes Standortsymbol `location.fill` bzw. kleines „S“-Abzeichen, ohne Hof) und Kompakt-Form prüfen
-  (Abstände, Schriftgröße, „SENTINEL“ ggf. kürzer). Auf dem Gerät mit und ohne parallele Anzeigen ansehen.
-- **Ortswahl („Standort setzen“): Suche wie auf der Karte:** Das Suchfeld im Dialog zum Setzen eines Punkts nutzt
-  dieselben Vorschläge wie die Suche auf der Karte (SearchService: Anschriften, Orte und Firmen, Kreuzungen,
-  Haltestellen, ggf. Objekte aus der Lage), statt nur Apples Adresssuche beim Bestätigen.
 - **Performance prüfen (0.40: nur gezielt, Messung steht aus):** Kartenbildschirm messen (Instruments: Time Profiler, SwiftUI-Updates, Hitches). Kandidaten:
   `MapScreen` baut bei jeder Standort- und Kameraänderung viel neu; Ebenen auf eigene beobachtbare Objekte aufteilen
   (wie Routenlinie/Spurende); teure Berechnungen (Clustern/Auseinanderrücken, Spur-Farbverläufe, Häufigkeit über alle

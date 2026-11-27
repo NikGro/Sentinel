@@ -133,6 +133,7 @@ struct TrackerDetailScreen: View {
         Section("Gerät") {
             TextField("Name", text: $name)
                 .onSubmit { save { $0.name = String(name.trimmingCharacters(in: .whitespaces).prefix(60)) } }
+                .clearable($name)
             LabeledContent("Anbieter", value: tracker.data.providerTitle)
             LabeledContent("Kennung") {
                 Text(tracker.data.kennung)
@@ -192,6 +193,7 @@ struct TrackerDetailScreen: View {
                     .font(.callout.monospaced())
                     .autocorrectionDisabled()
                     .textInputAutocapitalization(.never)
+                    .clearable($customCommand)
                 Button("Eigenen Befehl senden", systemImage: "paperplane") { send(.init(art: "eigen", text: customCommand)) }
                     .disabled(!customCommand.hasPrefix("*HQ,\(tracker.kennung),") || !customCommand.hasSuffix("#"))
             }

@@ -69,9 +69,12 @@ struct ProfileEditor: View {
             Section {
                 TextField("Name", text: $name)
                     .textContentType(.name)
+                    .clearable($name)
                 TextField("Spitzname", text: $nickname)
                     .autocorrectionDisabled()
+                    .clearable($nickname)
                 TextField("Dienststelle", text: $unit)
+                    .clearable($unit)
             } header: {
                 Text("Pflichtangaben")
             } footer: {
@@ -84,6 +87,7 @@ struct ProfileEditor: View {
                     TextField("Handynummer", text: $phone)
                         .textContentType(.telephoneNumber)
                         .keyboardType(.phonePad)
+                        .clearable($phone)
                     Button("Aus Kontakten", systemImage: "person.crop.circle.badge.plus") { showsContactPicker = true }
                         .labelStyle(.iconOnly)
                         .buttonStyle(.borderless)

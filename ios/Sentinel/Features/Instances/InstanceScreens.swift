@@ -337,6 +337,7 @@ private struct InstanceForm: View {
         NavigationStack {
             Form {
                 TextField("Name", text: $name)
+                    .clearable($name)
                 TextField("Beschreibung (optional)", text: $description, axis: .vertical)
                     .lineLimit(2...5)
                     .clearable($description)

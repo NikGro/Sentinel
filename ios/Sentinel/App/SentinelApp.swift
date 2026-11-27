@@ -6,10 +6,6 @@ struct SentinelApp: App {
     @State private var model = AppModel()
     @Environment(\.scenePhase) private var scenePhase
 
-    init() {
-        // Einzeilige Textfelder: X zum Leeren, solange man darin schreibt.
-        UITextField.appearance().clearButtonMode = .whileEditing
-    }
 
     var body: some Scene {
         WindowGroup {
