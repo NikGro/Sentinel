@@ -9,8 +9,8 @@ statt jede Änderung sofort einzubauen. Erledigtes wandert mit Version ins CHANG
 
 - **Standortspur wechselt weiter die Dicke (Screenshots 27.11., 17:21):** Dieselbe Stelle wird beim Fahren mal dicker,
   mal dünner; zu sehen sind dabei zwei Linien nebeneinander (rot und blau). Prüfen:
-  - Liegen zwei Standortspur-Objekte für dieselbe Person auf der Karte (dann zwei Linien, je nach Einfärbung rot/blau)?
-    Doppelte Objekte je Person verhindern bzw. zusammenführen.
+  - Nur eine Standortspur angelegt (geklärt): Die zwei Linien sind Hin- und Rückfahrt derselben Spur, die Dicke wechselt
+    an derselben Stelle zwischen zwei Aufnahmen. Ursache liegt also im Zeichnen, nicht in doppelten Objekten.
   - SwiftUI-MapKit legt Linien mit Farbverlauf beim Neuaufbau neu an und zeichnet sie kurz mit anderer Breite/Deckkraft.
     Saubere Lösung statt weiterer Versuche in SwiftUI: die Standortspur als eigenes Overlay direkt in die MKMapView
     (die MapEngine hält sie) mit eigenem Renderer (`MKGradientPolylineRenderer`, feste Breite in Punkten), Punkte nur
