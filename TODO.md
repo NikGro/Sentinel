@@ -7,6 +7,24 @@ statt jede Änderung sofort einzubauen. Erledigtes wandert mit Version ins CHANG
 
 ### Nach 0.39 offen
 
+- **Stau auf der Route einfärben (ohne Sonderrechte):** Abschnitte mit stockendem Verkehr auf der Routenlinie gelb bzw.
+  orange (nicht rot, das ist Sonderrechten vorbehalten).
+  - Stand: Apple Karten zeigt die Verkehrslage nur als Kartenebene; je Abschnitt gibt MapKit sie nicht heraus.
+  - Sauberer Weg: TomTom (Schlüssel ohnehin für Sperrungen) liefert zur Route Verkehrsabschnitte mit Verzögerung
+    (Routing-API mit `sectionType=traffic`, die eigene Route als Stützpunkte) bzw. Fließgeschwindigkeiten je Abschnitt.
+    Server fragt das je neu berechneter Route einmal ab und gibt die Abschnitte mit; die App färbt sie ein. Erst angehen,
+    wenn der TomTom-Schlüssel hinterlegt ist; Kontingent beachten.
+- **Prüfung auf Umwege und Behelfslösungen:** Einmal alles durchgehen, wo wir mit Tricks statt auf direktem Weg arbeiten,
+  und je Stelle entscheiden: behalten (begründet), sauber ersetzen oder streichen. Bekannte Kandidaten:
+  - Apples Route als Folge von Durchfahrtspunkten für Valhalla (Staus ohne Sonderrechte; mit TomTom-Verkehr ersetzbar).
+  - Eigene Kartensteuerung (MapEngine) mit eigenen Gesten statt der MapKit-Bedienung; eigener Punkt vom Bildschirm
+    gezeichnet; Kameramitte versetzt, damit der Pfeil höher sitzt (Versatz je Bild nachgemessen).
+  - Routenlinie aus Lot und Vorlauf statt aus dem Fortschritt des Navigationskerns.
+  - Sperrungen als Meidepunkte entlang der Strecke (statt Flächen) wegen Valhalla-Grenzen.
+  - Parallel-Modus: Straße des Ziels über Meidepunkte, Fallback bei großem Umweg.
+  - Wenden-Variante: zusätzliche Route ohne Startrichtung zum Vergleich.
+  - Straße am eigenen Punkt: Server-Straßenverzeichnis mit Apples Umkehrsuche als Rückfall.
+  - Vorlauf/Kreuzungen: Apples Umkehrsuche für die Straße des Ziels.
 - **SOS als kritischer Alarm:** Drückt ein Fahnder SOS, soll bei allen anderen außerhalb der App eine Mitteilung mit
   Alarmpriorität kommen, leise (etwa 10 % Lautstärke), aber immer hörbar, auch im Stumm- und Fokus-Modus.
   - Stand: Die App schickt bei SOS schon eine lokale Mitteilung als „Dringend“ (time-sensitive), sofern sie im
