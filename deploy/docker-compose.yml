@@ -13,6 +13,9 @@ services:
       SENTINEL_TRACKER_PORT: "5013"
       SENTINEL_VALHALLA_URL: http://Sentinel-Valhalla:8002
       SENTINEL_ARGUS_DIR: /argus
+      # Eigene Karte (Vektorkacheln Deutschland und Schriften, nur lesend) und Ortssuche (Photon im selben Netz).
+      SENTINEL_KARTE_DIR: /karte
+      SENTINEL_PHOTON_URL: http://Sentinel-Photon:2322
       # Lokales Straßenverzeichnis für die schnelle Kreuzungssuche (braucht den größeren Speicher unten).
       SENTINEL_STRASSENVERZEICHNIS: "an"
       # Node.js darf bis 1,5 GB nutzen; der Rest des Containers bleibt für den Prozess selbst.
@@ -24,6 +27,7 @@ services:
       - "5013:5013"
     volumes:
       - ./data:/data
+      - ../karte:/karte:ro
       - ${ARGUS_DATA_DIR:-./argus-leer}:/argus:ro
     networks: [sentinel]
     # Härtung: kein Schreibzugriff außerhalb von /data, keine Sonderrechte.
