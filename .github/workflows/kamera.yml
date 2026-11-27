@@ -84,6 +84,10 @@ jobs:
           DATA=""
           : > build/kamera/kamera.jsonl
           for T in testKameraBeimAnheften testKameraUnterUnruhe; do
+            # iOS startet die App nach dem Beenden selbst wieder (Standort im Hintergrund), dann ohne die Startargumente
+            # des Tests: Sie zeigte die Anmeldung statt der Beispieldaten. Vor jedem Fall beenden.
+            xcrun simctl terminate booted de.nglab.sentinel 2>/dev/null || true
+            sleep 1
             xcodebuild test-without-building \
               -project Sentinel.xcodeproj -scheme Sentinel \
               -destination "platform=iOS Simulator,name=${{ steps.sim.outputs.device }}" \
