@@ -7,6 +7,15 @@ statt jede Änderung sofort einzubauen. Erledigtes wandert mit Version ins CHANG
 
 ### Nach 0.41 offen
 
+- **Auseinandergerückte Symbole zittern beim Zoomen:** Sie passen sich jetzt sofort an (0.41), zittern dabei aber.
+  - Ursache (Code): Seit 0.40 stehen sie an einer eigenen Koordinate, die aus dem Bildschirmversatz über Meter je Punkt
+    umgerechnet wird. Beim Zoomen ändert sich die Umrechnung laufend, neu berechnet wird aber nur in Stufen (Achtel-
+    Oktaven) und mit dem Abstand des jeweiligen Moments: Die Symbole springen bei jeder Stufe ein Stück, dazwischen
+    wandern sie mit der Karte.
+  - Behebung: Symbole wieder am echten Ort verankern und den Versatz in Bildschirmpunkten zeichnen (bleibt beim Zoomen
+    ruhig, wie vor 0.40), aber die Trefferfläche korrekt: Anzeige so groß machen, dass sie das versetzte Symbol umfasst,
+    und nur das Symbol selbst antippbar (`contentShape` nur dort, übriger Bereich lässt Tipps durch). Mit dem UI-Test für
+    übereinanderliegende Symbole absichern. Den Versatz beim Wechsel der Stufe weich animieren.
 - **Auswahlmodus: „Optionen“ statt „…“:** Der runde „…“-Knopf neben „Fertig“ ist zu klein geraten (Menü-Knopf übernimmt
   die Knopfform nicht). Stattdessen ein Text-Knopf „Optionen“ in genau derselben Form und Größe wie „Fertig“ (blau
   gefüllt, Kapsel, gleiche Höhe), der das Menü öffnet.
