@@ -53,7 +53,11 @@ struct Lagebildschirm: View {
                     .glassEffect(.regular.tint(.red).interactive(), in: .circle)
                     GlassEffectContainer(spacing: 8) {
                         VStack(spacing: 8) {
-                            Kartenknopf(symbol: "location.north", titel: "Norden oben") { steuerung.norden() }
+                            // Standort und Kompass in einem Knopf: heftet an (Fahrtrichtung), erneut Norden oben.
+                            Kartenknopf(symbol: steuerung.anheftung == .frei ? "location" : (steuerung.anheftung == .norden ? "location.north.fill" : "location.fill"),
+                                        titel: "Standort und Kompass", aktiv: steuerung.anheftung != .frei) {
+                                steuerung.anheftenUmschalten(ort: modell.standort.aktuell)
+                            }
                             Kartenknopf(symbol: "car.side.rear.and.collision.and.car.side.front", titel: "Verkehr", aktiv: verkehr) {
                                 verkehr.toggle()
                                 steuerung.verkehr(verkehr)

@@ -27,6 +27,8 @@ import androidx.compose.material.icons.filled.DirectionsWalk
 import androidx.compose.material.icons.filled.Explore
 import androidx.compose.material.icons.filled.Groups
 import androidx.compose.material.icons.filled.Map
+import androidx.compose.material.icons.filled.NearMe
+import androidx.compose.material.icons.filled.Navigation
 import androidx.compose.material.icons.filled.MoreHoriz
 import androidx.compose.material.icons.filled.PersonSearch
 import androidx.compose.material.icons.filled.Search
@@ -69,7 +71,9 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import de.nglab.sentinel.AppModell
 import de.nglab.sentinel.karte.KartenSteuerung
 import de.nglab.sentinel.karte.LageKarte
+import de.nglab.sentinel.kern.karte.Anheftung
 import de.nglab.sentinel.kern.karte.KartenObjekt
+import de.nglab.sentinel.kern.modell.GeoPunkt
 import de.nglab.sentinel.kern.karte.Objektart
 import de.nglab.sentinel.kern.lage.LageStand
 import de.nglab.sentinel.kern.modell.Fortbewegung
@@ -138,7 +142,17 @@ private fun Lagebildschirm(modell: AppModell, stand: LageStand) {
             horizontalAlignment = Alignment.End,
         ) {
             SosKnopf(stand.eigenerNotruf) { if (stand.eigenerNotruf) modell.lage.notrufBeenden() else modell.lage.notrufAusloesen() }
-            Kartenknopf(Icons.Filled.Explore, "Norden oben") { steuerung.norden() }
+            // Standort und Kompass in einem Knopf: heftet an (Fahrtrichtung), erneut Norden oben.
+            val ort by modell.ort.collectAsStateWithLifecycle()
+            Kartenknopf(
+                when (steuerung.anheftung) {
+                    Anheftung.Frei -> Icons.Filled.NearMe
+                    Anheftung.Norden -> Icons.Filled.Explore
+                    else -> Icons.Filled.Navigation
+                },
+                "Standort und Kompass",
+                aktiv = steuerung.anheftung != Anheftung.Frei,
+            ) { steuerung.anheftenUmschalten(ort?.let { GeoPunkt(it.lat, it.lon) }) }
             Kartenknopf(Icons.Filled.Traffic, "Verkehr", aktiv = verkehr) { verkehr = !verkehr; steuerung.verkehr(verkehr) }
             Kartenknopf(Icons.Filled.Add, "Hinzufügen", hervorgehoben = true) {}
         }

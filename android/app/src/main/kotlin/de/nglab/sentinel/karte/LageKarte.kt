@@ -17,6 +17,8 @@ import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import de.nglab.sentinel.AppModell
+import de.nglab.sentinel.kern.karte.Anheftung
+import de.nglab.sentinel.kern.karte.Kamerafuehrung
 import de.nglab.sentinel.kern.karte.KartenObjekt
 import de.nglab.sentinel.kern.karte.Quellen
 import de.nglab.sentinel.kern.karte.Szene
@@ -40,6 +42,27 @@ private val ANTIPPBAR = arrayOf(
 /** Steuerung der Karte von außen (Kamera, Verkehrslage); gefüllt, sobald die Karte bereit ist. */
 class KartenSteuerung {
     internal var karte: MapLibreMap? = null
+    val fuehrung = Kamerafuehrung()
+    /** Angeheftet (für den Standort-/Kompassknopf). */
+    var anheftung by mutableStateOf(Anheftung.Frei)
+        internal set
+    internal var gesteAktiv = false
+
+    /** Standort-/Kompassknopf: heftet an (Fahrtrichtung), erneut getippt Norden oben, dann wieder Fahrtrichtung. */
+    fun anheftenUmschalten(ort: GeoPunkt?) {
+        val naechste = if (fuehrung.anheftung == Anheftung.Richtung) Anheftung.Norden else Anheftung.Richtung
+        fuehrung.anheften(naechste, ort?.lat ?: 53.5)
+        anheftung = fuehrung.anheftung
+        if (ort != null) folgen(ort, null, null, null, sofort = true)
+    }
+
+    internal fun folgen(ort: GeoPunkt, tempo: Double?, kurs: Double?, kompass: Double?, sofort: Boolean = false) {
+        val k = karte ?: return
+        if (gesteAktiv) return
+        val ziel = fuehrung.ziel(ort, tempo, kurs, kompass) ?: return
+        val position = CameraPosition.Builder().target(LatLng(ziel.mitte.lat, ziel.mitte.lon)).zoom(ziel.zoom).bearing(ziel.richtung).tilt(ziel.neigung).build()
+        k.easeCamera(CameraUpdateFactory.newCameraPosition(position), if (sofort) 600 else Kamerafuehrung.FAHRT_MS.toInt(), false)
+    }
 
     fun zeigen(p: GeoPunkt, zoom: Double = 16.0) {
         karte?.animateCamera(CameraUpdateFactory.newLatLngZoom(LatLng(p.lat, p.lon), zoom), 600)
@@ -94,6 +117,54 @@ fun LageKarte(
                 karte.setStyle(Style.Builder().fromUri("$server/karte/stil/${if (dunkel) "dunkel" else "hell"}.json")) { s -> style = s }
                 addOnStyleImageMissingListener { name -> karte.style?.let { Kartenbilder.anlegen(it, name) } }
                 karte.addOnCameraIdleListener { zoom = karte.cameraPosition.zoom }
+                // Gesten: Verschieben bzw. Herausdrehen löst die Kopplung, Zoomen und Kippen setzen nur Sollwerte.
+                // Während einer Geste setzt die Führung die Kamera nie (sonst würde die Geste abgebrochen).
+                var startMitte: LatLng? = null
+                var startRichtung = 0.0
+                karte.addOnMoveListener(object : MapLibreMap.OnMoveListener {
+                    override fun onMoveBegin(detector: org.maplibre.android.gestures.MoveGestureDetector) {
+                        steuerung.gesteAktiv = true
+                        startMitte = karte.cameraPosition.target
+                    }
+                    override fun onMove(detector: org.maplibre.android.gestures.MoveGestureDetector) {
+                        val start = startMitte ?: return
+                        val p = karte.projection.toScreenLocation(start)
+                        val mitte = android.graphics.PointF(width / 2f, height / 2f)
+                        val strecke = kotlin.math.hypot((p.x - mitte.x).toDouble(), (p.y - mitte.y).toDouble()) / resources.displayMetrics.density
+                        if (steuerung.fuehrung.geste(strecke, 0.0)) steuerung.anheftung = Anheftung.Frei
+                    }
+                    override fun onMoveEnd(detector: org.maplibre.android.gestures.MoveGestureDetector) {
+                        steuerung.gesteAktiv = false
+                    }
+                })
+                karte.addOnRotateListener(object : MapLibreMap.OnRotateListener {
+                    override fun onRotateBegin(detector: org.maplibre.android.gestures.RotateGestureDetector) {
+                        steuerung.gesteAktiv = true
+                        startRichtung = karte.cameraPosition.bearing
+                    }
+                    override fun onRotate(detector: org.maplibre.android.gestures.RotateGestureDetector) {
+                        if (steuerung.fuehrung.geste(0.0, karte.cameraPosition.bearing - startRichtung)) steuerung.anheftung = Anheftung.Frei
+                    }
+                    override fun onRotateEnd(detector: org.maplibre.android.gestures.RotateGestureDetector) {
+                        steuerung.gesteAktiv = false
+                    }
+                })
+                karte.addOnScaleListener(object : MapLibreMap.OnScaleListener {
+                    override fun onScaleBegin(detector: org.maplibre.android.gestures.StandardScaleGestureDetector) { steuerung.gesteAktiv = true }
+                    override fun onScale(detector: org.maplibre.android.gestures.StandardScaleGestureDetector) {}
+                    override fun onScaleEnd(detector: org.maplibre.android.gestures.StandardScaleGestureDetector) {
+                        steuerung.gesteAktiv = false
+                        steuerung.fuehrung.nutzerZoom(karte.cameraPosition.zoom, karte.cameraPosition.tilt)
+                    }
+                })
+                karte.addOnShoveListener(object : MapLibreMap.OnShoveListener {
+                    override fun onShoveBegin(detector: org.maplibre.android.gestures.ShoveGestureDetector) { steuerung.gesteAktiv = true }
+                    override fun onShove(detector: org.maplibre.android.gestures.ShoveGestureDetector) {}
+                    override fun onShoveEnd(detector: org.maplibre.android.gestures.ShoveGestureDetector) {
+                        steuerung.gesteAktiv = false
+                        steuerung.fuehrung.nutzerZoom(karte.cameraPosition.zoom, karte.cameraPosition.tilt)
+                    }
+                })
                 karte.addOnMapClickListener { lage ->
                     val p = karte.projection.toScreenLocation(lage)
                     val r = 24f * resources.displayMetrics.density
@@ -155,6 +226,8 @@ fun LageKarte(
         val s = style ?: return@LaunchedEffect
         val o = ort
         s.getSourceAs<GeoJsonSource>(Quellen.ICH)?.setGeoJson(szene.ich(o?.let { GeoPunkt(it.lat, it.lon) }, o?.richtung, "punkt", stand.haeltA))
+        // Angeheftet: Kamera folgt dem Standort.
+        if (o != null) steuerung.folgen(GeoPunkt(o.lat, o.lon), o.tempo, o.richtung, null)
     }
 
     AndroidView(factory = { ansicht }, modifier = modifier)

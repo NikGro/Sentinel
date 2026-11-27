@@ -11,8 +11,40 @@ private let antippbar: Set<String> = [
 
 /// Steuerung der Karte von außen (Kamera, Verkehrslage).
 @MainActor
+@Observable
 final class KartenSteuerung {
-    fileprivate weak var karte: MLNMapView?
+    @ObservationIgnored fileprivate weak var karte: MLNMapView?
+    @ObservationIgnored let fuehrung = Kamerafuehrung()
+    @ObservationIgnored fileprivate var gesteAktiv = false
+    /// Angeheftet (für den Standort-/Kompassknopf).
+    private(set) var anheftung: Anheftung = .frei
+
+    /// Standort-/Kompassknopf: heftet an (Fahrtrichtung), erneut getippt Norden oben, dann wieder Fahrtrichtung.
+    func anheftenUmschalten(ort: CLLocation?) {
+        let naechste: Anheftung = fuehrung.anheftung == .richtung ? .norden : .richtung
+        fuehrung.anheften(art: naechste, lat: ort?.coordinate.latitude ?? 53.5)
+        anheftung = fuehrung.anheftung
+        if let ort { folgen(ort, sofort: true) }
+    }
+
+    fileprivate func folgen(_ ort: CLLocation, sofort: Bool = false) {
+        guard let karte, !gesteAktiv else { return }
+        let punkt = GeoPunkt(lat: ort.coordinate.latitude, lon: ort.coordinate.longitude)
+        let tempo: KotlinDouble? = ort.speed >= 0 ? KotlinDouble(value: ort.speed) : nil
+        let kurs: KotlinDouble? = ort.course >= 0 ? KotlinDouble(value: ort.course) : nil
+        guard let ziel = fuehrung.ziel(ort: punkt, tempo: tempo, kurs: kurs, kompass: nil) else { return }
+        let kamera = MLNMapCamera()
+        kamera.centerCoordinate = CLLocationCoordinate2D(latitude: ziel.mitte.lat, longitude: ziel.mitte.lon)
+        kamera.heading = ziel.richtung
+        kamera.pitch = ziel.neigung
+        // Höhe aus der Zoomstufe (MapLibre rechnet Kamera in Metern über Grund).
+        kamera.altitude = MLNAltitudeForZoomLevel(ziel.zoom, ziel.neigung, ziel.mitte.lat, karte.bounds.size)
+        karte.fly(to: kamera, withDuration: sofort ? 0.6 : Double(Kamerafuehrung.companion.FAHRT_MS) / 1000, completionHandler: nil)
+    }
+
+    fileprivate func geste(verschoben: Double, gedreht: Double) {
+        if fuehrung.geste(verschobenPunkte: verschoben, gedrehtGrad: gedreht) { anheftung = .frei }
+    }
 
     func zeigen(_ p: GeoPunkt, zoom: Double = 16) {
         karte?.setCenter(CLLocationCoordinate2D(latitude: p.lat, longitude: p.lon), zoomLevel: zoom, animated: true)
@@ -38,7 +70,7 @@ struct LageKarte: UIViewRepresentable {
     let beiAuswahl: (KartenObjekt) -> Void
     @Environment(\.colorScheme) private var farbschema
 
-    func makeCoordinator() -> Koordinator { Koordinator(modell: modell, beiAuswahl: beiAuswahl) }
+    func makeCoordinator() -> Koordinator { Koordinator(modell: modell, steuerung: steuerung, beiAuswahl: beiAuswahl) }
 
     func makeUIView(context: Context) -> MLNMapView {
         let server = modell.zugang?.server ?? ""
@@ -70,6 +102,7 @@ struct LageKarte: UIViewRepresentable {
     @MainActor
     final class Koordinator: NSObject, MLNMapViewDelegate {
         let modell: AppModell
+        weak var steuerung: KartenSteuerung?
         var beiAuswahl: (KartenObjekt) -> Void
         weak var karte: MLNMapView?
         private var stil: MLNStyle?
@@ -77,9 +110,11 @@ struct LageKarte: UIViewRepresentable {
         private var zoom: Double = 14.5
         private var takt: Timer?
         private var letzterStand: LageStand?
+        private var letzterOrt: Date?
 
-        init(modell: AppModell, beiAuswahl: @escaping (KartenObjekt) -> Void) {
+        init(modell: AppModell, steuerung: KartenSteuerung, beiAuswahl: @escaping (KartenObjekt) -> Void) {
             self.modell = modell
+            self.steuerung = steuerung
             self.beiAuswahl = beiAuswahl
         }
 
@@ -90,6 +125,33 @@ struct LageKarte: UIViewRepresentable {
             takt = Timer.scheduledTimer(withTimeInterval: 0.1, repeats: true) { [weak self] _ in
                 MainActor.assumeIsolated { self?.oepnvTakt() }
             }
+        }
+
+        private var startMitte: CLLocationCoordinate2D?
+        private var startRichtung: Double = 0
+
+        func mapView(_ mapView: MLNMapView, regionWillChangeWith reason: MLNCameraChangeReason, animated: Bool) {
+            let geste: MLNCameraChangeReason = [.gesturePan, .gesturePinch, .gestureRotate, .gestureTilt, .gestureZoomIn, .gestureZoomOut, .gestureOneFingerZoom]
+            guard !reason.intersection(geste).isEmpty else { return }
+            steuerung?.gesteAktiv = true
+            startMitte = mapView.centerCoordinate
+            startRichtung = mapView.direction
+        }
+
+        func mapView(_ mapView: MLNMapView, regionIsChangingWith reason: MLNCameraChangeReason) {
+            guard let steuerung, steuerung.gesteAktiv, let start = startMitte else { return }
+            let p = mapView.convert(start, toPointTo: mapView)
+            let mitte = CGPoint(x: mapView.bounds.midX, y: mapView.bounds.midY)
+            let strecke = reason.contains(.gesturePan) ? Double(hypot(p.x - mitte.x, p.y - mitte.y)) : 0
+            let gedreht = reason.contains(.gestureRotate) ? mapView.direction - startRichtung : 0
+            steuerung.geste(verschoben: strecke, gedreht: gedreht)
+        }
+
+        func mapView(_ mapView: MLNMapView, regionDidChangeWith reason: MLNCameraChangeReason, animated: Bool) {
+            guard let steuerung, steuerung.gesteAktiv else { return }
+            steuerung.gesteAktiv = false
+            // Zoomen und Kippen: neue Sollwerte, angeheftet bleibt es.
+            steuerung.fuehrung.nutzerZoom(zoom: mapView.zoomLevel, neigung: mapView.camera.pitch)
         }
 
         func mapView(_ mapView: MLNMapView, regionDidChangeAnimated animated: Bool) {
@@ -118,6 +180,11 @@ struct LageKarte: UIViewRepresentable {
             let punkt = ort.map { GeoPunkt(lat: $0.coordinate.latitude, lon: $0.coordinate.longitude) }
             let richtung: KotlinDouble? = (ort?.course ?? -1) >= 0 ? KotlinDouble(value: ort!.course) : nil
             setzen(stil, Quellen.shared.ICH, szene.ich(p: punkt, richtung: richtung, darstellung: "punkt", mitA: stand.haeltA))
+            // Angeheftet: Kamera folgt dem Standort.
+            if let ort, ort.timestamp != letzterOrt {
+                letzterOrt = ort.timestamp
+                steuerung?.folgen(ort)
+            }
         }
 
         private func oepnvTakt() {

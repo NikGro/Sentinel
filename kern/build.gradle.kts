@@ -31,6 +31,7 @@ kotlin {
             implementation("org.jetbrains.kotlinx:kotlinx-coroutines-core:1.10.2")
             implementation("io.ktor:ktor-client-core:3.3.2")
             implementation("io.ktor:ktor-client-websockets:3.3.2")
+            implementation("org.jetbrains.kotlinx:kotlinx-datetime:0.6.2")
         }
         commonTest.dependencies {
             implementation(kotlin("test"))

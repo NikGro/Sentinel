@@ -79,6 +79,9 @@ jobs:
             adb exec-out screencap -p > bilder/01-start.png
             adb shell uiautomator dump /sdcard/ansicht.xml && adb pull /sdcard/ansicht.xml bilder/01-start.xml || true
             adb logcat -d -t 400 > bilder/logcat.txt || true
+            grep -E "FATAL|AndroidRuntime|E/Sentinel|MapLibre" bilder/logcat.txt | tail -40 || true
+            # Bildschirmfotos auch im Protokoll (Artefakte sind nicht überall abrufbar), verkleinert.
+            for b in bilder/*.png; do echo "=====BILD $b====="; base64 -w0 "$b"; echo; echo "=====BILD-ENDE====="; done
       - uses: actions/upload-artifact@v5
         if: always()
         with:

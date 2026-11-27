@@ -49,8 +49,9 @@ jobs:
         run: |
           mkdir -p bilder
           xcrun xcresulttool export attachments --path apple/build/ergebnis.xcresult --output-path bilder 2>/dev/null || true
-          grep -E "error:" apple/build.log | head -50 > bilder/fehler.txt || true
+          grep -E "error:" apple/build.log | head -60 | tee bilder/fehler.txt || true
           ls bilder
+          for b in $(find bilder -name "*.png" | head -6); do sips -Z 900 "$b" >/dev/null 2>&1 || true; echo "=====BILD $b====="; base64 -i "$b" | tr -d '\n'; echo; echo "=====BILD-ENDE====="; done
       - uses: actions/upload-artifact@v5
         if: always()
         with:
