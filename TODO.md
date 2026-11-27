@@ -7,6 +7,9 @@ statt jede Änderung sofort einzubauen. Erledigtes wandert mit Version ins CHANG
 
 ### Nach 0.41 offen
 
+- **Kopfzeile der Kurzübersicht: Hintergrund nur ganz oben:** Auch in der mittleren Stufe (halbe Höhe) reines Liquid
+  Glass; den deckenden Hintergrund mit Verlauf nur in der großen Stufe (fast Vollbild). Bisher: alles außer der
+  niedrigen Stufe (`isLow`), künftig nur bei `.large` (Detent an QuickLookSheet weitergeben).
 - **Standortspur als Pinsel (Grundidee, Neukonzept):** Die Spur soll malen, wo man tatsächlich war, wie ein Pinsel,
   zu Fuß wie im Auto; nicht nachträglich springen oder sich an die Straßenführung anpassen.
   - Springen (Ursache, Code): Das wachsende Ende kommt aus den eigenen GPS-Punkten, der Rest alle 30 s vom Server;
