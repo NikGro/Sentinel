@@ -7,6 +7,14 @@ statt jede Änderung sofort einzubauen. Erledigtes wandert mit Version ins CHANG
 
 ### Nach 0.41 offen
 
+- **Standortspur wechselt weiter die Dicke (Screenshots 27.11., 17:21):** Dieselbe Stelle wird beim Fahren mal dicker,
+  mal dünner; zu sehen sind dabei zwei Linien nebeneinander (rot und blau). Prüfen:
+  - Liegen zwei Standortspur-Objekte für dieselbe Person auf der Karte (dann zwei Linien, je nach Einfärbung rot/blau)?
+    Doppelte Objekte je Person verhindern bzw. zusammenführen.
+  - SwiftUI-MapKit legt Linien mit Farbverlauf beim Neuaufbau neu an und zeichnet sie kurz mit anderer Breite/Deckkraft.
+    Saubere Lösung statt weiterer Versuche in SwiftUI: die Standortspur als eigenes Overlay direkt in die MKMapView
+    (die MapEngine hält sie) mit eigenem Renderer (`MKGradientPolylineRenderer`, feste Breite in Punkten), Punkte nur
+    anhängen statt neu anlegen.
 - **Performance prüfen (0.40: nur gezielt, Messung steht aus):** Kartenbildschirm messen (Instruments: Time Profiler, SwiftUI-Updates, Hitches). Kandidaten:
   `MapScreen` baut bei jeder Standort- und Kameraänderung viel neu; Ebenen auf eigene beobachtbare Objekte aufteilen
   (wie Routenlinie/Spurende); teure Berechnungen (Clustern/Auseinanderrücken, Spur-Farbverläufe, Häufigkeit über alle
