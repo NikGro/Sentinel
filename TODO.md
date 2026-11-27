@@ -7,6 +7,14 @@ statt jede Änderung sofort einzubauen. Erledigtes wandert mit Version ins CHANG
 
 ### Nach 0.41 offen
 
+- **Unsichtbare ÖPNV-Linie fängt Tipps ab:** Setzt man ein Ziel in einen Bus, entsteht dafür eine ÖPNV-Strecke als
+  Objekt (Fahrt mit Fahrzeug), deren Linienverlauf ausgeblendet ist. Ein Tipp auf eine leere Stelle der Karte öffnete
+  trotzdem den Dialog dieser Buslinie.
+  - Ursache (Code): `shapes(at:)` in MapScreen+Interaction prüft bei ÖPNV-Strecken den Linienverlauf immer, auch wenn
+    er nicht gezeichnet wird (`showsPath` aus); gezeichnet wird er in `TransitLayer` nur mit `showsPath`.
+  - Behebung: nur Sichtbares antippbar machen (Linienverlauf nur mit `showsPath`, Halte nur mit `showsStops`); das
+    Fahrzeug selbst bleibt über sein Symbol antippbar. Allgemein prüfen, dass Treffer-Erkennung und Zeichnen dieselben
+    Bedingungen nutzen.
 - **Auseinandergerückte Symbole zittern beim Zoomen:** Sie passen sich jetzt sofort an (0.41), zittern dabei aber.
   - Ursache (Code): Seit 0.40 stehen sie an einer eigenen Koordinate, die aus dem Bildschirmversatz über Meter je Punkt
     umgerechnet wird. Beim Zoomen ändert sich die Umrechnung laufend, neu berechnet wird aber nur in Stufen (Achtel-
