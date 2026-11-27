@@ -21,20 +21,6 @@ statt jede Änderung sofort einzubauen. Erledigtes wandert mit Version ins CHANG
   - **Fenster des Standortverlaufs** (`HistoryPanel`) hat noch das alte Design: auf Variante 2 umstellen (Kopfzeile wie die
     Kurzübersichten, runde Glasknöpfe, Liquid Glass).
 
-- **Standortspur als Pinsel (Grundidee, Neukonzept):** Die Spur soll malen, wo man tatsächlich war, wie ein Pinsel,
-  zu Fuß wie im Auto; nicht nachträglich springen oder sich an die Straßenführung anpassen.
-  - Springen (Ursache, Code): Das wachsende Ende kommt aus den eigenen GPS-Punkten, der Rest alle 30 s vom Server;
-    der Server speichert gröber (Punkte etwa alle 15 s), also ersetzt beim Neuladen eine gröbere Linie die feine und
-    die Spur „rutscht“. Lösung: die eigene Spur vollständig aus den eigenen GPS-Punkten auf dem Gerät zeichnen
-    (lokal gespeichert, übersteht Neustart); der Server liefert nur die Spuren anderer und Verläufe, die vor der
-    Aufzeichnung auf diesem Gerät liegen.
-  - Mehrfach befahrene Stellen: nicht durch übereinanderliegende halbdurchsichtige Striche dunkler werden, sondern die
-    Farbe weich wechseln (Häufigkeit). Umsetzung als Raster „Pinselabdruck“: Durchfahrten je kleiner Zelle (z. B. 5 m)
-    zählen, je Zelle eine Farbe aus der Skala, mit weichem Übergang zu den Nachbarzellen; gezeichnet als eine
-    Ebene (z. B. eigene Kachel-Ebene bzw. Bild-Overlay) statt vieler Linien. Breite wie ein Pinsel (in Metern bzw.
-    Punkten fest), keine Ränder, Deckkraft einheitlich.
-  - Prüfen, was SwiftUI-MapKit dafür hergibt (eigene Kacheln/Overlays sind in SwiftUI-Map eingeschränkt); sonst eine
-    eigene Zeichenebene über der Karte, die mit der MapEngine-Kamera mitläuft.
 - **Performance prüfen (0.40: nur gezielt, Messung steht aus):** Kartenbildschirm messen (Instruments: Time Profiler, SwiftUI-Updates, Hitches). Kandidaten:
   `MapScreen` baut bei jeder Standort- und Kameraänderung viel neu; Ebenen auf eigene beobachtbare Objekte aufteilen
   (wie Routenlinie/Spurende); teure Berechnungen (Clustern/Auseinanderrücken, Spur-Farbverläufe, Häufigkeit über alle
@@ -76,6 +62,24 @@ statt jede Änderung sofort einzubauen. Erledigtes wandert mit Version ins CHANG
   gezeichnete Stelle). Prüfen, ob VoiceOver sie noch aktivieren kann; sonst eine eigene Bedienhilfe-Aktion ergänzen.
 
 ### Beobachten
+
+- **Standortspur als Pinsel:** Nach 0.41 (einfarbige Stücke, feste Breite) wirkt die Spur im Einsatz schon wie gewünscht;
+  das Neukonzept ist deshalb zurückgestellt. Wieder aufnehmen nur, wenn das Nachrutschen beim Neuladen vom Server oder
+  das Abdunkeln mehrfach befahrener Stellen doch stört. Ursprüngliche Notiz:
+  - **Standortspur als Pinsel (Grundidee, Neukonzept):** Die Spur soll malen, wo man tatsächlich war, wie ein Pinsel,
+    zu Fuß wie im Auto; nicht nachträglich springen oder sich an die Straßenführung anpassen.
+    - Springen (Ursache, Code): Das wachsende Ende kommt aus den eigenen GPS-Punkten, der Rest alle 30 s vom Server;
+      der Server speichert gröber (Punkte etwa alle 15 s), also ersetzt beim Neuladen eine gröbere Linie die feine und
+      die Spur „rutscht“. Lösung: die eigene Spur vollständig aus den eigenen GPS-Punkten auf dem Gerät zeichnen
+      (lokal gespeichert, übersteht Neustart); der Server liefert nur die Spuren anderer und Verläufe, die vor der
+      Aufzeichnung auf diesem Gerät liegen.
+    - Mehrfach befahrene Stellen: nicht durch übereinanderliegende halbdurchsichtige Striche dunkler werden, sondern die
+      Farbe weich wechseln (Häufigkeit). Umsetzung als Raster „Pinselabdruck“: Durchfahrten je kleiner Zelle (z. B. 5 m)
+      zählen, je Zelle eine Farbe aus der Skala, mit weichem Übergang zu den Nachbarzellen; gezeichnet als eine
+      Ebene (z. B. eigene Kachel-Ebene bzw. Bild-Overlay) statt vieler Linien. Breite wie ein Pinsel (in Metern bzw.
+      Punkten fest), keine Ränder, Deckkraft einheitlich.
+    - Prüfen, was SwiftUI-MapKit dafür hergibt (eigene Kacheln/Overlays sind in SwiftUI-Map eingeschränkt); sonst eine
+      eigene Zeichenebene über der Karte, die mit der MapEngine-Kamera mitläuft.
 
 - **Straßenverzeichnis beobachten:** Läuft mit 2 GB Container-Speicher, Node.js darf bis 1,5 GB nutzen. Stand
   22.11.: 286 MB im Betrieb, kein Neustart seit dem Update. Das nächste wöchentliche Neuladen über Overpass ist um
