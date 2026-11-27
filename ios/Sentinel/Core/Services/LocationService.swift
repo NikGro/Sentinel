@@ -63,6 +63,14 @@ final class LocationService {
         }
     }
 
+    /// Beim Zurückkehren in die App: Anzeige in Dynamic Island und Sperrbildschirm wiederherstellen, falls iOS sie
+    /// inzwischen beendet hat (spätestens nach acht Stunden oder weggewischt).
+    func restoreActivity() {
+        guard isRunning else { return }
+        SharingActivity.start(detail: Self.activityDetail)
+        activityRefreshedAt = .now
+    }
+
     func stop() {
         updates?.cancel()
         heartbeat?.cancel()

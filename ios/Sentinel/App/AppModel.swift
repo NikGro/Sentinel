@@ -143,6 +143,7 @@ final class AppModel {
     }
 
     func didBecomeActive() async {
+        location.restoreActivity()
         await lock.unlock()
     }
 

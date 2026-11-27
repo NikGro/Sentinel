@@ -18,6 +18,9 @@
   beim Zoomen; Tipps auf das versetzte Symbol prüft die Karte an der gezeichneten Stelle, Nachbarn werden nicht verdeckt
 - Standortspur nach Häufigkeit: weiche Farbübergänge (geglättet über etwa 70 m, an Übergängen kurze Stücke)
 - Kurzübersicht: Kopfzeile auch in der mittleren Stufe reines Liquid Glass, Hintergrund nur ganz aufgezogen
+- Dynamic Island: Anzeige fehlte zeitweise ganz. Start, Verlängern und Beenden der Live-Aktivität laufen jetzt
+  nacheinander (ein Start übernahm sonst eine gerade endende Aktivität); beim Zurückkehren in die App wird sie neu
+  angelegt, falls iOS sie beendet hat (spätestens nach acht Stunden)
 
 ## 0.41.0
 
