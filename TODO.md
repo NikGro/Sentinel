@@ -7,6 +7,20 @@ statt jede Änderung sofort einzubauen. Erledigtes wandert mit Version ins CHANG
 
 ### Nach 0.42 offen
 
+- **Hinzufügen überall wie beim Marker (reduzierte Ansicht):** Beim Setzen eines Markers bzw. Fahndungsraums ist die
+  Ansicht genau richtig: Nichts klappt auf, die Karte wird weich auf die Suchleiste reduziert, darunter die gelbe Leiste
+  (Hinweis, „Übernehmen“, X zum Abbrechen); Kompass und Tableiste bleiben.
+  - **SOS bleibt sichtbar:** In dieser reduzierten Ansicht fehlt derzeit der SOS-Knopf (`MapScreen` Overlay oben rechts
+    zeigt bei `tapMode != .none` nur den Kompass; `reducedTools` blendet SOS aus). SOS muss immer erreichbar bleiben.
+  - **ÖPNV hinzufügen** in derselben Form statt des aufklappenden Fensters (`TransitExplorer` als Sheet): gelbe Leiste mit
+    eigenem Text (z. B. Fahrzeug oder Haltestelle antippen bzw. Linie suchen) und X oben; die Suchleiste oben wird zur
+    Liniensuche. Abweichungen nur, soweit die Funktion sie braucht (Auswahl von Fahrt/Abschnitten, Einsteigen/Übernehmen),
+    sonst identisch aussehend.
+  - **Standortverlauf hinzufügen** ebenso: gelbe Leiste mit passendem Text und X oben (statt Schließen unten im Fenster);
+    die Suchleiste darf bleiben, um die Karte zu einer Straße zu bewegen.
+  - **Fenster des Standortverlaufs** (`HistoryPanel`) hat noch das alte Design: auf Variante 2 umstellen (Kopfzeile wie die
+    Kurzübersichten, runde Glasknöpfe, Liquid Glass).
+
 - **Standortspur als Pinsel (Grundidee, Neukonzept):** Die Spur soll malen, wo man tatsächlich war, wie ein Pinsel,
   zu Fuß wie im Auto; nicht nachträglich springen oder sich an die Straßenführung anpassen.
   - Springen (Ursache, Code): Das wachsende Ende kommt aus den eigenen GPS-Punkten, der Rest alle 30 s vom Server;
