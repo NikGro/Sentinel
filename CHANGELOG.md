@@ -5,6 +5,7 @@
 - ÖPNV hinzufügen: Die Karte lässt sich wieder verschieben und zoomen. Ihre Steuerung hatte sich an die Lagekarte
   darunter gehängt; danach hatte die Lagekarte zwei Steuerungen und lief beim Wischen viel zu schnell. Jede Steuerung
   nimmt jetzt nur eine Karte, die keiner anderen gehört
+- Dynamic Island und Sperrbildschirm: SENTINEL-Schild (Logo) in Rot statt Standortpfeil bzw. Punkt
 - Gruppenseite: Plus zum Anlegen eines Ziels (wie in der Hauptansicht), das neue Ziel kommt gleich in die Gruppe
 - Standortverlauf: keine gelbe Leiste mehr oben; das X sitzt im Fenster unten in der Kopfzeile neben „Auf die Karte
   legen“, oben bleibt nur die Suchleiste

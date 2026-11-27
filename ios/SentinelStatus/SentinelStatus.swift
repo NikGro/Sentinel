@@ -16,7 +16,7 @@ struct SharingLiveActivity: Widget {
         ActivityConfiguration(for: SharingAttributes.self) { context in
             // Sperrbildschirm und Mitteilungen.
             HStack(spacing: 12) {
-                LiveDot(size: 16)
+                SentinelLogo(size: 22)
                 VStack(alignment: .leading, spacing: 2) {
                     Text("SENTINEL teilt deinen Standort")
                         .font(.headline)
@@ -33,7 +33,7 @@ struct SharingLiveActivity: Widget {
         } dynamicIsland: { context in
             DynamicIsland {
                 DynamicIslandExpandedRegion(.leading) {
-                    LiveDot(size: 14)
+                    SentinelLogo(size: 18)
                         .padding(.leading, 6)
                 }
                 DynamicIslandExpandedRegion(.center) {
@@ -48,10 +48,8 @@ struct SharingLiveActivity: Widget {
                         .foregroundStyle(.secondary)
                 }
             } compactLeading: {
-                // Zugeklappt: links rotes Standortsymbol, rechts „SENTINEL“.
-                Image(systemName: "location.fill")
-                    .font(.system(size: 13, weight: .bold))
-                    .foregroundStyle(.red)
+                // Zugeklappt: links das SENTINEL-Schild in Rot, rechts „SENTINEL“.
+                SentinelLogo(size: 14)
                     .padding(.leading, 2)
             } compactTrailing: {
                 Text("SENTINEL")
@@ -59,25 +57,22 @@ struct SharingLiveActivity: Widget {
                     .foregroundStyle(.red)
                     .padding(.trailing, 2)
             } minimal: {
-                // Losgelöste kleine Blase (wenn noch etwas anderes läuft): eindeutiges rotes Standortsymbol statt eines
-                // Punkts mit Hof, der wie eine Aufnahme wirkte.
-                Image(systemName: "location.fill")
-                    .font(.system(size: 13, weight: .bold))
-                    .foregroundStyle(.red)
+                // Losgelöste kleine Blase (wenn noch etwas anderes läuft): das SENTINEL-Schild in Rot.
+                SentinelLogo(size: 14)
             }
             .keylineTint(.red)
         }
     }
 }
 
-/// Roter Punkt mit hellem Rand, wie eine Aufnahme-Anzeige.
-private struct LiveDot: View {
+/// SENTINEL-Logo (das Schild des App-Symbols) in Rot.
+private struct SentinelLogo: View {
     let size: CGFloat
 
     var body: some View {
-        Circle()
-            .fill(.red)
-            .frame(width: size, height: size)
-            .overlay(Circle().stroke(.red.opacity(0.35), lineWidth: size / 3).padding(-size / 4))
+        Image(systemName: "shield.lefthalf.filled")
+            .font(.system(size: size, weight: .semibold))
+            .foregroundStyle(.red)
+            .accessibilityLabel("SENTINEL")
     }
 }
