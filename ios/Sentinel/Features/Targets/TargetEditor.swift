@@ -112,6 +112,7 @@ struct TargetEditor: View {
                 Section("Notizen") {
                     TextField(notesPrompt, text: $target.hinweise, axis: .vertical)
                         .lineLimit(4...20)
+                        .clearable($target.hinweise)
                 }
 
                 locationSection

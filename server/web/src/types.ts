@@ -113,6 +113,8 @@ export interface Target {
 
 export interface TargetGroup {
   name: string;
+  symbol?: string;
+  farbe?: string;
 }
 
 /** Beziehung zwischen zwei Zielen; von beiden Seiten sichtbar, mit Status und Herkunft (keine gesicherte Tatsache). */

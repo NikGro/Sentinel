@@ -162,6 +162,7 @@ private struct SituationNotesEditor: View {
                 Section("Einsatzhinweise") {
                     TextField("Auftrag, Treffpunkt, Eigensicherung …", text: $notes, axis: .vertical)
                         .lineLimit(5...14)
+                        .clearable($notes)
                 }
             }
             .navigationTitle("Einsatzinformationen")

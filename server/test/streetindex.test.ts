@@ -43,3 +43,13 @@ test('Parallel-Modus: Meidepunkte nur auf der Straße des Ziels und nur voraus',
   // Weit weg von jeder Straße: keine Angabe.
   assert.equal(streets.pointsAhead({ lat: 53.7, lon: 10.2 }, 0, 600), null);
 });
+
+test('Befahrene Straße: nächstes Teilstück, an der Ecke die in Fahrtrichtung', () => {
+  const streets = index();
+  // Mitten auf dem Heegbarg zwischen Knoten 1 und 2.
+  assert.equal(streets.streetAt({ lat: 53.6505, lon: 10.0805 }, null), 'Heegbarg');
+  // Zwischen Heegbarg (Knoten 1→2, etwa 33°) und Wentzelplatz (4→2, etwa 140°) nahe Knoten 2: die Fahrtrichtung entscheidet.
+  assert.equal(streets.streetAt({ lat: 53.65097, lon: 10.08085 }, 140), 'Wentzelplatz');
+  assert.equal(streets.streetAt({ lat: 53.65097, lon: 10.08085 }, 33), 'Heegbarg');
+  assert.equal(streets.streetAt({ lat: 53.7, lon: 10.3 }, null), null);
+});

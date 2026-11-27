@@ -62,6 +62,12 @@ const diagnosisBody = z.object({ zeilen: z.array(z.string().max(600)).max(2000) 
 /** Höchstgröße der Messdatei je Gerät; darüber wird von vorn begonnen. */
 const DIAGNOSIS_MAX_BYTES = 8 * 1024 * 1024;
 
+const streetQuery = z.object({
+  lat: z.coerce.number().min(-90).max(90),
+  lon: z.coerce.number().min(-180).max(180),
+  kurs: z.coerce.number().min(0).max(360).optional(),
+});
+
 const pointQuery = z.object({ lat: z.coerce.number().min(-90).max(90), lon: z.coerce.number().min(-180).max(180) });
 
 /** Bestreifung, Weg-Zeit-Flächen, Routen, Navigation, Kreuzungen und Querstraßen. */
@@ -176,6 +182,15 @@ export function registerNavigationRoutes(app: FastifyInstance, services: Service
     const { a, lat, lon } = parse(crossingStreetsQuery, request.query, 'Straßenname angeben.');
     if (services.streets.ready) return services.streets.crossingStreets(a, { lat, lon }) ?? { a, strassen: [] };
     return overpassCall('Kreuzungssuche', (client) => findCrossingStreets(client, a, { lat, lon }));
+  });
+
+  /** Befahrene Straße am eigenen Standort (Straßenverzeichnis, Fahrtrichtung bevorzugt). */
+  app.get('/api/v1/strasse', async (request) => {
+    guards.actor(request);
+    guards.limit(crossingLimiter, request);
+    const { lat, lon, kurs } = parse(streetQuery, request.query, 'Ort fehlt.');
+    if (!services.streets.ready) return { name: null };
+    return { name: services.streets.streetAt({ lat, lon }, kurs ?? null) };
   });
 
   /** Querstraßen entlang einer Navigationsroute (OpenStreetMap). */

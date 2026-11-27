@@ -81,22 +81,12 @@ struct TargetDetail: View {
                 .listRowBackground(Color.clear)
             }
 
-            // Zielobjekte haben keine dynamische Quelle; ihr Standort wird nur von Hand gesetzt.
-            if !target.supportsDynamicSource {
-            Section("Standort") {
-                if let position = lage.position(ofTarget: entity) {
-                    LabeledContent("Von Hand gesetzt", value: Format.ago(position.date))
-                } else {
-                    Text("Kein Standort bekannt.")
+            // Zielobjekte: Der Ort kommt über die Anschrift auf der Bearbeiten-Seite (Vorschläge setzen auch den Standort).
+            if !target.supportsDynamicSource, lage.position(ofTarget: entity) == nil {
+                Section("Standort") {
+                    Text("Noch kein Standort. Unter Bearbeiten die Anschrift wählen.")
                         .foregroundStyle(.secondary)
                 }
-                if let placeOnMap {
-                    Button(target.standort == nil ? "Standort auf Karte setzen" : "Standort neu setzen", systemImage: "hand.tap") {
-                        placeOnMap(entity.id)
-                        dismiss()
-                    }
-                }
-            }
             }
 
             RelationsSection(targetId: entity.id, editing: .constant(nil))

@@ -164,6 +164,7 @@ export function TargetsPanel() {
         <div key={g.id} class={groupShown(g.id) ? '' : 'ruhend'}>
           <div class="row">
             <input type="checkbox" title="Gruppe in dieser Instanz einblenden" checked={groupShown(g.id)} onChange={() => setGroupShown(g.id, !groupShown(g.id))} />
+            <span class="thumb empty" style={{ background: g.data.farbe ?? '#0A84FF', color: '#fff', width: '28px', height: '28px' }}>{g.data.name.slice(0, 1)}</span>
             <b class="grow">{g.data.name}</b>
             <button
               class="quiet"

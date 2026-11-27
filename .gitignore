@@ -27,3 +27,4 @@ ios/Sentinel/Resources/Info.plist
 
 # Wird beim Bauen aus node_modules kopiert
 server/web/public/maplibre/
+ios/SentinelStatus/Info.plist

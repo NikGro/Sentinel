@@ -1,5 +1,30 @@
 # Änderungen
 
+## 0.39.0
+
+**Ziele**
+- Gruppen als eigene Seiten: In der Liste steht jede Gruppe als eine Zeile mit Symbol, Farbe, Anzahl und Kartenschalter;
+  Antippen öffnet eine Seite wie den Ziele-Tab (Fahrzeuge, Personen, Objekte) mit Zurück. Titel, Symbol und Farbe sind
+  wählbar
+- Auswahlmodus: Gedrückt halten wählt Ziele aus; über „…“ alle auswählen, zur Gruppe hinzufügen (auch neue Gruppe) oder
+  aus der Gruppe entfernen
+- Zielfahrzeug: Neben den Insassen „Aussteigen“ statt Hinführen (sie bleiben am Ort des Fahrzeugs stehen)
+- Zielobjekt: Kein Knopf „Standort neu setzen“ mehr in der Ansicht; der Ort kommt über die Anschrift im Editor
+- Textfelder: X zum Leeren beim Bearbeiten
+
+**Karte und Navigation**
+- Straßenschild am eigenen Punkt: die befahrene Straße aus dem Straßennetz des Servers (Fahrtrichtung bevorzugt) statt
+  der Straße der nächsten Hausnummer
+- Standort teilen sichtbar: Live-Aktivität „SENTINEL teilt deinen Standort“ in Dynamic Island und auf dem Sperrbildschirm
+  (dazu die blaue Standortanzeige des Systems)
+- ÖPNV-Ziel: Auswahl ohne „3 Halte voraus“ (Fahrzeug, 1, 2 Halte voraus, Überschlagen)
+- Kurzübersicht: Kopfzeile mit Hintergrund, der nach unten ausläuft; gescrollter Inhalt läuft sauber darunter weg
+- Standortspur: einheitlich dicker (7 pt), springt nicht mehr zwischen Dicken (unveränderte Spuren werden nicht neu
+  angelegt); neue Spuren standardmäßig nach Häufigkeit eingefärbt
+
+**Sonstiges**
+- Chat vorerst ausgeblendet (App und Sentinel Web), bleibt im Code erhalten
+
 ## 0.38.0
 
 **Navigation**

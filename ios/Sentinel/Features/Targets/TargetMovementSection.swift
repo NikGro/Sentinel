@@ -113,13 +113,15 @@ struct TargetMovementSection: View {
                     HStack {
                         Label(passenger.data.displayName, systemImage: Fortbewegung.fuss.symbolName)
                         Spacer()
-                        Button("Hinführen", systemImage: "arrow.triangle.turn.up.right.diamond.fill") {
-                            model.navigate(to: .target(passenger.id))
-                            dismiss()
+                        // Hinführen geht zum Fahrzeug selbst; hier stattdessen aussteigen lassen (auf der Karte ist die
+                        // Person im Fahrzeug nicht einzeln antippbar).
+                        Button("Aussteigen", systemImage: "figure.walk.departure") {
+                            getOut(passenger)
                         }
-                        .labelStyle(.iconOnly)
                         .buttonStyle(.bordered)
                         .buttonBorderShape(.capsule)
+                        .controlSize(.small)
+                        .accessibilityLabel("\(passenger.data.displayName) aussteigen lassen")
                     }
                 }
             }
@@ -177,6 +179,15 @@ struct TargetMovementSection: View {
         case .a:
             save { $0.quelle = .a }
         }
+    }
+
+    /// Insasse steigt aus: bleibt am aktuellen Ort des Fahrzeugs stehen, von Hand gesetzt (wie „Zu Fuß“ beim Ziel selbst).
+    private func getOut(_ passenger: Versioned<Target>) {
+        var next = passenger.data
+        let here = lage.position(ofTarget: entity)?.point
+        next.bindung = nil
+        if let here, next.effectiveSource == .hand { next.standort = TimedPoint(here) }
+        lage.put(next, id: passenger.id)
     }
 
     private func save(_ change: (inout Target) -> Void) {

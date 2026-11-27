@@ -267,6 +267,9 @@ const relation = z
 /** Gruppe von Zielen (z. B. je Verfahren). Ein- und Ausblenden je Instanz über `Operation.gruppenAus`. */
 const targetGroup = z.object({
   name: text(60).min(1),
+  /** SF-Symbol der Gruppe in der Liste. */
+  symbol: z.string().max(60).default('folder.fill'),
+  farbe: z.string().regex(/^#[0-9A-Fa-f]{6}$/).default('#0A84FF'),
 });
 
 const tracker = z.object({

@@ -280,6 +280,15 @@ struct APIClient: Sendable {
         let strassen: [Street]
     }
 
+    private struct StreetName: Decodable { let name: String? }
+
+    /// Befahrene Straße am Standort (Straßenverzeichnis des Servers, Fahrtrichtung bevorzugt).
+    func street(at point: GeoPoint, course: Double?) async throws -> String? {
+        var query = [URLQueryItem(name: "lat", value: String(point.lat)), URLQueryItem(name: "lon", value: String(point.lon))]
+        if let course, course >= 0 { query.append(URLQueryItem(name: "kurs", value: String(Int(course) % 360))) }
+        return try await json(StreetName.self, "GET", "api/v1/strasse", query: query).name
+    }
+
     func crossingStreets(_ a: String, near: GeoPoint) async throws -> CrossingStreets {
         try await json(CrossingStreets.self, "GET", "api/v1/kreuzung/strassen", query: [
             URLQueryItem(name: "a", value: a),

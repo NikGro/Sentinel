@@ -140,6 +140,7 @@ struct MapObjectEditor: View {
                     TextField(object.typ == .text ? "Text" : "Bezeichnung", text: $object.titel)
                     TextField("Notiz", text: $object.notiz, axis: .vertical)
                         .lineLimit(1...5)
+                        .clearable($object.notiz)
                 }
 
                 if ![.text, .haltestellen, .fahndungsraum, .geofence, .verlauf].contains(object.typ) {

@@ -11,6 +11,9 @@ final class LocationContext: NSObject, CLLocationManagerDelegate {
     /// Nächstgelegene Querstraße der aktuellen Straße (vor oder hinter einem), für „Ecke …“.
     private(set) var corner: String?
     /// Fragt die Querstraßen einer Straße beim eigenen Server ab (Name, Kreuzungspunkte); setzt das App-Modell.
+    /// Befahrene Straße vom eigenen Server (nächste Straße in Fahrtrichtung); setzt das App-Modell.
+    @ObservationIgnored var streetProvider: ((GeoPoint, CLLocationDirection?) async -> String?)?
+    @ObservationIgnored private var lookingUp = false
     @ObservationIgnored var crossingProvider: ((String, GeoPoint) async -> [(name: String, points: [GeoPoint])]?)?
     @ObservationIgnored private var crossings: [(name: String, points: [GeoPoint])] = []
     @ObservationIgnored private var crossingsFor: String?
@@ -40,15 +43,26 @@ final class LocationContext: NSObject, CLLocationManagerDelegate {
         if isMoving { setHeading(Self.cardinal(location.course)) }
         updateCorner(at: location)
         let moved = lastLookup.map { location.distance(from: $0) } ?? .greatestFiniteMagnitude
-        guard moved >= Self.minimumDistance, Date.now.timeIntervalSince(lastLookupAt) >= Self.minimumInterval, !geocoder.isGeocoding else { return }
+        guard moved >= Self.minimumDistance, Date.now.timeIntervalSince(lastLookupAt) >= Self.minimumInterval, !geocoder.isGeocoding, !lookingUp else { return }
         lastLookup = location
         lastLookupAt = .now
-        geocoder.reverseGeocodeLocation(location, preferredLocale: Locale(identifier: "de_DE")) { [weak self] placemarks, _ in
-            let place = placemarks?.first
-            let name = place?.thoroughfare ?? place?.name
-            Task { @MainActor in
-                self?.street = name
-                self?.updateCorner(at: location)
+        // Zuerst die befahrene Straße vom eigenen Server (Straßennetz, Fahrtrichtung); Apples Umkehrsuche liefert die
+        // Straße der nächsten Hausnummer und lag an Ecken oder neben Parallelstraßen daneben. Sie bleibt Rückfall.
+        lookingUp = true
+        Task { @MainActor in
+            defer { lookingUp = false }
+            if let streetProvider, let name = await streetProvider(GeoPoint(location.coordinate), location.course >= 0 && location.speed > 1.5 ? location.course : nil) {
+                street = name
+                updateCorner(at: location)
+                return
+            }
+            geocoder.reverseGeocodeLocation(location, preferredLocale: Locale(identifier: "de_DE")) { [weak self] placemarks, _ in
+                let place = placemarks?.first
+                let name = place?.thoroughfare ?? place?.name
+                Task { @MainActor in
+                    self?.street = name
+                    self?.updateCorner(at: location)
+                }
             }
         }
     }

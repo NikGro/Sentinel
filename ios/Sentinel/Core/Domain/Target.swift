@@ -305,4 +305,26 @@ extension Target {
 struct TargetGroup: LageEntity {
     static let kind = "targetGroup"
     var name: String
+    var symbol: String = "folder.fill"
+    var farbe: String = "#0A84FF"
+
+    init(name: String, symbol: String = "folder.fill", farbe: String = "#0A84FF") {
+        self.name = name
+        self.symbol = symbol
+        self.farbe = farbe
+    }
+
+    private enum CodingKeys: String, CodingKey { case name, symbol, farbe }
+
+    init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        name = try c.decode(String.self, forKey: .name)
+        symbol = (try? c.decodeIfPresent(String.self, forKey: .symbol)) ?? "folder.fill"
+        farbe = (try? c.decodeIfPresent(String.self, forKey: .farbe)) ?? "#0A84FF"
+    }
+
+    /// Symbole zur Auswahl für Gruppen.
+    static let symbols = ["folder.fill", "briefcase.fill", "person.3.fill", "car.2.fill", "house.fill", "building.2.fill",
+                          "star.fill", "flag.fill", "exclamationmark.triangle.fill", "eye.fill", "magnifyingglass", "shield.fill",
+                          "bolt.fill", "leaf.fill", "tag.fill", "mappin.and.ellipse"]
 }

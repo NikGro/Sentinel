@@ -67,6 +67,7 @@ struct SituationAdminScreen: View {
             Section {
                 TextField("Auftrag, Treffpunkt, Eigensicherung …", text: $notes, axis: .vertical)
                     .lineLimit(4...12)
+                    .clearable($notes)
                 Button("Für alle übernehmen") {
                     lage.setSituation(title: String(title.prefix(80)), notes: String(notes.prefix(4000)))
                 }

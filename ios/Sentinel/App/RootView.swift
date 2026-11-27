@@ -149,10 +149,12 @@ struct MainView: View {
                 Tab("Kräfte", systemImage: "person.3", value: Section.kraefte) {
                     ForcesScreen()
                 }
-                Tab("Chat", systemImage: "bubble.left.and.bubble.right", value: Section.chat) {
-                    ChatScreen()
+                if Features.chat {
+                    Tab("Chat", systemImage: "bubble.left.and.bubble.right", value: Section.chat) {
+                        ChatScreen()
+                    }
+                    .badge(unreadCount)
                 }
-                .badge(unreadCount)
             }
             Tab("Mehr", systemImage: "ellipsis", value: Section.mehr) {
                 SettingsScreen()
@@ -179,4 +181,10 @@ struct MainView: View {
         guard selection != .chat else { return 0 }
         return lage.messages.filter { $0.updatedAt > settings.lastReadMessageAt && $0.updatedBy != lage.selfId }.count
     }
+}
+
+/// Schalter für Funktionen, die vorerst ausgeblendet sind (Code und Server bleiben erhalten).
+enum Features {
+    /// Chat vorerst ausgeblendet; auf `true` setzen, um ihn wieder anzuzeigen.
+    static let chat = false
 }

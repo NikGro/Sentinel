@@ -60,6 +60,26 @@ struct QuickLookHeader: View {
     @Environment(\.dynamicTypeSize) private var typeSize
 
     var body: some View {
+        content
+            // Hinter der Kopfzeile ein Hintergrund, unten mit Verlauf ins Transparente (wie die Kopfzeile im Mehr-Menü):
+            // Gescrollter Inhalt läuft sauber darunter weg statt sichtbar unter Titel und Knöpfen.
+            .background(alignment: .top) {
+                Rectangle()
+                    .fill(.regularMaterial)
+                    .mask {
+                        VStack(spacing: 0) {
+                            Color.black
+                            LinearGradient(colors: [.black, .black.opacity(0)], startPoint: .top, endPoint: .bottom)
+                                .frame(height: 22)
+                        }
+                    }
+                    .padding(.bottom, -22)
+                    .ignoresSafeArea(edges: .top)
+                    .allowsHitTesting(false)
+            }
+    }
+
+    @ViewBuilder private var content: some View {
         // Bei sehr großer Schrift passen Titel und Knöpfe nicht in eine Zeile: Knöpfe darunter.
         if typeSize.isAccessibilitySize {
             VStack(alignment: .leading, spacing: 10) {

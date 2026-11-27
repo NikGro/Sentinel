@@ -339,6 +339,7 @@ private struct InstanceForm: View {
                 TextField("Name", text: $name)
                 TextField("Beschreibung (optional)", text: $description, axis: .vertical)
                     .lineLimit(2...5)
+                    .clearable($description)
             }
             .navigationTitle(title)
             .navigationBarTitleDisplayMode(.inline)

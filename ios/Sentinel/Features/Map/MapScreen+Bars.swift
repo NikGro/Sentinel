@@ -157,7 +157,8 @@ extension MapScreen {
         object.spuren = [SpurRef(SpurSubject(art: .member, id: me.id))]
         object.zeitVon = (Date.now.timeIntervalSince1970 * 1000).rounded()
         object.zeitBis = nil
-        object.symbol = MapObject.ownTrackSymbol
+        // Standard: nach Häufigkeit eingefärbt (umschaltbar im Editor).
+        object.symbol = MapObject.ownTrackFrequencySymbol
         lage.saveMapObject(object, id: LageStore.newId())
         model.alerts.post(.info, "Standortspur läuft", "Dein Weg wird ab jetzt auf der Karte gezeichnet. Antippen der Spur öffnet sie zum Bearbeiten oder Löschen.")
     }

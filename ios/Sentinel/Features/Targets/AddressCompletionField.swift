@@ -72,15 +72,30 @@ struct AddressCompletionField: View {
     @FocusState private var focused: Bool
 
     var body: some View {
-        TextField("Anschrift oder Firma suchen", text: $address, axis: .vertical)
-            .lineLimit(1...3)
-            .textContentType(.fullStreetAddress)
-            .focused($focused)
-            .onChange(of: address) { _, text in
-                guard focused else { return }
-                completer.update(text, near: near.map { MKCoordinateRegion(center: $0.coordinate, latitudinalMeters: 40_000, longitudinalMeters: 40_000) })
+        HStack(alignment: .top, spacing: 6) {
+            TextField("Anschrift oder Firma suchen", text: $address, axis: .vertical)
+                .lineLimit(1...3)
+                .textContentType(.fullStreetAddress)
+                .focused($focused)
+            if focused, !address.isEmpty {
+                Button {
+                    address = ""
+                    completer.clear()
+                } label: {
+                    Image(systemName: "xmark.circle.fill")
+                        .foregroundStyle(.tertiary)
+                        .frame(width: 28, height: 22)
+                        .contentShape(.rect)
+                }
+                .buttonStyle(.plain)
+                .accessibilityLabel("Feld leeren")
             }
-            .onChange(of: focused) { _, now in if !now { completer.clear() } }
+        }
+        .onChange(of: address) { _, text in
+            guard focused else { return }
+            completer.update(text, near: near.map { MKCoordinateRegion(center: $0.coordinate, latitudinalMeters: 40_000, longitudinalMeters: 40_000) })
+        }
+        .onChange(of: focused) { _, now in if !now { completer.clear() } }
         if focused {
             ForEach(completer.results, id: \.self) { result in
                 Button {

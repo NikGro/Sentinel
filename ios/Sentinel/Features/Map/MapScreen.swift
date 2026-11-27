@@ -194,8 +194,8 @@ struct MapScreen: View {
             let stored = objects(.verlauf)
             await storedTracks.load(stored, client: model.client)
             while stored.contains(where: { $0.data.zeitBis == nil }), !Task.isCancelled {
-                // Eine Standortspur folgt dem eigenen Weg sichtbar (alle 10 s), andere laufende Verläufe jede Minute.
-                try? await Task.sleep(for: .seconds(stored.contains(where: \.data.isOwnTrack) ? 10 : 60))
+                // Die eigene Spur wächst ohnehin lokal mit; vom Server alle 30 s (fremde Spuren), sonst jede Minute.
+                try? await Task.sleep(for: .seconds(stored.contains(where: \.data.isOwnTrack) ? 30 : 60))
                 guard !Task.isCancelled else { return }
                 await storedTracks.load(objects(.verlauf), client: model.client)
             }

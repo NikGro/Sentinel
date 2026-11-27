@@ -289,6 +289,7 @@ struct VehicleEditor: View {
                         .autocorrectionDisabled()
                     TextField("Beschreibung, z. B. Golf grau, Dachbox", text: $vehicle.bezeichnung, axis: .vertical)
                         .lineLimit(1...4)
+                        .clearable($vehicle.bezeichnung)
                     PhotoField(title: "Fahrzeugbild", blobId: $vehicle.fotoBlob)
                 } footer: {
                     if !vehicle.funkrufname.isEmpty, Callsign.normalize(vehicle.funkrufname) == nil {

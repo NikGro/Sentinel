@@ -4,7 +4,7 @@ import SwiftUI
 
 // Navigation: Banner mit Manöver und Querstraße, untere Leiste, Fahrspuren, Tempo und der Navi-Pfeil.
 
-/// Sitzt das Ziel in Bus oder Bahn: direkt zum Fahrzeug oder ein bis drei Halte voraus (rückt mit dem Fahrzeug mit).
+/// Sitzt das Ziel in Bus oder Bahn: direkt zum Fahrzeug oder ein bis zwei Halte voraus (rückt mit dem Fahrzeug mit).
 /// Erscheint gleich mit dem Navigationsstart und bleibt umschaltbar.
 struct TransitAheadPicker: View {
     @Environment(AppModel.self) private var model
@@ -16,13 +16,13 @@ struct TransitAheadPicker: View {
     }
 
     var body: some View {
-        // Ohne Text, im unteren Navi-Fenster: Fahrzeug selbst, 1 bis 3 Halte voraus oder überschlagend (so viele Halte
+        // Ohne Text, im unteren Navi-Fenster: Fahrzeug selbst, 1 oder 2 Halte voraus oder überschlagend (so viele Halte
         // voraus, wie Fahnder mitmachen; der Server verteilt sie und rückt nach).
         if let base, model.transitCourse(of: base) != nil {
             GlassSegmentedControl(
                 items: [(0, "tram.fill", "Zum Fahrzeug"), (1, "1.circle.fill", "1 Halt voraus"), (2, "2.circle.fill", "2 Halte voraus"),
-                        (3, "3.circle.fill", "3 Halte voraus"), (-1, "arrow.triangle.2.circlepath", "Überschlagend")],
-                selection: route.target == .leapfrog ? -1 : (route.target?.stopsAhead ?? 0),
+                        (-1, "arrow.triangle.2.circlepath", "Überschlagend")],
+                selection: route.target == .leapfrog ? -1 : min(route.target?.stopsAhead ?? 0, 2),
                 compact: true
             ) { choice in
                 // Nur das Ziel wechselt; Sonderrechte bleiben, wie sie waren.

@@ -126,11 +126,14 @@ final class RundgangTests: XCTestCase {
         XCTAssertTrue(app.staticTexts["Adler"].exists, "Fahnder mit Spitzname")
         capture("06-kraefte")
 
-        app.tabBars.buttons["Chat"].tap()
-        XCTAssertTrue(app.staticTexts["Team Nord"].waitForExistence(timeout: 5), "Chaträume")
-        app.staticTexts["Allgemein"].tap()
-        XCTAssertTrue(app.staticTexts["Bin auf Position, Sicht auf den Eingang."].waitForExistence(timeout: 5))
-        capture("07-chat")
+        // Chat ist vorerst ausgeblendet (Features.chat); nur prüfen, wenn der Tab da ist.
+        if app.tabBars.buttons["Chat"].exists {
+            app.tabBars.buttons["Chat"].tap()
+            XCTAssertTrue(app.staticTexts["Team Nord"].waitForExistence(timeout: 5), "Chaträume")
+            app.staticTexts["Allgemein"].tap()
+            XCTAssertTrue(app.staticTexts["Bin auf Position, Sicht auf den Eingang."].waitForExistence(timeout: 5))
+            capture("07-chat")
+        }
 
         app.tabBars.buttons["Mehr"].tap()
         XCTAssertTrue(app.staticTexts["Mehr"].waitForExistence(timeout: 5), "Mehr-Ansicht erscheint")

@@ -5,56 +5,8 @@ statt jede Änderung sofort einzubauen. Erledigtes wandert mit Version ins CHANG
 
 ## Geplant
 
-### Nach 0.38 offen
+### Nach 0.39 offen
 
-- **Angezeigte Straße stimmt nicht immer:** Das Straßenschild am eigenen Punkt zeigt manchmal nicht die Straße, auf
-  der man fährt.
-  - Ursache (Code): `LocationContext` nimmt die Straße aus Apples Umkehrsuche (`reverseGeocodeLocation`). Die liefert die
-    Straße der nächstgelegenen Adresse, nicht die befahrene: an Ecken, auf Hauptstraßen ohne Hausnummern in der Nähe
-    oder bei parallelen Nebenstraßen die falsche.
-  - Behebung: In der Navigation die Straße aus der Route nehmen (aktueller Abschnitt). Sonst die befahrene Straße über
-    den eigenen Server bestimmen: nächstgelegene benannte Straße im Straßenverzeichnis, deren Richtung zur Fahrtrichtung
-    passt (oder Valhalla `locate`/`trace_attributes` mit den letzten Punkten); Apples Umkehrsuche nur als Rückfall.
-- **Sichtbar machen, dass Sentinel den Standort teilt:**
-  - Dynamic Island und Sperrbildschirm: eine Live-Aktivität („Sentinel teilt deinen Standort“, mit Instanz, ggf.
-    Fortbewegung/A-Position), solange man im Dienst ist und der Standort übertragen wird; endet beim Verlassen der
-    Instanz. Braucht eine Widget-Erweiterung (ActivityKit); mit SideStore prüfen, ob die zusätzliche App-ID beim
-    kostenlosen Konto passt (Erweiterungen zählen zu den App-IDs).
-  - Sofort und ohne Erweiterung möglich: die blaue Standortanzeige in der Statusleiste bzw. Dynamic Island
-    (`showsBackgroundLocationIndicator`), sobald im Hintergrund geteilt wird.
-- **Chat vorerst ausblenden:** Den Chat-Tab (und Chat-Hinweise/Mitteilungen) in der App nicht mehr anzeigen, ohne ihn
-  zu löschen: Code und Server bleiben, z. B. über einen Schalter, damit er sich später wieder einblenden lässt.
-  Sentinel Web entsprechend.
-- **Ziele-Tab: Gruppen als eigene Seiten:** In der Liste steht eine Gruppe nur als eine Zeile (Symbol, Farbe, Titel,
-  Anzahl und Schalter für die Karte), nicht mit ihrem Inhalt. Beim Anlegen/Bearbeiten Titel, Symbol und Farbe wählbar
-  (wie bei Markierungen: Palette und Symbolraster). Antippen öffnet eine Seite, aufgebaut wie der Ziele-Tab
-  (Abschnitte Fahrzeuge, Personen, Objekte, mit den Schaltern je Ziel), mit Zurück zur Hauptansicht; der Auswahlmodus
-  gilt dort genauso. Bestehende Bausteine verwenden (TabHeader, TargetRow, Listenstil).
-- **Ziele-Tab: Auswahlmodus für Gruppen:** Statt Gruppe je Ziel über das Kontextmenü: Gedrückt halten startet den
-  Auswahlmodus (Häkchen an den Zeilen), oben erscheinen die üblichen Knöpfe, u. a. ein runder „…“-Knopf mit „Alle
-  auswählen“, „Zur Gruppe hinzufügen“ (bestehende oder neue Gruppe) und, wenn Ausgewählte in einer Gruppe sind, „Aus
-  Gruppe entfernen“; dazu „Fertig“ zum Beenden.
-- **ÖPNV-Ziel: Auswahl schmaler:** Im Schalter der Navi-Leiste bei einem ÖPNV-Fahrzeug die Stellung „3 Halte voraus“
-  streichen; nur noch Fahrzeug, 1 Halt voraus, 2 Halte voraus und Überschlagen (TransitAheadPicker).
-- **Standortspur: gleichbleibende Dicke, standardmäßig Häufigkeit:**
-  - Die Spur springt zwischen verschiedenen Dicken. Einheitlich und eher dick (z. B. 7 pt) zeichnen. Ursache prüfen:
-    Kandidaten sind das laufend neu angelegte Linienobjekt (bei jedem GPS-Punkt wird die Spur neu erzeugt, alte und
-    neue Linie liegen kurz übereinander und wirken bei 75 % Deckkraft dicker/dunkler), unterschiedliche Breiten von
-    Spur (5 pt), Endstück (5 pt) und Lücken (3 pt), oder ein kurzzeitiger Wechsel auf die normale Spurdarstellung
-    (weißer Rand 7 pt + 4 pt) beim Neuladen.
-  - Neue Standortspuren standardmäßig nach Häufigkeit eingefärbt (statt nach Alter); umschaltbar im Editor.
-- **Kurzübersicht: Kopfzeile mit Hintergrund:** Hochgewischt und gescrollt läuft der Inhalt sichtbar unter Titel und
-  runden Knöpfen hindurch (überlagert sich mit Foto und Text). Hinter die Kopfzeile ein Hintergrund, der nach unten
-  per Verlauf transparent wird, wie in der Kopfzeile des Mehr-Menüs (QuickLookHeader).
-- **Zielobjekt: Standort nur über die Anschrift im Editor:** In der Detailansicht bzw. Kurzübersicht eines Zielobjekts
-  entfällt der Knopf „Standort neu setzen“ (von Hand); der Ort kommt über das Anschriftenfeld mit Vorschlägen auf der
-  Bearbeiten-Seite.
-- **Textfelder leeren:** In allen Textfeldern beim Bearbeiten ein X-Knopf, der das ganze Feld mit einem Tipp leert
-  (sichtbar, solange das Feld aktiv ist und Text enthält).
-- **Insassen: Aussteigen statt Hinführen:** Beim Zielfahrzeug steht neben jedem Insassen bisher ein Hinführen-Knopf;
-  doppelt, denn man kann zum Fahrzeug navigieren. Stattdessen ein Knopf „Aussteigen“ (Person steigt aus, bleibt am
-  aktuellen Ort des Fahrzeugs stehen). Wichtig, weil man die Person auf der Karte nicht antippen kann, solange sie im
-  Fahrzeug sitzt.
 - **SOS als kritischer Alarm:** Drückt ein Fahnder SOS, soll bei allen anderen außerhalb der App eine Mitteilung mit
   Alarmpriorität kommen, leise (etwa 10 % Lautstärke), aber immer hörbar, auch im Stumm- und Fokus-Modus.
   - Stand: Die App schickt bei SOS schon eine lokale Mitteilung als „Dringend“ (time-sensitive), sofern sie im

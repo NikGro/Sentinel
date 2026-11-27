@@ -50,6 +50,10 @@ final class AppModel {
             return result.strassen.map { (name: $0.name, points: $0.punkte) }
         }
         leadPlanner.crossings = locationContext.crossingProvider
+        locationContext.streetProvider = { [weak self] point, course in
+            guard let client = self?.client else { return nil }
+            return try? await client.street(at: point, course: course)
+        }
         route.destinationStreet = { [weak self] target in
             guard let self else { return nil }
             switch target {
@@ -164,7 +168,7 @@ final class AppModel {
         case .sosEnded(let id):
             alerts.post(.info, "Notruf beendet", id == lage.selfId ? "Ihr Notruf ist beendet." : "Notruf von \(name(id)) ist beendet.")
         case .message(let message):
-            guard !alerts.chatIsVisible else { return }
+            guard Features.chat, !alerts.chatIsVisible else { return }
             let room = lage.rooms[message.data.roomId]?.data.name
             let text = message.data.text.isEmpty ? (message.data.anhang.map { $0.art == .audio ? "Sprachnachricht" : ($0.art == .bild ? "Foto" : "Datei") } ?? "") : message.data.text
             alerts.post(.info, "\(name(message.updatedBy))\(room.map { " in \($0)" } ?? "")", text)

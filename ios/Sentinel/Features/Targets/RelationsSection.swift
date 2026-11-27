@@ -233,6 +233,7 @@ struct RelationEditor: View {
         Section {
             TextField("z. B. Halter, Fahrer, Bewohner", text: $relation.bezeichnung, axis: .vertical)
                 .lineLimit(1...3)
+                .clearable($relation.bezeichnung)
         } header: {
             Text("Art der Beziehung")
         }

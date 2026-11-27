@@ -96,3 +96,35 @@ extension String {
         return needle.isEmpty || normalize(self).contains(needle)
     }
 }
+
+extension View {
+    /// Mehrzeiliges Textfeld: X zum Leeren, solange das Feld aktiv ist und Text enthält (einzeilige Felder haben das
+    /// System-X).
+    func clearable(_ text: Binding<String>) -> some View {
+        modifier(ClearableField(text: text))
+    }
+}
+
+private struct ClearableField: ViewModifier {
+    @Binding var text: String
+    @FocusState private var focused: Bool
+
+    func body(content: Content) -> some View {
+        HStack(alignment: .top, spacing: 6) {
+            content
+                .focused($focused)
+            if focused, !text.isEmpty {
+                Button {
+                    text = ""
+                } label: {
+                    Image(systemName: "xmark.circle.fill")
+                        .foregroundStyle(.tertiary)
+                        .frame(width: 28, height: 22)
+                        .contentShape(.rect)
+                }
+                .buttonStyle(.plain)
+                .accessibilityLabel("Feld leeren")
+            }
+        }
+    }
+}

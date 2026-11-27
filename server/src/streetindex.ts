@@ -186,6 +186,36 @@ export class StreetIndex {
   }
 
   /**
+   * Befahrene Straße an einem Punkt: das nächstgelegene Teilstück einer benannten Straße (höchstens 30 m entfernt);
+   * mit Fahrtrichtung werden Teilstücke bevorzugt, die in dieser Richtung verlaufen (an Ecken sonst oft die Querstraße,
+   * Apples Umkehrsuche liefert dort die Straße der nächsten Hausnummer).
+   */
+  streetAt(at: GeoPoint, heading: number | null): string | null {
+    let best: { name: number; score: number } | null = null;
+    for (const way of this.ways) {
+      const nodes = way.nodes;
+      const first = this.nodes.get(nodes[0]!);
+      if (!first || Math.abs(first.lat - at.lat) > 0.03 || Math.abs(first.lon - at.lon) > 0.045) continue;
+      for (let i = 1; i < nodes.length; i++) {
+        const a = this.nodes.get(nodes[i - 1]!);
+        const b = this.nodes.get(nodes[i]!);
+        if (!a || !b) continue;
+        const d = distanceToSegment(at, a, b);
+        if (d > 30) continue;
+        let score = d;
+        if (heading !== null && distanceMeters(a, b) > 3) {
+          // Straßen sind in beiden Richtungen befahrbar: Abweichung modulo 180°.
+          let off = Math.abs(bearingDeg(a, b) - heading) % 180;
+          if (off > 90) off = 180 - off;
+          if (off > 35) score += 25;
+        }
+        if (!best || score < best.score) best = { name: way.name, score };
+      }
+    }
+    return best ? this.names[best.name]! : null;
+  }
+
+  /**
    * Parallel-Modus: Meidepunkte auf der Straße, auf der ein Ziel fährt, vom Ziel aus in Fahrtrichtung bis `meters`.
    * Die Straße ist die nächstgelegene benannte am Ziel; die Punkte liegen jeweils mitten zwischen zwei Knoten, damit
    * sie nicht auf einer Kreuzung (und damit auf der Querstraße) einrasten. `null`, wenn keine Straße nah genug ist.
@@ -242,4 +272,16 @@ export class StreetIndex {
     }
     return hit ? { punkte: hit.punkte, a: crossings.a, b: hit.name } : null;
   }
+}
+
+/** Abstand eines Punkts zu einer Strecke in Metern (flache Näherung, für kurze Strecken genau genug). */
+function distanceToSegment(p: GeoPoint, a: GeoPoint, b: GeoPoint): number {
+  const kx = 111_320 * Math.cos((p.lat * Math.PI) / 180);
+  const ky = 110_540;
+  const ax = (a.lon - p.lon) * kx, ay = (a.lat - p.lat) * ky;
+  const bx = (b.lon - p.lon) * kx, by = (b.lat - p.lat) * ky;
+  const dx = bx - ax, dy = by - ay;
+  const l2 = dx * dx + dy * dy;
+  const t = l2 > 0 ? Math.min(Math.max(-(ax * dx + ay * dy) / l2, 0), 1) : 0;
+  return Math.hypot(ax + dx * t, ay + dy * t);
 }

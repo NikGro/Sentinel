@@ -33,7 +33,10 @@ final class LocationService {
         guard !isRunning else { return }
         isRunning = true
         if manager.authorizationStatus == .notDetermined { manager.requestWhenInUseAuthorization() }
+        // Hintergrund-Sitzung: Das System zeigt dabei die blaue Standortanzeige (Statusleiste bzw. Dynamic Island).
         backgroundSession = CLBackgroundActivitySession()
+        // Dazu deutlich sichtbar auf Sperrbildschirm und Dynamic Island: „SENTINEL teilt deinen Standort“.
+        SharingActivity.start(detail: "Live an das Einsatzteam")
 
         updates = Task { [weak self] in
             do {
@@ -65,6 +68,7 @@ final class LocationService {
         backgroundSession?.invalidate()
         backgroundSession = nil
         isRunning = false
+        SharingActivity.end()
     }
 
     private func handle(_ location: CLLocation) {

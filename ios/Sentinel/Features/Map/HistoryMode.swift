@@ -153,6 +153,8 @@ struct GradientSpurLines: MapContent {
     var liveEnd: CLLocationCoordinate2D?
 
     static let opacity = 0.75
+    /// Einheitliche Breite für Spur und Endstück (vorher sprang die Dicke zwischen Teilen und Darstellungen).
+    static let width: CGFloat = 7
 
     /// Farbskala von Blau über Grün und Gelb bis Rot, `t` von 0 bis 1.
     static func color(_ t: Double) -> Color {
@@ -225,7 +227,7 @@ struct GradientSpurLines: MapContent {
         ForEach(runs, id: \.id) { run in
             if let gradient = run.gradient {
                 MapPolyline(coordinates: run.coordinates)
-                    .stroke(gradient, style: StrokeStyle(lineWidth: 5, lineCap: .round, lineJoin: .round))
+                    .stroke(gradient, style: StrokeStyle(lineWidth: Self.width, lineCap: .round, lineJoin: .round))
             } else {
                 MapPolyline(coordinates: run.coordinates)
                     .stroke(.gray.opacity(0.8), style: StrokeStyle(lineWidth: 3, lineCap: .round, dash: [2, 6]))
@@ -365,6 +367,14 @@ final class StoredTracks {
                 }
             }
         }
+        // Unveränderte Spuren behalten: sonst legt die Karte alle Linien neu an, alte und neue liegen kurz übereinander
+        // und die halb durchsichtige Spur wirkt springend dicker.
+        let previous = Dictionary(tracks.map { ($0.id, $0) }, uniquingKeysWith: { a, _ in a })
+        result = result.map { track in
+            guard let old = previous[track.id], old.byFrequency == track.byFrequency,
+                  old.spur.punkte.count == track.spur.punkte.count, old.spur.punkte.last?.date == track.spur.punkte.last?.date else { return track }
+            return old
+        }
         tracks = result
         // Was der Server jetzt hat, braucht der lokale Nachlauf nicht mehr.
         let newest = result.filter { $0.spur.subject.key == liveSubjectKey }.compactMap { $0.spur.punkte.last?.date }.max()
@@ -388,7 +398,7 @@ struct OwnTrailEndLayer: MapContent {
                 ? GradientSpurLines.color(Double(min(state.sharedFrequency[GradientSpurLines.cell(last.point)] ?? 1, 5) - 1) / 4)
                 : GradientSpurLines.color(1)
             MapPolyline(coordinates: [last.point.coordinate, here])
-                .stroke(color.opacity(GradientSpurLines.opacity), style: StrokeStyle(lineWidth: 5, lineCap: .round, lineJoin: .round))
+                .stroke(color.opacity(GradientSpurLines.opacity), style: StrokeStyle(lineWidth: GradientSpurLines.width, lineCap: .butt, lineJoin: .round))
         }
     }
 }

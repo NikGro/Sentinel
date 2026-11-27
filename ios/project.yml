@@ -11,7 +11,7 @@ options:
 
 settings:
   base:
-    MARKETING_VERSION: "0.38.0"
+    MARKETING_VERSION: "0.39.0"
     CURRENT_PROJECT_VERSION: "1"
     SWIFT_VERSION: "5.0"
     SWIFT_STRICT_CONCURRENCY: minimal
@@ -32,6 +32,8 @@ targets:
     dependencies:
       - package: Ferrostar
         product: FerrostarCore
+      # Live-Aktivität „Standort wird geteilt“ (Dynamic Island, Sperrbildschirm).
+      - target: SentinelStatus
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: de.nglab.sentinel
@@ -61,6 +63,7 @@ targets:
         UIBackgroundModes:
           - location
         ITSAppUsesNonExemptEncryption: false
+        NSSupportsLiveActivities: true
         NSLocationWhenInUseUsageDescription: Ihr Standort wird mit dem Einsatzteam auf der Lagekarte geteilt.
         NSLocationAlwaysAndWhenInUseUsageDescription: Ihr Standort wird auch im Hintergrund mit dem Einsatzteam geteilt.
         NSCameraUsageDescription: Für Fotos von Profil, Fahrzeug, Ziel und im Chat.
@@ -70,6 +73,31 @@ targets:
         # Ausschließlich verschlüsselte Verbindungen, keine Ausnahmen.
         NSAppTransportSecurity:
           NSAllowsArbitraryLoads: false
+
+  SentinelStatus:
+    type: app-extension
+    platform: iOS
+    sources:
+      - path: SentinelStatus
+      - path: Sentinel/Core/Services/SharingActivity.swift
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: de.nglab.sentinel.status
+        PRODUCT_NAME: SentinelStatus
+        TARGETED_DEVICE_FAMILY: "1"
+        GENERATE_INFOPLIST_FILE: NO
+        SKIP_INSTALL: YES
+        CODE_SIGN_STYLE: Manual
+        CODE_SIGNING_ALLOWED: NO
+        CODE_SIGNING_REQUIRED: NO
+    info:
+      path: SentinelStatus/Info.plist
+      properties:
+        CFBundleDisplayName: SENTINEL
+        CFBundleShortVersionString: $(MARKETING_VERSION)
+        CFBundleVersion: $(CURRENT_PROJECT_VERSION)
+        NSExtension:
+          NSExtensionPointIdentifier: com.apple.widgetkit-extension
 
   SentinelTests:
     type: bundle.unit-test

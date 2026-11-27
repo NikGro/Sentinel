@@ -14,6 +14,9 @@ import { adminStatus, api, attempt, authed, command, connect, connected, disconn
 import { FORTBEWEGUNG_TITEL } from './types';
 import { ago } from './ui';
 
+/** Chat vorerst ausgeblendet; auf `true` setzen, um ihn wieder anzuzeigen. */
+const CHAT_SICHTBAR = false;
+
 const SECTIONS = [
   { id: 'instanzen', title: 'Instanzen', panel: InstancesPanel },
   { id: 'lage', title: 'Lage', panel: LagePanel },
@@ -21,7 +24,8 @@ const SECTIONS = [
   { id: 'kraefte', title: 'Kräfte', panel: TeamPanel },
   { id: 'ebenen', title: 'Ebenen', panel: LayersPanel },
   { id: 'tracker', title: 'Tracker', panel: TrackersPanel },
-  { id: 'chat', title: 'Chat', panel: ChatPanel },
+  // Chat vorerst ausgeblendet (Code bleibt, siehe CHAT_SICHTBAR).
+  ...(CHAT_SICHTBAR ? [{ id: 'chat', title: 'Chat', panel: ChatPanel } as const] : []),
   { id: 'system', title: 'System', panel: SystemPanel },
 ] as const;
 type SectionId = (typeof SECTIONS)[number]['id'];
