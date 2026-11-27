@@ -7,6 +7,10 @@ statt jede Änderung sofort einzubauen. Erledigtes wandert mit Version ins CHANG
 
 ### Nach 0.40 offen
 
+- **Kopfzeile der Kurzübersicht nur groß mit Hintergrund:** In der niedrigen Stufe (schwebende Glaskarte) soll die
+  Kopfzeile reines Liquid Glass sein, ohne den deckenden Hintergrund mit Verlauf (der dort als dunkler Balken wirkt).
+  Den Hintergrund nur zeigen, wenn das Fenster weiter aufgezogen ist (mittlere/große Stufe bzw. sobald der Inhalt
+  gescrollt wird): Stufe an den QuickLookHeader weitergeben (`quickLookDetent`) oder an der Scrollposition festmachen.
 - **X zum Leeren doppelt:** Seit 0.39 haben alle einzeiligen Textfelder app-weit das System-X
   (`UITextField.appearance().clearButtonMode`); Suchfelder mit eigenem X zeigen dadurch zwei (z. B. Suche in „Standort
   setzen“). Alle Stellen prüfen, die schon ein eigenes Leeren haben (SearchField in TabHeader.swift, SearchSheet,
