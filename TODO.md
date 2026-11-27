@@ -7,6 +7,20 @@ statt jede Änderung sofort einzubauen. Erledigtes wandert mit Version ins CHANG
 
 ### Nach 0.39 offen
 
+- **Standort und Live-Aktivität enden nicht:** Nach Schließen der App und Verlassen der Instanz laufen GPS-Übertragung
+  und Live-Aktivität weiter.
+  - Ursache (Code): Der Standortdienst startet beim Anmelden und stoppt nur beim Abmelden, nicht beim Verlassen der
+    Instanz (außer Dienst); die Live-Aktivität hängt daran. Wird die App beendet, bleibt eine laufende Live-Aktivität
+    stehen (iOS beendet sie nicht von selbst), die Hintergrund-Standortsitzung ebenfalls.
+  - Behebung: Standort nur im Dienst (in einer Instanz) teilen; beim Verlassen stoppen und die Live-Aktivität beenden.
+    Beim App-Start verwaiste Live-Aktivitäten beenden; Live-Aktivität mit Ablaufzeit (`staleDate`), die bei jeder
+    Übertragung verlängert wird, damit sie nach dem Beenden der App als veraltet erscheint bzw. verschwindet.
+- **Zielperson im ÖPNV:** Ist eine Zielperson an ein ÖPNV-Fahrzeug gebunden, sind beide Symbole zu sehen (Fahrzeug und
+  Zielperson), und das Symbol der Zielperson ruckelt.
+  - Ursache: Das ÖPNV-Fahrzeug wird mit 30 Bildern/s geglättet bewegt (TransitSmoother), die Zielperson dagegen an der
+    Position aus der Lage (seltener aktualisiert, ohne Glättung).
+  - Behebung: Nur das Symbol der Zielperson zeigen (Fahrzeug ausblenden, solange ein Ziel darin sitzt, ggf. Linie als
+    kleines Abzeichen am Zielsymbol) und die Zielperson an der geglätteten Fahrzeugposition zeichnen.
 - **Kopfzeile der Kurzübersicht: Hintergrund in derselben Farbe wie der Rest:** Der Balken hinter Titel und Knöpfen ist
   heller als der Hintergrund der Liste (er nutzt ein Material, `.regularMaterial`). Stattdessen die Hintergrundfarbe der
   Liste verwenden (`Color(.systemGroupedBackground)`, passt sich in Fenstern der erhöhten Ebene an), mit demselben
