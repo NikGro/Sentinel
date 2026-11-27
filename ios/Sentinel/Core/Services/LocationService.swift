@@ -18,6 +18,8 @@ final class LocationService {
     private var backgroundSession: CLBackgroundActivitySession?
     private var lastSent: CLLocation?
     private var lastSentAt = Date.distantPast
+    private var activityRefreshedAt = Date.distantPast
+    private static let activityDetail = "Live an das Einsatzteam"
 
     private static let minimumInterval: TimeInterval = 2
     private static let minimumDistance: CLLocationDistance = 5
@@ -36,7 +38,8 @@ final class LocationService {
         // Hintergrund-Sitzung: Das System zeigt dabei die blaue Standortanzeige (Statusleiste bzw. Dynamic Island).
         backgroundSession = CLBackgroundActivitySession()
         // Dazu deutlich sichtbar auf Sperrbildschirm und Dynamic Island: „SENTINEL teilt deinen Standort“.
-        SharingActivity.start(detail: "Live an das Einsatzteam")
+        SharingActivity.start(detail: Self.activityDetail)
+        activityRefreshedAt = .now
 
         updates = Task { [weak self] in
             do {
@@ -83,6 +86,11 @@ final class LocationService {
     private func send(_ location: CLLocation, at date: Date) {
         lastSent = location
         lastSentAt = date
+        // Live-Aktivität jede Minute verlängern; endet die Übertragung (App beendet), veraltet sie nach wenigen Minuten.
+        if date.timeIntervalSince(activityRefreshedAt) > 60 {
+            activityRefreshedAt = date
+            SharingActivity.refresh(detail: Self.activityDetail)
+        }
         onPosition(
             Position(
                 lat: location.coordinate.latitude,

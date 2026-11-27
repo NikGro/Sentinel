@@ -37,6 +37,8 @@ final class AppModel {
     }
 
     init() {
+        // Von einem früheren Lauf liegengebliebene Live-Aktivität beenden (die App wurde beendet, ohne zu stoppen).
+        SharingActivity.end()
         credentials = Credentials.load()
         location.onPosition = { [weak self] position in
             guard let self else { return }
@@ -126,7 +128,14 @@ final class AppModel {
         route.configure(serverURL: credentials.serverURL, token: credentials.token)
         alerts.requestPermission()
         lage.connect(credentials: credentials) { [weak self] in self?.signOut() }
-        location.start()
+        // Der Standort wird erst geteilt, wenn man im Dienst ist (siehe `updateSharing`).
+    }
+
+    /// Standort nur im Dienst teilen (in einer Instanz bzw. einem Sonderbereich); außer Dienst stoppen samt
+    /// Live-Aktivität. Wird bei jeder Änderung des Dienststatus aufgerufen.
+    func updateSharing(onDuty: Bool) {
+        guard credentials != nil else { return }
+        if onDuty { location.start() } else { location.stop() }
     }
 
     // MARK: Lebenszyklus

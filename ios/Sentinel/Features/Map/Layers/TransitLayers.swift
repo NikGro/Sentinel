@@ -250,6 +250,9 @@ struct TransitVehiclePin: Identifiable {
     let line: TransitRef
     let color: Color
     let departure: Date
+    /// Zielperson, die darin sitzt: Dann steht statt des Fahrzeugs nur ihr Symbol hier (an der geglätteten Position,
+    /// ruckelt nicht), beschriftet mit Name und Linie.
+    var rider: (id: String, label: String, symbol: String)?
 }
 
 /// ÖPNV-Linienabschnitte mit ihren Halten und die Fahrzeuge darauf.
@@ -315,6 +318,10 @@ struct TransitLayer: MapContent {
         }
         ForEach(vehicles) { pin in
             Annotation(pin.line.ref, coordinate: pin.coordinate, anchor: .center) {
+                if let rider = pin.rider {
+                    MapSymbolMarker(symbol: rider.symbol, color: Theme.target, label: rider.label)
+                        .onTapGesture { onSelect(pin) }
+                } else {
                 HStack(spacing: 3) {
                     Image(systemName: pin.line.symbolName)
                         .font(.system(size: 12, weight: .bold))
@@ -330,6 +337,7 @@ struct TransitLayer: MapContent {
                 .onTapGesture { onSelect(pin) }
                 .accessibilityLabel("\(pin.line.ref) Richtung \(pin.line.richtung)\(pin.objectId == nil ? ", im Takt geschätzt" : "")")
                 .accessibilityAddTraits(.isButton)
+                }
             }
             .annotationTitles(.hidden)
         }

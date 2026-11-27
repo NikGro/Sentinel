@@ -263,11 +263,11 @@ struct MapScreen: View {
                 }
                 CoverageLayer(runs: CoverageRun.cached(coverageSegments))
                 ReachLayer(rings: reachRings)
-                MapObjectsLayer(lines: objects(.linie) + objects(.pfeil), areas: objects(.flaeche), circles: objects(.kreis) + objects(.haltestellen), geofences: objects(.geofence), handles: handles.filter { !layout.hidden.contains($0.id) }, offsets: layout.offsets) { id in
+                MapObjectsLayer(lines: objects(.linie) + objects(.pfeil), areas: objects(.flaeche), circles: objects(.kreis) + objects(.haltestellen), geofences: objects(.geofence), handles: handles.filter { !layout.hidden.contains($0.id) }, placed: layout.placed) { id in
                     openEditor(for: id)
                 }
                 TimedTransitLayer(clock: transitClock, sections: objects(.oepnvlinie), pins: { transitPins(at: $0) }, showsStopNames: cameraState.distance < 5000) { pin in
-                    if let id = pin.objectId { openEditor(for: id) } else { virtualVehicle = pin }
+                    if let rider = pin.rider { tapMarker = nil; present(.target(rider.id), low: false) } else if let id = pin.objectId { openEditor(for: id) } else { virtualVehicle = pin }
                 }
                 AreaLabelLayer(objects: objects(.flaeche) + objects(.kreis) + objects(.geofence), metersPerPoint: cameraState.distance / 700)
                 NearbyStopsLayer(stops: nearbyStops)
@@ -303,8 +303,9 @@ struct MapScreen: View {
                     HistoryLayer(state: history) { model.title(of: $0) }
                 }
                 StopsLayer(stops: highlightedStops, line: lage.aHolder?.data.oepnv.map { NearbyStop.Line(ref: $0.linie, typ: "", farbe: nil) })
-                SymbolLayer(pins: (vehiclePins + targetPins).filter { !layout.hidden.contains($0.id) }, offsets: layout.offsets) { tapMarker = nil; present($0, low: false) }
-                ForcesLayer(pins: forcePins.filter { !layout.hidden.contains($0.id) }, offsets: layout.offsets) { tapMarker = nil; present($0, low: false) }
+                LeaderLinesLayer(layout: layout)
+                SymbolLayer(pins: (vehiclePins + targetPins).filter { !layout.hidden.contains($0.id) }, placed: layout.placed) { tapMarker = nil; present($0, low: false) }
+                ForcesLayer(pins: forcePins.filter { !layout.hidden.contains($0.id) }, placed: layout.placed) { tapMarker = nil; present($0, low: false) }
                 ClusterLayer(clusters: layout.clusters) { zoom(into: $0) }
                 DraftLayer(points: draftPoints, outline: draftOutline)
             }

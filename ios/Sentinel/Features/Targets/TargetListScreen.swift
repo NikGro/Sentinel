@@ -11,12 +11,13 @@ struct TargetListScreen: View {
     @State private var groupEditing: TargetGroupEditorContext?
     @State private var query = ""
     @State private var selection = TargetSelection()
+    @State private var path = NavigationPath()
 
     var body: some View {
-        NavigationStack {
+        NavigationStack(path: $path) {
             List {
                 if selection.isActive {
-                    SelectionStatusRow(selection: selection)
+                    SelectionStatusRow(selection: selection, visible: lage.sortedTargets.filter { !TargetSections.isGrouped($0, lage) }.map(\.id))
                 }
                 let groups = lage.sortedTargetGroups.filter { query.isEmpty || $0.data.name.matches(search: query) }
                 if !groups.isEmpty, !selection.isActive {
@@ -28,7 +29,7 @@ struct TargetListScreen: View {
                         Label("Gruppen", systemImage: "folder")
                     }
                 }
-                TargetSections(groupId: nil, query: query, selection: selection)
+                TargetSections(groupId: nil, query: query, selection: selection) { path.append($0) }
             }
             .navigationTitle("Ziele")
             // Erster Eintrag unterhalb des Verlaufs der Kopfzeile.
@@ -36,22 +37,18 @@ struct TargetListScreen: View {
             .toolbar(.hidden, for: .navigationBar)
             .safeAreaInset(edge: .top, spacing: 0) {
                 TabHeader(title: "Ziele", query: $query, prompt: "Name, Kennzeichen, Anschrift") {
-                    if selection.isActive {
-                        SelectionMenu(selection: selection, visible: lage.sortedTargets.filter { !TargetSections.isGrouped($0, lage) }.map(\.id))
-                    } else {
-                        Menu {
-                            ForEach(TargetSections.order) { art in
-                                Button(art.title, systemImage: art.symbolName) {
-                                    editing = TargetEditorContext(id: LageStore.newId(), target: Target(art: art), isNew: true)
-                                }
+                    Menu {
+                        ForEach(TargetSections.order) { art in
+                            Button(art.title, systemImage: art.symbolName) {
+                                editing = TargetEditorContext(id: LageStore.newId(), target: Target(art: art), isNew: true)
                             }
-                            Divider()
-                            Button("Gruppe", systemImage: "folder.badge.plus") {
-                                groupEditing = TargetGroupEditorContext(id: LageStore.newId(), group: TargetGroup(name: ""), isNew: true)
-                            }
-                        } label: {
-                            Label("Ziel anlegen", systemImage: "plus")
                         }
+                        Divider()
+                        Button("Gruppe", systemImage: "folder.badge.plus") {
+                            groupEditing = TargetGroupEditorContext(id: LageStore.newId(), group: TargetGroup(name: ""), isNew: true)
+                        }
+                    } label: {
+                        Label("Ziel anlegen", systemImage: "plus")
                     }
                 }
             }
@@ -59,7 +56,7 @@ struct TargetListScreen: View {
                 TargetDetail(targetId: id)
             }
             .navigationDestination(for: TargetGroupRoute.self) { route in
-                TargetGroupScreen(groupId: route.id, selection: selection)
+                TargetGroupScreen(groupId: route.id, selection: selection) { path.append($0) }
             }
             .sheet(item: $editing) { context in
                 TargetEditor(context: context)
@@ -75,6 +72,8 @@ struct TargetListScreen: View {
 struct TargetGroupScreen: View {
     let groupId: String
     let selection: TargetSelection
+    /// Ansicht eines Ziels öffnen.
+    let open: (String) -> Void
 
     @Environment(LageStore.self) private var lage
     @Environment(\.dismiss) private var dismiss
@@ -85,7 +84,7 @@ struct TargetGroupScreen: View {
         if let group = lage.targetGroups[groupId] {
             List {
                 if selection.isActive {
-                    SelectionStatusRow(selection: selection)
+                    SelectionStatusRow(selection: selection, visible: lage.sortedTargets.filter { $0.data.gruppeId == groupId }.map(\.id))
                 }
                 Section {
                     Toggle(isOn: Binding(get: { lage.isGroupShown(groupId) }, set: { lage.setGroupShown(groupId, $0) })) {
@@ -94,23 +93,19 @@ struct TargetGroupScreen: View {
                 } footer: {
                     Text("Blendet alle Ziele der Gruppe aus und ein; die Schalter der einzelnen Ziele bleiben, wie sie sind.")
                 }
-                TargetSections(groupId: groupId, query: "", selection: selection)
+                TargetSections(groupId: groupId, query: "", selection: selection, open: open)
             }
             .navigationTitle(group.data.name)
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .primaryAction) {
-                    if selection.isActive {
-                        SelectionMenu(selection: selection, visible: lage.sortedTargets.filter { $0.data.gruppeId == groupId }.map(\.id))
-                    } else {
-                        Menu {
-                            Button("Gruppe bearbeiten", systemImage: "pencil") {
-                                groupEditing = TargetGroupEditorContext(id: groupId, group: group.data, isNew: false)
-                            }
-                            Button("Gruppe auflösen", systemImage: "folder.badge.minus", role: .destructive) { showsDissolve = true }
-                        } label: {
-                            Label("Gruppe", systemImage: "ellipsis")
+                    Menu {
+                        Button("Gruppe bearbeiten", systemImage: "pencil") {
+                            groupEditing = TargetGroupEditorContext(id: groupId, group: group.data, isNew: false)
                         }
+                        Button("Gruppe auflösen", systemImage: "folder.badge.minus", role: .destructive) { showsDissolve = true }
+                    } label: {
+                        Label("Gruppe", systemImage: "ellipsis")
                     }
                 }
             }
@@ -142,6 +137,7 @@ private struct TargetSections: View {
     let groupId: String?
     let query: String
     let selection: TargetSelection
+    let open: (String) -> Void
 
     @Environment(LageStore.self) private var lage
 
@@ -171,7 +167,7 @@ private struct TargetSections: View {
                             .foregroundStyle(.secondary)
                     }
                     ForEach(list) { target in
-                        SelectableTargetRow(target: target, selection: selection)
+                        SelectableTargetRow(target: target, selection: selection, open: open)
                     }
                 } header: {
                     Label(art.plural, systemImage: art.symbolName)
@@ -187,52 +183,54 @@ private struct TargetSections: View {
     }
 }
 
-/// Zeile eines Ziels: normal mit Sprung zur Ansicht und Kartenschalter, im Auswahlmodus mit Häkchen.
-/// Gedrückt halten startet den Auswahlmodus.
+/// Zeile eines Ziels: Tippen öffnet die Ansicht, gedrückt halten (an beliebiger Stelle) startet den Auswahlmodus; im
+/// Auswahlmodus schaltet Tippen das Häkchen. Tippen und Halten liegen auf der ganzen Zeile (vorher hing das Halten neben
+/// dem Navigationslink und griff nicht überall).
 private struct SelectableTargetRow: View {
     let target: Versioned<Target>
     let selection: TargetSelection
+    let open: (String) -> Void
 
     @Environment(LageStore.self) private var lage
 
+    private var selected: Bool { selection.ids.contains(target.id) }
+
     var body: some View {
-        Group {
+        HStack(spacing: 12) {
             if selection.isActive {
-                Button {
-                    selection.toggle(target.id)
-                } label: {
-                    HStack(spacing: 12) {
-                        Image(systemName: selection.ids.contains(target.id) ? "checkmark.circle.fill" : "circle")
-                            .font(.title3)
-                            .foregroundStyle(selection.ids.contains(target.id) ? Theme.accent : Color.secondary)
-                        TargetRow(target: target)
-                        Spacer(minLength: 0)
-                    }
-                    .contentShape(.rect)
-                }
-                .buttonStyle(.plain)
-                .accessibilityAddTraits(selection.ids.contains(target.id) ? .isSelected : [])
-            } else {
-                HStack(spacing: 12) {
-                    NavigationLink(value: target.id) {
-                        TargetRow(target: target)
-                    }
-                    // Wie bei den Fahrzeugen der Kräfte: direkt in der Liste auf der Karte ein- und ausblenden.
-                    Toggle("Auf der Karte", isOn: Binding(get: { lage.isTargetShown(target.id) }, set: { lage.setTargetShown(target.id, $0) }))
-                        .labelsHidden()
-                        .accessibilityLabel("\(target.data.displayName) auf der Karte")
-                }
-                .swipeActions(edge: .trailing, allowsFullSwipe: true) {
-                    Button("Löschen", systemImage: "trash", role: .destructive) {
-                        lage.delete(Target.self, id: target.id)
-                    }
-                }
-                .simultaneousGesture(LongPressGesture(minimumDuration: 0.45).onEnded { _ in
-                    selection.begin(with: target.id)
-                })
-                .accessibilityAction(named: "Auswählen") { selection.begin(with: target.id) }
+                Image(systemName: selected ? "checkmark.circle.fill" : "circle")
+                    .font(.title3)
+                    .foregroundStyle(selected ? Theme.accent : Color.secondary)
+            }
+            TargetRow(target: target)
+            Spacer(minLength: 0)
+            if !selection.isActive {
+                // Wie bei den Fahrzeugen der Kräfte: direkt in der Liste auf der Karte ein- und ausblenden.
+                Toggle("Auf der Karte", isOn: Binding(get: { lage.isTargetShown(target.id) }, set: { lage.setTargetShown(target.id, $0) }))
+                    .labelsHidden()
+                    .accessibilityLabel("\(target.data.displayName) auf der Karte")
+                Image(systemName: "chevron.right")
+                    .font(.footnote.weight(.semibold))
+                    .foregroundStyle(.tertiary)
             }
         }
+        .contentShape(.rect)
+        .onTapGesture {
+            if selection.isActive { selection.toggle(target.id) } else { open(target.id) }
+        }
+        .onLongPressGesture(minimumDuration: 0.45) {
+            if selection.isActive { selection.toggle(target.id) } else { selection.begin(with: target.id) }
+        }
+        .swipeActions(edge: .trailing, allowsFullSwipe: true) {
+            if !selection.isActive {
+                Button("Löschen", systemImage: "trash", role: .destructive) {
+                    lage.delete(Target.self, id: target.id)
+                }
+            }
+        }
+        .accessibilityElement(children: .combine)
+        .accessibilityAddTraits(selection.isActive ? (selected ? [.isButton, .isSelected] : .isButton) : .isButton)
+        .accessibilityAction(named: "Auswählen") { selection.begin(with: target.id) }
     }
 }
 
@@ -294,15 +292,22 @@ final class TargetSelection {
     }
 }
 
-/// Oben in der Liste: Anzahl ausgewählter Ziele und „Fertig“.
+/// Oben in der Liste: Anzahl ausgewählter Ziele, daneben „…“ (Optionen) und „Fertig“.
 private struct SelectionStatusRow: View {
     let selection: TargetSelection
+    /// Ziele der aktuellen Ansicht (für „Alle auswählen“).
+    let visible: [String]
 
     var body: some View {
-        HStack {
+        HStack(spacing: 10) {
             Text(selection.ids.count == 1 ? "1 Ziel ausgewählt" : "\(selection.ids.count) Ziele ausgewählt")
                 .font(.subheadline.weight(.semibold))
             Spacer()
+            SelectionMenu(selection: selection, visible: visible)
+                .labelStyle(.iconOnly)
+                .font(.system(size: 17, weight: .semibold))
+                .frame(width: 36, height: 36)
+                .glassEffect(.regular.interactive(), in: .circle)
             Button("Fertig") { selection.end() }
                 .buttonStyle(.borderedProminent)
                 .controlSize(.small)

@@ -16,6 +16,10 @@ struct RootView: View {
             }
         }
         .animation(.default, value: lock.isLocked)
+        // Standort nur im Dienst teilen: außer Dienst (Instanz verlassen) stoppen Übertragung und Live-Aktivität.
+        .onChange(of: model.phase != .onboarding && insideInstance, initial: true) { _, onDuty in
+            model.updateSharing(onDuty: onDuty)
+        }
         #if DEBUG
         // Messfühler für den Kamera-Test auf oberster Ebene: Innerhalb der Karte verbirgt MapKit Unterelemente vor UI-Tests.
         .overlay(alignment: .topLeading) { CameraProbeLabel() }

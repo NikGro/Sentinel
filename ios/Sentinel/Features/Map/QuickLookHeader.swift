@@ -64,8 +64,9 @@ struct QuickLookHeader: View {
             // Hinter der Kopfzeile ein Hintergrund, unten mit Verlauf ins Transparente (wie die Kopfzeile im Mehr-Menü):
             // Gescrollter Inhalt läuft sauber darunter weg statt sichtbar unter Titel und Knöpfen.
             .background(alignment: .top) {
+                // Dieselbe Farbe wie die Liste darunter (passt sich im Fenster der erhöhten Ebene an).
                 Rectangle()
-                    .fill(.regularMaterial)
+                    .fill(Color(.systemGroupedBackground))
                     .mask {
                         VStack(spacing: 0) {
                             Color.black

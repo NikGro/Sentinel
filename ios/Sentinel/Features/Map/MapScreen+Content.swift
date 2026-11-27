@@ -100,9 +100,21 @@ extension MapScreen {
         return lage.sortedTargets.compactMap { target in
             guard !settings.hiddenTargetKinds.contains(target.data.art.rawValue), lage.isTargetVisible(target.id) else { return nil }
             if let binding = target.data.bindung, binding.art == .fahrzeug || binding.art == .objekt, let id = binding.zielId, lage.targets[id] != nil { return nil }
+            // Im ÖPNV-Fahrzeug zeichnet die ÖPNV-Ebene die Zielperson an der geglätteten Fahrzeugposition.
+            if let binding = target.data.bindung, binding.art == .oepnv, let id = binding.zielId, let vehicle = lage.mapObjects[id]?.data,
+               vehicle.typ == .oepnvfahrzeug || vehicle.hasRealVehicle, Self.transitVehicleShown(vehicle, at: .now) { return nil }
             guard let position = lage.position(ofTarget: target) else { return nil }
             return SymbolPin(id: target.id, title: targetLabel(target), symbol: target.data.mapSymbol, color: Theme.target, coordinate: position.point.coordinate, selection: .target(target.id))
         }
+    }
+
+    /// Wird das ÖPNV-Fahrzeug gerade gezeichnet (fünf Minuten vor Abfahrt bis fünf nach Ankunft)? Gleiche Regel wie in
+    /// `transitPins`; sonst bleibt die Zielperson mit eigenem Symbol stehen.
+    static func transitVehicleShown(_ object: MapObject, at date: Date) -> Bool {
+        guard let times = object.fahrt?.zeiten.compactMap({ $0 }), let start = times.first, let end = times.last else { return true }
+        let t = date.timeIntervalSince1970 * 1000
+        let margin = TransitSimulation.standing * 1000
+        return t >= start - margin && t <= end + margin
     }
 
     /// Beschriftung eines Ziels auf der Karte.

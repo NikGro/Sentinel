@@ -16,9 +16,7 @@ struct SharingLiveActivity: Widget {
         ActivityConfiguration(for: SharingAttributes.self) { context in
             // Sperrbildschirm und Mitteilungen.
             HStack(spacing: 12) {
-                Image(systemName: "location.fill")
-                    .font(.title2.weight(.bold))
-                    .foregroundStyle(.blue)
+                LiveDot(size: 16)
                 VStack(alignment: .leading, spacing: 2) {
                     Text("SENTINEL teilt deinen Standort")
                         .font(.headline)
@@ -35,13 +33,14 @@ struct SharingLiveActivity: Widget {
         } dynamicIsland: { context in
             DynamicIsland {
                 DynamicIslandExpandedRegion(.leading) {
-                    Image(systemName: "location.fill")
-                        .font(.title3.weight(.bold))
-                        .foregroundStyle(.blue)
+                    LiveDot(size: 14)
+                        .padding(.leading, 6)
                 }
                 DynamicIslandExpandedRegion(.center) {
-                    Text("Standort wird geteilt")
+                    Text("SENTINEL teilt deinen Standort")
                         .font(.headline)
+                        .lineLimit(1)
+                        .minimumScaleFactor(0.8)
                 }
                 DynamicIslandExpandedRegion(.bottom) {
                     Text(context.state.detail)
@@ -49,16 +48,33 @@ struct SharingLiveActivity: Widget {
                         .foregroundStyle(.secondary)
                 }
             } compactLeading: {
-                Image(systemName: "location.fill")
-                    .foregroundStyle(.blue)
+                // Zugeklappt: links roter Punkt mit Namen, rechts „Standort“: eindeutig statt eines Pfeilsymbols.
+                HStack(spacing: 4) {
+                    LiveDot(size: 9)
+                    Text("SENTINEL")
+                        .font(.caption2.weight(.heavy))
+                        .foregroundStyle(.red)
+                }
             } compactTrailing: {
-                Text("SENTINEL")
-                    .font(.caption2.weight(.heavy))
-                    .foregroundStyle(.blue)
+                Text("Standort")
+                    .font(.caption2.weight(.semibold))
+                    .foregroundStyle(.white)
             } minimal: {
-                Image(systemName: "location.fill")
-                    .foregroundStyle(.blue)
+                LiveDot(size: 10)
             }
+            .keylineTint(.red)
         }
+    }
+}
+
+/// Roter Punkt mit hellem Rand, wie eine Aufnahme-Anzeige.
+private struct LiveDot: View {
+    let size: CGFloat
+
+    var body: some View {
+        Circle()
+            .fill(.red)
+            .frame(width: size, height: size)
+            .overlay(Circle().stroke(.red.opacity(0.35), lineWidth: size / 3).padding(-size / 4))
     }
 }

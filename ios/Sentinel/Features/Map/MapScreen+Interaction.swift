@@ -55,7 +55,7 @@ extension MapScreen {
     /// Herausgezoomt Cluster, nah dran auseinandergerückte Punkte.
     var clusterLayout: ClusterLayout {
         let items = forcePins.map { ($0.id, $0.coordinate) } + (vehiclePins + targetPins).map { ($0.id, $0.coordinate) } + handles.map { ($0.id, $0.coordinate) }
-        return ClusterLayout(items.map { (id: $0.0, coordinate: $0.1) }, metersPerPoint: cameraState.distance / 700)
+        return ClusterLayout(items.map { (id: $0.0, coordinate: $0.1) }, metersPerPoint: cameraState.distance / 700, heading: cameraState.heading)
     }
 
     /// Cluster angetippt: so weit hineinzoomen, dass alle Punkte darin zu sehen sind.
@@ -88,10 +88,16 @@ extension MapScreen {
             } else {
                 lage.position(ofObject: object.data, at: transitNow)
             }
+            // Sitzt eine (sichtbare) Zielperson darin, steht nur ihr Symbol hier.
+            let rider = lage.sortedTargets.first { target in
+                target.data.bindung?.art == .oepnv && target.data.bindung?.zielId == object.id
+                    && lage.isTargetVisible(target.id) && !settings.hiddenTargetKinds.contains(target.data.art.rawValue)
+            }
             pins.append(TransitVehiclePin(
                 id: object.id, objectId: object.id, lineObjectId: nil,
                 coordinate: point.coordinate,
-                line: line, color: Color(hex: object.data.transitHex), departure: object.data.since ?? transitNow
+                line: line, color: Color(hex: object.data.transitHex), departure: object.data.since ?? transitNow,
+                rider: rider.map { (id: $0.id, label: targetLabel($0), symbol: $0.data.mapSymbol) }
             ))
         }
         for object in objects(.oepnvlinie) {
@@ -160,11 +166,8 @@ extension MapScreen {
             + layout.clusters.map { (nil, $0.coordinate) }
         for item in placed {
             if let id = item.id, layout.hidden.contains(id) { continue }
-            guard var screen = proxy.convert(item.coordinate, to: .local) else { continue }
-            if let id = item.id, let offset = layout.offsets[id] {
-                screen.x += offset.width
-                screen.y += offset.height
-            }
+            let coordinate = item.id.flatMap { layout.placed[$0] } ?? item.coordinate
+            guard let screen = proxy.convert(coordinate, to: .local) else { continue }
             if hypot(screen.x - point.x, screen.y - point.y) < 26 { return true }
         }
         return false

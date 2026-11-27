@@ -5,58 +5,12 @@ statt jede Änderung sofort einzubauen. Erledigtes wandert mit Version ins CHANG
 
 ## Geplant
 
-### Nach 0.39 offen
+### Nach 0.40 offen
 
-- **Standort und Live-Aktivität enden nicht:** Nach Schließen der App und Verlassen der Instanz laufen GPS-Übertragung
-  und Live-Aktivität weiter.
-  - Ursache (Code): Der Standortdienst startet beim Anmelden und stoppt nur beim Abmelden, nicht beim Verlassen der
-    Instanz (außer Dienst); die Live-Aktivität hängt daran. Wird die App beendet, bleibt eine laufende Live-Aktivität
-    stehen (iOS beendet sie nicht von selbst), die Hintergrund-Standortsitzung ebenfalls.
-  - Behebung: Standort nur im Dienst (in einer Instanz) teilen; beim Verlassen stoppen und die Live-Aktivität beenden.
-    Beim App-Start verwaiste Live-Aktivitäten beenden; Live-Aktivität mit Ablaufzeit (`staleDate`), die bei jeder
-    Übertragung verlängert wird, damit sie nach dem Beenden der App als veraltet erscheint bzw. verschwindet.
-- **Zielperson im ÖPNV:** Ist eine Zielperson an ein ÖPNV-Fahrzeug gebunden, sind beide Symbole zu sehen (Fahrzeug und
-  Zielperson), und das Symbol der Zielperson ruckelt.
-  - Ursache: Das ÖPNV-Fahrzeug wird mit 30 Bildern/s geglättet bewegt (TransitSmoother), die Zielperson dagegen an der
-    Position aus der Lage (seltener aktualisiert, ohne Glättung).
-  - Behebung: Nur das Symbol der Zielperson zeigen (Fahrzeug ausblenden, solange ein Ziel darin sitzt, ggf. Linie als
-    kleines Abzeichen am Zielsymbol) und die Zielperson an der geglätteten Fahrzeugposition zeichnen.
-- **Kopfzeile der Kurzübersicht: Hintergrund in derselben Farbe wie der Rest:** Der Balken hinter Titel und Knöpfen ist
-  heller als der Hintergrund der Liste (er nutzt ein Material, `.regularMaterial`). Stattdessen die Hintergrundfarbe der
-  Liste verwenden (`Color(.systemGroupedBackground)`, passt sich in Fenstern der erhöhten Ebene an), mit demselben
-  Verlauf ins Transparente nach unten.
-- **Aussteigen-Knopf schlicht:** Bei den Insassen nur das Symbol (ohne Text), rot, natives Design ohne Glas-/Leucht-
-  effekt (z. B. einfacher Knopf mit `figure.walk.departure` in Rot, Barrierefreiheits-Name „Aussteigen“).
-- **Antippen auf der Karte trifft weiter nicht immer das richtige Objekt:** Systematisch prüfen: welche Ebenen fangen
-  Tipps ab (Symbole, verschobene Symbole mit vergrößerter Trefferfläche, Flächen/Linien über `ShapeTap`, Haltestellen,
-  Cluster, eigener Punkt), in welcher Reihenfolge, und ob die vergrößerten Flächen verschobener Symbole Nachbarn
-  verdecken. Ziel: Tipp trifft immer das sichtbar oberste bzw. nächstgelegene Objekt; bei Mehrdeutigkeit kurze Auswahl.
-  Mit UI-Test abdecken (übereinanderliegende Symbole, Symbol auf Fläche, Symbol auf Linie).
-- **Performance prüfen:** Kartenbildschirm messen (Instruments: Time Profiler, SwiftUI-Updates, Hitches). Kandidaten:
+- **Performance prüfen (0.40: nur gezielt, Messung steht aus):** Kartenbildschirm messen (Instruments: Time Profiler, SwiftUI-Updates, Hitches). Kandidaten:
   `MapScreen` baut bei jeder Standort- und Kameraänderung viel neu; Ebenen auf eigene beobachtbare Objekte aufteilen
   (wie Routenlinie/Spurende); teure Berechnungen (Clustern/Auseinanderrücken, Spur-Farbverläufe, Häufigkeit über alle
   Spuren, ÖPNV-Fahrzeuge mit 30 Hz) zwischenspeichern; Anzahl der Annotationen begrenzen.
-- **Standortspur weiter uneinheitlich dick:** Meist stabil schmal, aber z. B. nach dem Abbiegen wird ein Stück, dann die
-  ganze Spur dick, dann alles dünn, dann wieder normal.
-  - Vermutete Ursachen (Code): Die eigene Spur wird bei jedem GPS-Punkt als neues Linienobjekt mit Farbverlauf angelegt
-    (die Lage der Farbstopps verschiebt sich, MapKit legt die Linie neu an); die Teilstücke sind nach Position nummeriert
-    (`id` = Index), sodass sich nach einem Abschnittswechsel (Lücke, Abbiegen) die Zuordnung verschiebt und SwiftUI-
-    MapKit Linien mit fremden Strich-Einstellungen wiederverwendet; das Endstück liegt mit eigener Breite darüber.
-  - Behebung: Spur aufteilen in einen festen Teil (vom Server, ändert sich nur beim Neuladen) und ein kurzes wachsendes
-    Ende; Teilstücke mit stabiler Kennung (Startzeit statt Index). Falls SwiftUI-MapKit weiter flackert: die Spur direkt
-    als eigenes Overlay mit festem Renderer (`MKGradientPolylineRenderer`, feste Breite) auf die Karte legen, die
-    MapEngine hat die MKMapView ohnehin in der Hand.
-- **Dynamic Island verständlich:** Zu sehen ist nur ein Kompass-/Pfeilsymbol, das verwirrt. Prüfen, ob die
-  Live-Aktivität überhaupt startet (oder ob nur die blaue Standortanzeige des Systems zu sehen ist: Start beim
-  App-Start, bevor die App im Vordergrund ist? Live-Aktivitäten in den Einstellungen erlaubt? Erweiterung von SideStore
-  mitinstalliert?). Darstellung: kompakt links ein roter Punkt (wenn möglich pulsierend) mit „SENTINEL“, rechts
-  „Standort“ bzw. „teilt“; ausgeklappt Text über die ganze Breite („SENTINEL teilt deinen Standort“, Instanz). Die
-  ganze Insel mit Text zu füllen geht nur im ausgeklappten Zustand; kompakt sind links und rechts je ein kurzer Bereich.
-- **Auswahlmodus übersichtlicher:**
-  - Gedrückt halten an beliebiger Stelle einer Zeile (auch auf Foto, Name, Schalterbereich) startet den Auswahlmodus;
-    bisher greift es nicht überall (die Geste hängt an der Zeile neben dem Navigationslink).
-  - Der „…“-Knopf mit den Optionen steht in der eingeblendeten Leiste direkt neben „Fertig“, nicht oben in der
-    Kopfzeile.
 - **Stau auf der Route einfärben (ohne Sonderrechte):** Abschnitte mit stockendem Verkehr auf der Routenlinie gelb bzw.
   orange (nicht rot, das ist Sonderrechten vorbehalten).
   - Stand: Apple Karten zeigt die Verkehrslage nur als Kartenebene; je Abschnitt gibt MapKit sie nicht heraus.

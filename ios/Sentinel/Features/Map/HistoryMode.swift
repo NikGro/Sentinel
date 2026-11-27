@@ -151,6 +151,8 @@ struct GradientSpurLines: MapContent {
     var sharedCounts: [String: Int]?
     /// Eigener, gerade gezeichneter Punkt: letztes Stück bis dorthin.
     var liveEnd: CLLocationCoordinate2D?
+    /// Zeitspanne für die Farbe nach Alter (für ein Teilstück der Spur dieselbe Skala wie die ganze Spur).
+    var timeRange: ClosedRange<Date>?
 
     static let opacity = 0.75
     /// Einheitliche Breite für Spur und Endstück (vorher sprang die Dicke zwischen Teilen und Darstellungen).
@@ -180,20 +182,25 @@ struct GradientSpurLines: MapContent {
     }
 
     /// Zusammenhängende Abschnitte (ohne Lücke) mit Farbverlauf; Lücken als eigene, gestrichelte Stücke.
-    private var runs: [(id: Int, coordinates: [CLLocationCoordinate2D], gradient: Gradient?)] {
+    private var runs: [(id: String, coordinates: [CLLocationCoordinate2D], gradient: Gradient?)] {
         let punkte = spur.punkte
-        guard punkte.count >= 2, let first = punkte.first?.date, let last = punkte.last?.date else { return [] }
-        let span = max(last.timeIntervalSince(first), 1)
+        guard punkte.count >= 2, let firstPoint = punkte.first?.date, let lastPoint = punkte.last?.date else { return [] }
+        let first = timeRange?.lowerBound ?? firstPoint
+        let span = max((timeRange?.upperBound ?? lastPoint).timeIntervalSince(first), 1)
         let counts = byFrequency ? (sharedCounts ?? Self.passes(spur)) : [:]
         func colorAt(_ i: Int) -> Color {
             if byFrequency { return Self.color(Double(min(counts[Self.cell(punkte[i].point)] ?? 1, 5) - 1) / 4) }
             return Self.color(punkte[i].date.timeIntervalSince(first) / span)
         }
-        var result: [(Int, [CLLocationCoordinate2D], Gradient?)] = []
+        // Kennung je Teilstück nach seiner Startzeit (nicht nach Position): Entsteht ein neues Teilstück (Lücke,
+        // Abbiegen), behalten die übrigen ihre Kennung; SwiftUI-MapKit verwendet sonst Linien mit fremden Einstellungen
+        // weiter und die Dicke springt.
+        func key(_ i: Int, gap: Bool) -> String { "\(gap ? "l" : "s")\(Int(punkte[i].date.timeIntervalSince1970 * 10))" }
+        var result: [(String, [CLLocationCoordinate2D], Gradient?)] = []
         var start = 0
         while start < punkte.count - 1 {
             if spur.isGap(after: start) {
-                result.append((result.count, [punkte[start].point.coordinate, punkte[start + 1].point.coordinate], nil))
+                result.append((key(start, gap: true), [punkte[start].point.coordinate, punkte[start + 1].point.coordinate], nil))
                 start += 1
                 continue
             }
@@ -217,7 +224,7 @@ struct GradientSpurLines: MapContent {
                 stops.append(.init(color: colorAt(i).opacity(Self.opacity), location: along[offset] / total))
             }
             if stops.count == 1 { stops.append(.init(color: stops[0].color, location: 1)) }
-            result.append((result.count, coordinates, Gradient(stops: stops)))
+            result.append((key(start, gap: false), coordinates, Gradient(stops: stops)))
             start = end
         }
         return result.map { (id: $0.0, coordinates: $0.1, gradient: $0.2) }
@@ -304,6 +311,17 @@ final class StoredTracks {
         if liveTail.count > 2000 { liveTail.removeFirst(liveTail.count - 2000) }
     }
 
+    /// Nur das lokal gewachsene Ende (letzter Punkt vom Server plus die neuen eigenen Punkte); `nil`, wenn es keines gibt.
+    func liveTail(of track: Track) -> Spur? {
+        guard track.spur.subject.key == liveSubjectKey else { return nil }
+        let after = track.spur.punkte.last?.date ?? .distantPast
+        let fresh = liveTail.filter { $0.date > after }
+        guard !fresh.isEmpty else { return nil }
+        let anchor = track.spur.punkte.last.map { [$0] } ?? []
+        let tail = anchor + fresh
+        return tail.count >= 2 ? Spur(subject: track.spur.subject, punkte: tail) : nil
+    }
+
     /// Spur samt der eigenen Punkte, die der Server noch nicht geliefert hat.
     func withLiveTail(_ track: Track) -> Spur {
         guard track.spur.subject.key == liveSubjectKey, !liveTail.isEmpty else { return track.spur }
@@ -317,13 +335,20 @@ final class StoredTracks {
     /// Häufigkeit über alle Standortspuren nach Häufigkeit (alle Fahnder): Durchfahrten je Feld zusammengezählt, jede
     /// Person nur einmal (auch wenn ihre Spur in mehreren Objekten steckt).
     var sharedFrequency: [String: Int] {
+        // Zwischengespeichert: Wird mehrmals je Sekunde gelesen (Spurende), ändert sich aber nur mit neuen Punkten.
+        let key = tracks.map { "\($0.id):\($0.spur.punkte.count):\($0.byFrequency)" }.joined(separator: ",") + "|\(liveTail.count)"
+        if key == frequencyKey { return frequencyCache }
         var seen = Set<String>()
         var total: [String: Int] = [:]
         for track in tracks where track.byFrequency && seen.insert(track.spur.subject.key).inserted {
             for (cell, count) in GradientSpurLines.passes(withLiveTail(track)) { total[cell, default: 0] += count }
         }
+        frequencyKey = key
+        frequencyCache = total
         return total
     }
+    @ObservationIgnored private var frequencyKey = ""
+    @ObservationIgnored private var frequencyCache: [String: Int] = [:]
 
     /// Angetippte Stelle einer Spur: Spur, Punkt und Anteil bis zum nächsten Punkt.
     var selected: (trackId: String, index: Int, fraction: Double)?
@@ -411,7 +436,14 @@ struct StoredTracksLayer: MapContent {
         let shared = state.sharedFrequency
         ForEach(state.tracks) { track in
             if track.gradient {
-                GradientSpurLines(spur: state.withLiveTail(track), byFrequency: track.byFrequency, sharedCounts: shared)
+                // Fester Teil vom Server (ändert sich nur beim Neuladen) und das wachsende Ende getrennt: So wird bei
+                // jedem GPS-Punkt nur das kurze Ende neu angelegt, nicht die ganze Spur.
+                let whole = state.withLiveTail(track)
+                let range = whole.punkte.first.flatMap { first in whole.punkte.last.map { first.date...$0.date } }
+                GradientSpurLines(spur: track.spur, byFrequency: track.byFrequency, sharedCounts: shared, timeRange: range)
+                if let tail = state.liveTail(of: track) {
+                    GradientSpurLines(spur: tail, byFrequency: track.byFrequency, sharedCounts: shared, timeRange: range)
+                }
             } else {
                 SpurLines(spur: track.spur, title: title(track.spur.subject))
             }

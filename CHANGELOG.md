@@ -1,5 +1,20 @@
 # Änderungen
 
+## 0.40.0
+
+- Standort nur im Dienst: Beim Verlassen der Instanz enden Standortübertragung und Live-Aktivität; liegengebliebene
+  Live-Aktivitäten werden beim App-Start beendet, ohne laufende App veraltet sie nach wenigen Minuten
+- Dynamic Island: roter Punkt mit „SENTINEL“ und „Standort“ statt eines Pfeilsymbols; ausgeklappt „SENTINEL teilt deinen
+  Standort“ über die ganze Breite
+- Zielperson im ÖPNV: Nur ihr Symbol (mit Linie im Namen), an der geglätteten Fahrzeugposition, ruckelt nicht mehr
+- Karte: Auseinandergerückte Symbole stehen wirklich an ihrer gezeichneten Stelle (auch beim Antippen); vorher lag die
+  Trefferfläche verschoben und verdeckte Nachbarn
+- Standortspur: Teilstücke mit fester Kennung, das wachsende Ende als eigenes Stück; die Dicke springt nicht mehr
+- Ziele-Tab: Gedrückt halten an beliebiger Stelle startet die Auswahl; „…“ steht neben „Fertig“
+- Insassen: Aussteigen als rotes Symbol, schlicht
+- Kurzübersicht: Kopfzeile in derselben Farbe wie der Hintergrund
+- Leistung: Häufigkeit der Standortspur zwischengespeichert
+
 ## 0.39.0
 
 **Ziele**

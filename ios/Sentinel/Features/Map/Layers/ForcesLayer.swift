@@ -21,16 +21,14 @@ struct ForcePin: Identifiable, Equatable {
 
 struct ForcesLayer: MapContent {
     let pins: [ForcePin]
-    var offsets: [String: CGSize] = [:]
+    var placed: [String: CLLocationCoordinate2D] = [:]
     let onSelect: (MapSelection) -> Void
 
     var body: some MapContent {
         ForEach(pins) { pin in
-            Annotation(pin.label, coordinate: pin.coordinate, anchor: .center) {
-                Displaced(offset: offsets[pin.id] ?? .zero) {
-                    ForceMarker(pin: pin)
-                        .onTapGesture { onSelect(pin.target) }
-                }
+            Annotation(pin.label, coordinate: placed[pin.id] ?? pin.coordinate, anchor: .center) {
+                ForceMarker(pin: pin)
+                    .onTapGesture { onSelect(pin.target) }
             }
             .annotationTitles(.hidden)
         }
@@ -109,16 +107,14 @@ struct SymbolPin: Identifiable {
 
 struct SymbolLayer: MapContent {
     let pins: [SymbolPin]
-    var offsets: [String: CGSize] = [:]
+    var placed: [String: CLLocationCoordinate2D] = [:]
     let onSelect: (MapSelection) -> Void
 
     var body: some MapContent {
         ForEach(pins) { pin in
-            Annotation(pin.title, coordinate: pin.coordinate, anchor: .center) {
-                Displaced(offset: offsets[pin.id] ?? .zero) {
-                    MapSymbolMarker(symbol: pin.symbol, color: pin.color, label: pin.title)
-                        .onTapGesture { onSelect(pin.selection) }
-                }
+            Annotation(pin.title, coordinate: placed[pin.id] ?? pin.coordinate, anchor: .center) {
+                MapSymbolMarker(symbol: pin.symbol, color: pin.color, label: pin.title)
+                    .onTapGesture { onSelect(pin.selection) }
             }
             .annotationTitles(.hidden)
         }
