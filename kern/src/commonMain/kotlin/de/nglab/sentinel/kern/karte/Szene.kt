@@ -124,30 +124,24 @@ class Szene {
     }
 
     /** Alle Datenquellen außer den bewegten (ÖPNV-Fahrzeuge, eigener Standort), als GeoJSON je Quelle. */
-    fun aufbauen(lage: LageStand, jetztMs: Long, anzeige: Anzeige = Anzeige(), versatz: Map<String, Pair<Double, Double>> = emptyMap()): Map<String, String> {
-        val symbole = ArrayList<JsonObject>()
+    private data class Eintrag(
+        val objekt: KartenObjekt, val p: GeoPunkt, val sym: Symbol, val farbe: String, val titel: String, val rang: Int,
+        val veraltet: Boolean, val a: Boolean, val live: Boolean,
+    )
+
+    /**
+     * Alle Datenquellen außer den bewegten. `zoom`: aktuelle Zoomstufe der Karte; nah herangezoomt werden
+     * übereinanderliegende Symbole aufgefächert (`Auffaechern`), ohne Angabe nicht.
+     */
+    fun aufbauen(lage: LageStand, jetztMs: Long, anzeige: Anzeige = Anzeige(), zoom: Double? = null): Map<String, String> {
+        val eintraege = ArrayList<Eintrag>()
         val linien = ArrayList<JsonObject>()
         val flaechen = ArrayList<JsonObject>()
         val flaechenText = ArrayList<JsonObject>()
         val halte = ArrayList<JsonObject>()
 
         fun symbol(objekt: KartenObjekt, p: GeoPunkt, sym: Symbol, farbe: String, titel: String, rang: Int, veraltet: Boolean = false, a: Boolean = false, live: Boolean = false) {
-            val v = versatz[objekt.schluessel]
-            symbole += merkmal(punkt(p), buildJsonObject {
-                put("id", objekt.schluessel)
-                put("art", objekt.art.schluessel)
-                put("bild", sym.bildname)
-                put("farbe", farbe)
-                put("titel", titel)
-                put("rang", rang)
-                putJsonArray("versatz") { add(JsonPrimitive(v?.first ?: 0.0)); add(JsonPrimitive(v?.second ?: 0.0)) }
-                // Name unter dem Symbol, in Schrifthöhen (12 pt), mit dem Symbol versetzt.
-                putJsonArray("textversatz") { add(JsonPrimitive((v?.first ?: 0.0) / 12)); add(JsonPrimitive(1.6 + (v?.second ?: 0.0) / 12)) }
-                put("versetzt", v != null)
-                put("veraltet", veraltet)
-                put("a", a)
-                put("live", live)
-            })
+            eintraege += Eintrag(objekt, p, sym, farbe, titel, rang, veraltet, a, live)
         }
 
         // Kräfte: zu Fuß bzw. im ÖPNV einzeln; im Fahrzeug erscheint das Fahrzeug samt Besatzung.
@@ -233,6 +227,25 @@ class Szene {
             }
         }
 
+        val versatz = zoom?.let { z -> Auffaechern.versatz(eintraege.map { it.objekt.schluessel to it.p }, z) } ?: emptyMap()
+        val symbole = eintraege.map { e ->
+            val v = versatz[e.objekt.schluessel]
+            merkmal(punkt(e.p), buildJsonObject {
+                put("id", e.objekt.schluessel)
+                put("art", e.objekt.art.schluessel)
+                put("bild", e.sym.bildname)
+                put("farbe", e.farbe)
+                put("titel", e.titel)
+                put("rang", e.rang)
+                putJsonArray("versatz") { add(JsonPrimitive(v?.first ?: 0.0)); add(JsonPrimitive(v?.second ?: 0.0)) }
+                // Name unter dem Symbol, in Schrifthöhen (12 pt), mit dem Symbol versetzt.
+                putJsonArray("textversatz") { add(JsonPrimitive((v?.first ?: 0.0) / 12)); add(JsonPrimitive(1.6 + (v?.second ?: 0.0) / 12)) }
+                put("versetzt", v != null)
+                put("veraltet", e.veraltet)
+                put("a", e.a)
+                put("live", e.live)
+            })
+        }
         return mapOf(
             Quellen.SYMBOLE to sammlung(symbole),
             Quellen.LINIEN to sammlung(linien),

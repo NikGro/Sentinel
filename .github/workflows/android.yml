@@ -1,0 +1,87 @@
+name: Android-App
+
+on:
+  push:
+    branches: [main, "claude/**"]
+    paths: ["android/**", "kern/**", ".github/workflows/android.yml"]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: android-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  bauen:
+    name: Bauen und testen
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: "21"
+      - uses: gradle/actions/setup-gradle@v5
+
+      - name: Kern testen
+        run: ./gradlew -p kern jvmTest --console=plain
+
+      - name: APK bauen
+        env:
+          BUILD_NUMBER: ${{ github.run_number }}
+        run: ./gradlew -p android :app:assembleDebug :app:assembleRelease --console=plain --stacktrace
+
+      - name: APK ablegen
+        run: |
+          mkdir -p apk
+          cp android/app/build/outputs/apk/release/*.apk apk/Sentinel-release.apk
+          cp android/app/build/outputs/apk/debug/*.apk apk/Sentinel-debug.apk
+          ls -la apk
+      - uses: actions/upload-artifact@v5
+        with:
+          name: sentinel-apk
+          path: apk/
+          retention-days: 30
+
+  emulator:
+    name: Im Emulator prüfen
+    needs: bauen
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/download-artifact@v5
+        with:
+          name: sentinel-apk
+          path: apk
+      - name: KVM freigeben
+        run: |
+          echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
+          sudo udevadm control --reload-rules && sudo udevadm trigger --name-match=kvm
+      - name: Starten und Bildschirmfotos
+        uses: reactivecircus/android-emulator-runner@v2
+        with:
+          api-level: 35
+          target: google_apis
+          arch: x86_64
+          profile: pixel_7
+          disable-animations: true
+          script: |
+            adb install -r apk/Sentinel-debug.apk
+            adb shell pm grant de.nglab.sentinel android.permission.ACCESS_FINE_LOCATION || true
+            adb shell pm grant de.nglab.sentinel android.permission.POST_NOTIFICATIONS || true
+            adb shell am start -n de.nglab.sentinel/.MainActivity
+            sleep 12
+            mkdir -p bilder
+            adb exec-out screencap -p > bilder/01-start.png
+            adb shell uiautomator dump /sdcard/ansicht.xml && adb pull /sdcard/ansicht.xml bilder/01-start.xml || true
+            adb logcat -d -t 400 > bilder/logcat.txt || true
+      - uses: actions/upload-artifact@v5
+        if: always()
+        with:
+          name: android-bilder
+          path: bilder/
+          retention-days: 14

@@ -67,6 +67,8 @@ data class LageStand(
     val aImOepnv: Boolean get() = aHalter?.data?.let { it.fortbewegung == Fortbewegung.Oepnv && it.oepnv != null } ?: false
     val fremderNotruf: Versioniert<Fahnder>? get() = einsatz.sos?.takeIf { it.memberId != ichId }?.let { fahnder[it.memberId] }
     val eigenerNotruf: Boolean get() = ichId != null && einsatz.sos?.memberId == ichId
+    /** Im Dienst = in einer Instanz aktiv; außer Dienst bleibt nur das Hauptmenü und der Standort wird nicht geteilt. */
+    val imDienst: Boolean get() = ich?.data?.aktiv ?: false
     val ueberschlagTeilnahme: Boolean get() = ichId?.let { it in einsatz.ueberschlagen.teilnehmer } ?: false
 
     // Instanzen
