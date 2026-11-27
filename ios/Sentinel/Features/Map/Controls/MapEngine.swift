@@ -203,14 +203,15 @@ final class MapEngine {
         var found: MKMapView?
         for _ in 0..<8 {
             guard let candidate = ancestor else { break }
-            // Nur eine Karte, die keiner anderen Steuerung gehört, und davon die oberste: Liegt eine zweite Karte über
-            // der Lagekarte (ÖPNV-Ansicht), griff die Steuerung sonst nach der Lagekarte darunter. Die eigene Karte
+            // Nur eine Karte, die keiner anderen Steuerung gehört (die erste davon, wie bisher): Liegt eine zweite Karte
+            // über der Lagekarte (ÖPNV-Ansicht), griff die Steuerung sonst nach der Lagekarte darunter. Die eigene Karte
             // ließ sich dann nicht bewegen, und die Lagekarte hatte danach zwei Steuerungen (Wischen viel zu schnell).
+            // Nicht die zuletzt gezeichnete nehmen: Die Lagekarte enthält weitere Kartenansichten.
             let free = Self.allMaps(in: candidate).filter { map in
                 guard let owner = Self.owners.object(forKey: map) else { return true }
                 return owner === self
             }
-            if let hit = free.last {
+            if let hit = free.first {
                 found = hit
                 break
             }
@@ -686,7 +687,7 @@ final class MapEngine {
     /// Welche Steuerung zu welcher Karte gehört (schwach gehalten: verschwindet mit Karte bzw. Steuerung).
     private static let owners = NSMapTable<MKMapView, MapEngine>.weakToWeakObjects()
 
-    /// Alle Karten unterhalb einer Ansicht, in Zeichenreihenfolge (die oberste zuletzt).
+    /// Alle Karten unterhalb einer Ansicht, in Reihenfolge der Ansichten.
     private static func allMaps(in view: UIView) -> [MKMapView] {
         if let map = view as? MKMapView { return [map] }
         return view.subviews.flatMap { allMaps(in: $0) }
