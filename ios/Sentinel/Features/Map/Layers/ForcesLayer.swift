@@ -21,14 +21,17 @@ struct ForcePin: Identifiable, Equatable {
 
 struct ForcesLayer: MapContent {
     let pins: [ForcePin]
-    var placed: [String: CLLocationCoordinate2D] = [:]
+    /// Bildschirmversatz auseinandergerückter Symbole (siehe `ClusterLayout`).
+    var offsets: [String: CGSize] = [:]
     let onSelect: (MapSelection) -> Void
 
     var body: some MapContent {
         ForEach(pins) { pin in
-            Annotation(pin.label, coordinate: placed[pin.id] ?? pin.coordinate, anchor: .center) {
-                ForceMarker(pin: pin)
-                    .onTapGesture { onSelect(pin.target) }
+            Annotation(pin.label, coordinate: pin.coordinate, anchor: .center) {
+                Displaced(offset: offsets[pin.id] ?? .zero) {
+                    ForceMarker(pin: pin)
+                        .onTapGesture { onSelect(pin.target) }
+                }
             }
             .annotationTitles(.hidden)
         }
@@ -107,14 +110,16 @@ struct SymbolPin: Identifiable {
 
 struct SymbolLayer: MapContent {
     let pins: [SymbolPin]
-    var placed: [String: CLLocationCoordinate2D] = [:]
+    var offsets: [String: CGSize] = [:]
     let onSelect: (MapSelection) -> Void
 
     var body: some MapContent {
         ForEach(pins) { pin in
-            Annotation(pin.title, coordinate: placed[pin.id] ?? pin.coordinate, anchor: .center) {
-                MapSymbolMarker(symbol: pin.symbol, color: pin.color, label: pin.title)
-                    .onTapGesture { onSelect(pin.selection) }
+            Annotation(pin.title, coordinate: pin.coordinate, anchor: .center) {
+                Displaced(offset: offsets[pin.id] ?? .zero) {
+                    MapSymbolMarker(symbol: pin.symbol, color: pin.color, label: pin.title)
+                        .onTapGesture { onSelect(pin.selection) }
+                }
             }
             .annotationTitles(.hidden)
         }
@@ -122,24 +127,28 @@ struct SymbolLayer: MapContent {
 }
 
 /// Ein wegen Platzmangels verschobenes Symbol: am echten Ort ein kleiner Punkt, eine dünne Linie zum Symbol.
-/// Das Verschieben gleitet, statt zu springen, damit beim Zoomen klar bleibt, was wohin gehört.
+/// Verankert bleibt es am echten Ort, verschoben wird nur auf dem Bildschirm (in Punkten): So bleibt es beim Zoomen
+/// ruhig. Ein Wechsel des Versatzes gleitet, statt zu springen.
+///
+/// Verschoben gezeichnet liegt das Symbol außerhalb seiner Kartenanzeige, die Karte gäbe ihm dort keine Tipps. Darum
+/// nimmt es selbst keine Tipps an; der Tipp auf die Karte prüft die gezeichnete Stelle (`MapScreen.displacedSymbol(at:)`).
+/// Eine vergrößerte Anzeige hätte stattdessen die Tipps der Nachbarsymbole abgefangen.
 struct Displaced<Content: View>: View {
     let offset: CGSize
     @ViewBuilder var content: () -> Content
 
     var body: some View {
-        ZStack {
-            if offset != .zero {
-                LeaderLine(offset: offset)
-            }
+        if offset == .zero {
             content()
-                .offset(offset)
+        } else {
+            ZStack {
+                LeaderLine(offset: offset)
+                content()
+                    .offset(offset)
+            }
+            .allowsHitTesting(false)
+            .animation(.snappy, value: offset)
         }
-        // Die Fläche der Kartenanzeige muss das verschobene Symbol ganz umfassen, sonst kommen Tipps am Rand nicht an
-        // (die Karte prüft Treffer nur innerhalb der Anzeige).
-        .padding(.horizontal, abs(offset.width))
-        .padding(.vertical, abs(offset.height))
-        .animation(.snappy, value: offset)
     }
 }
 

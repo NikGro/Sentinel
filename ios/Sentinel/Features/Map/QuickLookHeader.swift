@@ -139,7 +139,7 @@ struct QuickLookHeader: View {
 
     @ViewBuilder private var buttons: some View {
         if let navigate {
-            RoundButton(symbol: "location.fill", label: "Hinführen", prominent: true, action: navigate)
+            RoundButton(symbol: "arrow.triangle.turn.up.right.diamond.fill", label: "Hinführen", prominent: true, action: navigate)
         }
         if actions.canEdit {
             RoundButton(symbol: "pencil", label: "Bearbeiten") { actions.editRequests += 1 }

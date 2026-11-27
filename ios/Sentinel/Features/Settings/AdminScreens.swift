@@ -135,7 +135,6 @@ struct LayersAdminScreen: View {
                             }
                             .buttonStyle(.bordered)
                             .buttonBorderShape(.capsule)
-                            .controlSize(.small)
                         }
                     }
                     .swipeActions {

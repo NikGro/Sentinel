@@ -21,7 +21,7 @@ import { intervalCommand, startH02Listener, type H02Listener } from './trackers/
 import { TrackerLink, TrackerStatusStore } from './trackers/status.js';
 import { pajKey, PajPoller, type PajCredentials } from './trackers/paj.js';
 
-export const SERVER_VERSION = '0.41.0';
+export const SERVER_VERSION = '0.42.0';
 const MAX_UNKNOWN_TRACKERS = 50;
 
 /** Baut alle Dienste zusammen. Getrennt von `main`, damit Tests denselben Aufbau mit einer Speicher-Datenbank nutzen. */

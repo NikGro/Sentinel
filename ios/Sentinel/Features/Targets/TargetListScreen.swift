@@ -294,7 +294,7 @@ final class TargetSelection {
     }
 }
 
-/// Oben in der Liste: Anzahl ausgewählter Ziele, daneben „…“ (Optionen) und „Fertig“.
+/// Oben in der Liste: Anzahl ausgewählter Ziele, daneben „Optionen“ und „Fertig“ in derselben Form.
 private struct SelectionStatusRow: View {
     let selection: TargetSelection
     /// Ziele der aktuellen Ansicht (für „Alle auswählen“).
@@ -305,20 +305,31 @@ private struct SelectionStatusRow: View {
             Text(selection.ids.count == 1 ? "1 Ziel ausgewählt" : "\(selection.ids.count) Ziele ausgewählt")
                 .font(.subheadline.weight(.semibold))
             Spacer()
-            // Wie „Fertig“ (blau gefüllt, gleiche Höhe), nur rund.
+            // Beide Knöpfe gleich: blau gefüllt, Kapsel, gleiche Größe. Die Form wird selbst gezeichnet, weil ein Menü
+            // in einer Liste die Knopfform sonst nicht übernimmt.
             SelectionMenu(selection: selection, visible: visible)
-                .labelStyle(.iconOnly)
-                .buttonStyle(.borderedProminent)
-                .buttonBorderShape(.circle)
-                .controlSize(.small)
-            Button("Fertig") { selection.end() }
-                .buttonStyle(.borderedProminent)
-                .controlSize(.small)
+            Button { selection.end() } label: { SelectionPill(title: "Fertig") }
+                .buttonStyle(.plain)
         }
     }
 }
 
-/// Runder „…“-Knopf im Auswahlmodus: alle auswählen, zur Gruppe hinzufügen, aus der Gruppe entfernen, fertig.
+/// Blau gefüllte Kapsel für „Optionen“ und „Fertig“ im Auswahlmodus.
+private struct SelectionPill: View {
+    let title: String
+
+    var body: some View {
+        Text(title)
+            .font(.subheadline.weight(.semibold))
+            .foregroundStyle(.white)
+            .padding(.horizontal, 14)
+            .frame(height: 32)
+            .background(Color.accentColor, in: .capsule)
+            .contentShape(.capsule)
+    }
+}
+
+/// Knopf „Optionen“ im Auswahlmodus: alle auswählen, zur Gruppe hinzufügen, aus der Gruppe entfernen, fertig.
 private struct SelectionMenu: View {
     let selection: TargetSelection
     /// Ziele der aktuellen Ansicht (für „Alle auswählen“).
@@ -350,8 +361,9 @@ private struct SelectionMenu: View {
             Divider()
             Button("Fertig", systemImage: "checkmark") { selection.end() }
         } label: {
-            Label("Auswahl", systemImage: "ellipsis")
+            SelectionPill(title: "Optionen")
         }
+        .buttonStyle(.plain)
         .sheet(item: $groupEditing) { context in
             TargetGroupEditor(context: context) { selection.end() }
         }

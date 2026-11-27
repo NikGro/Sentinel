@@ -9,8 +9,9 @@ struct QuickLookSheet: View {
     let moveObject: (String) -> Void
     /// Angetippte Stelle eines Standortverlaufs (Werte dort).
     var trackPoint: TrackPoint?
-    /// Niedrige Stufe (schwebende Glaskarte): Kopfzeile ohne eigenen Hintergrund, reines Glas.
-    var isLow = false
+    /// Große Stufe (fast Vollbild): Nur dort bekommt die Kopfzeile einen deckenden Hintergrund; in der niedrigen und
+    /// mittleren Stufe bleibt sie reines Glas.
+    var isLarge = false
 
     @Environment(AppModel.self) private var model
     @Environment(LageStore.self) private var lage
@@ -45,7 +46,7 @@ struct QuickLookSheet: View {
                     subtitle: header.subtitle,
                     navigate: navigation.map { target in { model.navigate(to: target); dismiss() } },
                     actions: actions,
-                    showsBackground: !isLow,
+                    showsBackground: isLarge,
                     close: { dismiss() }
                 )
             }
@@ -90,9 +91,10 @@ struct QuickLookSheet: View {
     private var navigation: NavigationTarget? {
         let target: NavigationTarget
         switch selection {
-        case .member:
-            // Fahnder: Hinführen und Anrufen stehen in der Ansicht selbst.
-            return nil
+        case .member(let id):
+            // Wie bei allen Kurzübersichten führt der blaue Knopf der Kopfzeile hin; Anrufen steht in der Ansicht.
+            guard id != lage.selfId, lage.positions[id] != nil else { return nil }
+            target = .member(id)
         case .vehicle(let id): target = .vehicle(id)
         case .target(let id): target = .target(id)
         case .object(let id):
@@ -120,31 +122,17 @@ struct MemberQuickLook: View {
 
     var body: some View {
         List {
-            // Hinführen und Anrufen ganz oben, getrennt vom Rest.
-            if member.id != lage.selfId, position != nil || PhoneNumber.callURL(member.data.telefon) != nil {
+            // Anrufen ganz oben, getrennt vom Rest (Hinführen über den blauen Knopf der Kopfzeile).
+            if let url = PhoneNumber.callURL(member.data.telefon), member.id != lage.selfId {
                 Section {
-                HStack(spacing: 12) {
-                        if let url = PhoneNumber.callURL(member.data.telefon), member.id != lage.selfId {
-                            Button { openURL(url) } label: {
-                                Label("Anrufen", systemImage: "phone.fill")
-                                    .frame(maxWidth: .infinity)
-                            }
-                            .buttonStyle(.glass)
-                            .tint(.green)
-                        }
-                        if position != nil, member.id != lage.selfId {
-                            Button {
-                                model.navigate(to: .member(member.id))
-                                dismiss()
-                            } label: {
-                                Label("Hinführen", systemImage: "arrow.triangle.turn.up.right.diamond.fill")
-                                    // Weiß auf Blau: In Listen färbt sonst die Tönung das Symbol blau auf blauem Grund.
-                                    .foregroundStyle(.white)
-                                    .frame(maxWidth: .infinity)
-                            }
-                            .buttonStyle(.glassProminent)
-                        }
+                    Button { openURL(url) } label: {
+                        Label("Anrufen", systemImage: "phone.fill")
+                            .font(.headline)
+                            .frame(maxWidth: .infinity)
+                            .frame(height: Theme.barHeight - 6)
                     }
+                    .buttonStyle(.glass)
+                    .tint(.green)
                     .controlSize(.large)
                     .listRowBackground(Color.clear)
                     .listRowInsets(EdgeInsets(top: 4, leading: 0, bottom: 4, trailing: 0))

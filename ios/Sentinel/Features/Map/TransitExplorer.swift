@@ -468,18 +468,10 @@ struct TransitExplorer: View {
     }
 
     private var closeButton: some View {
-        Button {
+        CardCloseButton(label: "Auswahl aufheben") {
             selection = nil
             trip = nil
-        } label: {
-            Image(systemName: "xmark")
-                .font(.subheadline.weight(.bold))
-                .frame(width: 32, height: 32)
-                .contentShape(.circle)
         }
-        .buttonStyle(.plain)
-        .glassEffect(.regular.interactive(), in: .circle)
-        .accessibilityLabel("Auswahl aufheben")
     }
 
     /// Was übernommen wird, als Pillen wie im Verlauf: Fahrzeug, Strecke, Haltestellen. Es entsteht eine ÖPNV-Strecke

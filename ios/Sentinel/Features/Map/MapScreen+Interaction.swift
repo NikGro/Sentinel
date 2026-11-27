@@ -63,7 +63,7 @@ extension MapScreen {
         for pin in vehiclePins { kinds[pin.id] = "kraft" }
         for pin in targetPins { kinds[pin.id] = "ziel" }
         for handle in handles { kinds[handle.id] = "marker:" + handle.object.farbe.uppercased() }
-        return ClusterLayout(items.map { (id: $0.0, coordinate: $0.1) }, metersPerPoint: cameraState.distance / 700, heading: cameraState.heading, kinds: kinds)
+        return ClusterLayout(items.map { (id: $0.0, coordinate: $0.1) }, metersPerPoint: cameraState.distance / 700, kinds: kinds)
     }
 
     /// Cluster angetippt: so weit hineinzoomen, dass alle Punkte darin zu sehen sind.
@@ -174,11 +174,35 @@ extension MapScreen {
             + layout.clusters.map { (nil, $0.coordinate) }
         for item in placed {
             if let id = item.id, layout.hidden.contains(id) { continue }
-            let coordinate = item.id.flatMap { layout.placed[$0] } ?? item.coordinate
-            guard let screen = proxy.convert(coordinate, to: .local) else { continue }
-            if hypot(screen.x - point.x, screen.y - point.y) < 26 { return true }
+            guard let screen = proxy.convert(item.coordinate, to: .local) else { continue }
+            let offset = item.id.flatMap { layout.offsets[$0] } ?? .zero
+            if hypot(screen.x + offset.width - point.x, screen.y + offset.height - point.y) < 26 { return true }
         }
         return false
+    }
+
+    /// Auseinandergerücktes Symbol an der angetippten Stelle (am echten Ort plus Bildschirmversatz gemessen): was es
+    /// öffnet, sonst `nil`. Das nächstgelegene gewinnt.
+    func displacedSymbol(at point: CGPoint, proxy: MapProxy) -> (() -> Void)? {
+        let offsets = clusterLayout.offsets
+        guard !offsets.isEmpty else { return nil }
+        var candidates: [(id: String, coordinate: CLLocationCoordinate2D, open: () -> Void)] = []
+        for pin in forcePins where offsets[pin.id] != nil {
+            candidates.append((pin.id, pin.coordinate, { present(pin.target, low: false) }))
+        }
+        for pin in vehiclePins + targetPins where offsets[pin.id] != nil {
+            candidates.append((pin.id, pin.coordinate, { present(pin.selection, low: false) }))
+        }
+        for handle in handles where offsets[handle.id] != nil {
+            candidates.append((handle.id, handle.coordinate, { openEditor(for: handle.id) }))
+        }
+        var best: (distance: CGFloat, open: () -> Void)?
+        for candidate in candidates {
+            guard let offset = offsets[candidate.id], let screen = proxy.convert(candidate.coordinate, to: .local) else { continue }
+            let distance = hypot(screen.x + offset.width - point.x, screen.y + offset.height - point.y)
+            if distance < 26, best == nil || distance < best!.distance { best = (distance, candidate.open) }
+        }
+        return best?.open
     }
 
     /// Gezeichnete Form unter dem Finger: Linien (mit etwas Spielraum), Flächen, Kreise, Prognosezellen.
@@ -197,9 +221,15 @@ extension MapScreen {
                 guard let center = data.punkte.first else { continue }
                 let radius = data.radius ?? 100
                 size = center.distance(to: point) <= radius ? Double.pi * radius * radius : nil
-            case .linie where data.punkte.count >= 2, .oepnvlinie where data.punkte.count >= 2, .pfeil where data.punkte.count >= 2:
-                let line = data.typ == .oepnvlinie && (data.weg?.count ?? 0) >= 2 ? data.weg! : data.punkte
-                size = Self.distance(from: point, toLine: line) <= tolerance ? 0 : nil
+            case .oepnvlinie:
+                // Nur Sichtbares ist antippbar (wie in `TransitLayer` gezeichnet): Linienverlauf nur mit eingeschalteter
+                // Strecke, Halte nur mit eingeschalteten Haltestellen. Das Fahrzeug hat sein eigenes Symbol.
+                let path = (data.weg?.count ?? 0) >= 2 ? data.weg! : data.punkte
+                let onPath = data.showsPath && path.count >= 2 && Self.distance(from: point, toLine: path) <= tolerance
+                let onStop = data.showsStops && data.punkte.contains { $0.distance(to: point) <= tolerance * 1.5 }
+                size = onPath || onStop ? 0 : nil
+            case .linie where data.punkte.count >= 2, .pfeil where data.punkte.count >= 2:
+                size = Self.distance(from: point, toLine: data.punkte) <= tolerance ? 0 : nil
             default:
                 size = nil
             }

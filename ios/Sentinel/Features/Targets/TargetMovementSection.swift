@@ -115,17 +115,13 @@ struct TargetMovementSection: View {
                         Spacer()
                         // Hinführen geht zum Fahrzeug selbst; hier stattdessen aussteigen lassen (auf der Karte ist die
                         // Person im Fahrzeug nicht einzeln antippbar).
-                        Button {
-                            getOut(passenger)
-                        } label: {
-                            Image(systemName: "figure.walk.departure")
-                                .font(.body.weight(.semibold))
-                                .foregroundStyle(.red)
-                                .frame(width: 44, height: 44)
-                                .contentShape(.rect)
-                        }
-                        .buttonStyle(.borderless)
-                        .accessibilityLabel(target.art == .objekt ? "\(passenger.data.displayName) verlässt das Gebäude" : "\(passenger.data.displayName) aussteigen lassen")
+                        // Runder, rot getönter Knopf wie „Anrufen“ in der Kräfteliste (dort grün).
+                        Button("Aussteigen", systemImage: "figure.walk.departure") { getOut(passenger) }
+                            .labelStyle(.iconOnly)
+                            .buttonStyle(.bordered)
+                            .buttonBorderShape(.circle)
+                            .tint(.red)
+                            .accessibilityLabel(target.art == .objekt ? "\(passenger.data.displayName) verlässt das Gebäude" : "\(passenger.data.displayName) aussteigen lassen")
                     }
                 }
             }

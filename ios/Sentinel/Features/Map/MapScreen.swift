@@ -121,7 +121,7 @@ struct MapScreen: View {
             }, moveObject: { objectId in
                 self.selection = nil
                 tapMode = .moving(objectId: objectId)
-            }, trackPoint: selectedTrackPoint, isLow: quickLookDetent == QuickLookHeight.low)
+            }, trackPoint: selectedTrackPoint, isLarge: quickLookDetent == .large)
             .presentationDetents([QuickLookHeight.low, .medium, .large], selection: $quickLookDetent)
             .presentationBackgroundInteraction(.enabled(upThrough: .medium))
         }
@@ -263,7 +263,7 @@ struct MapScreen: View {
                 }
                 CoverageLayer(runs: CoverageRun.cached(coverageSegments))
                 ReachLayer(rings: reachRings)
-                MapObjectsLayer(lines: objects(.linie) + objects(.pfeil), areas: objects(.flaeche), circles: objects(.kreis) + objects(.haltestellen), geofences: objects(.geofence), handles: handles.filter { !layout.hidden.contains($0.id) }, placed: layout.placed) { id in
+                MapObjectsLayer(lines: objects(.linie) + objects(.pfeil), areas: objects(.flaeche), circles: objects(.kreis) + objects(.haltestellen), geofences: objects(.geofence), handles: handles.filter { !layout.hidden.contains($0.id) }, offsets: layout.offsets) { id in
                     openEditor(for: id)
                 }
                 TimedTransitLayer(clock: transitClock, sections: objects(.oepnvlinie), pins: { transitPins(at: $0) }, showsStopNames: cameraState.distance < 5000) { pin in
@@ -303,9 +303,8 @@ struct MapScreen: View {
                     HistoryLayer(state: history) { model.title(of: $0) }
                 }
                 StopsLayer(stops: highlightedStops, line: lage.aHolder?.data.oepnv.map { NearbyStop.Line(ref: $0.linie, typ: "", farbe: nil) })
-                LeaderLinesLayer(layout: layout)
-                SymbolLayer(pins: (vehiclePins + targetPins).filter { !layout.hidden.contains($0.id) }, placed: layout.placed) { tapMarker = nil; present($0, low: false) }
-                ForcesLayer(pins: forcePins.filter { !layout.hidden.contains($0.id) }, placed: layout.placed) { tapMarker = nil; present($0, low: false) }
+                SymbolLayer(pins: (vehiclePins + targetPins).filter { !layout.hidden.contains($0.id) }, offsets: layout.offsets) { tapMarker = nil; present($0, low: false) }
+                ForcesLayer(pins: forcePins.filter { !layout.hidden.contains($0.id) }, offsets: layout.offsets) { tapMarker = nil; present($0, low: false) }
                 ClusterLayer(clusters: layout.clusters) { zoom(into: $0) }
                 DraftLayer(points: draftPoints, outline: draftOutline)
             }
@@ -395,6 +394,13 @@ struct MapScreen: View {
                         focusTapMarker()
                         tapMarker = nil
                     }
+                    return
+                }
+                // Auseinandergerückte Symbole nehmen ihre Tipps nicht selbst an (siehe `Displaced`): hier an der
+                // gezeichneten Stelle prüfen.
+                if tapMode == .none, let openSymbol = displacedSymbol(at: point, proxy: proxy) {
+                    tapMarker = nil
+                    openSymbol()
                     return
                 }
                 if tapMode == .none {

@@ -17,7 +17,8 @@ struct MapObjectsLayer: MapContent {
     let circles: [Versioned<MapObject>]
     var geofences: [Versioned<MapObject>] = []
     let handles: [ObjectHandle]
-    var placed: [String: CLLocationCoordinate2D] = [:]
+    /// Bildschirmversatz auseinandergerückter Symbole (siehe `ClusterLayout`).
+    var offsets: [String: CGSize] = [:]
     let onSelect: (String) -> Void
 
     var body: some MapContent {
@@ -54,9 +55,11 @@ struct MapObjectsLayer: MapContent {
             }
         }
         ForEach(handles) { handle in
-            Annotation(handle.object.titel, coordinate: placed[handle.id] ?? handle.coordinate, anchor: .center) {
-                MapObjectHandle(object: handle.object, locked: handle.locked)
-                    .onTapGesture { onSelect(handle.id) }
+            Annotation(handle.object.titel, coordinate: handle.coordinate, anchor: .center) {
+                Displaced(offset: offsets[handle.id] ?? .zero) {
+                    MapObjectHandle(object: handle.object, locked: handle.locked)
+                        .onTapGesture { onSelect(handle.id) }
+                }
             }
             .annotationTitles(.hidden)
         }
@@ -254,13 +257,9 @@ struct MapCluster: Identifiable {
 }
 
 struct ClusterLayout {
-    /// Bildschirmversatz der auseinandergerückten Symbole (Punkte).
+    /// Bildschirmversatz der auseinandergerückten Symbole (Punkte). Sie bleiben am echten Ort verankert und werden
+    /// nur auf dem Bildschirm verschoben gezeichnet (`Displaced`), damit sie beim Zoomen ruhig stehen.
     var offsets: [String: CGSize] = [:]
-    /// Auseinandergerückte Symbole an ihrer gezeichneten Stelle als Koordinate: Das Symbol steht wirklich dort (auch
-    /// seine Trefferfläche), statt nur verschoben gezeichnet zu werden; die Linie zum echten Ort zeichnet `LeaderLinesLayer`.
-    var placed: [String: CLLocationCoordinate2D] = [:]
-    /// Echter Ort der auseinandergerückten Symbole (für die Linien).
-    var origins: [String: CLLocationCoordinate2D] = [:]
     var clusters: [MapCluster] = []
     /// Punkte, die in einem Cluster stecken und deshalb nicht einzeln gezeichnet werden.
     var hidden: Set<String> = []
@@ -281,21 +280,9 @@ struct ClusterLayout {
         return mixedColor
     }
 
-    init(_ items: [(id: String, coordinate: CLLocationCoordinate2D)], metersPerPoint: Double, heading: Double = 0, kinds: [String: String] = [:]) {
+    init(_ items: [(id: String, coordinate: CLLocationCoordinate2D)], metersPerPoint: Double, kinds: [String: String] = [:]) {
         guard metersPerPoint >= Self.clusterFromMetersPerPoint else {
             offsets = Declutter.offsets(items, metersPerPoint: metersPerPoint)
-            // Bildschirmversatz in Meter umrechnen, gedreht um die Kartenausrichtung (oben = Blickrichtung).
-            let h = heading * .pi / 180
-            for item in items {
-                guard let offset = offsets[item.id] else { continue }
-                let east = Double(offset.width) * metersPerPoint, north = -Double(offset.height) * metersPerPoint
-                let rotatedEast = east * cos(h) + north * sin(h)
-                let rotatedNorth = -east * sin(h) + north * cos(h)
-                let p = MKMapPoint(item.coordinate)
-                let perMeter = MKMapPointsPerMeterAtLatitude(item.coordinate.latitude)
-                placed[item.id] = MKMapPoint(x: p.x + rotatedEast * perMeter, y: p.y - rotatedNorth * perMeter).coordinate
-                origins[item.id] = item.coordinate
-            }
             return
         }
         for group in Declutter.groups(items, metersPerPoint: metersPerPoint, points: 36) where group.count > 1 {
@@ -381,24 +368,3 @@ enum Declutter {
     }
 }
 
-/// Dünne Linie vom echten Ort zum auseinandergerückten Symbol, mit kleinem Punkt am echten Ort.
-struct LeaderLinesLayer: MapContent {
-    let layout: ClusterLayout
-
-    var body: some MapContent {
-        ForEach(Array(layout.placed.keys.sorted()), id: \.self) { id in
-            if let from = layout.origins[id], let to = layout.placed[id] {
-                MapPolyline(coordinates: [from, to])
-                    .stroke(.white.opacity(0.95), style: StrokeStyle(lineWidth: 1.5, lineCap: .round))
-                Annotation("", coordinate: from, anchor: .center) {
-                    Circle()
-                        .fill(.white)
-                        .overlay(Circle().stroke(.black.opacity(0.45), lineWidth: 1))
-                        .frame(width: 6, height: 6)
-                        .allowsHitTesting(false)
-                }
-                .annotationTitles(.hidden)
-            }
-        }
-    }
-}

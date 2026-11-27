@@ -181,7 +181,24 @@ struct GradientSpurLines: MapContent {
         return count
     }
 
-    /// Zusammenhängende Abschnitte (ohne Lücke) mit Farbverlauf; Lücken als eigene, gestrichelte Stücke.
+    /// Häufigkeit je Punkt (1 bis 5) als gleitender Mittelwert über etwa `window` Meter entlang der Spur.
+    static func smoothedFrequency(_ points: [GeoPoint], counts: [String: Int], window: Double = 70) -> [Double] {
+        guard !points.isEmpty else { return [] }
+        let raw = points.map { Double(min(max(counts[cell($0)] ?? 1, 1), 5)) }
+        var along = [0.0]
+        along.reserveCapacity(points.count)
+        for i in 1..<points.count { along.append(along[i - 1] + points[i - 1].distance(to: points[i])) }
+        // Zwei Zeiger über die Strecke: Summe der Werte im Fenster ±window/2.
+        var result = [Double](repeating: 1, count: points.count)
+        var lo = 0, hi = 0, sum = 0.0
+        for i in 0..<points.count {
+            while hi < points.count, along[hi] - along[i] <= window / 2 { sum += raw[hi]; hi += 1 }
+            while along[i] - along[lo] > window / 2 { sum -= raw[lo]; lo += 1 }
+            result[i] = sum / Double(hi - lo)
+        }
+        return result
+    }
+
     /// Stücke der Spur mit je einer Farbe. Kein Farbverlauf entlang der Linie: SwiftUI-MapKit zeichnete Linien mit
     /// Verlauf wechselnd unterschiedlich dick (Teilstücke mal doppelt so breit). Stattdessen viele kurze einfarbige
     /// Stücke, deren Farbe von Stück zu Stück nur wenig wechselt; das wirkt wie ein Verlauf und hat feste Breite (wie
@@ -192,10 +209,13 @@ struct GradientSpurLines: MapContent {
         let first = timeRange?.lowerBound ?? firstPoint
         let span = max((timeRange?.upperBound ?? lastPoint).timeIntervalSince(first), 1)
         let counts = byFrequency ? (sharedCounts ?? Self.passes(spur)) : [:]
-        func colorAt(_ i: Int) -> Color {
-            if byFrequency { return Self.color(Double(min(counts[Self.cell(punkte[i].point)] ?? 1, 5) - 1) / 4) }
-            return Self.color(punkte[i].date.timeIntervalSince(first) / span)
+        // Häufigkeit je Punkt als Kommazahl (1 bis 5), entlang der Spur geglättet: Die Farbe wechselt so in kleinen
+        // Schritten statt hart an den Feldgrenzen.
+        let frequency = byFrequency ? Self.smoothedFrequency(punkte.map(\.point), counts: counts) : []
+        func value(_ i: Int) -> Double {
+            byFrequency ? (frequency[i] - 1) / 4 : punkte[i].date.timeIntervalSince(first) / span
         }
+        func colorAt(_ i: Int) -> Color { Self.color(value(i)) }
         // Kennung nach Startzeit des Stücks (nicht nach Position), damit Stücke beim Wachsen der Spur ihre Kennung behalten.
         func key(_ i: Int, gap: Bool) -> String { "\(gap ? "l" : "s")\(Int(punkte[i].date.timeIntervalSince1970 * 10))" }
         var result: [(String, [CLLocationCoordinate2D], Color?)] = []
@@ -208,13 +228,25 @@ struct GradientSpurLines: MapContent {
             }
             var end = start + 1
             while end < punkte.count - 1, !spur.isGap(after: end) { end += 1 }
-            // Höchstens etwa 120 Stücke je Abschnitt; feste Stücklänge, damit die Grenzen beim Wachsen stehen bleiben.
-            let length = max(2, (end - start + 119) / 120)
-            var a = start
-            while a < end {
-                let b = min(a + length, end)
-                result.append((key(a, gap: false), punkte[a...b].map(\.point.coordinate), colorAt((a + b) / 2)))
-                a = b
+            if byFrequency {
+                // Ein Stück endet, sobald die Farbe merklich wechselt (gut 3 % der Skala): wo sie gleich bleibt, lange
+                // Stücke, an Übergängen viele kurze in kleinen Farbschritten.
+                var a = start
+                while a < end {
+                    var b = a + 1
+                    while b < end, abs(value(b) - value(a)) < 0.035 { b += 1 }
+                    result.append((key(a, gap: false), punkte[a...b].map(\.point.coordinate), colorAt((a + b) / 2)))
+                    a = b
+                }
+            } else {
+                // Nach Alter: höchstens etwa 120 Stücke je Abschnitt, die Farbe ändert sich gleichmäßig.
+                let length = max(2, (end - start + 119) / 120)
+                var a = start
+                while a < end {
+                    let b = min(a + length, end)
+                    result.append((key(a, gap: false), punkte[a...b].map(\.point.coordinate), colorAt((a + b) / 2)))
+                    a = b
+                }
             }
             start = end
         }
@@ -580,10 +612,7 @@ struct HistoryPanel: View {
                 }
             }
         } label: {
-            Image(systemName: "plus")
-                .font(.subheadline.weight(.bold))
-                .frame(width: 32, height: 32)
-                .contentShape(.circle)
+            CardIcon(symbol: "plus")
         }
         .glassEffect(.regular.interactive(), in: .circle)
         .accessibilityLabel("Weitere Spur anzeigen")
@@ -613,10 +642,7 @@ struct HistoryPanel: View {
                         Button(range.title) { state.range = range }
                     }
                 } label: {
-                    Image(systemName: "clock.arrow.circlepath")
-                        .font(.subheadline.weight(.bold))
-                        .frame(width: 32, height: 32)
-                        .contentShape(.circle)
+                    CardIcon(symbol: "clock.arrow.circlepath")
                 }
                 .glassEffect(.regular.interactive(), in: .circle)
                 .accessibilityLabel("Schnellwahl Zeitraum")
@@ -698,15 +724,7 @@ struct HistoryPointCard: View {
                     .font(.headline)
                     .lineLimit(1)
                 Spacer()
-                Button(action: close) {
-                    Image(systemName: "xmark")
-                        .font(.caption.weight(.bold))
-                        .frame(width: 28, height: 28)
-                        .contentShape(.circle)
-                }
-                .buttonStyle(.plain)
-                .glassEffect(.regular.interactive(), in: .circle)
-                .accessibilityLabel("Punkt schließen")
+                CardCloseButton(label: "Punkt schließen", action: close)
             }
             row("Zeit", (sample.between ? "etwa " : "") + Format.dateTime(punkt.date))
             if let speed = sample.speed {

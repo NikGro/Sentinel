@@ -1,5 +1,24 @@
 # Änderungen
 
+## 0.42.0
+
+- Design-Review auf Einheitlichkeit (gleiche Funktion im gleichen Kontext sieht gleich aus):
+  - Schließen-Knöpfe der Karten über der Lagekarte (Ort, ÖPNV-Auswahl, Punkt im Verlauf) einheitlich als runder
+    Glasknopf in einer Größe; ebenso „Spur hinzufügen“ und „Schnellwahl Zeitraum“ im Verlauf
+  - Hinführen überall mit demselben Symbol und Namen (Kopfzeile der Kurzübersicht hatte einen Standortpfeil, die
+    Ortskarte hieß „Navigieren“); auch beim Fahnder über den blauen Knopf der Kopfzeile wie bei allen anderen
+    Kurzübersichten, „Anrufen“ als breiter Knopf darunter
+  - Aktionsknöpfe am Ende einer Listenzeile einheitlich umrandet als Kapsel in einer Größe („Laden/Zurückziehen“ war
+    kleiner, „Andere Linie“ ohne Knopfform)
+- Auswahlmodus: „Optionen“ als Text-Knopf in genau derselben Form und Größe wie „Fertig“
+- Aussteigen bzw. Gebäude verlassen: richtiger runder Knopf, rot getönt (wie „Anrufen“ in der Kräfteliste grün)
+- Karte: Nur Sichtbares ist antippbar; eine ÖPNV-Strecke mit ausgeblendetem Linienverlauf öffnet sich nicht mehr bei
+  einem Tipp auf die leere Karte
+- Auseinandergerückte Symbole stehen wieder am echten Ort und werden auf dem Bildschirm versetzt gezeichnet: kein Zittern
+  beim Zoomen; Tipps auf das versetzte Symbol prüft die Karte an der gezeichneten Stelle, Nachbarn werden nicht verdeckt
+- Standortspur nach Häufigkeit: weiche Farbübergänge (geglättet über etwa 70 m, an Übergängen kurze Stücke)
+- Kurzübersicht: Kopfzeile auch in der mittleren Stufe reines Liquid Glass, Hintergrund nur ganz aufgezogen
+
 ## 0.41.0
 
 - Zielperson betritt Gebäude: vierte Stellung „Gebäude“ im Schalter „Unterwegs“ mit Auswahl der Zielobjekte; beim

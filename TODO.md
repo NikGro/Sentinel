@@ -5,42 +5,8 @@ statt jede Änderung sofort einzubauen. Erledigtes wandert mit Version ins CHANG
 
 ## Geplant
 
-### Nach 0.41 offen
+### Nach 0.42 offen
 
-- **Aussteigen/Verlassen als richtiger Knopf:** Bei Zielpersonen in einem Zielfahrzeug bzw. Zielobjekt ist es derzeit
-  nur ein rotes Symbol ohne Knopfform. Stattdessen ein erkennbarer Knopf (natives Design, rot getönt, z. B. umrandet oder
-  gefüllt, rund bzw. Kapsel mit Symbol), weiterhin ohne Glas-/Leuchteffekt, Trefferfläche 44 pt.
-- **Unsichtbare ÖPNV-Linie fängt Tipps ab:** Setzt man ein Ziel in einen Bus, entsteht dafür eine ÖPNV-Strecke als
-  Objekt (Fahrt mit Fahrzeug), deren Linienverlauf ausgeblendet ist. Ein Tipp auf eine leere Stelle der Karte öffnete
-  trotzdem den Dialog dieser Buslinie.
-  - Ursache (Code): `shapes(at:)` in MapScreen+Interaction prüft bei ÖPNV-Strecken den Linienverlauf immer, auch wenn
-    er nicht gezeichnet wird (`showsPath` aus); gezeichnet wird er in `TransitLayer` nur mit `showsPath`.
-  - Behebung: nur Sichtbares antippbar machen (Linienverlauf nur mit `showsPath`, Halte nur mit `showsStops`); das
-    Fahrzeug selbst bleibt über sein Symbol antippbar. Allgemein prüfen, dass Treffer-Erkennung und Zeichnen dieselben
-    Bedingungen nutzen.
-- **Auseinandergerückte Symbole zittern beim Zoomen:** Sie passen sich jetzt sofort an (0.41), zittern dabei aber.
-  - Ursache (Code): Seit 0.40 stehen sie an einer eigenen Koordinate, die aus dem Bildschirmversatz über Meter je Punkt
-    umgerechnet wird. Beim Zoomen ändert sich die Umrechnung laufend, neu berechnet wird aber nur in Stufen (Achtel-
-    Oktaven) und mit dem Abstand des jeweiligen Moments: Die Symbole springen bei jeder Stufe ein Stück, dazwischen
-    wandern sie mit der Karte.
-  - Behebung: Symbole wieder am echten Ort verankern und den Versatz in Bildschirmpunkten zeichnen (bleibt beim Zoomen
-    ruhig, wie vor 0.40), aber die Trefferfläche korrekt: Anzeige so groß machen, dass sie das versetzte Symbol umfasst,
-    und nur das Symbol selbst antippbar (`contentShape` nur dort, übriger Bereich lässt Tipps durch). Mit dem UI-Test für
-    übereinanderliegende Symbole absichern. Den Versatz beim Wechsel der Stufe weich animieren.
-- **Auswahlmodus: „Optionen“ statt „…“:** Der runde „…“-Knopf neben „Fertig“ ist zu klein geraten (Menü-Knopf übernimmt
-  die Knopfform nicht). Stattdessen ein Text-Knopf „Optionen“ in genau derselben Form und Größe wie „Fertig“ (blau
-  gefüllt, Kapsel, gleiche Höhe), der das Menü öffnet.
-- **Standortspur: Farbwechsel weich statt hart:** Die Spur ist jetzt einheitlich dick (0.41), die Farbe springt aber
-  hart von Stück zu Stück (sichtbar bei Häufigkeit: blau → türkis → grün → gelb an Abschnittsgrenzen).
-  - Ursache (Code): Nach Häufigkeit bekommt jeder Punkt die Zahl seines 25-m-Felds (ganze Zahlen 1–5), jedes Stück die
-    Farbe in seiner Mitte; dazwischen gibt es keinen Übergang.
-  - Behebung (ohne Farbverlauf-Linien, die die Dicke springen ließen): Häufigkeit entlang der Spur glätten
-    (gleitender Mittelwert über etwa 50–80 m, als Kommazahl statt ganzer Stufe), Stücke an Farbwechseln kürzer
-    machen (z. B. höchstens 10–15 m), sodass die Farbe in kleinen Schritten wechselt. Gleiches für die Farbe nach Alter
-    prüfen.
-- **Kopfzeile der Kurzübersicht: Hintergrund nur ganz oben:** Auch in der mittleren Stufe (halbe Höhe) reines Liquid
-  Glass; den deckenden Hintergrund mit Verlauf nur in der großen Stufe (fast Vollbild). Bisher: alles außer der
-  niedrigen Stufe (`isLow`), künftig nur bei `.large` (Detent an QuickLookSheet weitergeben).
 - **Standortspur als Pinsel (Grundidee, Neukonzept):** Die Spur soll malen, wo man tatsächlich war, wie ein Pinsel,
   zu Fuß wie im Auto; nicht nachträglich springen oder sich an die Straßenführung anpassen.
   - Springen (Ursache, Code): Das wachsende Ende kommt aus den eigenen GPS-Punkten, der Rest alle 30 s vom Server;
@@ -92,6 +58,8 @@ statt jede Änderung sofort einzubauen. Erledigtes wandert mit Version ins CHANG
   rechnet nur Valhalla; ein Hinweis bei deutlich schnellerer Apple-Route wäre möglich.
 - **Beziehungen:** Protokollierung von Änderungen gehört zum Ereignisprotokoll in Runde 2 (Datenschutz); bisher
   stehen nur „zuletzt geändert von“ und Status/Herkunft am Datensatz.
+- **Auseinandergerückte Symbole mit VoiceOver:** Seit 0.42 nehmen sie ihre Tipps nicht selbst an (die Karte prüft die
+  gezeichnete Stelle). Prüfen, ob VoiceOver sie noch aktivieren kann; sonst eine eigene Bedienhilfe-Aktion ergänzen.
 
 ### Beobachten
 

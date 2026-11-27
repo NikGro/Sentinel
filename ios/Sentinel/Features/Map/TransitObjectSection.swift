@@ -212,7 +212,8 @@ struct TransitObjectSection: View {
                         line = nil
                         hits = []
                     }
-                    .buttonStyle(.borderless)
+                    .buttonStyle(.bordered)
+                    .buttonBorderShape(.capsule)
                 }
             }
         }

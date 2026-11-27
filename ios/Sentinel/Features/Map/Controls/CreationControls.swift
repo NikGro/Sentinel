@@ -185,21 +185,13 @@ struct SearchPinCard: View {
                     }
                 }
                 Spacer(minLength: 0)
-                Button(action: close) {
-                    Image(systemName: "xmark")
-                        .font(.subheadline.weight(.bold))
-                        .frame(width: 36, height: 36)
-                        .contentShape(.circle)
-                }
-                .buttonStyle(.plain)
-                .glassEffect(.regular.interactive(), in: .circle)
-                .accessibilityLabel("Schließen")
+                CardCloseButton(action: close)
             }
             // Zwei gleich gestaltete Knöpfe; „Hier anlegen“ öffnet dasselbe große Auswahlmenü wie das Plus.
             HStack(spacing: Theme.barSpacing) {
                 if scope == .all {
                     Button(action: navigate) {
-                        Label("Navigieren", systemImage: "arrow.triangle.turn.up.right.diamond.fill")
+                        Label("Hinführen", systemImage: "arrow.triangle.turn.up.right.diamond.fill")
                             .font(.subheadline.weight(.semibold))
                             .frame(maxWidth: .infinity)
                     }

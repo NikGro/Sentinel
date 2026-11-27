@@ -42,6 +42,8 @@ enum Theme {
 
     /// Durchmesser runder Kartenknöpfe, so groß wie Apples Kompassrose.
     static let roundButton: CGFloat = 44
+    /// Runde Knöpfe innerhalb einer Karte über der Lagekarte (Schließen, Hinzufügen, Schnellwahl).
+    static let cardButton: CGFloat = 36
     /// Einheitliche Höhe aller Leisten über der Tableiste (Suche, A-Position, Fortbewegung, Lageleiste, Chat):
     /// genauso hoch wie die runden Knöpfe.
     static let barHeight: CGFloat = roundButton
