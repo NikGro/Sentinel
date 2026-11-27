@@ -7,6 +7,21 @@ statt jede Änderung sofort einzubauen. Erledigtes wandert mit Version ins CHANG
 
 ### Nach 0.38 offen
 
+- **Angezeigte Straße stimmt nicht immer:** Das Straßenschild am eigenen Punkt zeigt manchmal nicht die Straße, auf
+  der man fährt.
+  - Ursache (Code): `LocationContext` nimmt die Straße aus Apples Umkehrsuche (`reverseGeocodeLocation`). Die liefert die
+    Straße der nächstgelegenen Adresse, nicht die befahrene: an Ecken, auf Hauptstraßen ohne Hausnummern in der Nähe
+    oder bei parallelen Nebenstraßen die falsche.
+  - Behebung: In der Navigation die Straße aus der Route nehmen (aktueller Abschnitt). Sonst die befahrene Straße über
+    den eigenen Server bestimmen: nächstgelegene benannte Straße im Straßenverzeichnis, deren Richtung zur Fahrtrichtung
+    passt (oder Valhalla `locate`/`trace_attributes` mit den letzten Punkten); Apples Umkehrsuche nur als Rückfall.
+- **Sichtbar machen, dass Sentinel den Standort teilt:**
+  - Dynamic Island und Sperrbildschirm: eine Live-Aktivität („Sentinel teilt deinen Standort“, mit Instanz, ggf.
+    Fortbewegung/A-Position), solange man im Dienst ist und der Standort übertragen wird; endet beim Verlassen der
+    Instanz. Braucht eine Widget-Erweiterung (ActivityKit); mit SideStore prüfen, ob die zusätzliche App-ID beim
+    kostenlosen Konto passt (Erweiterungen zählen zu den App-IDs).
+  - Sofort und ohne Erweiterung möglich: die blaue Standortanzeige in der Statusleiste bzw. Dynamic Island
+    (`showsBackgroundLocationIndicator`), sobald im Hintergrund geteilt wird.
 - **Chat vorerst ausblenden:** Den Chat-Tab (und Chat-Hinweise/Mitteilungen) in der App nicht mehr anzeigen, ohne ihn
   zu löschen: Code und Server bleiben, z. B. über einen Schalter, damit er sich später wieder einblenden lässt.
   Sentinel Web entsprechend.
