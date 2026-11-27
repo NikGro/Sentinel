@@ -119,6 +119,8 @@ private fun Lagebildschirm(modell: AppModell, stand: LageStand) {
     val steuerung = remember { KartenSteuerung() }
     var auswahl by remember { mutableStateOf<KartenObjekt?>(null) }
     var verkehr by rememberSaveable { mutableStateOf(false) }
+    var sucht by remember { mutableStateOf(false) }
+    var ortTreffer by remember { mutableStateOf<de.nglab.sentinel.kern.netz.Suchtreffer?>(null) }
     Box(Modifier.fillMaxSize()) {
         LageKarte(modell, steuerung, Modifier.fillMaxSize().testTag("Lagekarte")) { auswahl = it }
 
@@ -127,7 +129,7 @@ private fun Lagebildschirm(modell: AppModell, stand: LageStand) {
             shape = RoundedCornerShape(28.dp),
             tonalElevation = 3.dp,
             shadowElevation = 4.dp,
-            modifier = Modifier.statusBarsPadding().padding(horizontal = 16.dp, vertical = 8.dp).fillMaxWidth().height(52.dp),
+            modifier = Modifier.statusBarsPadding().padding(horizontal = 16.dp, vertical = 8.dp).fillMaxWidth().height(52.dp).clickable { sucht = true },
         ) {
             Row(Modifier.padding(horizontal = 18.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
                 Icon(Icons.Filled.Search, null)
@@ -167,6 +169,38 @@ private fun Lagebildschirm(modell: AppModell, stand: LageStand) {
                 Fortbewegungswahl(stand.ich?.data?.fortbewegung ?: Fortbewegung.Fuss, Modifier.weight(1.2f)) { modell.lage.fortbewegungSetzen(it) }
             }
             Lageleiste(stand)
+        }
+    }
+
+    if (sucht) {
+        ModalBottomSheet(onDismissRequest = { sucht = false }, sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)) {
+            Suche(modell, stand, schliessen = { sucht = false }) { e ->
+                sucht = false
+                when (e) {
+                    is Suchergebnis.Objekt -> {
+                        e.punkt?.let { steuerung.zeigen(it) }
+                        auswahl = e.objekt
+                    }
+                    is Suchergebnis.Ort -> {
+                        steuerung.zeigen(e.treffer.punkt, 17.0)
+                        steuerung.markieren(e.treffer.punkt)
+                        ortTreffer = e.treffer
+                    }
+                }
+            }
+        }
+    }
+
+    ortTreffer?.let { t ->
+        ModalBottomSheet(onDismissRequest = { ortTreffer = null; steuerung.markieren(null) }) {
+            Column(Modifier.fillMaxWidth().padding(horizontal = 20.dp).padding(bottom = 32.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                Text(t.titel, style = MaterialTheme.typography.titleLarge)
+                if (t.untertitel.isNotBlank()) Text(t.untertitel, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                    Button(onClick = {}, modifier = Modifier.weight(1f).height(52.dp)) { Text("Hinführen") }
+                    OutlinedButton(onClick = {}, modifier = Modifier.weight(1f).height(52.dp)) { Text("Hier anlegen") }
+                }
+            }
         }
     }
 

@@ -50,6 +50,18 @@ final class KartenSteuerung {
         karte?.setCenter(CLLocationCoordinate2D(latitude: p.lat, longitude: p.lon), zoomLevel: zoom, animated: true)
     }
 
+    /// Hebt einen Ort hervor (Suchtreffer, gedrückter Ort); `nil` entfernt die Markierung.
+    func markieren(_ p: GeoPunkt?) {
+        guard let quelle = karte?.style?.source(withIdentifier: Quellen.shared.AUSWAHL) as? MLNShapeSource else { return }
+        if let p {
+            let punkt = MLNPointFeature()
+            punkt.coordinate = CLLocationCoordinate2D(latitude: p.lat, longitude: p.lon)
+            quelle.shape = MLNShapeCollectionFeature(shapes: [punkt])
+        } else {
+            quelle.shape = MLNShapeCollectionFeature(shapes: [])
+        }
+    }
+
     func norden() {
         karte?.setDirection(0, animated: true)
     }

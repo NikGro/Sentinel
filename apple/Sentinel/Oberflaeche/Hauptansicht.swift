@@ -27,6 +27,8 @@ struct Lagebildschirm: View {
     @State private var steuerung = KartenSteuerung()
     @State private var auswahl: KartenObjektAuswahl?
     @State private var verkehr = false
+    @State private var sucht = false
+    @State private var ortTreffer: OrtAuswahl?
 
     var body: some View {
         LageKarte(modell: modell, steuerung: steuerung) { auswahl = KartenObjektAuswahl(objekt: $0) }
@@ -41,6 +43,7 @@ struct Lagebildschirm: View {
                 .frame(height: 44)
                 .glassEffect(.regular.interactive(), in: .capsule)
                 .padding(.horizontal, 22)
+                .onTapGesture { sucht = true }
             }
             .overlay(alignment: .topTrailing) {
                 VStack(spacing: 8) {
@@ -80,12 +83,47 @@ struct Lagebildschirm: View {
                 .padding(.horizontal, 22)
                 .padding(.bottom, 4)
             }
+            .sheet(isPresented: $sucht) {
+                Suche { ergebnis in
+                    switch ergebnis {
+                    case .objekt(let objekt, let punkt):
+                        if let punkt { steuerung.zeigen(punkt) }
+                        auswahl = KartenObjektAuswahl(objekt: objekt)
+                    case .ort(let treffer):
+                        steuerung.zeigen(treffer.punkt, zoom: 17)
+                        steuerung.markieren(treffer.punkt)
+                        ortTreffer = OrtAuswahl(treffer: treffer)
+                    }
+                }
+            }
+            .sheet(item: $ortTreffer, onDismiss: { steuerung.markieren(nil) }) { o in
+                VStack(alignment: .leading, spacing: 12) {
+                    Text(o.treffer.titel).font(.title3.weight(.semibold))
+                    if !o.treffer.untertitel.isEmpty { Text(o.treffer.untertitel).foregroundStyle(.secondary) }
+                    HStack(spacing: 12) {
+                        Button {} label: { Label("Hinführen", systemImage: "arrow.triangle.turn.up.right.diamond.fill").frame(maxWidth: .infinity) }
+                            .buttonStyle(.glassProminent)
+                        Button {} label: { Label("Hier anlegen", systemImage: "plus").frame(maxWidth: .infinity) }
+                            .buttonStyle(.glass)
+                    }
+                    .controlSize(.large)
+                    Spacer()
+                }
+                .padding(20)
+                .presentationDetents([.fraction(0.28)])
+                .presentationBackgroundInteraction(.enabled)
+            }
             .sheet(item: $auswahl) { a in
                 Kurzuebersicht(objekt: a.objekt)
                     .presentationDetents([.fraction(0.3), .medium, .large])
                     .presentationBackgroundInteraction(.enabled(upThrough: .medium))
             }
     }
+}
+
+struct OrtAuswahl: Identifiable {
+    let treffer: Suchtreffer
+    var id: String { treffer.id }
 }
 
 struct KartenObjektAuswahl: Identifiable {

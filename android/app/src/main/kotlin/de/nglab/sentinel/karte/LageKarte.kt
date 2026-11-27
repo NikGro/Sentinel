@@ -75,6 +75,13 @@ class KartenSteuerung {
         }
     }
 
+    /** Hebt einen Ort hervor (Suchtreffer, gedrückter Ort); `null` entfernt die Markierung. */
+    fun markieren(p: GeoPunkt?) {
+        val quelle = karte?.style?.getSourceAs<GeoJsonSource>(Quellen.AUSWAHL) ?: return
+        quelle.setGeoJson(if (p == null) """{"type":"FeatureCollection","features":[]}""" else
+            """{"type":"FeatureCollection","features":[{"type":"Feature","geometry":{"type":"Point","coordinates":[${p.lon},${p.lat}]},"properties":{}}]}""")
+    }
+
     fun norden() {
         karte?.animateCamera(CameraUpdateFactory.bearingTo(0.0), 400)
     }
