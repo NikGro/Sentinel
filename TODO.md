@@ -7,6 +7,16 @@ statt jede Änderung sofort einzubauen. Erledigtes wandert mit Version ins CHANG
 
 ### Nach 0.40 offen
 
+- **Cluster und Auseinanderrücken reagieren träge auf Zoomen:**
+  - Ursache (Code): Die Aufteilung (Cluster bzw. Abstände) wird aus `cameraState.distance` berechnet, das bewusst nicht
+    beobachtet wird (`@ObservationIgnored`, sonst würde der ganze Kartenbildschirm bei jedem Bild neu gebaut). Neu
+    berechnet wird sie deshalb erst, wenn zufällig etwas anderes den Bildschirm auffrischt (z. B. der nächste
+    GPS-Punkt, etwa einmal je Sekunde); so wirkt es verzögert.
+  - Behebung: eine beobachtete, gestufte Zoomstufe (z. B. Abstand auf Achtel-Oktaven gerundet) einführen, die sich nur
+    bei spürbarer Zoomänderung ändert und die Aufteilung sofort neu berechnen lässt; Cluster/Symbole in eine eigene Ebene
+    auslagern, damit nur sie neu gebaut wird. Übergang weich animieren.
+- **Cluster farbig nach Inhalt:** Nur Ziele: rot (Zielfarbe); nur Kräfte/Fahrzeuge: Kräftefarbe; nur Markierungen:
+  deren Farbe, falls einheitlich; gemischt: neutrale Universalfarbe (z. B. Grau/Dunkelblau).
 - **Zielperson betritt Gebäude:** Der Schalter „Unterwegs“ (zu Fuß, Fahrzeug, ÖPNV) bekommt eine vierte Stellung
   „Gebäude“. Antippen öffnet wie beim Fahrzeug die Auswahl der verfügbaren Zielobjekte (nächstgelegene zuerst); die
   Person steckt dann im Gebäude (Standort folgt ihm, kein eigenes Symbol, Name in der Beschriftung des Objekts). Beim
