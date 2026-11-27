@@ -58,7 +58,10 @@ struct QuickLookHeader: View {
     let actions: QuickLookActions
     /// Deckender Hintergrund mit Verlauf nur bei aufgezogenem Fenster; in der niedrigen Stufe reines Liquid Glass.
     var showsBackground = true
-    let close: () -> Void
+    /// Zusätzlicher blauer Knopf (z. B. „Auf die Karte legen“ im Verlauf) statt Hinführen.
+    var primary: HeaderAction?
+    /// `nil`: kein Schließen in der Kopfzeile (z. B. im Verlauf, dort schließt das X der gelben Leiste).
+    var close: (() -> Void)?
     @Environment(\.dynamicTypeSize) private var typeSize
 
     var body: some View {
@@ -144,8 +147,23 @@ struct QuickLookHeader: View {
         if actions.canEdit {
             RoundButton(symbol: "pencil", label: "Bearbeiten") { actions.editRequests += 1 }
         }
-        RoundButton(symbol: "xmark", label: "Schließen", action: close)
+        if let primary {
+            RoundButton(symbol: primary.symbol, label: primary.label, prominent: true, action: primary.action)
+                .disabled(!primary.enabled)
+                .opacity(primary.enabled ? 1 : 0.45)
+        }
+        if let close {
+            RoundButton(symbol: "xmark", label: "Schließen", action: close)
+        }
     }
+}
+
+/// Knopf der Kopfzeile mit Symbol, Bezeichnung (für VoiceOver) und Aktion.
+struct HeaderAction {
+    let symbol: String
+    let label: String
+    var enabled = true
+    let action: () -> Void
 }
 
 /// Kleiner runder Glasknopf (44 Punkte Trefferfläche).

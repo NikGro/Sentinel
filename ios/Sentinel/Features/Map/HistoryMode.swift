@@ -203,7 +203,27 @@ struct GradientSpurLines: MapContent {
     /// Verlauf wechselnd unterschiedlich dick (Teilstücke mal doppelt so breit). Stattdessen viele kurze einfarbige
     /// Stücke, deren Farbe von Stück zu Stück nur wenig wechselt; das wirkt wie ein Verlauf und hat feste Breite (wie
     /// die einfarbige Routenlinie). Lücken als eigene, gestrichelte Stücke.
-    private var pieces: [(id: String, coordinates: [CLLocationCoordinate2D], color: Color?)] {
+    private typealias Piece = (id: String, coordinates: [CLLocationCoordinate2D], color: Color?)
+
+    /// Zwischenspeicher der Stücke: Die Karte baut sich beim Zoomen und bei jedem Standort neu auf; die Stücke einer
+    /// langen Spur jedes Mal neu zu berechnen, ließ das Zoomen stocken. Nur auf dem Hauptthread benutzt.
+    nonisolated(unsafe) private static var cache: [String: [Piece]] = [:]
+
+    private var pieces: [Piece] {
+        // Kurze Stücke (wachsendes Ende) sind schnell berechnet und ändern sich ständig: nicht zwischenspeichern.
+        guard spur.punkte.count > 200 else { return computePieces() }
+        let key = [spur.subject.key, "\(spur.punkte.count)", "\(spur.punkte.first?.date.timeIntervalSince1970 ?? 0)",
+                   "\(spur.punkte.last?.date.timeIntervalSince1970 ?? 0)", byFrequency ? "h" : "a",
+                   "\(sharedCounts.map { $0.count &+ $0.values.reduce(0, &+) } ?? -1)",
+                   "\(timeRange?.lowerBound.timeIntervalSince1970 ?? 0)-\(timeRange?.upperBound.timeIntervalSince1970 ?? 0)"].joined(separator: "|")
+        if let cached = Self.cache[key] { return cached }
+        let result = computePieces()
+        if Self.cache.count > 24 { Self.cache = [:] }
+        Self.cache[key] = result
+        return result
+    }
+
+    private func computePieces() -> [Piece] {
         let punkte = spur.punkte
         guard punkte.count >= 2, let firstPoint = punkte.first?.date, let lastPoint = punkte.last?.date else { return [] }
         let first = timeRange?.lowerBound ?? firstPoint
@@ -322,26 +342,47 @@ final class StoredTracks {
         var byFrequency = false
     }
 
-    /// Eigene GPS-Punkte seit dem letzten Laden: Die Standortspur wächst damit sofort hinter einem mit, nicht erst
-    /// beim nächsten Laden vom Server.
-    private(set) var liveTail: [SpurPunkt] = []
+    /// Eigene GPS-Punkte auf diesem Gerät (siehe `OwnTrailLog`): Die eigene Standortspur entsteht daraus wie mit
+    /// einem Pinsel; sie wächst sofort hinter einem mit und wird beim Neuladen vom Server nicht ersetzt.
+    private(set) var liveTail: [SpurPunkt] = OwnTrailLog.shared.points
     @ObservationIgnored var liveSubjectKey: String?
 
     func appendLive(_ location: CLLocation) {
         let punkt = SpurPunkt(point: GeoPoint(location.coordinate), date: location.timestamp, speed: location.speed >= 0 ? location.speed : nil, quelle: .gps, info: nil)
-        if let last = liveTail.last, last.point.distance(to: punkt.point) < 3 { return }
+        guard OwnTrailLog.shared.append(punkt) else { return }
         liveTail.append(punkt)
-        if liveTail.count > 2000 { liveTail.removeFirst(liveTail.count - 2000) }
+        // Hat das Protokoll alte Punkte verworfen, den Stand übernehmen.
+        if liveTail.count != OwnTrailLog.shared.points.count { liveTail = OwnTrailLog.shared.points }
+    }
+
+    /// Eigene Punkte nach einem Zeitpunkt (die Punkte sind nach Zeit sortiert; binäre Suche, da mehrmals je Sekunde
+    /// gelesen und bis zu 48 Stunden lang).
+    private func livePoints(after date: Date) -> ArraySlice<SpurPunkt> {
+        var lo = 0, hi = liveTail.count
+        while lo < hi {
+            let mid = (lo + hi) / 2
+            if liveTail[mid].date > date { hi = mid } else { lo = mid + 1 }
+        }
+        return liveTail[lo...]
+    }
+
+    /// Eigene Spur: vom Server nur, was vor der Aufzeichnung auf diesem Gerät liegt, danach die eigenen GPS-Punkte im
+    /// Zeitraum des Objekts.
+    private func ownSpur(server: Spur, interval: ClosedRange<Date>) -> Spur {
+        let local = liveTail.filter { $0.date >= interval.lowerBound && $0.date <= interval.upperBound.addingTimeInterval(120) }
+        guard let start = local.first?.date else { return server }
+        let prefix = server.punkte.filter { $0.date < start.addingTimeInterval(-1) }
+        return Spur(subject: server.subject, punkte: prefix + local)
     }
 
     /// Nur das lokal gewachsene Ende (letzter Punkt vom Server plus die neuen eigenen Punkte); `nil`, wenn es keines gibt.
     func liveTail(of track: Track) -> Spur? {
         guard track.spur.subject.key == liveSubjectKey else { return nil }
         let after = track.spur.punkte.last?.date ?? .distantPast
-        let fresh = liveTail.filter { $0.date > after }
+        let fresh = livePoints(after: after)
         guard !fresh.isEmpty else { return nil }
         let anchor = track.spur.punkte.last.map { [$0] } ?? []
-        let tail = anchor + fresh
+        let tail = anchor + Array(fresh)
         return tail.count >= 2 ? Spur(subject: track.spur.subject, punkte: tail) : nil
     }
 
@@ -349,8 +390,8 @@ final class StoredTracks {
     func withLiveTail(_ track: Track) -> Spur {
         guard track.spur.subject.key == liveSubjectKey, !liveTail.isEmpty else { return track.spur }
         let after = track.spur.punkte.last?.date ?? .distantPast
-        let fresh = liveTail.filter { $0.date > after }
-        return fresh.isEmpty ? track.spur : Spur(subject: track.spur.subject, punkte: track.spur.punkte + fresh)
+        let fresh = livePoints(after: after)
+        return fresh.isEmpty ? track.spur : Spur(subject: track.spur.subject, punkte: track.spur.punkte + Array(fresh))
     }
 
     private(set) var tracks: [Track] = []
@@ -410,7 +451,8 @@ final class StoredTracks {
         for object in objects {
             guard let interval = object.data.historyInterval else { continue }
             for subject in object.data.historySubjects {
-                if let spur = try? await client.spur(subject, from: interval.lowerBound, to: interval.upperBound) {
+                if var spur = try? await client.spur(subject, from: interval.lowerBound, to: interval.upperBound) {
+                    if object.data.isOwnTrack, subject.key == liveSubjectKey { spur = ownSpur(server: spur, interval: interval) }
                     result.append(Track(id: "\(object.id)|\(subject.key)", spur: spur, gradient: object.data.isOwnTrack, byFrequency: object.data.ownTrackByFrequency))
                 }
             }
@@ -424,9 +466,6 @@ final class StoredTracks {
             return old
         }
         tracks = result
-        // Was der Server jetzt hat, braucht der lokale Nachlauf nicht mehr.
-        let newest = result.filter { $0.spur.subject.key == liveSubjectKey }.compactMap { $0.spur.punkte.last?.date }.max()
-        if let newest { liveTail.removeAll { $0.date <= newest } }
         if let selected, selectedTrack?.spur.punkte.indices.contains(selected.index) != true { self.selected = nil }
     }
 }
@@ -493,44 +532,58 @@ struct HistoryPanel: View {
     @Environment(LageStore.self) private var lage
     @Environment(LocalSettings.self) private var settings
 
+    /// Suche aus der Leiste oben: verschiebt nur die Karte (z. B. zu einer Straße).
+    @Binding var searching: Bool
+    let showPlace: (GeoPoint) -> Void
+    @State private var actions = QuickLookActions()
+
     var body: some View {
-        // Fenster von unten wie die Kurzübersicht: links Schließen, rechts Hinzufügen (auf die Karte legen).
-        NavigationStack {
-            ScrollView {
-                VStack(alignment: .leading, spacing: 12) {
-                    if let selected = state.selected, let spur = state.spuren[selected.key], spur.punkte.indices.contains(selected.index) {
-                        HistoryPointCard(spur: spur, index: selected.index, fraction: selected.fraction, title: model.title(of: spur.subject)) { state.selected = nil }
-                    }
-                    subjectsRow
-                    rangeRow
-                    if model.historySubjects.isEmpty {
-                        EmptyView()
-                    } else if state.isEmpty, !state.loading {
-                        Text(state.failure ?? "Keine Aufzeichnung in diesem Zeitraum.")
-                            .font(.footnote)
-                            .foregroundStyle(.secondary)
-                    } else if !state.quellen.isEmpty {
-                        legend
-                    }
+        // Aufbau wie die Kurzübersichten (Variante 2): Kopfzeile mit rundem blauem Knopf „Auf die Karte legen“;
+        // geschlossen wird über das X der gelben Leiste oben.
+        ScrollView {
+            VStack(alignment: .leading, spacing: 12) {
+                if let selected = state.selected, let spur = state.spuren[selected.key], spur.punkte.indices.contains(selected.index) {
+                    HistoryPointCard(spur: spur, index: selected.index, fraction: selected.fraction, title: model.title(of: spur.subject)) { state.selected = nil }
                 }
-                .padding(.horizontal, 18)
-                .padding(.vertical, 8)
-            }
-            .navigationTitle("Standortverlauf")
-            .navigationBarTitleDisplayMode(.inline)
-            .toolbar {
-                ToolbarItem(placement: .cancellationAction) {
-                    Button("Schließen") {
-                        state.selected = nil
-                        model.closeHistory()
-                    }
-                }
-                ToolbarItem(placement: .confirmationAction) {
-                    Button("Hinzufügen", action: placeOnMap)
-                        .disabled(state.isEmpty || model.historySubjects.isEmpty)
+                subjectsRow
+                rangeRow
+                if model.historySubjects.isEmpty {
+                    EmptyView()
+                } else if state.isEmpty, !state.loading {
+                    Text(state.failure ?? "Keine Aufzeichnung in diesem Zeitraum.")
+                        .font(.footnote)
+                        .foregroundStyle(.secondary)
+                } else if !state.quellen.isEmpty {
+                    legend
                 }
             }
+            .padding(.horizontal, 18)
+            .padding(.vertical, 8)
         }
+        .contentMargins(.top, 6, for: .scrollContent)
+        .safeAreaInset(edge: .top, spacing: 0) {
+            QuickLookHeader(
+                symbol: "clock.arrow.circlepath",
+                tint: Theme.accent,
+                title: "Standortverlauf",
+                subtitle: subtitle,
+                navigate: nil,
+                actions: actions,
+                showsBackground: false,
+                primary: HeaderAction(symbol: "plus", label: "Auf die Karte legen",
+                                      enabled: !(state.isEmpty || model.historySubjects.isEmpty), action: placeOnMap)
+            )
+        }
+        .sheet(isPresented: $searching) {
+            SearchSheet(mode: .adresse, navigate: { _ in }, pick: { point, _ in showPlace(point) })
+                .presentationDetents([.fraction(0.94)])
+        }
+    }
+
+    private var subtitle: String {
+        let count = model.historySubjects.count
+        let range = state.range == .custom ? "Eigener Zeitraum" : state.range.title
+        return count == 0 ? "Spur über das Plus wählen" : "\(count == 1 ? "1 Spur" : "\(count) Spuren") · \(range)"
     }
 
     private var subjectsRow: some View {
@@ -661,7 +714,7 @@ struct HistoryPanel: View {
                     }
                 ))
                 // Platzhalter in Breite des Schnellwahl-Knopfs, damit beide Felder bündig stehen.
-                Color.clear.frame(width: 32, height: 1)
+                Color.clear.frame(width: Theme.cardButton, height: 1)
             }
         }
         .font(.subheadline)

@@ -68,6 +68,8 @@ struct MapScreen: View {
     @State var pickingBySearch = false
     /// Deutschlandweite ÖPNV-Karte.
     @State var showsTransitMap = false
+    /// Suche im Verlauf (verschiebt nur die Karte); das Suchfenster liegt über dem Verlaufsfenster.
+    @State var historySearching = false
     /// Vorschau des neuen Orts: erst „Übernehmen“ setzt ihn endgültig; erneutes Tippen verschiebt die Vorschau.
     @State var pendingPoint: GeoPoint?
     /// Takt für die geschätzten ÖPNV-Fahrzeuge (alle 2 Sekunden, solange welche sichtbar sind).
@@ -89,8 +91,21 @@ struct MapScreen: View {
     /// Alle Fenster über der Karte.
     func sheets(_ content: some View) -> some View {
         content
-        .fullScreenCover(isPresented: $showsTransitMap) {
-            TransitExplorer(start: GeoPoint(cameraState.center))
+        // ÖPNV hinzufügen bzw. einsteigen: kein aufklappendes Fenster, sondern eine Ansicht über der Lagekarte, die weich
+        // einblendet und so aussieht wie das Setzen eines Orts (Suchleiste, gelbe Leiste mit X, SOS, Tableiste bleibt).
+        .overlay {
+            if showsTransitMap || boardsTransit {
+                TransitExplorer(start: GeoPoint(cameraState.center), board: boardsTransit ? { (trip: TripDetail) in
+                    lage.setMobility(.oepnv, transit: OepnvFahrt(linienId: trip.tripId, linie: trip.name, richtung: trip.headsign))
+                } : nil, camera: MapCamera(centerCoordinate: cameraState.center, distance: cameraState.distance, heading: cameraState.heading, pitch: 0),
+                onClose: {
+                    withAnimation(.snappy) {
+                        showsTransitMap = false
+                        boardsTransit = false
+                    }
+                })
+                .transition(.opacity)
+            }
         }
         .sheet(isPresented: $pickingBySearch) {
             SearchSheet(mode: .adresse, navigate: { _ in }, pick: { point, _ in
@@ -130,7 +145,9 @@ struct MapScreen: View {
             get: { showsHistory && selection == nil && editor == nil },
             set: { open in if !open, showsHistory, selection == nil, editor == nil { model.closeHistory() } }
         )) {
-            HistoryPanel(state: history)
+            HistoryPanel(state: history, searching: $historySearching) { point in
+                engine.fly(to: MapCamera(centerCoordinate: point.coordinate, distance: 900, heading: 0, pitch: settings.prefers3D ? 55 : 0))
+            }
                 .presentationDetents([QuickLookHeight.low, .medium, .large])
                 .presentationBackgroundInteraction(.enabled(upThrough: .medium))
         }
@@ -158,11 +175,6 @@ struct MapScreen: View {
             })
             // Knapp unter voller Höhe bleibt das Fenster im Glas-Stil wie die Detailfenster.
             .presentationDetents([.fraction(0.94)])
-        }
-        .fullScreenCover(isPresented: $boardsTransit) {
-            TransitExplorer(start: GeoPoint(cameraState.center)) { trip in
-                lage.setMobility(.oepnv, transit: OepnvFahrt(linienId: trip.tripId, linie: trip.name, richtung: trip.headsign))
-            }
         }
         .sheet(item: $mobilityChoice) { mode in
             MobilitySheet(initialMode: mode)
@@ -192,11 +204,13 @@ struct MapScreen: View {
         // Dauerhaft gelegte Standortverläufe: bei Änderung neu laden, mitlaufende jede Minute.
         .task(id: StoredTracks.key(objects(.verlauf))) {
             let stored = objects(.verlauf)
+            if let me = lage.me { storedTracks.liveSubjectKey = SpurSubject(art: .member, id: me.id).key }
             await storedTracks.load(stored, client: model.client)
             while stored.contains(where: { $0.data.zeitBis == nil }), !Task.isCancelled {
                 // Die eigene Spur wächst ohnehin lokal mit; vom Server alle 30 s (fremde Spuren), sonst jede Minute.
                 try? await Task.sleep(for: .seconds(stored.contains(where: \.data.isOwnTrack) ? 30 : 60))
                 guard !Task.isCancelled else { return }
+                if let me = lage.me { storedTracks.liveSubjectKey = SpurSubject(art: .member, id: me.id).key }
                 await storedTracks.load(objects(.verlauf), client: model.client)
             }
         }
@@ -449,10 +463,14 @@ struct MapScreen: View {
             if tapMode == .none, searchPin == nil {
                 sideButtons
             } else {
-                // Reduzierte Ansicht (Ort setzen, Suchtreffer): nur der Kompassknopf, um zum eigenen Standort zu springen.
-                LocationCompassButton(state: cameraState, pin: pin) { pinCamera(pin == .heading ? .north : .heading) }
-                    .padding(.trailing, Theme.barInset)
-                    .padding(.top, topAreaHeight + Theme.barSpacing)
+                // Reduzierte Ansicht (Ort setzen, Suchtreffer): SOS bleibt immer erreichbar, dazu nur der Kompassknopf,
+                // um zum eigenen Standort zu springen.
+                VStack(spacing: Theme.barSpacing) {
+                    if !reducedTools { SOSButton() }
+                    LocationCompassButton(state: cameraState, pin: pin) { pinCamera(pin == .heading ? .north : .heading) }
+                }
+                .padding(.trailing, Theme.barInset)
+                .padding(.top, topAreaHeight + Theme.barSpacing)
             }
         }
         .overlay(alignment: .topLeading) {

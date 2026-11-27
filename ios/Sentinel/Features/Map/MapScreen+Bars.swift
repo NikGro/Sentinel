@@ -24,8 +24,26 @@ extension MapScreen {
             if route.isActive {
                 NavigationBanner()
             } else if showsHistory, tapMode == .none {
-                // Verlauf: reduzierte Karte ohne Suche.
-                EmptyView()
+                // Verlauf: wie beim Setzen eines Orts Suchleiste (verschiebt nur die Karte) und gelbe Leiste mit X.
+                Button { historySearching = true } label: {
+                    HStack(spacing: 10) {
+                        Image(systemName: "magnifyingglass")
+                        Text("Ort oder Straße suchen")
+                            .foregroundStyle(.secondary)
+                        Spacer()
+                    }
+                    .font(.body)
+                    .padding(.horizontal, 18)
+                    .frame(height: Theme.roundButton)
+                    .contentShape(.rect)
+                }
+                .buttonStyle(.plain)
+                .glassEffect(.regular.interactive(), in: .capsule)
+                .accessibilityLabel("Ort oder Straße suchen")
+                PlacementBar(hint: "Standortverlauf: Spuren unten über das Plus wählen, Spur antippen zeigt die Werte.", canConfirm: false, confirm: {}, cancel: {
+                    history.selected = nil
+                    model.closeHistory()
+                })
             } else {
                 HStack(spacing: Theme.barSpacing) {
                     // Beim Setzen eines Orts sucht die Leiste den Ort für das Werkzeug.
@@ -123,7 +141,7 @@ extension MapScreen {
                 AddMenu(scope: model.editsPermanentLayer ? .places : (lage.isPackageArea ? .package : .all)) { action in
                     switch action {
                     case .transitMap:
-                        showsTransitMap = true
+                        withAnimation(.snappy) { showsTransitMap = true }
                     case .ownTrack:
                         createOwnTrack()
                     case .history:
@@ -224,7 +242,7 @@ extension MapScreen {
             } else if searchPin == nil {
                 HStack(spacing: Theme.barSpacing) {
                     MobilityControl { mode in
-                        if mode == .oepnv { boardsTransit = true } else { mobilityChoice = mode }
+                        if mode == .oepnv { withAnimation(.snappy) { boardsTransit = true } } else { mobilityChoice = mode }
                     }
                     APositionControl()
                     ToAButton()

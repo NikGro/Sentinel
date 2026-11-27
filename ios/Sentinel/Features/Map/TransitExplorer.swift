@@ -12,7 +12,16 @@ struct TransitExplorer: View {
     /// Kennung der ÖPNV-Markierung. Gibt es die Fahrt in der Lage schon, wird die vorhandene genommen.
     var boardInto: ((String) -> Void)?
 
+    /// Kamera der Lagekarte beim Öffnen: Die ÖPNV-Ansicht setzt genau dort an, ohne sichtbaren Sprung.
+    var camera: MapCamera?
+    /// Schließen, wenn die Ansicht über der Lagekarte liegt (sonst schließt sie sich als Fenster selbst).
+    var onClose: (() -> Void)?
+
     private var isBoarding: Bool { board != nil || boardInto != nil }
+
+    private func close() {
+        if let onClose { onClose() } else { dismiss() }
+    }
 
     @Environment(AppModel.self) private var model
     @Environment(LageStore.self) private var lage
@@ -63,8 +72,10 @@ struct TransitExplorer: View {
     @FocusState private var searching: Bool
 
     var body: some View {
-        NavigationStack {
-            Map(initialPosition: .region(MKCoordinateRegion(center: start.coordinate, latitudinalMeters: 2500, longitudinalMeters: 2500)), interactionModes: []) {
+        // Aufbau wie beim Setzen eines Orts auf der Lagekarte: oben Suchleiste (hier Linien- und Haltestellensuche) und
+        // die gelbe Hinweisleiste mit X, rechts SOS und Kompass, unten nur bei einer Auswahl eine Karte.
+        Group {
+            Map(initialPosition: camera.map { .camera($0) } ?? .region(MKCoordinateRegion(center: start.coordinate, latitudinalMeters: 2500, longitudinalMeters: 2500)), interactionModes: []) {
                     UserAnnotation()
                     if let trip, trip.points.count >= 2 {
                         MapPolyline(coordinates: trip.points.map(\.coordinate))
@@ -118,13 +129,18 @@ struct TransitExplorer: View {
                     .padding(.trailing, Theme.barInset)
                     .padding(.top, Theme.barSpacing)
                 }
-            .safeAreaInset(edge: .top, spacing: 0) { searchBar }
+            .safeAreaInset(edge: .top, spacing: 0) { topArea }
             .safeAreaInset(edge: .bottom, spacing: 0) { bottomCard }
-            .navigationTitle(isBoarding ? "Fahrzeug wählen" : "ÖPNV-Karte")
-            .navigationBarTitleDisplayMode(.inline)
-            .toolbar {
-                ToolbarItem(placement: .cancellationAction) {
-                    Button("Schließen") { dismiss() }
+            .overlay(alignment: .bottomLeading) {
+                if selection == nil, failure == nil, !tooLarge {
+                    Text("Daten: Transitous · DELFI u. a. · Echtzeit, wo verfügbar")
+                        .font(.caption2)
+                        .foregroundStyle(.secondary)
+                        .padding(.horizontal, 8)
+                        .padding(.vertical, 3)
+                        .background(.thinMaterial, in: .capsule)
+                        .padding(.leading, Theme.barInset)
+                        .padding(.bottom, 8)
                 }
             }
             // Fahrzeuge alle 20 Sekunden neu laden (Echtzeit), Positionen fünfmal je Sekunde weiterrechnen.
@@ -249,6 +265,20 @@ struct TransitExplorer: View {
 
     // MARK: Suche
 
+    private var hint: String {
+        isBoarding ? "Fahrzeug antippen oder oben die Linie suchen." : "Fahrzeug oder Haltestelle antippen, oben Linie suchen."
+    }
+
+    private var topArea: some View {
+        VStack(spacing: 8) {
+            searchBar
+            PlacementBar(hint: hint, canConfirm: false, confirm: {}, cancel: close)
+        }
+        .padding(.horizontal, Theme.barInset)
+        .padding(.top, 4)
+        .padding(.bottom, 6)
+    }
+
     private var searchBar: some View {
         VStack(spacing: 6) {
             HStack(spacing: 10) {
@@ -267,7 +297,8 @@ struct TransitExplorer: View {
                     .foregroundStyle(.secondary)
                 }
             }
-            .padding(.horizontal, 14)
+            .font(.body)
+            .padding(.horizontal, 18)
             .frame(height: Theme.roundButton)
             .glassEffect(.regular.interactive(), in: .capsule)
 
@@ -314,8 +345,6 @@ struct TransitExplorer: View {
                 .glassEffect(.regular, in: .rect(cornerRadius: 18))
             }
         }
-        .padding(.horizontal, Theme.barInset)
-        .padding(.vertical, 6)
     }
 
     private func zoomToLine(_ name: String) {
@@ -330,6 +359,8 @@ struct TransitExplorer: View {
     // MARK: Auswahl und Übernahme
 
     @ViewBuilder private var bottomCard: some View {
+        // Ohne Auswahl keine Karte unten (der Hinweis steht in der gelben Leiste), nur bei Fehlern.
+        if selection != nil || failure != nil || tooLarge {
         VStack(alignment: .leading, spacing: 10) {
             switch selection {
             case .vehicle(let tripId):
@@ -345,6 +376,7 @@ struct TransitExplorer: View {
         .glassEffect(.regular, in: .rect(cornerRadius: 22))
         .padding(.horizontal, Theme.barInset)
         .padding(.bottom, 6)
+        }
     }
 
     private var hintCard: some View {
@@ -353,8 +385,6 @@ struct TransitExplorer: View {
                 Label(failure, systemImage: "exclamationmark.triangle").foregroundStyle(.orange)
             } else if tooLarge {
                 Label("Zum Anzeigen der Fahrzeuge näher heranzoomen.", systemImage: "plus.magnifyingglass")
-            } else {
-                Text("Fahrzeug oder Haltestelle antippen, um es zu übernehmen.")
             }
             Text("Daten: Transitous · DELFI u. a. · Echtzeit, wo verfügbar")
                 .font(.caption2)
@@ -395,7 +425,7 @@ struct TransitExplorer: View {
                         if !parts.isEmpty { saveLine(trip) }
                         board(trip)
                     }
-                    dismiss()
+                    close()
                 }
             } label: {
                 Label("Einsteigen", systemImage: Fortbewegung.oepnv.symbolName)
@@ -489,7 +519,7 @@ struct TransitExplorer: View {
     /// Übernimmt die gewählten Teile einer Fahrt als eine ÖPNV-Strecke.
     private func adopt(_ trip: TripDetail) {
         saveLine(trip)
-        dismiss()
+        close()
     }
 
     /// ÖPNV-Markierung derselben Fahrt, die schon in der Lage ist (Fahrzeug-Ebene wird dabei eingeschaltet).
@@ -532,7 +562,7 @@ struct TransitExplorer: View {
     private func adopt(stop: LiveStop) {
         let pin = MapObject(layerId: Layer.lageId, typ: .haltestelle, titel: stop.name, farbe: "#0A84FF", punkte: [stop.point])
         lage.saveMapObject(pin, id: LageStore.newId())
-        dismiss()
+        close()
     }
 }
 

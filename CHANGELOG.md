@@ -18,6 +18,15 @@
   beim Zoomen; Tipps auf das versetzte Symbol prüft die Karte an der gezeichneten Stelle, Nachbarn werden nicht verdeckt
 - Standortspur nach Häufigkeit: weiche Farbübergänge (geglättet über etwa 70 m, an Übergängen kurze Stücke)
 - Kurzübersicht: Kopfzeile auch in der mittleren Stufe reines Liquid Glass, Hintergrund nur ganz aufgezogen
+- Hinzufügen überall wie beim Marker: ÖPNV hinzufügen bzw. einsteigen klappt kein Fenster mehr auf, sondern blendet
+  über der Lagekarte weich ein (gleicher Ausschnitt), mit Linien- und Haltestellensuche oben, gelber Leiste mit X,
+  SOS und Kompass rechts; die Tableiste bleibt. Unten nur bei einer Auswahl eine Karte
+- Standortverlauf ebenso: Suchleiste (verschiebt die Karte) und gelbe Leiste mit X oben; das Fenster unten im Aufbau der
+  Kurzübersichten (Kopfzeile mit rundem blauem Knopf „Auf die Karte legen“)
+- SOS bleibt in der verkleinerten Ansicht beim Setzen eines Orts sichtbar
+- Standortspur als Pinsel: Die eigene Spur entsteht aus den GPS-Punkten auf dem Gerät (gespeichert, 48 Stunden, beim
+  Abmelden gelöscht); vom Server kommt nur, was davor liegt. Sie rutscht beim Neuladen nicht mehr nach
+- Standortspur: Stücke werden zwischengespeichert statt bei jedem Neuaufbau der Karte neu berechnet (Zoomen stockte)
 - Dynamic Island: Anzeige fehlte zeitweise ganz. Start, Verlängern und Beenden der Live-Aktivität laufen jetzt
   nacheinander (ein Start übernahm sonst eine gerade endende Aktivität); beim Zurückkehren in die App wird sie neu
   angelegt, falls iOS sie beendet hat (spätestens nach acht Stunden)

@@ -106,6 +106,8 @@ final class AppModel {
         if let client { Task { try? await client.signOutDevice() } }
         route.stop()
         location.stop()
+        // Eigene Spur auf dem Gerät mit abmelden.
+        OwnTrailLog.shared.clear()
         fahndung.stopReach()
         fahndung.clearCoverage()
         fahndung.client = nil
@@ -139,6 +141,7 @@ final class AppModel {
     // MARK: Lebenszyklus
 
     func didEnterBackground() {
+        OwnTrailLog.shared.save()
         if settings.appLockEnabled, credentials != nil { lock.lock() }
     }
 
