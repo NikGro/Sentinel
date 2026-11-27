@@ -7,6 +7,14 @@ statt jede Änderung sofort einzubauen. Erledigtes wandert mit Version ins CHANG
 
 ### Nach 0.40 offen
 
+- **Dynamic Island sieht komisch aus:** Läuft daneben etwas anderes (z. B. die Standortanzeige des Systems oder eine
+  andere App), zeigt iOS unsere Live-Aktivität nur in der Minimal-Form als losgelöste Blase rechts: derzeit ein roter
+  Punkt mit rotem Hof in einem schwarzen Kreis, der wie ein Aufnahme- oder Fehlersymbol wirkt. Minimal-Form klarer
+  gestalten (z. B. rotes Standortsymbol `location.fill` bzw. kleines „S“-Abzeichen, ohne Hof) und Kompakt-Form prüfen
+  (Abstände, Schriftgröße, „SENTINEL“ ggf. kürzer). Auf dem Gerät mit und ohne parallele Anzeigen ansehen.
+- **Ortswahl („Standort setzen“): Suche wie auf der Karte:** Das Suchfeld im Dialog zum Setzen eines Punkts nutzt
+  dieselben Vorschläge wie die Suche auf der Karte (SearchService: Anschriften, Orte und Firmen, Kreuzungen,
+  Haltestellen, ggf. Objekte aus der Lage), statt nur Apples Adresssuche beim Bestätigen.
 - **Performance prüfen (0.40: nur gezielt, Messung steht aus):** Kartenbildschirm messen (Instruments: Time Profiler, SwiftUI-Updates, Hitches). Kandidaten:
   `MapScreen` baut bei jeder Standort- und Kameraänderung viel neu; Ebenen auf eigene beobachtbare Objekte aufteilen
   (wie Routenlinie/Spurende); teure Berechnungen (Clustern/Auseinanderrücken, Spur-Farbverläufe, Häufigkeit über alle
