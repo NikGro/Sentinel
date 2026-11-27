@@ -37,8 +37,6 @@ final class AppModel {
     }
 
     init() {
-        // Von einem früheren Lauf liegengebliebene Live-Aktivität beenden (die App wurde beendet, ohne zu stoppen).
-        SharingActivity.end()
         credentials = Credentials.load()
         location.onPosition = { [weak self] position in
             guard let self else { return }
@@ -84,8 +82,8 @@ final class AppModel {
         if DemoData.isRequested {
             credentials = DemoData.credentials
             lage.loadDemo(DemoData.snapshot(now: .now))
-            // Echter Standortdienst auch im Rundgang, damit Kamera-Nachführung und Straßenschild mitgetestet werden.
-            location.start()
+            // Echter Standortdienst auch im Rundgang (Kamera-Nachführung, Straßenschild): startet wie sonst über
+            // `updateSharing`, sobald die erste Ansicht steht, nicht schon hier beim App-Start.
             return
         }
         #endif

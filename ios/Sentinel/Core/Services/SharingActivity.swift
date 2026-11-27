@@ -18,6 +18,9 @@ enum SharingActivity {
     /// Nach dieser Zeit ohne Verlängerung gilt die Anzeige als veraltet (z. B. wenn die App beendet wurde).
     static let lifetime: TimeInterval = 5 * 60
 
+    /// Eine vom letzten Lauf liegengebliebene Aktivität wird hier übernommen (aktualisiert) statt neu angelegt; außer
+    /// Dienst beendet `end()` sie. Nicht schon beim App-Start aufrufen: ActivityKit so früh (vor der ersten Szene) ließ
+    /// die App im UI-Test beim zweiten Start nicht hochkommen.
     static func start(detail: String) {
         guard ActivityAuthorizationInfo().areActivitiesEnabled else { return }
         let content = ActivityContent(state: SharingAttributes.ContentState(detail: detail), staleDate: .now.addingTimeInterval(lifetime))
