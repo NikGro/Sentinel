@@ -8,9 +8,9 @@ statt jede Änderung sofort einzubauen. Erledigtes wandert mit Version ins CHANG
 ### Nach 0.41 offen
 
 - **Standortspur wechselt weiter die Dicke (Screenshots 27.11., 17:21):** Dieselbe Stelle wird beim Fahren mal dicker,
-  mal dünner; zu sehen sind dabei zwei Linien nebeneinander (rot und blau). Prüfen:
-  - Nur eine Standortspur angelegt (geklärt): Die zwei Linien sind Hin- und Rückfahrt derselben Spur, die Dicke wechselt
-    an derselben Stelle zwischen zwei Aufnahmen. Ursache liegt also im Zeichnen, nicht in doppelten Objekten.
+  mal dünner. Prüfen:
+  - Geklärt: nur eine Standortspur (die blaue Linie); die rote daneben ist Apples Verkehrslage (Stau). Die Dicke der
+    blauen Spur wechselt an derselben Stelle zwischen zwei Aufnahmen: Ursache liegt im Zeichnen.
   - SwiftUI-MapKit legt Linien mit Farbverlauf beim Neuaufbau neu an und zeichnet sie kurz mit anderer Breite/Deckkraft.
     Saubere Lösung statt weiterer Versuche in SwiftUI: die Standortspur als eigenes Overlay direkt in die MKMapView
     (die MapEngine hält sie) mit eigenem Renderer (`MKGradientPolylineRenderer`, feste Breite in Punkten), Punkte nur
