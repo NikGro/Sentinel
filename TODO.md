@@ -7,6 +7,20 @@ statt jede Änderung sofort einzubauen. Erledigtes wandert mit Version ins CHANG
 
 ### Nach 0.41 offen
 
+- **Standortspur als Pinsel (Grundidee, Neukonzept):** Die Spur soll malen, wo man tatsächlich war, wie ein Pinsel,
+  zu Fuß wie im Auto; nicht nachträglich springen oder sich an die Straßenführung anpassen.
+  - Springen (Ursache, Code): Das wachsende Ende kommt aus den eigenen GPS-Punkten, der Rest alle 30 s vom Server;
+    der Server speichert gröber (Punkte etwa alle 15 s), also ersetzt beim Neuladen eine gröbere Linie die feine und
+    die Spur „rutscht“. Lösung: die eigene Spur vollständig aus den eigenen GPS-Punkten auf dem Gerät zeichnen
+    (lokal gespeichert, übersteht Neustart); der Server liefert nur die Spuren anderer und Verläufe, die vor der
+    Aufzeichnung auf diesem Gerät liegen.
+  - Mehrfach befahrene Stellen: nicht durch übereinanderliegende halbdurchsichtige Striche dunkler werden, sondern die
+    Farbe weich wechseln (Häufigkeit). Umsetzung als Raster „Pinselabdruck“: Durchfahrten je kleiner Zelle (z. B. 5 m)
+    zählen, je Zelle eine Farbe aus der Skala, mit weichem Übergang zu den Nachbarzellen; gezeichnet als eine
+    Ebene (z. B. eigene Kachel-Ebene bzw. Bild-Overlay) statt vieler Linien. Breite wie ein Pinsel (in Metern bzw.
+    Punkten fest), keine Ränder, Deckkraft einheitlich.
+  - Prüfen, was SwiftUI-MapKit dafür hergibt (eigene Kacheln/Overlays sind in SwiftUI-Map eingeschränkt); sonst eine
+    eigene Zeichenebene über der Karte, die mit der MapEngine-Kamera mitläuft.
 - **Performance prüfen (0.40: nur gezielt, Messung steht aus):** Kartenbildschirm messen (Instruments: Time Profiler, SwiftUI-Updates, Hitches). Kandidaten:
   `MapScreen` baut bei jeder Standort- und Kameraänderung viel neu; Ebenen auf eigene beobachtbare Objekte aufteilen
   (wie Routenlinie/Spurende); teure Berechnungen (Clustern/Auseinanderrücken, Spur-Farbverläufe, Häufigkeit über alle
