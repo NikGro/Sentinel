@@ -79,6 +79,7 @@ struct TargetGroupScreen: View {
     @Environment(\.dismiss) private var dismiss
     @State private var groupEditing: TargetGroupEditorContext?
     @State private var showsDissolve = false
+    @State private var editing: TargetEditorContext?
 
     var body: some View {
         if let group = lage.targetGroups[groupId] {
@@ -98,6 +99,20 @@ struct TargetGroupScreen: View {
             .navigationTitle(group.data.name)
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
+                // Wie in der Hauptansicht: Plus legt ein Ziel an, hier gleich in dieser Gruppe.
+                ToolbarItem(placement: .primaryAction) {
+                    Menu {
+                        ForEach(TargetSections.order) { art in
+                            Button(art.title, systemImage: art.symbolName) {
+                                var target = Target(art: art)
+                                target.gruppeId = groupId
+                                editing = TargetEditorContext(id: LageStore.newId(), target: target, isNew: true)
+                            }
+                        }
+                    } label: {
+                        Label("Ziel anlegen", systemImage: "plus")
+                    }
+                }
                 ToolbarItem(placement: .primaryAction) {
                     Menu {
                         Button("Gruppe bearbeiten", systemImage: "pencil") {
@@ -111,6 +126,9 @@ struct TargetGroupScreen: View {
             }
             .sheet(item: $groupEditing) { context in
                 TargetGroupEditor(context: context)
+            }
+            .sheet(item: $editing) { context in
+                TargetEditor(context: context)
             }
             .alert("Gruppe „\(group.data.name)“ auflösen?", isPresented: $showsDissolve) {
                 Button("Abbrechen", role: .cancel) {}
