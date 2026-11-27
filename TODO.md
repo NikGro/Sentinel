@@ -7,6 +7,10 @@ statt jede Änderung sofort einzubauen. Erledigtes wandert mit Version ins CHANG
 
 ### Nach 0.39 offen
 
+- **Kopfzeile der Kurzübersicht: Hintergrund in derselben Farbe wie der Rest:** Der Balken hinter Titel und Knöpfen ist
+  heller als der Hintergrund der Liste (er nutzt ein Material, `.regularMaterial`). Stattdessen die Hintergrundfarbe der
+  Liste verwenden (`Color(.systemGroupedBackground)`, passt sich in Fenstern der erhöhten Ebene an), mit demselben
+  Verlauf ins Transparente nach unten.
 - **Aussteigen-Knopf schlicht:** Bei den Insassen nur das Symbol (ohne Text), rot, natives Design ohne Glas-/Leucht-
   effekt (z. B. einfacher Knopf mit `figure.walk.departure` in Rot, Barrierefreiheits-Name „Aussteigen“).
 - **Antippen auf der Karte trifft weiter nicht immer das richtige Objekt:** Systematisch prüfen: welche Ebenen fangen
