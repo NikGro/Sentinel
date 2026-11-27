@@ -182,7 +182,11 @@ struct GradientSpurLines: MapContent {
     }
 
     /// Zusammenhängende Abschnitte (ohne Lücke) mit Farbverlauf; Lücken als eigene, gestrichelte Stücke.
-    private var runs: [(id: String, coordinates: [CLLocationCoordinate2D], gradient: Gradient?)] {
+    /// Stücke der Spur mit je einer Farbe. Kein Farbverlauf entlang der Linie: SwiftUI-MapKit zeichnete Linien mit
+    /// Verlauf wechselnd unterschiedlich dick (Teilstücke mal doppelt so breit). Stattdessen viele kurze einfarbige
+    /// Stücke, deren Farbe von Stück zu Stück nur wenig wechselt; das wirkt wie ein Verlauf und hat feste Breite (wie
+    /// die einfarbige Routenlinie). Lücken als eigene, gestrichelte Stücke.
+    private var pieces: [(id: String, coordinates: [CLLocationCoordinate2D], color: Color?)] {
         let punkte = spur.punkte
         guard punkte.count >= 2, let firstPoint = punkte.first?.date, let lastPoint = punkte.last?.date else { return [] }
         let first = timeRange?.lowerBound ?? firstPoint
@@ -192,11 +196,9 @@ struct GradientSpurLines: MapContent {
             if byFrequency { return Self.color(Double(min(counts[Self.cell(punkte[i].point)] ?? 1, 5) - 1) / 4) }
             return Self.color(punkte[i].date.timeIntervalSince(first) / span)
         }
-        // Kennung je Teilstück nach seiner Startzeit (nicht nach Position): Entsteht ein neues Teilstück (Lücke,
-        // Abbiegen), behalten die übrigen ihre Kennung; SwiftUI-MapKit verwendet sonst Linien mit fremden Einstellungen
-        // weiter und die Dicke springt.
+        // Kennung nach Startzeit des Stücks (nicht nach Position), damit Stücke beim Wachsen der Spur ihre Kennung behalten.
         func key(_ i: Int, gap: Bool) -> String { "\(gap ? "l" : "s")\(Int(punkte[i].date.timeIntervalSince1970 * 10))" }
-        var result: [(String, [CLLocationCoordinate2D], Gradient?)] = []
+        var result: [(String, [CLLocationCoordinate2D], Color?)] = []
         var start = 0
         while start < punkte.count - 1 {
             if spur.isGap(after: start) {
@@ -206,37 +208,26 @@ struct GradientSpurLines: MapContent {
             }
             var end = start + 1
             while end < punkte.count - 1, !spur.isGap(after: end) { end += 1 }
-            var coordinates = punkte[start...end].map(\.point.coordinate)
-            // Farbstopps nach zurückgelegter Strecke, höchstens etwa 64.
-            var along: [Double] = [0]
-            for i in 1..<coordinates.count {
-                along.append(along[i - 1] + MKMapPoint(coordinates[i - 1]).distance(to: MKMapPoint(coordinates[i])))
+            // Höchstens etwa 120 Stücke je Abschnitt; feste Stücklänge, damit die Grenzen beim Wachsen stehen bleiben.
+            let length = max(2, (end - start + 119) / 120)
+            var a = start
+            while a < end {
+                let b = min(a + length, end)
+                result.append((key(a, gap: false), punkte[a...b].map(\.point.coordinate), colorAt((a + b) / 2)))
+                a = b
             }
-            let isLast = end == punkte.count - 1
-            if isLast, let liveEnd, MKMapPoint(liveEnd).distance(to: MKMapPoint(coordinates[coordinates.count - 1])) < 300 {
-                along.append(along[along.count - 1] + MKMapPoint(coordinates[coordinates.count - 1]).distance(to: MKMapPoint(liveEnd)))
-                coordinates.append(liveEnd)
-            }
-            let total = max(along[along.count - 1], 0.001)
-            let step = max(1, (end - start + 1) / 64)
-            var stops: [Gradient.Stop] = []
-            for (offset, i) in (start...end).enumerated() where offset % step == 0 || i == end {
-                stops.append(.init(color: colorAt(i).opacity(Self.opacity), location: along[offset] / total))
-            }
-            if stops.count == 1 { stops.append(.init(color: stops[0].color, location: 1)) }
-            result.append((key(start, gap: false), coordinates, Gradient(stops: stops)))
             start = end
         }
-        return result.map { (id: $0.0, coordinates: $0.1, gradient: $0.2) }
+        return result.map { (id: $0.0, coordinates: $0.1, color: $0.2) }
     }
 
     var body: some MapContent {
-        ForEach(runs, id: \.id) { run in
-            if let gradient = run.gradient {
-                MapPolyline(coordinates: run.coordinates)
-                    .stroke(gradient, style: StrokeStyle(lineWidth: Self.width, lineCap: .round, lineJoin: .round))
+        ForEach(pieces, id: \.id) { piece in
+            if let color = piece.color {
+                MapPolyline(coordinates: piece.coordinates)
+                    .stroke(color.opacity(Self.opacity), style: StrokeStyle(lineWidth: Self.width, lineCap: .butt, lineJoin: .round))
             } else {
-                MapPolyline(coordinates: run.coordinates)
+                MapPolyline(coordinates: piece.coordinates)
                     .stroke(.gray.opacity(0.8), style: StrokeStyle(lineWidth: 3, lineCap: .round, dash: [2, 6]))
             }
         }
