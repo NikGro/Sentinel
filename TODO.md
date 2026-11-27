@@ -7,6 +7,13 @@ statt jede Änderung sofort einzubauen. Erledigtes wandert mit Version ins CHANG
 
 ### Nach 0.38 offen
 
+- **Standortspur: gleichbleibende Dicke, standardmäßig Häufigkeit:**
+  - Die Spur springt zwischen verschiedenen Dicken. Einheitlich und eher dick (z. B. 7 pt) zeichnen. Ursache prüfen:
+    Kandidaten sind das laufend neu angelegte Linienobjekt (bei jedem GPS-Punkt wird die Spur neu erzeugt, alte und
+    neue Linie liegen kurz übereinander und wirken bei 75 % Deckkraft dicker/dunkler), unterschiedliche Breiten von
+    Spur (5 pt), Endstück (5 pt) und Lücken (3 pt), oder ein kurzzeitiger Wechsel auf die normale Spurdarstellung
+    (weißer Rand 7 pt + 4 pt) beim Neuladen.
+  - Neue Standortspuren standardmäßig nach Häufigkeit eingefärbt (statt nach Alter); umschaltbar im Editor.
 - **Kurzübersicht: Kopfzeile mit Hintergrund:** Hochgewischt und gescrollt läuft der Inhalt sichtbar unter Titel und
   runden Knöpfen hindurch (überlagert sich mit Foto und Text). Hinter die Kopfzeile ein Hintergrund, der nach unten
   per Verlauf transparent wird, wie in der Kopfzeile des Mehr-Menüs (QuickLookHeader).
