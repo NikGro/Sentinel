@@ -538,8 +538,7 @@ struct HistoryPanel: View {
     @State private var actions = QuickLookActions()
 
     var body: some View {
-        // Aufbau wie die Kurzübersichten (Variante 2): Kopfzeile mit rundem blauem Knopf „Auf die Karte legen“;
-        // geschlossen wird über das X der gelben Leiste oben.
+        // Aufbau wie die Kurzübersichten (Variante 2): Kopfzeile mit rundem blauem Knopf „Auf die Karte legen“ und X.
         ScrollView {
             VStack(alignment: .leading, spacing: 12) {
                 if let selected = state.selected, let spur = state.spuren[selected.key], spur.punkte.indices.contains(selected.index) {
@@ -571,7 +570,11 @@ struct HistoryPanel: View {
                 actions: actions,
                 showsBackground: false,
                 primary: HeaderAction(symbol: "plus", label: "Auf die Karte legen",
-                                      enabled: !(state.isEmpty || model.historySubjects.isEmpty), action: placeOnMap)
+                                      enabled: !(state.isEmpty || model.historySubjects.isEmpty), action: placeOnMap),
+                close: {
+                    state.selected = nil
+                    model.closeHistory()
+                }
             )
         }
         .sheet(isPresented: $searching) {

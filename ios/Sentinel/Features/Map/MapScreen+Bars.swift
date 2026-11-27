@@ -24,7 +24,7 @@ extension MapScreen {
             if route.isActive {
                 NavigationBanner()
             } else if showsHistory, tapMode == .none {
-                // Verlauf: wie beim Setzen eines Orts Suchleiste (verschiebt nur die Karte) und gelbe Leiste mit X.
+                // Verlauf: nur die Suchleiste (verschiebt die Karte); geschlossen wird im Fenster unten.
                 Button { historySearching = true } label: {
                     HStack(spacing: 10) {
                         Image(systemName: "magnifyingglass")
@@ -40,10 +40,6 @@ extension MapScreen {
                 .buttonStyle(.plain)
                 .glassEffect(.regular.interactive(), in: .capsule)
                 .accessibilityLabel("Ort oder Straße suchen")
-                PlacementBar(hint: "Standortverlauf: Spuren unten über das Plus wählen, Spur antippen zeigt die Werte.", canConfirm: false, confirm: {}, cancel: {
-                    history.selected = nil
-                    model.closeHistory()
-                })
             } else {
                 HStack(spacing: Theme.barSpacing) {
                     // Beim Setzen eines Orts sucht die Leiste den Ort für das Werkzeug.
