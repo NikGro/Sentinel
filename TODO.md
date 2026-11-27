@@ -7,6 +7,14 @@ statt jede Änderung sofort einzubauen. Erledigtes wandert mit Version ins CHANG
 
 ### Nach 0.41 offen
 
+- **Standortspur: Farbwechsel weich statt hart:** Die Spur ist jetzt einheitlich dick (0.41), die Farbe springt aber
+  hart von Stück zu Stück (sichtbar bei Häufigkeit: blau → türkis → grün → gelb an Abschnittsgrenzen).
+  - Ursache (Code): Nach Häufigkeit bekommt jeder Punkt die Zahl seines 25-m-Felds (ganze Zahlen 1–5), jedes Stück die
+    Farbe in seiner Mitte; dazwischen gibt es keinen Übergang.
+  - Behebung (ohne Farbverlauf-Linien, die die Dicke springen ließen): Häufigkeit entlang der Spur glätten
+    (gleitender Mittelwert über etwa 50–80 m, als Kommazahl statt ganzer Stufe), Stücke an Farbwechseln kürzer
+    machen (z. B. höchstens 10–15 m), sodass die Farbe in kleinen Schritten wechselt. Gleiches für die Farbe nach Alter
+    prüfen.
 - **Kopfzeile der Kurzübersicht: Hintergrund nur ganz oben:** Auch in der mittleren Stufe (halbe Höhe) reines Liquid
   Glass; den deckenden Hintergrund mit Verlauf nur in der großen Stufe (fast Vollbild). Bisher: alles außer der
   niedrigen Stufe (`isLow`), künftig nur bei `.large` (Detent an QuickLookSheet weitergeben).
