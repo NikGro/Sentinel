@@ -7,6 +7,17 @@ statt jede Änderung sofort einzubauen. Erledigtes wandert mit Version ins CHANG
 
 ### Nach 0.39 offen
 
+- **Dynamic Island verständlich:** Zu sehen ist nur ein Kompass-/Pfeilsymbol, das verwirrt. Prüfen, ob die
+  Live-Aktivität überhaupt startet (oder ob nur die blaue Standortanzeige des Systems zu sehen ist: Start beim
+  App-Start, bevor die App im Vordergrund ist? Live-Aktivitäten in den Einstellungen erlaubt? Erweiterung von SideStore
+  mitinstalliert?). Darstellung: kompakt links ein roter Punkt (wenn möglich pulsierend) mit „SENTINEL“, rechts
+  „Standort“ bzw. „teilt“; ausgeklappt Text über die ganze Breite („SENTINEL teilt deinen Standort“, Instanz). Die
+  ganze Insel mit Text zu füllen geht nur im ausgeklappten Zustand; kompakt sind links und rechts je ein kurzer Bereich.
+- **Auswahlmodus übersichtlicher:**
+  - Gedrückt halten an beliebiger Stelle einer Zeile (auch auf Foto, Name, Schalterbereich) startet den Auswahlmodus;
+    bisher greift es nicht überall (die Geste hängt an der Zeile neben dem Navigationslink).
+  - Der „…“-Knopf mit den Optionen steht in der eingeblendeten Leiste direkt neben „Fertig“, nicht oben in der
+    Kopfzeile.
 - **Stau auf der Route einfärben (ohne Sonderrechte):** Abschnitte mit stockendem Verkehr auf der Routenlinie gelb bzw.
   orange (nicht rot, das ist Sonderrechten vorbehalten).
   - Stand: Apple Karten zeigt die Verkehrslage nur als Kartenebene; je Abschnitt gibt MapKit sie nicht heraus.
