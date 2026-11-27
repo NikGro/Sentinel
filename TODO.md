@@ -7,6 +7,9 @@ statt jede Änderung sofort einzubauen. Erledigtes wandert mit Version ins CHANG
 
 ### Nach 0.41 offen
 
+- **Auswahlmodus: „Optionen“ statt „…“:** Der runde „…“-Knopf neben „Fertig“ ist zu klein geraten (Menü-Knopf übernimmt
+  die Knopfform nicht). Stattdessen ein Text-Knopf „Optionen“ in genau derselben Form und Größe wie „Fertig“ (blau
+  gefüllt, Kapsel, gleiche Höhe), der das Menü öffnet.
 - **Standortspur: Farbwechsel weich statt hart:** Die Spur ist jetzt einheitlich dick (0.41), die Farbe springt aber
   hart von Stück zu Stück (sichtbar bei Häufigkeit: blau → türkis → grün → gelb an Abschnittsgrenzen).
   - Ursache (Code): Nach Häufigkeit bekommt jeder Punkt die Zahl seines 25-m-Felds (ganze Zahlen 1–5), jedes Stück die
