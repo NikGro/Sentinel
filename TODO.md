@@ -7,6 +7,14 @@ statt jede Änderung sofort einzubauen. Erledigtes wandert mit Version ins CHANG
 
 ### Nach 0.40 offen
 
+- **Zielperson betritt Gebäude:** Der Schalter „Unterwegs“ (zu Fuß, Fahrzeug, ÖPNV) bekommt eine vierte Stellung
+  „Gebäude“. Antippen öffnet wie beim Fahrzeug die Auswahl der verfügbaren Zielobjekte (nächstgelegene zuerst); die
+  Person steckt dann im Gebäude (Standort folgt ihm, kein eigenes Symbol, Name in der Beschriftung des Objekts). Beim
+  Zielobjekt stehen die Personen darin unter „Insassen“ bzw. „Im Gebäude“ mit dem roten Symbol zum Verlassen (wie
+  „Aussteigen“ beim Fahrzeug). Das Datenmodell kennt die Bindung an ein Objekt schon (`bindung.art = objekt`).
+- **„Unterwegs“ nur an einer Stelle:** Der Schalter erscheint bei der Zielperson zusätzlich auf der Bearbeiten-Seite
+  (`bindingSection` im TargetEditor). Ausnahme von „alles Bearbeiten unter Bearbeiten“, weil schnell erreichbar sein
+  muss: nur in der Übersicht (Detailansicht/Kurzübersicht), im Editor entfernen.
 - **Kopfzeile der Kurzübersicht nur groß mit Hintergrund:** In der niedrigen Stufe (schwebende Glaskarte) soll die
   Kopfzeile reines Liquid Glass sein, ohne den deckenden Hintergrund mit Verlauf (der dort als dunkler Balken wirkt).
   Den Hintergrund nur zeigen, wenn das Fenster weiter aufgezogen ist (mittlere/große Stufe bzw. sobald der Inhalt
