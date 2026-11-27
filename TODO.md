@@ -7,6 +7,12 @@ statt jede Änderung sofort einzubauen. Erledigtes wandert mit Version ins CHANG
 
 ### Nach 0.40 offen
 
+- **X zum Leeren doppelt:** Seit 0.39 haben alle einzeiligen Textfelder app-weit das System-X
+  (`UITextField.appearance().clearButtonMode`); Suchfelder mit eigenem X zeigen dadurch zwei (z. B. Suche in „Standort
+  setzen“). Alle Stellen prüfen, die schon ein eigenes Leeren haben (SearchField in TabHeader.swift, SearchSheet,
+  TransitExplorer, HistoryMode, PillPicker, PlacementBar, Ortswahl, AddressCompletionField), und je Feld genau ein X:
+  entweder das System-X global abschalten und gezielt `.clearable` nutzen, oder in diesen Feldern das eigene X
+  entfernen. Bevorzugt: kein globales Appearance, sondern ein einheitlicher Baustein für alle Felder.
 - **Dynamic Island sieht komisch aus:** Läuft daneben etwas anderes (z. B. die Standortanzeige des Systems oder eine
   andere App), zeigt iOS unsere Live-Aktivität nur in der Minimal-Form als losgelöste Blase rechts: derzeit ein roter
   Punkt mit rotem Hof in einem schwarzen Kreis, der wie ein Aufnahme- oder Fehlersymbol wirkt. Minimal-Form klarer
