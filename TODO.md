@@ -7,6 +7,16 @@ statt jede Änderung sofort einzubauen. Erledigtes wandert mit Version ins CHANG
 
 ### Nach 0.39 offen
 
+- **Standortspur weiter uneinheitlich dick:** Meist stabil schmal, aber z. B. nach dem Abbiegen wird ein Stück, dann die
+  ganze Spur dick, dann alles dünn, dann wieder normal.
+  - Vermutete Ursachen (Code): Die eigene Spur wird bei jedem GPS-Punkt als neues Linienobjekt mit Farbverlauf angelegt
+    (die Lage der Farbstopps verschiebt sich, MapKit legt die Linie neu an); die Teilstücke sind nach Position nummeriert
+    (`id` = Index), sodass sich nach einem Abschnittswechsel (Lücke, Abbiegen) die Zuordnung verschiebt und SwiftUI-
+    MapKit Linien mit fremden Strich-Einstellungen wiederverwendet; das Endstück liegt mit eigener Breite darüber.
+  - Behebung: Spur aufteilen in einen festen Teil (vom Server, ändert sich nur beim Neuladen) und ein kurzes wachsendes
+    Ende; Teilstücke mit stabiler Kennung (Startzeit statt Index). Falls SwiftUI-MapKit weiter flackert: die Spur direkt
+    als eigenes Overlay mit festem Renderer (`MKGradientPolylineRenderer`, feste Breite) auf die Karte legen, die
+    MapEngine hat die MKMapView ohnehin in der Hand.
 - **Dynamic Island verständlich:** Zu sehen ist nur ein Kompass-/Pfeilsymbol, das verwirrt. Prüfen, ob die
   Live-Aktivität überhaupt startet (oder ob nur die blaue Standortanzeige des Systems zu sehen ist: Start beim
   App-Start, bevor die App im Vordergrund ist? Live-Aktivitäten in den Einstellungen erlaubt? Erweiterung von SideStore
