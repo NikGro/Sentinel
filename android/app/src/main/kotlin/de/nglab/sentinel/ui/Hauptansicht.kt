@@ -516,14 +516,13 @@ private fun Lagebildschirm(modell: AppModell, stand: LageStand, fokus: KartenObj
             Column(Modifier.fillMaxWidth().then(Modifier.verticalScroll(androidx.compose.foundation.rememberScrollState())).padding(horizontal = 20.dp).padding(bottom = 32.dp)) {
                 Text("Ebenen", style = MaterialTheme.typography.titleLarge, modifier = Modifier.padding(bottom = 8.dp))
                 // Grundkarte und 3D
-                androidx.compose.material3.SingleChoiceSegmentedButtonRow(Modifier.fillMaxWidth()) {
-                    val karten = de.nglab.sentinel.kern.karte.Kartenebenen.grundkarten
-                    karten.forEachIndexed { i, (schluessel, titel) ->
-                        androidx.compose.material3.SegmentedButton(
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    for ((schluessel, titel) in de.nglab.sentinel.kern.karte.Kartenebenen.grundkarten) {
+                        androidx.compose.material3.FilterChip(
                             selected = ebenen.grundkarte == schluessel,
                             onClick = { ebenen = ebenen.mitGrundkarte(schluessel) },
-                            shape = androidx.compose.material3.SegmentedButtonDefaults.itemShape(i, karten.size),
-                        ) { Text(titel) }
+                            label = { Text(titel) },
+                        )
                     }
                 }
                 Row(Modifier.fillMaxWidth().height(52.dp), verticalAlignment = Alignment.CenterVertically) {
