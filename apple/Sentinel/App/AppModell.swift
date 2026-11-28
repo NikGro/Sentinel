@@ -78,9 +78,9 @@ final class AppModell {
 
     private func ereignis(_ e: LageEreignis) {
         switch e {
-        case let f as LageEreignis.Fehler: meldung = f.meldung
-        case let a as LageEreignis.AUebernommen: meldung = a.eigen ? "Sie haben die A" : "\(stand.name(akteurId: a.fahnderId)) hat die A-Position."
-        case let n as LageEreignis.NotrufBegonnen where !n.eigen: meldung = "Notruf: \(stand.name(akteurId: n.fahnderId))"
+        case let f as LageEreignisFehler: meldung = f.meldung
+        case let a as LageEreignisAUebernommen: meldung = a.eigen ? "Sie haben die A" : "\(stand.name(akteurId: a.fahnderId)) hat die A-Position."
+        case let n as LageEreignisNotrufBegonnen where !n.eigen: meldung = "Notruf: \(stand.name(akteurId: n.fahnderId))"
         default: break
         }
     }
