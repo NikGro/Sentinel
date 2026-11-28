@@ -227,11 +227,29 @@ private fun Lagebildschirm(modell: AppModell, stand: LageStand, fokus: KartenObj
         steuerung.navigation(null)
     }
 
+    var sichtungsfrage by remember { mutableStateOf<Platzierung.Ergebnis.Verschoben?>(null) }
+    sichtungsfrage?.let { e ->
+        androidx.compose.material3.AlertDialog(
+            onDismissRequest = { sichtungsfrage = null; modell.lage.markierungSichern(e.markierung, e.id) },
+            title = { Text(Platzierung.SICHTUNG_FRAGE) },
+            text = { Text(Platzierung.SICHTUNG_TEXT) },
+            confirmButton = { androidx.compose.material3.TextButton(onClick = {
+                sichtungsfrage = null
+                modell.lage.markierungSichern(Platzierung.sichtung(e, true, System.currentTimeMillis()), e.id)
+            }) { Text(Platzierung.SICHTUNG_JETZT) } },
+            dismissButton = { androidx.compose.material3.TextButton(onClick = {
+                sichtungsfrage = null
+                modell.lage.markierungSichern(e.markierung, e.id)
+            }) { Text(Platzierung.SICHTUNG_BEHALTEN) } },
+        )
+    }
+
     fun ergebnis(e: Platzierung.Ergebnis?) {
         when (e) {
             is Platzierung.Ergebnis.NeueMarkierung -> editor = Markierungsbearbeitung(Lage.neueId(), e.markierung, neu = true)
             is Platzierung.Ergebnis.NeuesZiel -> neuesZiel = e.ziel
-            is Platzierung.Ergebnis.Verschoben -> modell.lage.markierungSichern(e.markierung, e.id)
+            is Platzierung.Ergebnis.Verschoben ->
+                if (Platzierung.fragtSichtungszeit(e)) sichtungsfrage = e else modell.lage.markierungSichern(e.markierung, e.id)
             is Platzierung.Ergebnis.ZielVersetzt -> modell.lage.setzen(Art.Ziel, e.id, e.ziel)
             null -> Unit
         }

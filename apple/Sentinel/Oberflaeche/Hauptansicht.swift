@@ -42,6 +42,7 @@ struct Lagebildschirm: View {
     // ÖPNV live
     // Zuschaltbare Ebenen (Verkehr, ÖPNV live, Bestreifung, Weg-Zeit)
     @State private var ebenen = Kartenebenen.companion.standard
+    @State private var sichtungsfrage: PlatzierungErgebnisVerschoben?
     @State private var ebenenWahl = false
     @State private var flaechen = Lageflaechen()
     @State private var flaechenStand = 0
@@ -109,7 +110,7 @@ struct Lagebildschirm: View {
         case let e as PlatzierungErgebnisNeuesZiel:
             neuesZiel = NeuesZielAuswahl(ziel: e.ziel)
         case let e as PlatzierungErgebnisVerschoben:
-            _ = modell.lage.markierungSichern(m: e.markierung, id: e.id)
+            if Platzierung.companion.fragtSichtungszeit(e: e) { sichtungsfrage = e } else { _ = modell.lage.markierungSichern(m: e.markierung, id: e.id) }
         case let e as PlatzierungErgebnisZielVersetzt:
             _ = modell.lage.setzen(art: .ziel, id: e.id, daten: e.ziel)
         default:
@@ -398,6 +399,14 @@ struct Lagebildschirm: View {
                     }
                     try? await Task.sleep(for: .milliseconds(Int(Lageflaechen.companion.TAKT_MS)))
                 }
+            }
+            .alert(Platzierung.companion.SICHTUNG_FRAGE, isPresented: Binding(get: { sichtungsfrage != nil }, set: { if !$0 { sichtungsfrage = nil } }), presenting: sichtungsfrage) { e in
+                Button(Platzierung.companion.SICHTUNG_JETZT) {
+                    _ = modell.lage.markierungSichern(m: Platzierung.companion.sichtung(e: e, neu: true, jetztMs: Int64(Date.now.timeIntervalSince1970 * 1000)), id: e.id)
+                }
+                Button(Platzierung.companion.SICHTUNG_BEHALTEN, role: .cancel) { _ = modell.lage.markierungSichern(m: e.markierung, id: e.id) }
+            } message: { _ in
+                Text(Platzierung.companion.SICHTUNG_TEXT)
             }
             .sheet(isPresented: $ebenenWahl) {
                 NavigationStack {

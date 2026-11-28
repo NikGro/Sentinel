@@ -224,7 +224,12 @@ function bind(map: MapBackend, disposers: (() => void)[]): void {
         const object = tables.annotation.value[current.id]?.data;
         if (object && !isLocked(object.layerId)) {
           const anchor = anchorOf(object);
-          saveObject(current.id, { ...object, punkte: object.punkte.map((p) => ({ lat: p.lat + point.lat - anchor.lat, lon: p.lon + point.lon - anchor.lon })) });
+          const punkte = object.punkte.map((p) => ({ lat: p.lat + point.lat - anchor.lat, lon: p.lon + point.lon - anchor.lon }));
+          // Verschobener Fahndungsraum: neue Sichtung jetzt oder Zeit beibehalten (wie in den Apps).
+          const neueSichtung =
+            object.typ === 'fahndungsraum' && object.zeit !== null &&
+            window.confirm('Neue Sichtung? Der Fahndungsraum wurde verschoben. „OK“ setzt den Sichtungszeitpunkt auf jetzt, „Abbrechen“ behält die Zeit bei.');
+          saveObject(current.id, { ...object, punkte, ...(neueSichtung ? { zeit: Date.now() } : {}) });
         }
         tool.value = { kind: 'auswahl' };
         break;

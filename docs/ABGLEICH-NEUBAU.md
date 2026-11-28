@@ -35,7 +35,8 @@ Bedienung geprüft ist noch nichts davon; dafür braucht es den Server mit den n
 - Ziele: Suche, Gruppen anlegen/bearbeiten/löschen, Auswahlmodus, Insassen, Anschrift mit Vorschlägen,
   Aufzeichnung je Ziel. Kräfte: Suche, Fahrzeugflotte bearbeiten. Profil übernehmen bei der Einrichtung.
 - Karte: Grundkarte Satellit (TomTom-Luftbild über den eigenen Server), 3D an/aus, Zielarten und Gruppen
-  ausblenden (Android, iOS, Web).
+  ausblenden (Android, iOS, Web); mehrfach tippen schaltet durch; Fahndungsraum verschieben mit Rückfrage
+  zum Sichtungszeitpunkt.
 
 ## Offen (nach Wichtigkeit)
 
@@ -44,7 +45,6 @@ Bedienung geprüft ist noch nichts davon; dafür braucht es den Server mit den n
 
 **Karte**
 14. Punkt auf Linie bzw. Spur antippen (Wert an der Stelle; Durchschalten übereinanderliegender Formen ist fertig).
-15. Fahndungsraum verschieben mit Rückfrage zum Sichtungszeitpunkt.
 16. Sonderbereiche sichtbar machen: „Dauerhafte Orte bearbeiten“, „Paket vorbereiten“ (Leiste mit „Fertig“,
     eingeschränkte Funktionen).
 

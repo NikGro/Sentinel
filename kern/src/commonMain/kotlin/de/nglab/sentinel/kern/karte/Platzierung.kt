@@ -191,6 +191,20 @@ data class Platzierung(val zweck: Zweck, val punkte: List<GeoPunkt> = emptyList(
             return if (start != null) p.tippen(start) else p
         }
 
+        /**
+         * Ein verschobener Fahndungsraum ist meist eine neue Sichtung: dann fragt die Oberfläche, ob der
+         * Sichtungszeitpunkt auf jetzt gesetzt oder beibehalten wird (die Weg-Zeit-Flächen rechnen ab dieser Zeit).
+         */
+        fun fragtSichtungszeit(e: Ergebnis.Verschoben): Boolean = e.markierung.typ == de.nglab.sentinel.kern.modell.Form.Fahndungsraum && e.markierung.zeit != null
+
+        /** Sichtungszeitpunkt nach der Antwort: `neu` = jetzt, sonst unverändert. */
+        fun sichtung(e: Ergebnis.Verschoben, neu: Boolean, jetztMs: Long): Markierung = if (neu) e.markierung.copy(zeit = jetztMs) else e.markierung
+
+        const val SICHTUNG_FRAGE = "Neue Sichtung?"
+        const val SICHTUNG_TEXT = "Der Fahndungsraum wurde verschoben. Gilt der neue Ort als Sichtung von jetzt? Die Weg-Zeit-Flächen rechnen ab dem Sichtungszeitpunkt."
+        const val SICHTUNG_JETZT = "Sichtung jetzt"
+        const val SICHTUNG_BEHALTEN = "Zeit beibehalten"
+
         /** Alle Punkte so versetzen, dass der Ankerpunkt auf `neu` liegt. */
         fun verschieben(m: Markierung, neu: GeoPunkt): Markierung {
             val a = m.anker
