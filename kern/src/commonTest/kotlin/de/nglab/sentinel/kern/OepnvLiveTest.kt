@@ -43,3 +43,20 @@ class OepnvLiveTest {
         assertNull(live.position(a, 500_000))
     }
 }
+
+class HalteVorausTest {
+    @Test
+    fun zweiHalteVorDemFahrzeug() {
+        val halte = (0..4).map { de.nglab.sentinel.kern.modell.GeoPunkt(53.0 + it * 0.01, 10.0) }
+        val zeiten = (0..4).map { (it * 120_000).toLong() as Long? }
+        val m = de.nglab.sentinel.kern.modell.Markierung(
+            layerId = "lage", typ = Form.OepnvLinie, punkte = halte, haltNamen = listOf("A", "B", "C", "D", "E"),
+            linie = de.nglab.sentinel.kern.modell.Linienverweis("t", "U3", "subway"),
+            fahrt = de.nglab.sentinel.kern.modell.OepnvFahrtDaten("t", zeiten),
+        )
+        // Zwischen A und B unterwegs: 1 voraus = B, 2 voraus = C
+        assertEquals("B", de.nglab.sentinel.kern.oepnv.OepnvSimulation.haltVoraus(m, 60_000, 1)?.second)
+        assertEquals("C", de.nglab.sentinel.kern.oepnv.OepnvSimulation.haltVoraus(m, 60_000, 2)?.second)
+        assertNull(de.nglab.sentinel.kern.oepnv.OepnvSimulation.haltVoraus(m, 10_000_000, 1))
+    }
+}

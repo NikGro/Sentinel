@@ -58,6 +58,7 @@ struct NaviLeisteUnten: View {
     let n: Navistand
     @Binding var sonderrechte: Bool
     var modusWaehlen: (Naviziel) -> Void = { _ in }
+    var zielImOepnv = false
     let beenden: () -> Void
 
     var body: some View {
@@ -95,6 +96,19 @@ struct NaviLeisteUnten: View {
                 }
                 Spacer(minLength: 0)
                 if let kmh = n.tempolimit { Tempolimit(kmh: kmh) }
+            }
+            // Ziel im ÖPNV: zum Fahrzeug oder ein bis zwei Halte voraus (rückt mit)
+            if zielImOepnv {
+                HStack(spacing: 8) {
+                    let basis = n.ziel.basis
+                    ForEach([1, 2], id: \.self) { halte in
+                        let gewaehlt = (n.ziel as? NavizielHalteVoraus)?.halte == Int32(halte)
+                        Button(halte == 1 ? "1 Halt voraus" : "2 Halte voraus") {
+                            modusWaehlen(gewaehlt ? basis : NavizielHalteVoraus(ziel: basis, halte: Int32(halte)))
+                        }
+                        .buttonStyle(.glass).tint(gewaehlt ? .accentColor : .primary)
+                    }
+                }
             }
         }
         .padding(16)

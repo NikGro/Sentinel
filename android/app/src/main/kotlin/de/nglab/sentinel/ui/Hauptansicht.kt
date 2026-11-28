@@ -348,7 +348,8 @@ private fun Lagebildschirm(modell: AppModell, stand: LageStand, fokus: KartenObj
                 NaviLeisteUnten(n, sonderrechte, sonderrechteUmschalten = {
                     sonderrechte = !sonderrechte
                     hinfuehren(n.ziel)
-                }, modusWaehlen = { hinfuehren(it) }, beenden = ::naviBeenden)
+                }, modusWaehlen = { hinfuehren(it) }, beenden = ::naviBeenden,
+                    zielImOepnv = de.nglab.sentinel.kern.navi.Navizielaufloesung.oepnvFahrzeug(n.ziel, stand) != null)
             }
         }
         verlauf?.let { v ->

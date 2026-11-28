@@ -93,6 +93,20 @@ object OepnvSimulation {
         return null
     }
 
+    /**
+     * Halt `voraus` Halte vor dem Fahrzeug einer ÖPNV-Markierung (1 = nächster Halt; steht es gerade am Halt, der danach),
+     * mit Name; `null`, wenn das Fahrzeug gerade nicht fährt. Rückt mit dem Fahrzeug weiter, bis zum Endhalt.
+     */
+    fun haltVoraus(m: Markierung, jetztMs: Long, voraus: Int): Pair<GeoPunkt, String>? {
+        if (!m.typ.istOepnv || m.punkte.size < 2) return null
+        val typ = m.linie?.typ ?: "bus"
+        val z = m.fahrt?.let { zustand(m.punkte, m.weg, it.zeiten, typ, jetztMs) }
+            ?: if (m.typ == Form.OepnvFahrzeug && m.zeit != null) zustand(m.punkte, m.weg, typ, m.zeit, jetztMs) else null
+        z ?: return null
+        val index = (z.naechsterHalt + if (z.amHalt) voraus else voraus - 1).coerceIn(0, m.punkte.lastIndex)
+        return m.punkte[index] to (m.haltNamen.getOrNull(index)?.takeIf { it.isNotBlank() } ?: "Halt ${index + 1}")
+    }
+
     /** Ankunft am Endhalt (ms): echte Zeit, sonst geschätzt. */
     fun ende(m: Markierung): Long? {
         m.fahrt?.zeiten?.lastOrNull { it != null }?.let { return it }

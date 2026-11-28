@@ -28,11 +28,14 @@ sealed interface Naviziel {
     data class Vorlauf(val ziel: Naviziel) : Naviziel
     /** Parallel: ebenfalls zur Kreuzung vor dem Ziel, aber über eine Nebenstrecke; seine Straße wird gemieden. */
     data class Parallel(val ziel: Naviziel) : Naviziel
+    /** Ziel im ÖPNV: nicht zum Fahrzeug, sondern `halte` Halte voraus (rückt mit dem Fahrzeug). */
+    data class HalteVoraus(val ziel: Naviziel, val halte: Int) : Naviziel
 
     /** Das eigentliche Ziel, ohne Vorlauf bzw. Parallel. */
     val basis: Naviziel get() = when (this) {
         is Vorlauf -> ziel.basis
         is Parallel -> ziel.basis
+        is HalteVoraus -> ziel.basis
         else -> this
     }
 }
@@ -57,7 +60,22 @@ object Navizielaufloesung {
         return ort to hinweis
     }
 
+    /** ÖPNV-Fahrzeug, in dem das Ziel bzw. die Kraft gerade sitzt (Markierung), falls es eines gibt. */
+    fun oepnvFahrzeug(ziel: Naviziel, stand: LageStand): de.nglab.sentinel.kern.modell.Markierung? {
+        val o = (ziel.basis as? Naviziel.Objekt)?.objekt ?: return null
+        if (o.art != Objektart.Ziel) return null
+        val b = stand.ziele[o.id]?.data?.bindung ?: return null
+        if (b.art != de.nglab.sentinel.kern.modell.BindungsArt.Oepnv) return null
+        return b.zielId?.let { stand.markierungen[it]?.data }
+    }
+
     fun aufloesen(ziel: Naviziel, stand: LageStand, jetztMs: Long): Zielort? = when (ziel) {
+        is Naviziel.HalteVoraus -> {
+            val basis = aufloesen(ziel.basis, stand, jetztMs)
+            val halt = oepnvFahrzeug(ziel, stand)?.let { de.nglab.sentinel.kern.oepnv.OepnvSimulation.haltVoraus(it, jetztMs, ziel.halte) }
+            // Fahrzeug steht nicht (mehr) auf der Strecke: dann zum Ziel selbst.
+            halt?.let { Zielort(it.first, "Haltestelle ${it.second} (vor ${basis?.titel ?: "Ziel"})") } ?: basis
+        }
         is Naviziel.Vorlauf -> aufloesen(ziel.basis, stand, jetztMs)
         is Naviziel.Parallel -> aufloesen(ziel.basis, stand, jetztMs)
         Naviziel.APosition -> stand.aHalter?.let { a -> stand.positionen[a.id]?.let { Zielort(it.punkt, "A-Position (${a.data.spitzname})") } }

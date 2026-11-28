@@ -110,7 +110,7 @@ fun NaviLeisteOben(n: Navistand) {
 
 /** Navi-Leiste unten: Ankunft, Restzeit, Entfernung, Sonderrechte, Beenden. */
 @Composable
-fun NaviLeisteUnten(n: Navistand, sonderrechte: Boolean, sonderrechteUmschalten: () -> Unit, modusWaehlen: (Naviziel) -> Unit, beenden: () -> Unit) {
+fun NaviLeisteUnten(n: Navistand, sonderrechte: Boolean, sonderrechteUmschalten: () -> Unit, modusWaehlen: (Naviziel) -> Unit, beenden: () -> Unit, zielImOepnv: Boolean = false) {
     val f = n.fortschritt
     val jetzt = System.currentTimeMillis()
     Surface(shape = RoundedCornerShape(24.dp), tonalElevation = 3.dp, shadowElevation = 4.dp, modifier = Modifier.fillMaxWidth()) {
@@ -141,6 +141,14 @@ fun NaviLeisteUnten(n: Navistand, sonderrechte: Boolean, sonderrechteUmschalten:
                     FilterChip(selected = n.ziel is Naviziel.Parallel, onClick = { modusWaehlen(if (n.ziel is Naviziel.Parallel) basis else Naviziel.Parallel(basis)) }, label = { Text("Parallel") })
                 }
                 n.tempolimit?.let { Tempolimit(it) }
+            }
+            // Ziel im ÖPNV: zum Fahrzeug oder ein bis zwei Halte voraus (rückt mit)
+            if (zielImOepnv) Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                val basis = n.ziel.basis
+                for (halte in 1..2) {
+                    val gewaehlt = (n.ziel as? Naviziel.HalteVoraus)?.halte == halte
+                    FilterChip(selected = gewaehlt, onClick = { modusWaehlen(if (gewaehlt) basis else Naviziel.HalteVoraus(basis, halte)) }, label = { Text(if (halte == 1) "1 Halt voraus" else "2 Halte voraus") })
+                }
             }
         }
     }
