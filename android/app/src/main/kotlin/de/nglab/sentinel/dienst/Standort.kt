@@ -40,6 +40,10 @@ class Standort(private val kontext: Context) {
     private val _ort = MutableStateFlow<Ort?>(null)
     val ort: StateFlow<Ort?> = _ort.asStateFlow()
 
+    /** Rohe Standorte für den Navigationskern (Ferrostar). */
+    private val _roh = kotlinx.coroutines.flow.MutableSharedFlow<Location>(replay = 1, extraBufferCapacity = 8, onBufferOverflow = kotlinx.coroutines.channels.BufferOverflow.DROP_OLDEST)
+    val roh: kotlinx.coroutines.flow.SharedFlow<Location> = _roh
+
     var beiPosition: (Position) -> Unit = {}
     private var zuletztGesendet: Ort? = null
     private val client = LocationServices.getFusedLocationProviderClient(kontext)
@@ -68,6 +72,7 @@ class Standort(private val kontext: Context) {
     }
 
     private fun aufnehmen(l: Location) {
+        _roh.tryEmit(l)
         val o = Ort(l.latitude, l.longitude, l.time, l.accuracy.toDouble(), if (l.hasSpeed()) l.speed.toDouble() else null, if (l.hasBearing()) l.bearing.toDouble() else null)
         _ort.value = o
         val vorher = zuletztGesendet

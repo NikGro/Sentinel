@@ -22,6 +22,7 @@ import de.nglab.sentinel.kern.karte.Anheftung
 import de.nglab.sentinel.kern.karte.Kamerafuehrung
 import de.nglab.sentinel.kern.karte.KartenObjekt
 import de.nglab.sentinel.kern.karte.Platzierung
+import de.nglab.sentinel.kern.navi.Routenrest
 import de.nglab.sentinel.kern.karte.Quellen
 import de.nglab.sentinel.kern.karte.Szene
 import de.nglab.sentinel.kern.modell.GeoPunkt
@@ -51,6 +52,18 @@ class KartenSteuerung {
     var anheftung by mutableStateOf(Anheftung.Frei)
         internal set
     internal var gesteAktiv = false
+
+    /** Navigation: nah, gekippt, in Fahrtrichtung; `null` löst die Kopplung wieder (Ende der Navigation). */
+    fun navigation(ort: GeoPunkt?) {
+        if (ort == null) {
+            fuehrung.loesen()
+            anheftung = fuehrung.anheftung
+            return
+        }
+        fuehrung.anheften(Anheftung.Navigation, ort.lat)
+        anheftung = fuehrung.anheftung
+        folgen(ort, null, null, null, sofort = true)
+    }
 
     /** Standort-/Kompassknopf: heftet an (Fahrtrichtung), erneut getippt Norden oben, dann wieder Fahrtrichtung. */
     fun anheftenUmschalten(ort: GeoPunkt?) {
@@ -250,13 +263,20 @@ fun LageKarte(
         }
     }
 
-    // Eigener Standort
-    LaunchedEffect(style, ort, stand.haeltA) {
+    // Eigener Standort; in der Navigation auf die Route gelegt und als Navi-Pfeil, die Route beginnt dort.
+    val navi by modell.navigator.stand.collectAsStateWithLifecycle()
+    val rest = remember { Routenrest() }
+    LaunchedEffect(style, ort, stand.haeltA, navi) {
         val s = style ?: return@LaunchedEffect
         val o = ort
-        s.getSourceAs<GeoJsonSource>(Quellen.ICH)?.setGeoJson(szene.ich(o?.let { GeoPunkt(it.lat, it.lon) }, o?.richtung, "punkt", stand.haeltA))
+        val n = navi
+        val aufRoute = n?.aufRoute
+        val punkt = aufRoute?.let { GeoPunkt(it.latitude, it.longitude) } ?: o?.let { GeoPunkt(it.lat, it.lon) }
+        val richtung = aufRoute?.takeIf { it.hasBearing() }?.bearing?.toDouble() ?: o?.richtung
+        s.getSourceAs<GeoJsonSource>(Quellen.ICH)?.setGeoJson(szene.ich(punkt, richtung, if (n != null) "pfeil" else "punkt", stand.haeltA))
+        s.getSourceAs<GeoJsonSource>(Quellen.ROUTE)?.setGeoJson(szene.route(if (n != null) rest.rest(n.route, punkt) else emptyList(), n?.info?.sonderrechte == true))
         // Angeheftet: Kamera folgt dem Standort.
-        if (o != null) steuerung.folgen(GeoPunkt(o.lat, o.lon), o.tempo, o.richtung, null)
+        if (punkt != null) steuerung.folgen(punkt, o?.tempo, richtung, null)
     }
 
     AndroidView(factory = { ansicht }, modifier = modifier)

@@ -69,13 +69,17 @@ dependencies {
     implementation("androidx.lifecycle:lifecycle-process:2.9.4")
     implementation("androidx.core:core-ktx:1.17.0")
     implementation("androidx.biometric:biometric:1.1.0")
-    implementation("org.jetbrains.kotlinx:kotlinx-coroutines-android:1.10.2")
-    implementation("org.jetbrains.kotlinx:kotlinx-serialization-json:1.9.0")
+    implementation("org.jetbrains.kotlinx:kotlinx-coroutines-android:1.11.0")
+    implementation("org.jetbrains.kotlinx:kotlinx-serialization-json:1.11.0")
     implementation("io.ktor:ktor-client-okhttp:3.3.2")
     implementation("com.google.android.gms:play-services-location:21.3.0")
 
     // Karte
     implementation("org.maplibre.gl:android-sdk:11.13.5")
+
+    // Navigationskern (quelloffen, gleiche Version wie auf iOS), ohne dessen Kartenoberfläche
+    implementation("com.stadiamaps.ferrostar:core:0.59.0")
+    implementation("com.squareup.okhttp3:okhttp:5.3.2")
 
     testImplementation(kotlin("test"))
     androidTestImplementation(compose)

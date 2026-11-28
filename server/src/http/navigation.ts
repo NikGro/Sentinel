@@ -8,6 +8,7 @@ import { MAX_MEIDEPUNKTE } from '../reach/route.js';
 import { findCrossStreets } from '../reach/crossings.js';
 import { speedLimitAt } from '../reach/speedlimit.js';
 import { REACH_MODES } from '../reach/reach.js';
+import { durchfahrtspunkte, plausibel, routenPfad, Verkehrsfuehrung, verkehrsfaktor } from '../reach/verkehrsfuehrung.js';
 import { geoPoint, INSTANZ_HAUPT } from '../schemas.js';
 import { RateLimiter } from '../security.js';
 import { HttpError, parse, type Guards, type Services } from './app.js';
@@ -77,6 +78,7 @@ export function registerNavigationRoutes(app: FastifyInstance, services: Service
   const crossingLimiter = new RateLimiter(90, 60_000);
   const speedLimiter = new RateLimiter(30, 60_000);
   const diagnosisLimiter = new RateLimiter(60, 60_000);
+  const fuehrung = services.verkehrsfuehrung ?? new Verkehrsfuehrung(() => services.incidents.schluessel());
 
   /** Kamera-Messdaten vom Gerät: werden je Gerät an `diagnose/kamera-<Gerät>.jsonl` angehängt (nur zur Fehlersuche). */
   app.post('/api/v1/diagnose/kamera', { bodyLimit: 2 * 1024 * 1024 }, async (request) => {
@@ -157,11 +159,37 @@ export function registerNavigationRoutes(app: FastifyInstance, services: Service
       // Sperrungen in der Stadt (TomTom) zuerst, dann Autobahnen; zusammen höchstens so viele, wie Valhalla annimmt.
       sperrungen.push(...services.incidents.near(ends, MAX_MEIDEPUNKTE - 30), ...services.closures.near(ends));
     }
-    const result = await routes.navigation(anfrage, sentinel?.sonderrechte ?? false, sperrungen, parallel);
+    const sonderrechte = sentinel?.sonderrechte ?? false;
+    // Ohne Sonderrechte mit dem Auto: TomToms Weg mit Verkehrslage als Vorgabe, gleichzeitig mit der direkten Route.
+    // Mit Sonderrechten nicht (TomTom fährt nie mit Sonderrechten; Sperrungen meidet der Server ohnehin).
+    const mitVerkehr = anfrage.costing === 'auto' && !sonderrechte && parallel.length === 0 && fuehrung.bereit;
+    const start = locations[0]!;
+    const ziel = locations[locations.length - 1]!;
+    const [result, weg] = await Promise.all([
+      routes.navigation(anfrage, sonderrechte, sperrungen, parallel),
+      mitVerkehr ? fuehrung.weg({ lat: start.lat, lon: start.lon }, { lat: ziel.lat, lon: ziel.lon }) : Promise.resolve(null),
+    ]);
     if (!result) throw new HttpError(404, 'Keine Route gefunden.');
-    reply.header('x-sentinel-sonderrechte', result.sonderrechte ? '1' : '0');
-    reply.header('x-sentinel-parallel', result.gemieden ? '1' : '0');
-    return result.antwort;
+    let wahl = result;
+    let gefuehrt = false;
+    if (weg) {
+      // Durchfahrtspunkte entlang des Wegs, dicht dort, wo er von der direkten Route abweicht (Umleitungen).
+      const vias = durchfahrtspunkte(weg.pfad, routenPfad(result.antwort));
+      if (vias.length > 0) {
+        const mitVias = { ...anfrage, locations: [start, ...vias, ...locations.slice(1)].slice(0, 25) };
+        const gefuehrteRoute = await routes.navigation(mitVias, sonderrechte, sperrungen, parallel);
+        if (gefuehrteRoute && plausibel(gefuehrteRoute.antwort, result.antwort, weg)) {
+          wahl = gefuehrteRoute;
+          gefuehrt = true;
+        }
+      }
+    }
+    reply.header('x-sentinel-sonderrechte', wahl.sonderrechte ? '1' : '0');
+    reply.header('x-sentinel-parallel', wahl.gemieden ? '1' : '0');
+    reply.header('x-sentinel-verkehr', gefuehrt ? '1' : '0');
+    // Ehrliche Ankunftszeit: Verhältnis der Fahrzeit mit Verkehr zur Fahrzeit ohne.
+    reply.header('x-sentinel-verkehrsfaktor', verkehrsfaktor(wahl.antwort, weg).toFixed(3));
+    return wahl.antwort;
   });
 
   app.get('/api/v1/kreuzung', async (request) => {

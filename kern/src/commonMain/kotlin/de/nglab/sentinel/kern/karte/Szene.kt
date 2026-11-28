@@ -285,6 +285,11 @@ class Szene {
     }
 
     /** Eigener Standort: Punkt, Richtung (Grad) und Darstellung (punkt, fahrzeug, pfeil). */
+    /** Routenlinie der Navigation (rot mit Sonderrechten). Leer ohne Route. */
+    fun route(punkte: List<GeoPunkt>, sonderrechte: Boolean): String =
+        if (punkte.size < 2) sammlung(emptyList())
+        else sammlung(listOf(merkmal(linie(punkte), buildJsonObject { put("sonderrechte", sonderrechte) })))
+
     fun ich(p: GeoPunkt?, richtung: Double?, darstellung: String, mitA: Boolean): String =
         sammlung(listOfNotNull(p?.let {
             merkmal(punkt(it), buildJsonObject {

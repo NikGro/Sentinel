@@ -32,6 +32,7 @@ import { registerKartenRoutes } from '../karte/routen.js';
 import { registerSucheRoutes } from './suche.js';
 import type { ClosureService } from '../reach/closures.js';
 import type { IncidentService } from '../reach/incidents.js';
+import type { Verkehrsfuehrung } from '../reach/verkehrsfuehrung.js';
 
 export const SESSION_COOKIE = 'sentinel_sitzung';
 
@@ -65,6 +66,8 @@ export interface Services {
   closures: ClosureService;
   /** Aktuelle Sperrungen von TomTom (auch innerorts), sofern ein Schlüssel hinterlegt ist. */
   incidents: IncidentService;
+  /** Routenwahl mit Verkehrslage (TomTom); ohne Angabe aus dem TomTom-Schlüssel der Sperrungen gebildet. */
+  verkehrsfuehrung?: Verkehrsfuehrung;
 }
 
 export class HttpError extends Error {

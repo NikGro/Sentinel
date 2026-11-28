@@ -1,6 +1,5 @@
 package de.nglab.sentinel.kern.format
 
-import kotlinx.datetime.Instant
 import kotlinx.datetime.TimeZone
 import kotlinx.datetime.toLocalDateTime
 import kotlin.math.roundToInt
@@ -13,13 +12,13 @@ object Format {
 
     /** „14:30“ */
     fun uhrzeit(ms: Long, zone: TimeZone = TimeZone.currentSystemDefault()): String {
-        val t = Instant.fromEpochMilliseconds(ms).toLocalDateTime(zone)
+        val t = kotlin.time.Instant.fromEpochMilliseconds(ms).toLocalDateTime(zone)
         return "${zwei(t.hour)}:${zwei(t.minute)}"
     }
 
     /** „27. Nov. 2026, 14:30“ */
     fun datumUhrzeit(ms: Long, zone: TimeZone = TimeZone.currentSystemDefault()): String {
-        val t = Instant.fromEpochMilliseconds(ms).toLocalDateTime(zone)
+        val t = kotlin.time.Instant.fromEpochMilliseconds(ms).toLocalDateTime(zone)
         return "${t.dayOfMonth}. ${monate[t.monthNumber - 1]} ${t.year}, ${zwei(t.hour)}:${zwei(t.minute)}"
     }
 

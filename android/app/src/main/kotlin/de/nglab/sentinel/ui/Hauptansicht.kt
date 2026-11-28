@@ -79,6 +79,7 @@ import de.nglab.sentinel.kern.lage.LageStand
 import de.nglab.sentinel.kern.modell.Fortbewegung
 import de.nglab.sentinel.kern.karte.Anlegbar
 import de.nglab.sentinel.kern.lage.Kurzaktion
+import de.nglab.sentinel.kern.navi.Naviziel
 import de.nglab.sentinel.kern.lage.Kurzinfo
 import de.nglab.sentinel.karte.bild
 import de.nglab.sentinel.kern.karte.Platzierung
@@ -137,6 +138,20 @@ private fun Lagebildschirm(modell: AppModell, stand: LageStand) {
     var platzierung by remember { mutableStateOf<Platzierung?>(null) }
     var editor by remember { mutableStateOf<Markierungsbearbeitung?>(null) }
     var neuesZiel by remember { mutableStateOf<Ziel?>(null) }
+    // Navigation
+    val navi by modell.navigator.stand.collectAsStateWithLifecycle()
+    var sonderrechte by rememberSaveable { mutableStateOf(false) }
+    val ortJetzt by modell.ort.collectAsStateWithLifecycle()
+
+    fun hinfuehren(ziel: Naviziel) {
+        modell.navigator.starten(ziel, sonderrechte, zuFuss = stand.ich?.data?.fortbewegung == Fortbewegung.Fuss) { modell.lage.stand.value }
+        steuerung.navigation(ortJetzt?.let { GeoPunkt(it.lat, it.lon) })
+    }
+
+    fun naviBeenden() {
+        modell.navigator.stoppen()
+        steuerung.navigation(null)
+    }
 
     fun ergebnis(e: Platzierung.Ergebnis?) {
         when (e) {
@@ -182,8 +197,10 @@ private fun Lagebildschirm(modell: AppModell, stand: LageStand) {
             )
         }
 
+        navi?.let { n -> if (platzierung == null) NaviLeisteOben(n) }
+
         // Oben: Suchleiste
-        if (platzierung == null) Surface(
+        if (platzierung == null && navi == null) Surface(
             shape = RoundedCornerShape(28.dp),
             tonalElevation = 3.dp,
             shadowElevation = 4.dp,
@@ -217,8 +234,16 @@ private fun Lagebildschirm(modell: AppModell, stand: LageStand) {
             Kartenknopf(Icons.Filled.Add, "Hinzufügen", hervorgehoben = true) { plusOrt = null; plus = true }
         }
 
-        // Unten: A-Position und Fortbewegung, darüber die Lageleiste
-        Column(
+        // Unten: in der Navigation die Navi-Leiste, sonst A-Position, Fortbewegung und Lageleiste
+        navi?.let { n ->
+            Box(Modifier.align(Alignment.BottomCenter).padding(horizontal = 16.dp, vertical = 12.dp)) {
+                NaviLeisteUnten(n, sonderrechte, sonderrechteUmschalten = {
+                    sonderrechte = !sonderrechte
+                    hinfuehren(n.ziel)
+                }, beenden = ::naviBeenden)
+            }
+        }
+        if (navi == null) Column(
             Modifier.align(Alignment.BottomCenter).padding(horizontal = 16.dp, vertical = 12.dp).fillMaxWidth(),
             verticalArrangement = Arrangement.spacedBy(8.dp),
         ) {
@@ -255,7 +280,7 @@ private fun Lagebildschirm(modell: AppModell, stand: LageStand) {
                 Text(t.titel, style = MaterialTheme.typography.titleLarge)
                 if (t.untertitel.isNotBlank()) Text(t.untertitel, color = MaterialTheme.colorScheme.onSurfaceVariant)
                 Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                    Button(onClick = {}, modifier = Modifier.weight(1f).height(52.dp)) { Text("Hinführen") }
+                    Button(onClick = { ortTreffer = null; steuerung.markieren(null); hinfuehren(Naviziel.Ort(t.punkt, t.titel)) }, modifier = Modifier.weight(1f).height(52.dp)) { Text("Hinführen") }
                     OutlinedButton(onClick = { ortTreffer = null; plusOrt = t.punkt; plus = true }, modifier = Modifier.weight(1f).height(52.dp)) { Text("Hier anlegen") }
                 }
             }
@@ -269,7 +294,7 @@ private fun Lagebildschirm(modell: AppModell, stand: LageStand) {
             Kurzuebersicht(stand, a, ort?.let { GeoPunkt(it.lat, it.lon) }) { k, info ->
                 auswahl = null
                 when (k) {
-                    Kurzaktion.Hinfuehren -> info.ort?.let { steuerung.zeigen(it, 17.0) }
+                    Kurzaktion.Hinfuehren -> hinfuehren(if (stand.einsatz.a?.memberId == a.id && a.art == Objektart.Kraft) Naviziel.APosition else Naviziel.Objekt(a))
                     Kurzaktion.Bearbeiten -> stand.markierungen[a.id]?.let { editor = Markierungsbearbeitung(a.id, it.data, neu = false) }
                     Kurzaktion.Verschieben -> platzierung = Platzierung(Platzierung.Zweck.Verschieben(a.id))
                     Kurzaktion.StandortSetzen -> platzierung = Platzierung(Platzierung.Zweck.ZielOrt(a.id))

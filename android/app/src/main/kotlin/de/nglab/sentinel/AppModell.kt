@@ -60,6 +60,9 @@ class AppModell(private val kontext: Context) {
     private var imVordergrund = false
     private var dienstLaeuft = false
 
+    /** Navigation (Ferrostar-Kern, Routen vom eigenen Server). */
+    val navigator = de.nglab.sentinel.navi.Navigator({ _zugang.value?.server }, { _zugang.value?.token }, standort.roh)
+
     init {
         standort.beiPosition = { p -> if (lage.stand.value.imDienst) lage.positionSenden(p) }
         // Dienststatus steuert Übertragung und Benachrichtigung zentral, unabhängig von Ansichten: außer Dienst endet
@@ -130,6 +133,7 @@ class AppModell(private val kontext: Context) {
     fun abmelden(lokal: Boolean = false) {
         val a = api
         if (!lokal && a != null) bereich.launch { runCatching { a.abmelden() } }
+        navigator.stoppen()
         verbindung.stoppen()
         StandortDienst.beenden(kontext)
         dienstLaeuft = false
