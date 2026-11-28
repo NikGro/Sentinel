@@ -5,16 +5,24 @@ import SwiftUI
 struct Hauptansicht: View {
     @Environment(AppModell.self) private var modell
     @State private var hauptmenue = false
+    @State private var tab = "lage"
+    /// Objekt, das die Karte beim Wechsel zum Lage-Tab zeigen soll (z. B. aus der Zielansicht).
+    @State private var fokus: KartenObjektAuswahl?
 
     var body: some View {
         if !modell.stand.imDienst || hauptmenue {
             Hauptmenue { hauptmenue = false }
         } else {
-            TabView {
-                Tab("Lage", systemImage: "map") { Lagebildschirm() }
-                Tab("Ziele", systemImage: "person.crop.rectangle.stack") { Zielliste() }
-                Tab("Kräfte", systemImage: "person.3") { Kraefteliste() }
-                Tab("Mehr", systemImage: "ellipsis") { Mehr { hauptmenue = true } }
+            TabView(selection: $tab) {
+                Tab("Lage", systemImage: "map", value: "lage") { Lagebildschirm(fokus: $fokus) }
+                Tab("Ziele", systemImage: "person.crop.rectangle.stack", value: "ziele") {
+                    Zielliste { objekt in
+                        fokus = KartenObjektAuswahl(objekt: objekt)
+                        tab = "lage"
+                    }
+                }
+                Tab("Kräfte", systemImage: "person.3", value: "kraefte") { Kraefteliste() }
+                Tab("Mehr", systemImage: "ellipsis", value: "mehr") { Mehr { hauptmenue = true } }
             }
         }
     }
@@ -24,6 +32,8 @@ struct Hauptansicht: View {
 /// Fortbewegung und Lageleiste. Antippen öffnet die Kurzübersicht.
 struct Lagebildschirm: View {
     @Environment(AppModell.self) private var modell
+    @Binding var fokus: KartenObjektAuswahl?
+    @State private var zielansicht: ZielansichtAuswahl?
     @State private var steuerung = KartenSteuerung()
     @State private var auswahl: KartenObjektAuswahl?
     @State private var verkehr = false
@@ -222,6 +232,8 @@ struct Lagebildschirm: View {
                         platzierung = Platzierung(zweck: PlatzierungZweckVerschieben(markierungId: a.objekt.id), punkte: [])
                     case "StandortSetzen":
                         platzierung = Platzierung(zweck: PlatzierungZweckZielOrt(zielId: a.objekt.id), punkte: [])
+                    case "Details":
+                        nachSchliessen { zielansicht = ZielansichtAuswahl(id: a.objekt.id) }
                     case "Anrufen":
                         if let t = info.telefon, let url = URL(string: "tel:\(t.filter { !$0.isWhitespace })") { UIApplication.shared.open(url) }
                     default:
@@ -243,7 +255,30 @@ struct Lagebildschirm: View {
             .sheet(item: $neuesZiel) { n in
                 ZielAnlegen(ziel: n.ziel)
             }
+            .sheet(item: $zielansicht) { auswahl in
+                NavigationStack {
+                    Zielansicht(id: auswahl.id, aufKarte: {
+                        zielansicht = nil
+                        let info = Kurzinfo.companion.fuer(stand: modell.stand, objekt: KartenObjekt(art: .ziel, id: auswahl.id), jetztMs: jetztMs, ich: nil)
+                        if let p = info?.ort { steuerung.zeigen(p, zoom: 17) }
+                    }, standortSetzen: {
+                        zielansicht = nil
+                        platzierung = Platzierung(zweck: PlatzierungZweckZielOrt(zielId: auswahl.id), punkte: [])
+                    })
+                }
+            }
+            .onChange(of: fokus?.id, initial: true) {
+                guard let f = fokus else { return }
+                let info = Kurzinfo.companion.fuer(stand: modell.stand, objekt: f.objekt, jetztMs: jetztMs, ich: nil)
+                if let p = info?.ort { steuerung.zeigen(p, zoom: 17) }
+                auswahl = f
+                fokus = nil
+            }
     }
+}
+
+struct ZielansichtAuswahl: Identifiable {
+    let id: String
 }
 
 struct OrtAuswahl: Identifiable {
@@ -336,7 +371,7 @@ struct Kurzuebersicht: View {
     var aktion: (Kurzaktion, Kurzinfo) -> Void = { _, _ in }
 
     /// Aktionen, die es in dieser Ausbaustufe schon gibt (Details folgen mit der Zielansicht).
-    private static let umgesetzt: Set<String> = ["Hinfuehren", "Bearbeiten", "Verschieben", "StandortSetzen", "Anrufen"]
+    private static let umgesetzt: Set<String> = ["Hinfuehren", "Bearbeiten", "Verschieben", "StandortSetzen", "Anrufen", "Details"]
 
     var body: some View {
         let ich = modell.standort.aktuell.map { GeoPunkt(lat: $0.coordinate.latitude, lon: $0.coordinate.longitude) }
@@ -391,22 +426,6 @@ struct Kurzuebersicht: View {
             }
         } else {
             Text("Nicht mehr in der Lage").foregroundStyle(.secondary).padding(20)
-        }
-    }
-}
-
-struct Zielliste: View {
-    @Environment(AppModell.self) private var modell
-
-    var body: some View {
-        NavigationStack {
-            List(modell.stand.zieleSortiert, id: \.id) { z in
-                VStack(alignment: .leading) {
-                    Text(z.data.anzeigename)
-                    if let zweite = z.data.zweiteZeile { Text(zweite).font(.caption).foregroundStyle(.secondary) }
-                }
-            }
-            .navigationTitle("Ziele")
         }
     }
 }

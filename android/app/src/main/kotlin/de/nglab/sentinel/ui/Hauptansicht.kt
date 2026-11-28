@@ -103,6 +103,8 @@ fun Hauptansicht(modell: AppModell) {
         return
     }
     var tab by rememberSaveable { mutableStateOf(Tab.Lage) }
+    // Objekt, das die Karte beim Wechsel zum Lage-Tab zeigen soll (z. B. aus der Zielansicht)
+    var fokus by remember { mutableStateOf<KartenObjekt?>(null) }
     Scaffold(
         bottomBar = {
             NavigationBar {
@@ -115,8 +117,8 @@ fun Hauptansicht(modell: AppModell) {
     ) { innen ->
         Box(Modifier.fillMaxSize().padding(innen)) {
             when (tab) {
-                Tab.Lage -> Lagebildschirm(modell, stand)
-                Tab.Ziele -> Zielliste(stand)
+                Tab.Lage -> Lagebildschirm(modell, stand, fokus) { fokus = null }
+                Tab.Ziele -> Zielliste(modell, stand) { fokus = it; tab = Tab.Lage }
                 Tab.Kraefte -> Kraefteliste(stand)
                 Tab.Mehr -> Mehr(modell) { hauptmenue = true }
             }
@@ -126,7 +128,7 @@ fun Hauptansicht(modell: AppModell) {
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-private fun Lagebildschirm(modell: AppModell, stand: LageStand) {
+private fun Lagebildschirm(modell: AppModell, stand: LageStand, fokus: KartenObjekt?, fokusErledigt: () -> Unit) {
     val steuerung = remember { KartenSteuerung() }
     var auswahl by remember { mutableStateOf<KartenObjekt?>(null) }
     var verkehr by rememberSaveable { mutableStateOf(false) }
@@ -138,6 +140,7 @@ private fun Lagebildschirm(modell: AppModell, stand: LageStand) {
     var platzierung by remember { mutableStateOf<Platzierung?>(null) }
     var editor by remember { mutableStateOf<Markierungsbearbeitung?>(null) }
     var neuesZiel by remember { mutableStateOf<Ziel?>(null) }
+    var zielansicht by remember { mutableStateOf<String?>(null) }
     // Navigation
     val navi by modell.navigator.stand.collectAsStateWithLifecycle()
     var sonderrechte by rememberSaveable { mutableStateOf(false) }
@@ -301,9 +304,31 @@ private fun Lagebildschirm(modell: AppModell, stand: LageStand) {
                     Kurzaktion.Anrufen -> info.telefon?.let {
                         kontext.startActivity(android.content.Intent(android.content.Intent.ACTION_DIAL, android.net.Uri.parse("tel:$it")))
                     }
-                    Kurzaktion.Details -> Unit
+                    Kurzaktion.Details -> zielansicht = a.id
                 }
             }
+        }
+    }
+
+    // Aus einem anderen Tab: Objekt zeigen und Kurzübersicht öffnen
+    androidx.compose.runtime.LaunchedEffect(fokus) {
+        val f = fokus ?: return@LaunchedEffect
+        Kurzinfo.fuer(stand, f, System.currentTimeMillis(), null)?.ort?.let { steuerung.zeigen(it, 17.0) }
+        auswahl = f
+        fokusErledigt()
+    }
+
+    zielansicht?.let { id ->
+        ModalBottomSheet(onDismissRequest = { zielansicht = null }, sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)) {
+            Zielansicht(
+                modell, stand, id,
+                zurueck = { zielansicht = null },
+                aufKarte = {
+                    zielansicht = null
+                    Kurzinfo.fuer(stand, KartenObjekt(Objektart.Ziel, id), System.currentTimeMillis(), null)?.ort?.let { steuerung.zeigen(it, 17.0) }
+                },
+                standortSetzen = { zielansicht = null; platzierung = Platzierung(Platzierung.Zweck.ZielOrt(id)) },
+            )
         }
     }
 
@@ -443,20 +468,7 @@ private fun Kurzuebersicht(stand: LageStand, a: KartenObjekt, ich: GeoPunkt?, ak
 }
 
 /** Aktionen, die es in dieser Ausbaustufe schon gibt (Details folgen mit der Zielansicht). */
-private val UMGESETZT = setOf(Kurzaktion.Hinfuehren, Kurzaktion.Bearbeiten, Kurzaktion.Verschieben, Kurzaktion.StandortSetzen, Kurzaktion.Anrufen)
-
-@OptIn(ExperimentalMaterial3Api::class)
-@Composable
-private fun Zielliste(stand: LageStand) {
-    Column(Modifier.fillMaxSize()) {
-        TopAppBar(title = { Text("Ziele") })
-        LazyColumn {
-            items(stand.zieleSortiert, key = { it.id }) { z ->
-                ListItem(headlineContent = { Text(z.data.anzeigename) }, supportingContent = { z.data.zweiteZeile?.let { Text(it) } })
-            }
-        }
-    }
-}
+private val UMGESETZT = Kurzaktion.entries.toSet()
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
