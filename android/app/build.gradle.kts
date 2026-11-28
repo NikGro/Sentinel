@@ -43,6 +43,8 @@ android {
     compileOptions {
         sourceCompatibility = JavaVersion.VERSION_17
         targetCompatibility = JavaVersion.VERSION_17
+        // Ferrostar nutzt java.time auf älteren Android-Versionen.
+        isCoreLibraryDesugaringEnabled = true
     }
 
     buildFeatures { compose = true }
@@ -79,6 +81,7 @@ dependencies {
 
     // Navigationskern (quelloffen, gleiche Version wie auf iOS), ohne dessen Kartenoberfläche
     implementation("com.stadiamaps.ferrostar:core:0.59.0")
+    coreLibraryDesugaring("com.android.tools:desugar_jdk_libs:2.1.5")
     implementation("com.squareup.okhttp3:okhttp:5.3.2")
 
     testImplementation(kotlin("test"))
