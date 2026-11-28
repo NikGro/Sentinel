@@ -60,3 +60,19 @@ class ZiellisteTest {
         assertFalse(Zieleditor.mitAufzeichnung(z, false).aufzeichnung)
     }
 }
+
+class FahrzeugeditorTest {
+    @Test
+    fun fahrzeugBearbeitenUndSuchen() {
+        var v = de.nglab.sentinel.kern.lage.Fahrzeugeditor.neu()
+        kotlin.test.assertNotNull(de.nglab.sentinel.kern.lage.Fahrzeugeditor.fehlt(v))
+        v = de.nglab.sentinel.kern.lage.Fahrzeugeditor.setzen(v, "funkrufname", " Adler 21 ")
+        v = de.nglab.sentinel.kern.lage.Fahrzeugeditor.setzen(v, "kennzeichen", "hh-ab 12")
+        v = de.nglab.sentinel.kern.lage.Fahrzeugeditor.fertig(v)
+        assertEquals("Adler 21", v.funkrufname)
+        assertEquals("HH-AB 12", v.kennzeichen)
+        assertTrue(de.nglab.sentinel.kern.lage.Kraeftesuche.fahrzeug(v, "hhab12"))
+        assertTrue(de.nglab.sentinel.kern.lage.Kraeftesuche.fahrzeug(v, "adler"))
+        assertFalse(de.nglab.sentinel.kern.lage.Kraeftesuche.fahrzeug(v, "bär"))
+    }
+}

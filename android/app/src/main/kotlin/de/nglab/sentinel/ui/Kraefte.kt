@@ -2,7 +2,31 @@ package de.nglab.sentinel.ui
 
 import android.content.Intent
 import android.net.Uri
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.PickVisualMediaRequest
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.background
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
+import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.filled.Search
+import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.HorizontalDivider
+import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.TextButton
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.ui.text.input.KeyboardCapitalization
+import de.nglab.sentinel.kern.lage.Fahrzeugeditor
+import de.nglab.sentinel.kern.lage.Kraeftesuche
+import de.nglab.sentinel.kern.lage.Lage
+import de.nglab.sentinel.kern.modell.Art
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -52,18 +76,37 @@ import de.nglab.sentinel.kern.modell.Fortbewegung
 @Composable
 fun Kraefteliste(modell: AppModell, stand: LageStand, aufKarte: (KartenObjekt) -> Unit) {
     var offen by rememberSaveable { mutableStateOf<String?>(null) }
+    var fahrzeug by rememberSaveable { mutableStateOf<String?>(null) }
+    var suche by rememberSaveable { mutableStateOf("") }
     offen?.let { id ->
         if (stand.fahnder[id] != null) {
             Kraftansicht(modell, stand, id, zurueck = { offen = null }) { aufKarte(KartenObjekt(Objektart.Kraft, id)) }
             return
         }
     }
+    fahrzeug?.let { id ->
+        if (id == NEU || stand.fahrzeuge[id] != null) {
+            Fahrzeugansicht(modell, stand, id.takeIf { it != NEU }, zurueck = { fahrzeug = null }) { aufKarte(KartenObjekt(Objektart.Fahrzeug, id)) }
+            return
+        }
+    }
     val jetzt = System.currentTimeMillis()
+    val kraefte = Kraeftesuche.kraefte(stand, suche)
+    val fahrzeuge = Kraeftesuche.fahrzeuge(stand, suche)
     Column(Modifier.fillMaxSize()) {
-        TopAppBar(title = { Text("Kräfte") })
+        TopAppBar(title = { Text("Kräfte") }, actions = { TextButton(onClick = { fahrzeug = NEU }) { Text("Neues Fahrzeug") } })
+        OutlinedTextField(
+            value = suche, onValueChange = { suche = it },
+            placeholder = { Text("Kräfte und Fahrzeuge durchsuchen") },
+            leadingIcon = { Icon(Icons.Filled.Search, null) },
+            trailingIcon = { if (suche.isNotEmpty()) IconButton(onClick = { suche = "" }) { Icon(Icons.Filled.Close, "Leeren") } },
+            singleLine = true,
+            modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 4.dp),
+        )
         LazyColumn {
-            item { Kopf("Kräfte") }
-            items(Kraefteansicht.sortiert(stand), key = { it.id }) { f ->
+            if (suche.isNotBlank() && kraefte.isEmpty() && fahrzeuge.isEmpty()) item { Text("Nichts passt zu „$suche“.", color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(20.dp)) }
+            if (kraefte.isNotEmpty()) item { Kopf("Kräfte") }
+            items(kraefte, key = { it.id }) { f ->
                 val info = Kurzinfo.fuer(stand, KartenObjekt(Objektart.Kraft, f.id), jetzt, null)
                 ListItem(
                     headlineContent = { Text(f.data.spitzname + if (f.id == stand.ichId) " (ich)" else "") },
@@ -81,7 +124,7 @@ fun Kraefteliste(modell: AppModell, stand: LageStand, aufKarte: (KartenObjekt) -
             // Eigenes Fahrzeug: Einsteigen setzt die Fortbewegung auf „Fahrzeug“.
             val ich = stand.ich
             val waehlbar = Kraefteansicht.waehlbareFahrzeuge(stand)
-            if (ich != null && waehlbar.isNotEmpty()) {
+            if (ich != null && waehlbar.isNotEmpty() && suche.isBlank()) {
                 item { Kopf("Mein Fahrzeug") }
                 item {
                     val aktuell = if (ich.data.fortbewegung == Fortbewegung.Fahrzeug) ich.data.fahrzeugId else null
@@ -93,18 +136,115 @@ fun Kraefteliste(modell: AppModell, stand: LageStand, aufKarte: (KartenObjekt) -
                 }
             }
 
-            if (stand.fahrzeuge.isNotEmpty()) {
+            if (fahrzeuge.isNotEmpty()) {
                 item { Kopf("Fahrzeuge") }
-                items(stand.fahrzeugeSortiert, key = { "v-${it.id}" }) { v ->
+                items(fahrzeuge, key = { "v-${it.id}" }) { v ->
                     ListItem(
                         headlineContent = { Text(v.data.funkrufname) },
                         supportingContent = { Text(listOf(v.data.kennzeichen, Kraefteansicht.fahrzeugStatus(stand, v)).filter { it.isNotBlank() }.joinToString(" · "), maxLines = 2) },
                         trailingContent = { Switch(checked = stand.imEinsatz(v), onCheckedChange = { modell.lage.fahrzeugImEinsatz(v.id, it) }) },
-                        modifier = Modifier.clickable { if (stand.ortung(v) != null) aufKarte(KartenObjekt(Objektart.Fahrzeug, v.id)) },
+                        leadingContent = { v.data.fotoBlob?.let { ServerBild(modell, it, Modifier.size(36.dp), rund = 18.dp) } },
+                        modifier = Modifier.clickable { fahrzeug = v.id }.testTag("Fahrzeug ${v.data.funkrufname}"),
                     )
                 }
             }
         }
+    }
+}
+
+private const val NEU = "\u0000neu"
+
+/**
+ * Fahrzeug der Flotte anlegen bzw. bearbeiten: Funkrufname, Kennzeichen, Bezeichnung, Foto, Tracker, Aufzeichnung.
+ * Felder und Regeln aus dem Kern (gleich wie auf iOS); Änderungen gelten mit „Sichern“.
+ */
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun Fahrzeugansicht(modell: AppModell, stand: LageStand, id: String?, zurueck: () -> Unit, aufKarte: () -> Unit) {
+    val vorhanden = id?.let { stand.fahrzeuge[it] }
+    var v by remember(id) { mutableStateOf(vorhanden?.data ?: Fahrzeugeditor.neu()) }
+    val geaendert = v != (vorhanden?.data ?: Fahrzeugeditor.neu())
+    val fehlt = Fahrzeugeditor.fehlt(v)
+    var loeschen by remember { mutableStateOf(false) }
+    val kontext = LocalContext.current
+    val bereich = rememberCoroutineScope()
+    var laedt by remember { mutableStateOf(false) }
+    val fotoWaehlen = rememberLauncherForActivityResult(ActivityResultContracts.PickVisualMedia()) { uri ->
+        val api = modell.api
+        if (uri == null || api == null) return@rememberLauncherForActivityResult
+        laedt = true
+        bereich.launch {
+            runCatching {
+                val daten = withContext(Dispatchers.IO) { Bildspeicher.verkleinern(kontext, uri) } ?: error("Foto")
+                api.hochladen(daten, "image/jpeg").id
+            }.onSuccess { blob -> v = Fahrzeugeditor.mitFoto(v, blob) }
+            laedt = false
+        }
+    }
+    Column(Modifier.fillMaxSize()) {
+        TopAppBar(
+            title = { Text(vorhanden?.data?.funkrufname ?: "Neues Fahrzeug", maxLines = 1) },
+            navigationIcon = { IconButton(onClick = zurueck) { Icon(Icons.AutoMirrored.Filled.ArrowBack, "Zurück") } },
+            actions = {
+                Button(
+                    onClick = {
+                        modell.lage.setzen(Art.Fahrzeug, id ?: Lage.neueId(), Fahrzeugeditor.fertig(v))
+                        if (id == null) zurueck()
+                    },
+                    enabled = geaendert && fehlt == null,
+                    modifier = Modifier.padding(end = 8.dp).testTag("Sichern"),
+                ) { Text(if (id == null) "Anlegen" else "Sichern") }
+            },
+        )
+        Column(Modifier.verticalScroll(rememberScrollState()).padding(horizontal = 16.dp).padding(bottom = 32.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+            v.fotoBlob?.let { ServerBild(modell, it, Modifier.fillMaxWidth().height(200.dp)) }
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
+                OutlinedButton(onClick = { fotoWaehlen.launch(PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly)) }, enabled = !laedt) { Text(if (v.fotoBlob == null) "Foto hinzufügen" else "Foto ändern") }
+                if (v.fotoBlob != null) TextButton(onClick = { v = Fahrzeugeditor.mitFoto(v, null) }) { Text("Foto entfernen") }
+                if (laedt) CircularProgressIndicator(Modifier.size(20.dp), strokeWidth = 2.dp)
+            }
+            for (f in Fahrzeugeditor.felder()) {
+                OutlinedTextField(
+                    value = Fahrzeugeditor.wert(v, f.schluessel),
+                    onValueChange = { v = Fahrzeugeditor.setzen(v, f.schluessel, it) },
+                    label = { Text(f.titel) },
+                    placeholder = { if (f.hinweis.isNotBlank()) Text(f.hinweis) },
+                    singleLine = true,
+                    keyboardOptions = KeyboardOptions(capitalization = if (f.grossbuchstaben) KeyboardCapitalization.Characters else KeyboardCapitalization.Sentences),
+                    modifier = Modifier.fillMaxWidth(),
+                )
+            }
+            val tracker = stand.tracker.values.sortedBy { it.data.name }
+            if (tracker.isNotEmpty()) {
+                Auswahl("Tracker", listOf<Pair<String?, String>>(null to "Kein Tracker") + tracker.map { it.id to it.data.name }, v.trackerId) { t -> v = Fahrzeugeditor.mitTracker(v, t) }
+            }
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Column(Modifier.weight(1f)) {
+                    Text("Standort aufzeichnen")
+                    Text("Für den Verlauf", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                }
+                Switch(checked = v.aufzeichnung, onCheckedChange = { v = Fahrzeugeditor.mitAufzeichnung(v, it) })
+            }
+            if (vorhanden != null) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Text("Im Einsatz", modifier = Modifier.weight(1f))
+                    Switch(checked = stand.imEinsatz(vorhanden), onCheckedChange = { modell.lage.fahrzeugImEinsatz(vorhanden.id, it) })
+                }
+                Text(Kraefteansicht.fahrzeugStatus(stand, vorhanden), color = MaterialTheme.colorScheme.onSurfaceVariant)
+                if (stand.ortung(vorhanden) != null) OutlinedButton(onClick = aufKarte) { Text("Auf der Karte") }
+                HorizontalDivider()
+                OutlinedButton(onClick = { loeschen = true }, modifier = Modifier.fillMaxWidth()) { Text("Fahrzeug löschen", color = MaterialTheme.colorScheme.error) }
+            }
+        }
+    }
+    if (loeschen && id != null) {
+        AlertDialog(
+            onDismissRequest = { loeschen = false },
+            title = { Text("Fahrzeug löschen?") },
+            text = { Text("„${v.funkrufname}“ wird aus der Flotte entfernt.") },
+            confirmButton = { TextButton(onClick = { modell.lage.loeschen(Art.Fahrzeug, id); loeschen = false; zurueck() }) { Text("Löschen", color = MaterialTheme.colorScheme.error) } },
+            dismissButton = { TextButton(onClick = { loeschen = false }) { Text("Abbrechen") } },
+        )
     }
 }
 

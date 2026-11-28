@@ -1,18 +1,22 @@
 import SentinelKern
+import PhotosUI
 import SwiftUI
 
 /// Kräfte-Tab: Kräfte, eigenes Fahrzeug, Fahrzeuge der Lage (gleich aufgebaut wie auf Android).
 struct Kraefteliste: View {
     @Environment(AppModell.self) private var modell
     let aufKarte: (KartenObjekt) -> Void
+    @State private var suche = ""
 
     var body: some View {
         let stand = modell.stand
         let jetzt = Int64(Date.now.timeIntervalSince1970 * 1000)
+        let kraefte = Kraeftesuche.shared.kraefte(stand: stand, suche: suche)
+        let fahrzeuge = Kraeftesuche.shared.fahrzeuge(stand: stand, suche: suche)
         NavigationStack {
             List {
-                Section("Kräfte") {
-                    ForEach(Kraefteansicht.shared.sortiert(stand: stand), id: \.id) { f in
+                if !kraefte.isEmpty { Section("Kräfte") {
+                    ForEach(kraefte, id: \.id) { f in
                         let info = Kurzinfo.companion.fuer(stand: stand, objekt: KartenObjekt(art: .kraft, id: f.id), jetztMs: jetzt, ich: nil)
                         NavigationLink(value: f.id) {
                             HStack(spacing: 12) {
@@ -31,11 +35,11 @@ struct Kraefteliste: View {
                         }
                         .accessibilityIdentifier("Kraft \(f.data.spitzname)")
                     }
-                }
+                } }
 
                 // Eigenes Fahrzeug: Einsteigen setzt die Fortbewegung auf „Fahrzeug“.
                 let waehlbar = Kraefteansicht.shared.waehlbareFahrzeuge(stand: stand)
-                if let ich = stand.ich, !waehlbar.isEmpty {
+                if let ich = stand.ich, !waehlbar.isEmpty, suche.isEmpty {
                     Section("Mein Fahrzeug") {
                         Picker("Fahrzeug", selection: Binding(
                             get: { ich.data.fortbewegung == .fahrzeug ? (ich.data.fahrzeugId ?? "") : "" },
@@ -50,27 +54,41 @@ struct Kraefteliste: View {
                     }
                 }
 
-                if !stand.fahrzeuge.isEmpty {
+                if !fahrzeuge.isEmpty {
                     Section("Fahrzeuge") {
-                        ForEach(stand.fahrzeugeSortiert, id: \.id) { v in
+                        ForEach(fahrzeuge, id: \.id) { v in
                             HStack {
-                                Button {
-                                    if stand.ortung(fahrzeug: v) != nil { aufKarte(KartenObjekt(art: .fahrzeug, id: v.id)) }
-                                } label: {
-                                    VStack(alignment: .leading, spacing: 2) {
-                                        Text(v.data.funkrufname).foregroundStyle(.primary)
-                                        Text([v.data.kennzeichen, Kraefteansicht.shared.fahrzeugStatus(stand: stand, v: v)].filter { !$0.isEmpty }.joined(separator: " · "))
-                                            .font(.caption).foregroundStyle(.secondary).lineLimit(2)
+                                NavigationLink(value: FahrzeugWahl(id: v.id)) {
+                                    HStack(spacing: 12) {
+                                        if let foto = v.data.fotoBlob {
+                                            ServerBild(blobId: foto).frame(width: 36, height: 36).clipShape(.circle)
+                                        }
+                                        VStack(alignment: .leading, spacing: 2) {
+                                            Text(v.data.funkrufname).foregroundStyle(.primary)
+                                            Text([v.data.kennzeichen, Kraefteansicht.shared.fahrzeugStatus(stand: stand, v: v)].filter { !$0.isEmpty }.joined(separator: " · "))
+                                                .font(.caption).foregroundStyle(.secondary).lineLimit(2)
+                                        }
                                     }
                                 }
-                                .buttonStyle(.plain)
-                                Spacer()
                                 Toggle("Im Einsatz", isOn: Binding(get: { stand.imEinsatz(fahrzeug: v) }, set: { _ = modell.lage.fahrzeugImEinsatz(fahrzeugId: v.id, aktiv: $0) }))
                                     .labelsHidden()
                             }
+                            .accessibilityIdentifier("Fahrzeug \(v.data.funkrufname)")
                         }
                     }
                 }
+            }
+            .searchable(text: $suche, prompt: "Kräfte und Fahrzeuge durchsuchen")
+            .overlay {
+                if !suche.isEmpty && kraefte.isEmpty && fahrzeuge.isEmpty { ContentUnavailableView.search(text: suche) }
+            }
+            .toolbar {
+                ToolbarItem(placement: .primaryAction) {
+                    NavigationLink(value: FahrzeugWahl(id: nil)) { Label("Neues Fahrzeug", systemImage: "car.badge.plus") }
+                }
+            }
+            .navigationDestination(for: FahrzeugWahl.self) { w in
+                Fahrzeugansicht(id: w.id) { if let id = w.id { aufKarte(KartenObjekt(art: .fahrzeug, id: id)) } }
             }
             .navigationTitle("Kräfte")
             .navigationDestination(for: String.self) { id in
@@ -106,5 +124,112 @@ private struct Kraftansicht: View {
             .navigationTitle(info.titel)
             .navigationBarTitleDisplayMode(.inline)
         }
+    }
+}
+
+struct FahrzeugWahl: Hashable { let id: String? }
+
+/// Fahrzeug der Flotte anlegen bzw. bearbeiten: Funkrufname, Kennzeichen, Bezeichnung, Foto, Tracker, Aufzeichnung.
+/// Felder und Regeln aus dem Kern (gleich wie auf Android); Änderungen gelten mit „Sichern“.
+private struct Fahrzeugansicht: View {
+    @Environment(AppModell.self) private var modell
+    @Environment(\.dismiss) private var schliessen
+    let id: String?
+    let aufKarte: () -> Void
+    @State private var v: Fahrzeug?
+    @State private var loeschen = false
+    @State private var fotoAuswahl: PhotosPickerItem?
+    @State private var laedt = false
+
+    var body: some View {
+        let stand = modell.stand
+        let vorhanden = id.flatMap { stand.fahrzeuge[$0] }
+        let basis = vorhanden?.data ?? Fahrzeugeditor.shared.neu()
+        let aktuell = v ?? basis
+        let geaendert = v.map { !$0.isEqual(basis) } ?? false
+        let fehlt = Fahrzeugeditor.shared.fehlt(v: aktuell)
+        Form {
+            Section {
+                if let foto = aktuell.fotoBlob {
+                    ServerBild(blobId: foto).frame(height: 200).listRowInsets(EdgeInsets())
+                }
+                PhotosPicker(selection: $fotoAuswahl, matching: .images) {
+                    Label(aktuell.fotoBlob == nil ? "Foto hinzufügen" : "Foto ändern", systemImage: "photo.badge.plus")
+                }
+                .disabled(laedt)
+                if aktuell.fotoBlob != nil {
+                    Button("Foto entfernen", systemImage: "trash", role: .destructive) { v = Fahrzeugeditor.shared.mitFoto(v: aktuell, blobId: nil) }
+                }
+            }
+            Section("Angaben") {
+                ForEach(Fahrzeugeditor.shared.felder(), id: \.schluessel) { f in
+                    TextField(f.titel, text: Binding(
+                        get: { Fahrzeugeditor.shared.wert(v: v ?? basis, schluessel: f.schluessel) },
+                        set: { v = Fahrzeugeditor.shared.setzen(v: v ?? basis, schluessel: f.schluessel, wert: $0) }
+                    ), prompt: Text(f.hinweis.isEmpty ? f.titel : "\(f.titel) (\(f.hinweis))"))
+                    .textInputAutocapitalization(f.grossbuchstaben ? .characters : .sentences)
+                }
+            }
+            let tracker = stand.tracker.values.sorted { $0.data.name < $1.data.name }
+            Section {
+                if !tracker.isEmpty {
+                    Picker("Tracker", selection: Binding(get: { aktuell.trackerId ?? "" }, set: { t in
+                        v = Fahrzeugeditor.shared.mitTracker(v: aktuell, trackerId: t.isEmpty ? nil : t)
+                    })) {
+                        Text("Kein Tracker").tag("")
+                        ForEach(tracker, id: \.id) { t in Text(t.data.name).tag(t.id) }
+                    }
+                }
+                Toggle(isOn: Binding(get: { aktuell.aufzeichnung }, set: { v = Fahrzeugeditor.shared.mitAufzeichnung(v: aktuell, an: $0) })) {
+                    Text("Standort aufzeichnen")
+                    Text("Für den Verlauf")
+                }
+            }
+            if let vorhanden {
+                Section {
+                    Toggle("Im Einsatz", isOn: Binding(get: { stand.imEinsatz(fahrzeug: vorhanden) }, set: { _ = modell.lage.fahrzeugImEinsatz(fahrzeugId: vorhanden.id, aktiv: $0) }))
+                    Text(Kraefteansicht.shared.fahrzeugStatus(stand: stand, v: vorhanden)).foregroundStyle(.secondary)
+                    if stand.ortung(fahrzeug: vorhanden) != nil { Button("Auf der Karte", systemImage: "map", action: aufKarte) }
+                }
+                Section {
+                    Button("Fahrzeug löschen", systemImage: "trash", role: .destructive) { loeschen = true }
+                }
+            }
+        }
+        .navigationTitle(vorhanden?.data.funkrufname ?? "Neues Fahrzeug")
+        .navigationBarTitleDisplayMode(.inline)
+        .toolbar {
+            ToolbarItem(placement: .confirmationAction) {
+                Button(id == nil ? "Anlegen" : "Sichern") {
+                    _ = modell.lage.setzen(art: .fahrzeug, id: id ?? Lage.companion.neueId(), daten: Fahrzeugeditor.shared.fertig(v: aktuell))
+                    v = nil
+                    if id == nil { schliessen() }
+                }
+                .disabled(!geaendert || fehlt != nil)
+                .accessibilityIdentifier("Sichern")
+            }
+        }
+        .confirmationDialog("Fahrzeug löschen?", isPresented: $loeschen, titleVisibility: .visible) {
+            Button("Löschen", role: .destructive) {
+                if let id { _ = modell.lage.loeschen(art: .fahrzeug, id: id) }
+                schliessen()
+            }
+        } message: {
+            Text("„\(aktuell.funkrufname)“ wird aus der Flotte entfernt.")
+        }
+        .onChange(of: fotoAuswahl) { _, neu in
+            guard let neu else { return }
+            Task { await hochladen(neu, basis: aktuell) }
+        }
+    }
+
+    private func hochladen(_ item: PhotosPickerItem, basis: Fahrzeug) async {
+        laedt = true
+        defer { laedt = false; fotoAuswahl = nil }
+        guard let api = modell.api,
+              let roh = try? await item.loadTransferable(type: Data.self),
+              let klein = Bildspeicher.verkleinern(roh),
+              let d = try? await api.hochladen(daten: Bruecke.shared.ausData(d: klein), mime: "image/jpeg") else { return }
+        v = Fahrzeugeditor.shared.mitFoto(v: v ?? basis, blobId: d.id)
     }
 }
