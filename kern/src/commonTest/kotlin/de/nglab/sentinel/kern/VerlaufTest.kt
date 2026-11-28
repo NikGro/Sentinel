@@ -32,3 +32,14 @@ class VerlaufTest {
         assertTrue(z.all { it.bisMs == 10_000_000L })
     }
 }
+
+class KartenebenenTest {
+    @Test
+    fun umschaltenUndModi() {
+        val e = de.nglab.sentinel.kern.karte.Kartenebenen()
+        assertEquals(listOf("fuss", "kfz"), e.wegZeitModi)
+        val f = e.mit("wegZeitOepnv", true).mit("wegZeitFuss", false)
+        assertEquals(listOf("kfz", "oepnv"), f.wegZeitModi)
+        assertTrue(f.mit("verkehr", true).an("verkehr"))
+    }
+}

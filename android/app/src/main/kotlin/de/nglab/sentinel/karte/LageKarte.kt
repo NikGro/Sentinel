@@ -135,6 +135,8 @@ fun LageKarte(
     liveStand: Int = 0,
     beiKameraRuhe: () -> Unit = {},
     spurenJson: String? = null,
+    wegZeitJson: String? = null,
+    bestreifungJson: String? = null,
     beiAuswahl: (KartenObjekt) -> Unit,
 ) {
     val ruhe by rememberUpdatedState(beiKameraRuhe)
@@ -271,6 +273,13 @@ fun LageKarte(
     // Spuren (Spur-Markierungen und ein offener Verlauf)
     LaunchedEffect(style, spurenJson) {
         style?.getSourceAs<GeoJsonSource>(Quellen.SPUREN)?.setGeoJson(spurenJson ?: LEER)
+    }
+
+    // Weg-Zeit-Flächen und Bestreifung
+    LaunchedEffect(style, wegZeitJson, bestreifungJson) {
+        val s = style ?: return@LaunchedEffect
+        s.getSourceAs<GeoJsonSource>(Quellen.WEGZEIT)?.setGeoJson(wegZeitJson ?: LEER)
+        s.getSourceAs<GeoJsonSource>(Quellen.BESTREIFUNG)?.setGeoJson(bestreifungJson ?: LEER)
     }
 
     // Entwurf im Platzierungsmodus (gelbe Vorschau)

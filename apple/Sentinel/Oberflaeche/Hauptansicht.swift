@@ -40,7 +40,12 @@ struct Lagebildschirm: View {
     @Binding var fokus: KartenObjektAuswahl?
     @State private var zielansicht: ZielansichtAuswahl?
     // ÖPNV live
-    @State private var liveAn = false
+    // Zuschaltbare Ebenen (Verkehr, ÖPNV live, Bestreifung, Weg-Zeit)
+    @State private var ebenen = Kartenebenen(verkehr: false, oepnvLive: false, wegZeitFuss: true, wegZeitKfz: true, wegZeitOepnv: false, bestreifung: false)
+    @State private var ebenenWahl = false
+    @State private var flaechen = Lageflaechen()
+    @State private var flaechenStand = 0
+    private var liveAn: Bool { ebenen.oepnvLive }
     @State private var live = OepnvLive()
     @State private var liveStand = 0
     @State private var liveAnstoss = 0
@@ -63,7 +68,6 @@ struct Lagebildschirm: View {
     }
     @State private var steuerung = KartenSteuerung()
     @State private var auswahl: KartenObjektAuswahl?
-    @State private var verkehr = false
     @State private var sucht = false
     @State private var ortTreffer: OrtAuswahl?
     // Anlegen: Plus-Menü (optional an einem Ort), Platzierungsmodus, danach Editor
@@ -144,7 +148,9 @@ struct Lagebildschirm: View {
     var body: some View {
         LageKarte(modell: modell, steuerung: steuerung, platzierung: platzierung, beiTipp: { punkt in platzierung = platzierung?.tippen(p: punkt) },
                   live: liveAn ? live : nil, liveStand: liveStand, beiKameraRuhe: { if liveAn { liveAnstoss += 1 } },
-                  spurenJson: { let _ = (spurenStand, verlaufStand); return modell.spuren.geoJson(stand: modell.stand, verlauf: verlauf) }()) {
+                  spurenJson: { let _ = (spurenStand, verlaufStand); return modell.spuren.geoJson(stand: modell.stand, verlauf: verlauf) }(),
+                  wegZeitJson: { let _ = flaechenStand; return flaechen.wegZeitGeoJson() }(),
+                  bestreifungJson: { let _ = flaechenStand; return flaechen.bestreifungGeoJson(jetztMs: jetztMs) }()) {
             auswahl = KartenObjektAuswahl(objekt: $0)
         }
             .ignoresSafeArea()
@@ -182,11 +188,7 @@ struct Lagebildschirm: View {
                                         titel: "Standort und Kompass", aktiv: steuerung.anheftung != .frei) {
                                 steuerung.anheftenUmschalten(ort: modell.standort.aktuell)
                             }
-                            Kartenknopf(symbol: "car.side.rear.and.collision.and.car.side.front", titel: "Verkehr", aktiv: verkehr) {
-                                verkehr.toggle()
-                                steuerung.verkehr(verkehr)
-                            }
-                            Kartenknopf(symbol: "tram.fill", titel: "ÖPNV live", aktiv: liveAn) { liveAn.toggle() }
+                            Kartenknopf(symbol: "square.3.layers.3d", titel: "Ebenen", aktiv: ebenen.verkehr || ebenen.oepnvLive || ebenen.bestreifung) { ebenenWahl = true }
                             Kartenknopf(symbol: "plus", titel: "Hinzufügen", hervorgehoben: true) {
                                 plusOrt = nil
                                 plus = true
@@ -334,6 +336,33 @@ struct Lagebildschirm: View {
                     }
                     try? await Task.sleep(for: .seconds(10))
                 }
+            }
+            .onChange(of: ebenen.verkehr) { _, an in steuerung.verkehr(an) }
+            .task(id: ebenen) {
+                while !Task.isCancelled {
+                    if let api = modell.api, (try? await flaechen.aktualisieren(api: api, stand: modell.stand, ebenen: ebenen, jetztMs: Int64(Date.now.timeIntervalSince1970 * 1000)))?.boolValue == true {
+                        flaechenStand += 1
+                    }
+                    try? await Task.sleep(for: .milliseconds(Int(Lageflaechen.companion.TAKT_MS)))
+                }
+            }
+            .sheet(isPresented: $ebenenWahl) {
+                NavigationStack {
+                    Form {
+                        Section {
+                            ForEach(Kartenebenen.companion.schalter.indices, id: \.self) { i in
+                                let eintrag = Kartenebenen.companion.schalter[i]
+                                let schluessel = (eintrag.first as String?) ?? ""
+                                Toggle((eintrag.second as String?) ?? "", isOn: Binding(get: { ebenen.an(schluessel: schluessel) }, set: { ebenen = ebenen.mit(schluessel: schluessel, an: $0) }))
+                            }
+                        } footer: {
+                            Text("Weg-Zeit-Flächen zeigen, wie weit jemand seit einer Sichtung gekommen sein kann.")
+                        }
+                    }
+                    .navigationTitle("Ebenen")
+                    .navigationBarTitleDisplayMode(.inline)
+                }
+                .presentationDetents([.medium])
             }
             .task(id: liveAn ? liveAnstoss : -1) {
                 guard liveAn else {

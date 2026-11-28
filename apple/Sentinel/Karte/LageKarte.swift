@@ -116,6 +116,8 @@ struct LageKarte: UIViewRepresentable {
     var beiKameraRuhe: () -> Void = {}
     /// Spuren (Spur-Markierungen und ein offener Verlauf) als GeoJSON.
     var spurenJson: String? = nil
+    var wegZeitJson: String? = nil
+    var bestreifungJson: String? = nil
     let beiAuswahl: (KartenObjekt) -> Void
     @Environment(\.colorScheme) private var farbschema
 
@@ -149,6 +151,7 @@ struct LageKarte: UIViewRepresentable {
         context.coordinator.beiKameraRuhe = beiKameraRuhe
         context.coordinator.liveSetzen(live, stand: liveStand)
         context.coordinator.spurenSetzen(spurenJson)
+        context.coordinator.flaechenSetzen(wegZeit: wegZeitJson, bestreifung: bestreifungJson)
         context.coordinator.entwurf(platzierung)
         context.coordinator.aktualisieren(stand: modell.stand, ort: modell.standort.aktuell)
     }
@@ -184,6 +187,8 @@ struct LageKarte: UIViewRepresentable {
             aktualisieren(stand: modell.stand, ort: modell.standort.aktuell, erzwingen: true)
             letzteVorschau = ""
             letzteSpuren = nil
+            letzteWegZeit = nil
+            letzteBestreifung = nil
             spurenSetzen(gewuenschteSpuren)
             entwurf(platzierung)
             // ÖPNV-Fahrzeuge flüssig (zehnmal je Sekunde), nur diese Quelle.
@@ -256,6 +261,15 @@ struct LageKarte: UIViewRepresentable {
                 letzterOrt = anzeige.timestamp
                 steuerung?.folgen(anzeige)
             }
+        }
+
+        private var letzteWegZeit: String?
+        private var letzteBestreifung: String?
+        func flaechenSetzen(wegZeit: String?, bestreifung: String?) {
+            guard let stil else { return }
+            let leer = #"{"type":"FeatureCollection","features":[]}"#
+            if (wegZeit ?? leer) != letzteWegZeit { letzteWegZeit = wegZeit ?? leer; setzen(stil, Quellen.shared.WEGZEIT, wegZeit ?? leer) }
+            if (bestreifung ?? leer) != letzteBestreifung { letzteBestreifung = bestreifung ?? leer; setzen(stil, Quellen.shared.BESTREIFUNG, bestreifung ?? leer) }
         }
 
         private var gewuenschteSpuren = #"{"type":"FeatureCollection","features":[]}"#

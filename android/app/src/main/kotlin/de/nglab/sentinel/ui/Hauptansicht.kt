@@ -33,6 +33,7 @@ import androidx.compose.material.icons.filled.MoreHoriz
 import androidx.compose.material.icons.filled.PersonSearch
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.Traffic
+import androidx.compose.material.icons.filled.Layers
 import androidx.compose.material.icons.filled.Tram
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
@@ -132,7 +133,19 @@ fun Hauptansicht(modell: AppModell) {
 private fun Lagebildschirm(modell: AppModell, stand: LageStand, fokus: KartenObjekt?, fokusErledigt: () -> Unit) {
     val steuerung = remember { KartenSteuerung() }
     var auswahl by remember { mutableStateOf<KartenObjekt?>(null) }
-    var verkehr by rememberSaveable { mutableStateOf(false) }
+    // Zuschaltbare Ebenen (Verkehr, ÖPNV live, Bestreifung, Weg-Zeit)
+    var ebenen by remember { mutableStateOf(de.nglab.sentinel.kern.karte.Kartenebenen()) }
+    var ebenenWahl by remember { mutableStateOf(false) }
+    val flaechen = remember { de.nglab.sentinel.kern.karte.Lageflaechen() }
+    var flaechenStand by remember { mutableStateOf(0) }
+    androidx.compose.runtime.LaunchedEffect(ebenen.verkehr) { steuerung.verkehr(ebenen.verkehr) }
+    androidx.compose.runtime.LaunchedEffect(ebenen) {
+        while (true) {
+            val api = modell.api
+            if (api != null && flaechen.aktualisieren(api, modell.lage.stand.value, ebenen, System.currentTimeMillis())) flaechenStand++
+            kotlinx.coroutines.delay(de.nglab.sentinel.kern.karte.Lageflaechen.TAKT_MS)
+        }
+    }
     var sucht by remember { mutableStateOf(false) }
     var ortTreffer by remember { mutableStateOf<de.nglab.sentinel.kern.netz.Suchtreffer?>(null) }
     // Anlegen: Plus-Menü (optional an einem Ort), Platzierungsmodus, danach Editor
@@ -143,7 +156,7 @@ private fun Lagebildschirm(modell: AppModell, stand: LageStand, fokus: KartenObj
     var neuesZiel by remember { mutableStateOf<Ziel?>(null) }
     var zielansicht by remember { mutableStateOf<String?>(null) }
     // ÖPNV live: Fahrzeuge und Haltestellen im Kartenausschnitt
-    var liveAn by rememberSaveable { mutableStateOf(false) }
+    val liveAn = ebenen.oepnvLive
     val live = remember { de.nglab.sentinel.kern.oepnv.OepnvLive() }
     var liveStand by remember { mutableStateOf(0) }
     var liveAnstoss by remember { mutableStateOf(0) }
@@ -236,6 +249,8 @@ private fun Lagebildschirm(modell: AppModell, stand: LageStand, fokus: KartenObj
             liveStand = liveStand,
             beiKameraRuhe = { if (liveAn) liveAnstoss++ },
             spurenJson = spurenJson,
+            wegZeitJson = remember(flaechenStand) { flaechen.wegZeitGeoJson() },
+            bestreifungJson = remember(flaechenStand) { flaechen.bestreifungGeoJson(System.currentTimeMillis()) },
         ) { auswahl = it }
 
         platzierung?.let { p ->
@@ -288,8 +303,7 @@ private fun Lagebildschirm(modell: AppModell, stand: LageStand, fokus: KartenObj
                 "Standort und Kompass",
                 aktiv = steuerung.anheftung != Anheftung.Frei,
             ) { steuerung.anheftenUmschalten(ort?.let { GeoPunkt(it.lat, it.lon) }) }
-            Kartenknopf(Icons.Filled.Traffic, "Verkehr", aktiv = verkehr) { verkehr = !verkehr; steuerung.verkehr(verkehr) }
-            Kartenknopf(Icons.Filled.Tram, "ÖPNV live", aktiv = liveAn) { liveAn = !liveAn }
+            Kartenknopf(Icons.Filled.Layers, "Ebenen", aktiv = ebenen.verkehr || ebenen.oepnvLive || ebenen.bestreifung) { ebenenWahl = true }
             Kartenknopf(Icons.Filled.Add, "Hinzufügen", hervorgehoben = true) { plusOrt = null; plus = true }
         }
 
@@ -419,6 +433,21 @@ private fun Lagebildschirm(modell: AppModell, stand: LageStand, fokus: KartenObj
                 },
                 standortSetzen = { zielansicht = null; platzierung = Platzierung(Platzierung.Zweck.ZielOrt(id)) },
             )
+        }
+    }
+
+    if (ebenenWahl) {
+        ModalBottomSheet(onDismissRequest = { ebenenWahl = false }) {
+            Column(Modifier.fillMaxWidth().padding(horizontal = 20.dp).padding(bottom = 32.dp)) {
+                Text("Ebenen", style = MaterialTheme.typography.titleLarge, modifier = Modifier.padding(bottom = 8.dp))
+                for ((schluessel, titel) in de.nglab.sentinel.kern.karte.Kartenebenen.schalter) {
+                    Row(Modifier.fillMaxWidth().height(52.dp), verticalAlignment = Alignment.CenterVertically) {
+                        Text(titel, modifier = Modifier.weight(1f))
+                        androidx.compose.material3.Switch(checked = ebenen.an(schluessel), onCheckedChange = { ebenen = ebenen.mit(schluessel, it) })
+                    }
+                }
+                Text("Weg-Zeit-Flächen zeigen, wie weit jemand seit einer Sichtung gekommen sein kann.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            }
         }
     }
 
