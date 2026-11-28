@@ -59,6 +59,11 @@ data class LageStand(
 ) {
     // Eigene Rolle
 
+    companion object {
+        /** Leerer Stand vor der ersten Nachricht (für Swift, das die Vorgabewerte nicht sieht). */
+        val leer: LageStand = LageStand()
+    }
+
     val ich: Versioniert<Fahnder>? get() = ichId?.let { fahnder[it] }
     val eigenePosition: Position? get() = ichId?.let { positionen[it] }
     val haeltA: Boolean get() = ichId != null && einsatz.a?.memberId == ichId

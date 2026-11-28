@@ -24,7 +24,7 @@ private final class KeinSender: NSObject, Sender {
 @Observable
 final class AppModell {
     private(set) var phase: Phase = .einrichtung
-    private(set) var stand: LageStand = LageStand()
+    private(set) var stand: LageStand = LageStand.companion.leer
     private(set) var verbindungszustand: Verbindungszustand = .getrennt
     private(set) var zugang: Zugang?
     /// Letzte Meldung (Fehler, Hinweise) für das Banner.

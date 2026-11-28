@@ -181,10 +181,23 @@ struct Lagebildschirm: View {
                 .presentationBackgroundInteraction(.enabled)
             }
             .sheet(item: $auswahl) { a in
-                Kurzuebersicht(objekt: a.objekt) {
-                    if let v = modell.stand.markierungen[a.objekt.id] {
-                        auswahl = nil
-                        nachSchliessen { editor = Markierungsbearbeitung(id: a.objekt.id, markierung: v.data, neu: false) }
+                Kurzuebersicht(objekt: a.objekt) { k, info in
+                    auswahl = nil
+                    switch k {
+                    case .hinfuehren:
+                        if let p = info.ort { steuerung.zeigen(p, zoom: 17) }
+                    case .bearbeiten:
+                        if let v = modell.stand.markierungen[a.objekt.id] {
+                            nachSchliessen { editor = Markierungsbearbeitung(id: a.objekt.id, markierung: v.data, neu: false) }
+                        }
+                    case .verschieben:
+                        platzierung = Platzierung(zweck: PlatzierungZweckVerschieben(markierungId: a.objekt.id), punkte: [])
+                    case .standortSetzen:
+                        platzierung = Platzierung(zweck: PlatzierungZweckZielOrt(zielId: a.objekt.id), punkte: [])
+                    case .anrufen:
+                        if let t = info.telefon, let url = URL(string: "tel:\(t.filter { !$0.isWhitespace })") { UIApplication.shared.open(url) }
+                    default:
+                        break
                     }
                 }
                 .presentationDetents([.fraction(0.3), .medium, .large])
@@ -288,55 +301,69 @@ private struct Lageleiste: View {
     }
 }
 
-/// Kurzübersicht eines angetippten Objekts: Kopfzeile mit Symbol, Titel und Untertitel, darunter Hinführen.
+/// Kurzübersicht eines angetippten Objekts: Inhalt aus dem Kern (gleich wie auf Android), Aktionen als Knöpfe.
 struct Kurzuebersicht: View {
     @Environment(AppModell.self) private var modell
     let objekt: KartenObjekt
-    var bearbeiten: () -> Void = {}
+    var aktion: (Kurzaktion, Kurzinfo) -> Void = { _, _ in }
+
+    /// Aktionen, die es in dieser Ausbaustufe schon gibt (Details folgen mit der Zielansicht).
+    private static let umgesetzt: [Kurzaktion] = [.hinfuehren, .bearbeiten, .verschieben, .standortSetzen, .anrufen]
 
     var body: some View {
-        let stand = modell.stand
-        let (titel, untertitel, farbe): (String, String, Color) = {
-            switch objekt.art {
-            case .kraft:
-                let f = stand.fahnder[objekt.id]?.data
-                return (f?.spitzname ?? "Fahnder", f.map { stand.fortbewegungText(f: $0) } ?? "", Color(red: 0.37, green: 0.36, blue: 0.9))
-            case .fahrzeug:
-                let f = stand.fahrzeuge[objekt.id]?.data
-                return (f?.funkrufname ?? "Fahrzeug", f?.zusatz ?? "", Color(red: 0.37, green: 0.36, blue: 0.9))
-            case .ziel:
-                let z = stand.ziele[objekt.id]?.data
-                return (z?.anzeigename ?? "Ziel", z?.zweiteZeile ?? "", Color(red: 1, green: 0.22, blue: 0.37))
-            default:
-                let m = stand.markierungen[objekt.id]?.data
-                return (m.map { $0.titel.isEmpty ? "Markierung" : $0.titel } ?? "Markierung", m?.notiz ?? "", .accentColor)
-            }
-        }()
-        VStack(alignment: .leading, spacing: 16) {
-            HStack(spacing: 12) {
-                Circle().fill(farbe.gradient).frame(width: 40, height: 40)
-                VStack(alignment: .leading, spacing: 2) {
-                    Text(titel).font(.headline)
-                    if !untertitel.isEmpty { Text(untertitel).font(.subheadline).foregroundStyle(.secondary) }
-                }
-                Spacer()
-            }
-            HStack(spacing: 12) {
-                Button {} label: {
-                    Label("Hinführen", systemImage: "arrow.triangle.turn.up.right.diamond.fill").font(.headline).frame(maxWidth: .infinity)
-                }
-                .buttonStyle(.glassProminent)
-                if objekt.art == .markierung {
-                    Button(action: bearbeiten) {
-                        Label("Bearbeiten", systemImage: "pencil").font(.headline).frame(maxWidth: .infinity)
+        let ich = modell.standort.aktuell.map { GeoPunkt(lat: $0.coordinate.latitude, lon: $0.coordinate.longitude) }
+        if let info = Kurzinfo.companion.fuer(stand: modell.stand, objekt: objekt, jetztMs: Int64(Date.now.timeIntervalSince1970 * 1000), ich: ich) {
+            ScrollView {
+                VStack(alignment: .leading, spacing: 16) {
+                    HStack(spacing: 12) {
+                        Image(systemName: info.symbol.sf)
+                            .font(.system(size: 18, weight: .semibold))
+                            .foregroundStyle(.white)
+                            .frame(width: 44, height: 44)
+                            .background(Color(hex: info.farbe).gradient, in: .circle)
+                        VStack(alignment: .leading, spacing: 2) {
+                            Text(info.titel).font(.title3.weight(.semibold)).lineLimit(2)
+                            if !info.untertitel.isEmpty { Text(info.untertitel).font(.subheadline).foregroundStyle(.secondary) }
+                        }
+                        Spacer()
                     }
-                    .buttonStyle(.glass)
+                    let knoepfe = info.aktionen.filter { Self.umgesetzt.contains($0) }
+                    if !knoepfe.isEmpty {
+                        HStack(spacing: 10) {
+                            ForEach(knoepfe.indices, id: \.self) { i in
+                                let k = knoepfe[i]
+                                if i == 0 {
+                                    Button { aktion(k, info) } label: { Text(k.titel).font(.headline).lineLimit(1).frame(maxWidth: .infinity) }
+                                        .buttonStyle(.glassProminent)
+                                } else {
+                                    Button { aktion(k, info) } label: { Text(k.titel).font(.headline).lineLimit(1).frame(maxWidth: .infinity) }
+                                        .buttonStyle(.glass)
+                                }
+                            }
+                        }
+                        .controlSize(.large)
+                    }
+                    if !info.zeilen.isEmpty {
+                        VStack(spacing: 0) {
+                            ForEach(info.zeilen.indices, id: \.self) { i in
+                                let z = info.zeilen[i]
+                                if i > 0 { Divider() }
+                                HStack(alignment: .firstTextBaseline, spacing: 12) {
+                                    Text(z.titel).foregroundStyle(.secondary).frame(width: 110, alignment: .leading)
+                                    Text(z.wert).frame(maxWidth: .infinity, alignment: .leading)
+                                }
+                                .padding(.vertical, 10)
+                            }
+                        }
+                        .padding(.horizontal, 16)
+                        .background(.fill.tertiary, in: .rect(cornerRadius: 16))
+                    }
                 }
+                .padding(20)
             }
-            .controlSize(.large)
-            Spacer()
+        } else {
+            Text("Nicht mehr in der Lage").foregroundStyle(.secondary).padding(20)
         }
-        .padding(20)
     }
 }
 

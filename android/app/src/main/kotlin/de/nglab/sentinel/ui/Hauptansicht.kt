@@ -78,6 +78,9 @@ import de.nglab.sentinel.kern.karte.Objektart
 import de.nglab.sentinel.kern.lage.LageStand
 import de.nglab.sentinel.kern.modell.Fortbewegung
 import de.nglab.sentinel.kern.karte.Anlegbar
+import de.nglab.sentinel.kern.lage.Kurzaktion
+import de.nglab.sentinel.kern.lage.Kurzinfo
+import de.nglab.sentinel.karte.bild
 import de.nglab.sentinel.kern.karte.Platzierung
 import de.nglab.sentinel.kern.lage.Lage
 import de.nglab.sentinel.kern.modell.Art
@@ -261,9 +264,20 @@ private fun Lagebildschirm(modell: AppModell, stand: LageStand) {
 
     auswahl?.let { a ->
         ModalBottomSheet(onDismissRequest = { auswahl = null }, sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = false)) {
-            Kurzuebersicht(stand, a) {
-                stand.markierungen[a.id]?.let { editor = Markierungsbearbeitung(a.id, it.data, neu = false) }
+            val ort by modell.ort.collectAsStateWithLifecycle()
+            val kontext = androidx.compose.ui.platform.LocalContext.current
+            Kurzuebersicht(stand, a, ort?.let { GeoPunkt(it.lat, it.lon) }) { k, info ->
                 auswahl = null
+                when (k) {
+                    Kurzaktion.Hinfuehren -> info.ort?.let { steuerung.zeigen(it, 17.0) }
+                    Kurzaktion.Bearbeiten -> stand.markierungen[a.id]?.let { editor = Markierungsbearbeitung(a.id, it.data, neu = false) }
+                    Kurzaktion.Verschieben -> platzierung = Platzierung(Platzierung.Zweck.Verschieben(a.id))
+                    Kurzaktion.StandortSetzen -> platzierung = Platzierung(Platzierung.Zweck.ZielOrt(a.id))
+                    Kurzaktion.Anrufen -> info.telefon?.let {
+                        kontext.startActivity(android.content.Intent(android.content.Intent.ACTION_DIAL, android.net.Uri.parse("tel:$it")))
+                    }
+                    Kurzaktion.Details -> Unit
+                }
             }
         }
     }
@@ -361,29 +375,50 @@ private fun Lageleiste(stand: LageStand) {
     }
 }
 
-/** Kurzübersicht eines angetippten Objekts (Kopfzeile wie auf iOS: Symbol, Titel, Untertitel). */
+/** Kurzübersicht eines angetippten Objekts: Inhalt aus dem Kern (gleich wie auf iOS), Aktionen als Knöpfe. */
 @Composable
-private fun Kurzuebersicht(stand: LageStand, a: KartenObjekt, bearbeiten: () -> Unit) {
-    val (titel, untertitel, farbe) = when (a.art) {
-        Objektart.Kraft -> stand.fahnder[a.id]?.data.let { Triple(it?.spitzname ?: "Fahnder", it?.let(stand::fortbewegungText) ?: "", SentinelFarben.kraefte) }
-        Objektart.Fahrzeug -> stand.fahrzeuge[a.id]?.data.let { Triple(it?.funkrufname ?: "Fahrzeug", it?.zusatz ?: "", SentinelFarben.kraefte) }
-        Objektart.Ziel -> stand.ziele[a.id]?.data.let { Triple(it?.anzeigename ?: "Ziel", it?.zweiteZeile ?: "", SentinelFarben.ziele) }
-        else -> stand.markierungen[a.id]?.data.let { Triple(it?.titel?.ifBlank { null } ?: "Markierung", it?.notiz ?: "", SentinelFarben.akzent) }
+private fun Kurzuebersicht(stand: LageStand, a: KartenObjekt, ich: GeoPunkt?, aktion: (Kurzaktion, Kurzinfo) -> Unit) {
+    val info = Kurzinfo.fuer(stand, a, System.currentTimeMillis(), ich) ?: run {
+        Text("Nicht mehr in der Lage", modifier = Modifier.padding(20.dp))
+        return
     }
-    Column(Modifier.fillMaxWidth().padding(horizontal = 20.dp).padding(bottom = 32.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+    Column(Modifier.fillMaxWidth().padding(horizontal = 20.dp).padding(bottom = 32.dp), verticalArrangement = Arrangement.spacedBy(14.dp)) {
         Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-            Box(Modifier.size(40.dp).background(farbe, CircleShape))
+            Box(Modifier.size(44.dp).background(hexFarbe(info.farbe), CircleShape), contentAlignment = Alignment.Center) {
+                Icon(info.symbol.bild(), null, tint = Color.White)
+            }
             Column(Modifier.weight(1f)) {
-                Text(titel, style = MaterialTheme.typography.titleLarge)
-                if (untertitel.isNotBlank()) Text(untertitel, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                Text(info.titel, style = MaterialTheme.typography.titleLarge, maxLines = 2)
+                if (info.untertitel.isNotBlank()) Text(info.untertitel, color = MaterialTheme.colorScheme.onSurfaceVariant)
             }
         }
-        Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-            Button(onClick = {}, modifier = Modifier.weight(1f).height(52.dp)) { Text("Hinführen") }
-            if (a.art == Objektart.Markierung) OutlinedButton(onClick = bearbeiten, modifier = Modifier.weight(1f).height(52.dp)) { Text("Bearbeiten") }
+        val knoepfe = info.aktionen.filter { it in UMGESETZT }
+        if (knoepfe.isNotEmpty()) {
+            Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                knoepfe.forEachIndexed { i, k ->
+                    if (i == 0) Button(onClick = { aktion(k, info) }, modifier = Modifier.weight(1f).height(48.dp)) { Text(k.titel, maxLines = 1) }
+                    else OutlinedButton(onClick = { aktion(k, info) }, modifier = Modifier.weight(1f).height(48.dp)) { Text(k.titel, maxLines = 1) }
+                }
+            }
+        }
+        if (info.zeilen.isNotEmpty()) {
+            Surface(shape = RoundedCornerShape(16.dp), color = MaterialTheme.colorScheme.surfaceContainerHigh) {
+                Column(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 6.dp)) {
+                    info.zeilen.forEachIndexed { i, z ->
+                        if (i > 0) androidx.compose.material3.HorizontalDivider()
+                        Row(Modifier.padding(vertical = 10.dp), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                            Text(z.titel, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.width(110.dp))
+                            Text(z.wert, modifier = Modifier.weight(1f))
+                        }
+                    }
+                }
+            }
         }
     }
 }
+
+/** Aktionen, die es in dieser Ausbaustufe schon gibt (Details folgen mit der Zielansicht). */
+private val UMGESETZT = setOf(Kurzaktion.Hinfuehren, Kurzaktion.Bearbeiten, Kurzaktion.Verschieben, Kurzaktion.StandortSetzen, Kurzaktion.Anrufen)
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
