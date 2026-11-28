@@ -270,7 +270,11 @@ struct Lagebildschirm: View {
                         VStack(spacing: 8) {
                             HStack(spacing: 8) {
                                 AKnopf()
-                                Fortbewegungswahl()
+                                Fortbewegungswahl {
+                                    // ÖPNV braucht eine Fahrt: Live-Ansicht einschalten, Fahrzeug antippen, „Selbst einsteigen“
+                                    ebenen = ebenen.mit(schluessel: "oepnvLive", an: true)
+                                    modell.zeigeHinweis("ÖPNV-Fahrzeug antippen, dann „Details“ und „Selbst einsteigen“.")
+                                }
                             }
                             Lageleiste().onTapGesture { lageUebersicht = true }
                         }
@@ -510,10 +514,23 @@ private struct AKnopf: View {
 
 private struct Fortbewegungswahl: View {
     @Environment(AppModell.self) private var modell
+    var oepnvOhneFahrt: () -> Void = {}
 
     var body: some View {
         let aktuell = modell.stand.ich?.data.fortbewegung ?? .fuss
-        Picker("Fortbewegung", selection: Binding(get: { aktuell }, set: { _ = modell.lage.fortbewegungSetzen(art: $0, fahrzeugId: nil, oepnv: nil) })) {
+        let ich = modell.stand.ich?.data
+        Picker("Fortbewegung", selection: Binding(get: { aktuell }, set: { art in
+            switch art {
+            case .oepnv:
+                if let fahrt = ich?.oepnv { _ = modell.lage.fortbewegungSetzen(art: art, fahrzeugId: nil, oepnv: fahrt) } else { oepnvOhneFahrt() }
+            case .fahrzeug:
+                // Im Kräfte-Tab unter „Mein Fahrzeug“ gewählt; ohne Wahl das erste im Einsatz
+                let id = ich?.fahrzeugId ?? Kraefteansicht.shared.waehlbareFahrzeuge(stand: modell.stand).first?.id
+                _ = modell.lage.fortbewegungSetzen(art: art, fahrzeugId: id, oepnv: nil)
+            default:
+                _ = modell.lage.fortbewegungSetzen(art: art, fahrzeugId: nil, oepnv: nil)
+            }
+        })) {
             Image(systemName: "figure.walk").tag(Fortbewegung.fuss)
             Image(systemName: "car.fill").tag(Fortbewegung.fahrzeug)
             Image(systemName: "tram.fill").tag(Fortbewegung.oepnv)

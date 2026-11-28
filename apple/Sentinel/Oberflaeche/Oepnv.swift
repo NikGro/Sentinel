@@ -54,6 +54,29 @@ struct FahrtAnsicht: View {
                                 schliessen()
                             }
                             .buttonStyle(.glassProminent)
+                            // Einsteigen: selbst (Fortbewegung ÖPNV) oder eine Zielperson (an das Fahrzeug gebunden)
+                            Button("Selbst einsteigen", systemImage: "figure.walk.arrival") {
+                                _ = modell.lage.fortbewegungSetzen(art: .oepnv, fahrzeugId: nil, oepnv: Einsteigen.shared.eigeneFahrt(f: f))
+                                schliessen()
+                            }
+                            let personen = Einsteigen.shared.personen(stand: modell.stand)
+                            if !personen.isEmpty {
+                                Menu {
+                                    ForEach(personen, id: \.id) { z in
+                                        Button(z.data.anzeigename) {
+                                            let stand = modell.stand
+                                            var fahrzeugId = Einsteigen.shared.vorhandenesFahrzeug(stand: stand, tripId: f.tripId)
+                                            if fahrzeugId == nil, let m = OepnvLive.companion.alsStrecke(f: f, fahrzeug: true, strecke: false, halte: false, jetztMs: Int64(Date.now.timeIntervalSince1970 * 1000)) {
+                                                let id = Lage.companion.neueId()
+                                                _ = modell.lage.markierungSichern(m: m, id: id)
+                                                fahrzeugId = id
+                                            }
+                                            if let fahrzeugId { _ = modell.lage.setzen(art: .ziel, id: z.id, daten: Einsteigen.shared.zielBinden(z: z.data, markierungId: fahrzeugId)) }
+                                            schliessen()
+                                        }
+                                    }
+                                } label: { Label("Zielperson einsteigen lassen", systemImage: "person.fill.badge.plus") }
+                            }
                         }
                         Section("Halte") {
                             let jetzt = Int64(Date.now.timeIntervalSince1970 * 1000)

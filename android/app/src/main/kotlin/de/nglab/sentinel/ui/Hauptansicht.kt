@@ -368,7 +368,18 @@ private fun Lagebildschirm(modell: AppModell, stand: LageStand, fokus: KartenObj
         ) {
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
                 AKnopf(stand, Modifier.weight(1f)) { if (stand.haeltA) modell.lage.aFreigeben() else modell.lage.aUebernehmen() }
-                Fortbewegungswahl(stand.ich?.data?.fortbewegung ?: Fortbewegung.Fuss, Modifier.weight(1.2f)) { modell.lage.fortbewegungSetzen(it) }
+                Fortbewegungswahl(stand.ich?.data?.fortbewegung ?: Fortbewegung.Fuss, Modifier.weight(1.2f)) { art ->
+                    when (art) {
+                        // ÖPNV braucht eine Fahrt: Live-Ansicht einschalten, Fahrzeug antippen, „Selbst einsteigen“
+                        Fortbewegung.Oepnv -> if (stand.ich?.data?.oepnv == null) {
+                            ebenen = ebenen.copy(oepnvLive = true)
+                            modell.zeigeHinweis("ÖPNV-Fahrzeug antippen, dann „Details“ und „Selbst einsteigen“.")
+                        } else modell.lage.fortbewegungSetzen(art, oepnv = stand.ich?.data?.oepnv)
+                        // Fahrzeug: im Kräfte-Tab unter „Mein Fahrzeug“ gewählt; ohne Wahl das erste im Einsatz
+                        Fortbewegung.Fahrzeug -> modell.lage.fortbewegungSetzen(art, stand.ich?.data?.fahrzeugId ?: de.nglab.sentinel.kern.lage.Kraefteansicht.waehlbareFahrzeuge(stand).firstOrNull()?.id)
+                        Fortbewegung.Fuss -> modell.lage.fortbewegungSetzen(art)
+                    }
+                }
             }
             Lageleiste(stand) { lageUebersicht = true }
         }

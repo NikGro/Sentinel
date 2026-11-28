@@ -258,3 +258,22 @@ class OepnvLive {
             Markierung(layerId = Ebene.LAGE, typ = Form.Haltestelle, titel = h.name, farbe = "#0A84FF", punkte = listOf(h.punkt))
     }
 }
+
+/** Einsteigen in eine ÖPNV-Fahrt: selbst (Fortbewegung) oder eine Zielperson (Bindung an das Fahrzeug in der Lage). */
+object Einsteigen {
+    /** Eigene Fortbewegung „ÖPNV“ für diese Fahrt. */
+    fun eigeneFahrt(f: Fahrt): de.nglab.sentinel.kern.modell.OepnvFahrt =
+        de.nglab.sentinel.kern.modell.OepnvFahrt(linienId = f.tripId, linie = f.name, richtung = f.headsign)
+
+    /** Zielpersonen, die einsteigen können. */
+    fun personen(stand: de.nglab.sentinel.kern.lage.LageStand): List<de.nglab.sentinel.kern.modell.Versioniert<de.nglab.sentinel.kern.modell.Ziel>> =
+        stand.zieleSortiert.filter { it.data.art == de.nglab.sentinel.kern.modell.Zielart.Person }
+
+    /** Bereits übernommenes Fahrzeug derselben Fahrt (sonst wird es zum Einsteigen angelegt). */
+    fun vorhandenesFahrzeug(stand: de.nglab.sentinel.kern.lage.LageStand, tripId: String): String? =
+        stand.markierungen.entries.firstOrNull { it.value.data.typ.istOepnv && it.value.data.fahrt?.id == tripId }?.key
+
+    /** Zielperson an das Fahrzeug binden (rückt mit, Symbol am Fahrzeug). */
+    fun zielBinden(z: de.nglab.sentinel.kern.modell.Ziel, markierungId: String): de.nglab.sentinel.kern.modell.Ziel =
+        z.copy(bindung = de.nglab.sentinel.kern.modell.Bindung(de.nglab.sentinel.kern.modell.BindungsArt.Oepnv, markierungId))
+}

@@ -110,6 +110,11 @@ final class AppModell {
         hintergrundSeit = nil
     }
 
+    /// Hinweis-Banner aus der Oberfläche (z. B. nächster Schritt).
+    func zeigeHinweis(_ text: String) {
+        meldung = Meldung(titel: "Hinweis", text: text, dringlichkeit: .hinweis, objekt: nil, ort: nil, kennung: "hinweis")
+    }
+
     /// Fehlermeldung als Hinweis-Banner (lokale Fehler, z. B. bei der Anmeldung).
     func hinweis(_ text: String) {
         meldung = Meldung(titel: "Hinweis", text: text, dringlichkeit: .hinweis, objekt: nil, ort: nil, kennung: "fehler")

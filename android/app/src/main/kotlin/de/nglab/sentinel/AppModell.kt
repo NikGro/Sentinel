@@ -155,6 +155,11 @@ class AppModell(private val kontext: Context) {
         if (!imVordergrund) standort.stoppen()
     }
 
+    /** Hinweis-Banner aus der Oberfläche (z. B. nächster Schritt). */
+    fun zeigeHinweis(text: String) {
+        _meldung.value = de.nglab.sentinel.kern.lage.Meldung("Hinweis", text, de.nglab.sentinel.kern.lage.Dringlichkeit.Hinweis, kennung = "hinweis")
+    }
+
     fun meldungGelesen() {
         _meldung.value = null
     }

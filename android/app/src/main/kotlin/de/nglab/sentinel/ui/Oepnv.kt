@@ -89,6 +89,30 @@ fun FahrtAnsicht(modell: AppModell, tripId: String, fertig: () -> Unit) {
                     },
                     modifier = Modifier.fillMaxWidth().height(48.dp),
                 ) { Text(if (!strecke && !halte) "Fahrzeug übernehmen" else "In die Lage übernehmen") }
+                // Einsteigen: selbst (Fortbewegung ÖPNV) oder eine Zielperson (an das Fahrzeug gebunden)
+                val stand = modell.lage.stand.value
+                var zielWahl by remember { mutableStateOf(false) }
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    OutlinedButton(onClick = {
+                        modell.lage.fortbewegungSetzen(de.nglab.sentinel.kern.modell.Fortbewegung.Oepnv, oepnv = de.nglab.sentinel.kern.oepnv.Einsteigen.eigeneFahrt(f))
+                        fertig()
+                    }, modifier = Modifier.weight(1f)) { Text("Selbst einsteigen") }
+                    if (de.nglab.sentinel.kern.oepnv.Einsteigen.personen(stand).isNotEmpty()) {
+                        OutlinedButton(onClick = { zielWahl = true }, modifier = Modifier.weight(1f)) { Text("Zielperson einsteigen") }
+                    }
+                }
+                androidx.compose.material3.DropdownMenu(expanded = zielWahl, onDismissRequest = { zielWahl = false }) {
+                    for (z in de.nglab.sentinel.kern.oepnv.Einsteigen.personen(stand)) {
+                        androidx.compose.material3.DropdownMenuItem(text = { Text(z.data.anzeigename) }, onClick = {
+                            zielWahl = false
+                            val fahrzeugId = de.nglab.sentinel.kern.oepnv.Einsteigen.vorhandenesFahrzeug(stand, f.tripId) ?: Lage.neueId().also { id ->
+                                OepnvLive.alsStrecke(f, fahrzeug = true, strecke = false, halte = false, jetztMs = System.currentTimeMillis())?.let { modell.lage.markierungSichern(it, id) }
+                            }
+                            modell.lage.setzen(de.nglab.sentinel.kern.modell.Art.Ziel, z.id, de.nglab.sentinel.kern.oepnv.Einsteigen.zielBinden(z.data, fahrzeugId))
+                            fertig()
+                        })
+                    }
+                }
                 HorizontalDivider()
                 val jetzt = System.currentTimeMillis()
                 LazyColumn(Modifier.height(320.dp)) {
