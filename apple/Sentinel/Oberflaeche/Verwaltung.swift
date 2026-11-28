@@ -11,6 +11,7 @@ struct Mehr: View {
 
     var body: some View {
         let stand = modell.stand
+        @Bindable var m = modell
         NavigationStack {
             List {
                 Section {
@@ -35,6 +36,16 @@ struct Mehr: View {
                             Text(text.isEmpty ? "Nicht gesetzt" : text).font(.caption).foregroundStyle(.secondary)
                         }
                     }
+                }
+                Section {
+                    Toggle("App-Sperre", isOn: $m.sperreAn)
+                    if modell.sperreAn {
+                        Picker("Sperren", selection: $m.sperreFrist) {
+                            ForEach(AppSperre.shared.fristen, id: \.sekunden) { f in Text(f.titel).tag(Int(f.sekunden)) }
+                        }
+                    }
+                } footer: {
+                    Text("Fragt nach Face ID oder dem Gerätecode, wenn die App eine Zeit lang im Hintergrund war.")
                 }
                 Section {
                     LabeledContent("Version", value: Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "")

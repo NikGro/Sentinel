@@ -37,6 +37,8 @@ import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.unit.dp
 import de.nglab.sentinel.AppModell
 import de.nglab.sentinel.kern.lage.LageStand
+import de.nglab.sentinel.kern.lage.AppSperre
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import de.nglab.sentinel.kern.lage.Verwaltung
 import de.nglab.sentinel.kern.modell.Art
 import de.nglab.sentinel.kern.modell.Instanz
@@ -76,6 +78,18 @@ fun Mehr(modell: AppModell, stand: LageStand, hauptmenue: () -> Unit) {
                     supportingContent = { Text(listOfNotNull(stand.einsatz.funkkanal?.let { "Kanal $it" }, stand.einsatz.titel.ifBlank { null }).joinToString(" · ").ifBlank { "Nicht gesetzt" }) },
                     modifier = Modifier.clickable { lage = true },
                 )
+            }
+            item {
+                val an by modell.sperreAn.collectAsStateWithLifecycle()
+                val frist by modell.sperreFrist.collectAsStateWithLifecycle()
+                ListItem(
+                    headlineContent = { Text("App-Sperre") },
+                    supportingContent = { Text(if (an) "Fingerabdruck oder Gerätecode · ${AppSperre.fristTitel(frist)}" else "Aus") },
+                    trailingContent = { androidx.compose.material3.Switch(checked = an, onCheckedChange = { modell.sperreSetzen(it, frist) }) },
+                )
+                if (an) Box(Modifier.padding(horizontal = 16.dp)) {
+                    Auswahl("Sperren", AppSperre.fristen.map { it.sekunden to it.titel }, frist) { modell.sperreSetzen(true, it) }
+                }
             }
             item { HorizontalDivider() }
             item { ListItem(headlineContent = { Text("Version") }, trailingContent = { Text(version) }) }

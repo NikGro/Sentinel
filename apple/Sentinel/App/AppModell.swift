@@ -28,7 +28,7 @@ final class AppModell {
     private(set) var verbindungszustand: Verbindungszustand = .getrennt
     private(set) var zugang: Zugang?
     /// Letzte Meldung (Fehler, Hinweise) für das Banner.
-    var meldung: String?
+    var meldung: Meldung?
 
     @ObservationIgnored let lage = Lage(sender: KeinSender())
     @ObservationIgnored private let verbindung = Bruecke.shared.neueVerbindung()
@@ -79,12 +79,38 @@ final class AppModell {
     }
 
     private func ereignis(_ e: LageEreignis) {
-        switch e {
-        case let f as LageEreignisFehler: meldung = f.meldung
-        case let a as LageEreignisAUebernommen: meldung = a.eigen ? "Sie haben die A" : "\(stand.name(akteurId: a.fahnderId)) hat die A-Position."
-        case let n as LageEreignisNotrufBegonnen where !n.eigen: meldung = "Notruf: \(stand.name(akteurId: n.fahnderId))"
-        default: break
+        guard let m = Meldungen.shared.aus(e: e, stand: stand) else { return }
+        meldung = m
+        // Im Vordergrund reicht das Banner, außer bei Alarmen; im Hintergrund die Systemmitteilung (wie Android).
+        let vordergrund = UIApplication.shared.applicationState == .active
+        if m.systemmitteilung, !vordergrund || m.dringlichkeit == .alarm { Mitteilungen.zeigen(m) }
+    }
+
+    // App-Sperre (Face ID bzw. Gerätecode nach einer Zeit im Hintergrund; Regel im Kern)
+    var sperreAn: Bool = UserDefaults.standard.bool(forKey: "sperre") {
+        didSet { UserDefaults.standard.set(sperreAn, forKey: "sperre") }
+    }
+    var sperreFrist: Int = UserDefaults.standard.object(forKey: "sperreFrist") as? Int ?? 60 {
+        didSet { UserDefaults.standard.set(sperreFrist, forKey: "sperreFrist") }
+    }
+    var gesperrt: Bool = UserDefaults.standard.bool(forKey: "sperre")
+    @ObservationIgnored private var hintergrundSeit: Date?
+
+    func szenenwechsel(aktiv: Bool) {
+        if !aktiv {
+            if hintergrundSeit == nil { hintergrundSeit = .now }
+            return
         }
+        let seit = hintergrundSeit.map { KotlinLong(value: Int64($0.timeIntervalSince1970 * 1000)) }
+        if AppSperre.shared.sperren(an: sperreAn, fristSekunden: Int32(sperreFrist), imHintergrundSeitMs: seit, jetztMs: Int64(Date.now.timeIntervalSince1970 * 1000)) {
+            gesperrt = true
+        }
+        hintergrundSeit = nil
+    }
+
+    /// Fehlermeldung als Hinweis-Banner (lokale Fehler, z. B. bei der Anmeldung).
+    func hinweis(_ text: String) {
+        meldung = Meldung(titel: "Hinweis", text: text, dringlichkeit: .hinweis, objekt: nil, ort: nil, kennung: "fehler")
     }
 
     /// Meldet dieses Gerät mit dem Zugangscode am Server an.
@@ -98,8 +124,9 @@ final class AppModell {
         zugang = z
         phase = .verbinde
         starten(z)
-        // Standort erst nach der Anmeldung erfragen und nutzen.
+        // Standort und Mitteilungen erst nach der Anmeldung erfragen und nutzen.
         standort.starten()
+        Mitteilungen.erlaubnisErfragen()
     }
 
     /// Entfernt Anmeldung und alle Einsatzdaten von diesem Gerät; beim Server wird das Gerät gesperrt.

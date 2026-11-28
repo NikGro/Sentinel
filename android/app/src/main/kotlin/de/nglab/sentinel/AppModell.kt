@@ -49,8 +49,8 @@ class AppModell(private val kontext: Context) {
     val phase: StateFlow<Phase> = _phase.asStateFlow()
 
     /** Letzte Meldung (Fehler, Hinweise), zur Anzeige als Banner. */
-    private val _meldung = MutableStateFlow<LageEreignis?>(null)
-    val meldung: StateFlow<LageEreignis?> = _meldung.asStateFlow()
+    private val _meldung = MutableStateFlow<de.nglab.sentinel.kern.lage.Meldung?>(null)
+    val meldung: StateFlow<de.nglab.sentinel.kern.lage.Meldung?> = _meldung.asStateFlow()
 
     val api: Api? get() = _zugang.value?.let { Api(http, it.server, it.token) }
 
@@ -75,7 +75,14 @@ class AppModell(private val kontext: Context) {
         }
         verbindung.beiNachricht = { text -> bereich.launch { lage.empfangen(text); phaseNachStand() } }
         verbindung.beiZugangEntzogen = { bereich.launch { abmelden(lokal = true) } }
-        lage.beiEreignis = { e -> if (e !is LageEreignis.Position) _meldung.value = e }
+        de.nglab.sentinel.dienst.Mitteilungen.einrichten(kontext)
+        lage.beiEreignis = { e ->
+            de.nglab.sentinel.kern.lage.Meldungen.aus(e, lage.stand.value)?.let { m ->
+                _meldung.value = m
+                // Im Vordergrund reicht das Banner, außer bei Alarmen; im Hintergrund die Systemmitteilung.
+                if (!imVordergrund || m.dringlichkeit == de.nglab.sentinel.kern.lage.Dringlichkeit.Alarm) de.nglab.sentinel.dienst.Mitteilungen.zeigen(kontext, m)
+            }
+        }
         _zugang.value?.let { starten(it) }
     }
 
@@ -101,8 +108,33 @@ class AppModell(private val kontext: Context) {
         }
     }
 
+    // App-Sperre (Fingerabdruck bzw. Gerätecode nach einer Zeit im Hintergrund)
+    private val einstellungen = kontext.getSharedPreferences("einstellungen", Context.MODE_PRIVATE)
+    private val _sperreAn = MutableStateFlow(einstellungen.getBoolean("sperre", false))
+    val sperreAn: StateFlow<Boolean> = _sperreAn.asStateFlow()
+    private val _sperreFrist = MutableStateFlow(einstellungen.getInt("sperreFrist", 60))
+    val sperreFrist: StateFlow<Int> = _sperreFrist.asStateFlow()
+    private val _gesperrt = MutableStateFlow(_sperreAn.value)
+    val gesperrt: StateFlow<Boolean> = _gesperrt.asStateFlow()
+    private var hintergrundSeit: Long? = null
+
+    fun sperreSetzen(an: Boolean, fristSekunden: Int) {
+        _sperreAn.value = an
+        _sperreFrist.value = fristSekunden
+        einstellungen.edit().putBoolean("sperre", an).putInt("sperreFrist", fristSekunden).apply()
+    }
+
+    fun entsperrt() {
+        _gesperrt.value = false
+    }
+
     /** Die App ist sichtbar: Standort für die Karte, auch außer Dienst (ohne Übertragung). */
     fun vordergrund(sichtbar: Boolean) {
+        if (!sichtbar) hintergrundSeit = System.currentTimeMillis()
+        else {
+            if (de.nglab.sentinel.kern.lage.AppSperre.sperren(_sperreAn.value, _sperreFrist.value, hintergrundSeit, System.currentTimeMillis())) _gesperrt.value = true
+            hintergrundSeit = null
+        }
         imVordergrund = sichtbar
         if (sichtbar) {
             standort.starten()

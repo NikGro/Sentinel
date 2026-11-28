@@ -57,3 +57,26 @@ class VerwaltungTest {
         assertEquals("2 Mitglieder", de.nglab.sentinel.kern.lage.Verwaltung.beschreibung(stand, eigene))
     }
 }
+
+class MeldungenTest {
+    @Test
+    fun fremderNotrufIstAlarm() {
+        val stand = LageStand(fahnder = mapOf("b" to Versioniert("b", data = Fahnder("B", "Bär", "PK"))))
+        val m = de.nglab.sentinel.kern.lage.Meldungen.aus(de.nglab.sentinel.kern.lage.LageEreignis.NotrufBegonnen("b", false), stand)!!
+        assertEquals(de.nglab.sentinel.kern.lage.Dringlichkeit.Alarm, m.dringlichkeit)
+        assertTrue(m.systemmitteilung)
+        assertNull(de.nglab.sentinel.kern.lage.Meldungen.anzeigedauerMs(m))
+    }
+}
+
+class AppSperreTest {
+    @Test
+    fun sperrtNachFrist() {
+        val s = de.nglab.sentinel.kern.lage.AppSperre
+        assertTrue(s.sperren(true, 0, 1000, 1000))
+        assertTrue(!s.sperren(true, 60, 0, 30_000))
+        assertTrue(s.sperren(true, 60, 0, 60_000))
+        assertTrue(!s.sperren(false, 0, 0, 99_999))
+        assertTrue(!s.sperren(true, 0, null, 5))
+    }
+}
