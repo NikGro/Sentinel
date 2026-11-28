@@ -77,6 +77,13 @@ import de.nglab.sentinel.kern.modell.GeoPunkt
 import de.nglab.sentinel.kern.karte.Objektart
 import de.nglab.sentinel.kern.lage.LageStand
 import de.nglab.sentinel.kern.modell.Fortbewegung
+import de.nglab.sentinel.kern.karte.Anlegbar
+import de.nglab.sentinel.kern.karte.Platzierung
+import de.nglab.sentinel.kern.lage.Lage
+import de.nglab.sentinel.kern.modell.Art
+import de.nglab.sentinel.kern.modell.Ebene
+import de.nglab.sentinel.kern.modell.Markierung
+import de.nglab.sentinel.kern.modell.Ziel
 
 private enum class Tab(val titel: String, val bild: ImageVector) {
     Lage("Lage", Icons.Filled.Map), Ziele("Ziele", Icons.Filled.PersonSearch), Kraefte("Kräfte", Icons.Filled.Groups), Mehr("Mehr", Icons.Filled.MoreHoriz)
@@ -121,11 +128,59 @@ private fun Lagebildschirm(modell: AppModell, stand: LageStand) {
     var verkehr by rememberSaveable { mutableStateOf(false) }
     var sucht by remember { mutableStateOf(false) }
     var ortTreffer by remember { mutableStateOf<de.nglab.sentinel.kern.netz.Suchtreffer?>(null) }
+    // Anlegen: Plus-Menü (optional an einem Ort), Platzierungsmodus, danach Editor
+    var plus by remember { mutableStateOf(false) }
+    var plusOrt by remember { mutableStateOf<GeoPunkt?>(null) }
+    var platzierung by remember { mutableStateOf<Platzierung?>(null) }
+    var editor by remember { mutableStateOf<Markierungsbearbeitung?>(null) }
+    var neuesZiel by remember { mutableStateOf<Ziel?>(null) }
+
+    fun ergebnis(e: Platzierung.Ergebnis?) {
+        when (e) {
+            is Platzierung.Ergebnis.NeueMarkierung -> editor = Markierungsbearbeitung(Lage.neueId(), e.markierung, neu = true)
+            is Platzierung.Ergebnis.NeuesZiel -> neuesZiel = e.ziel
+            is Platzierung.Ergebnis.Verschoben -> modell.lage.markierungSichern(e.markierung, e.id)
+            is Platzierung.Ergebnis.ZielVersetzt -> modell.lage.setzen(Art.Ziel, e.id, e.ziel)
+            null -> Unit
+        }
+    }
+
+    fun anlegen(was: Anlegbar) {
+        plus = false
+        val ort = plusOrt
+        plusOrt = null
+        steuerung.markieren(null)
+        val p = Platzierung.anlegen(was, ort)
+        // Einzelner Ort schon bekannt (Suchtreffer): direkt weiter, sonst Platzierungsmodus.
+        if (ort != null && !p.mehrpunkt) ergebnis(p.bestaetigen(System.currentTimeMillis(), Ebene.LAGE)) else platzierung = p
+    }
+
     Box(Modifier.fillMaxSize()) {
-        LageKarte(modell, steuerung, Modifier.fillMaxSize().testTag("Lagekarte")) { auswahl = it }
+        LageKarte(
+            modell, steuerung, Modifier.fillMaxSize().testTag("Lagekarte"),
+            platzierung = platzierung,
+            beiTipp = { punkt -> platzierung = platzierung?.tippen(punkt) },
+        ) { auswahl = it }
+
+        platzierung?.let { p ->
+            Platzierungsleiste(
+                p,
+                zuruecknehmen = { platzierung = p.zuruecknehmen() },
+                abbrechen = { platzierung = null },
+                fertig = {
+                    platzierung = null
+                    val z = p.zweck
+                    ergebnis(p.bestaetigen(
+                        System.currentTimeMillis(), Ebene.LAGE,
+                        markierung = (z as? Platzierung.Zweck.Verschieben)?.let { stand.markierungen[it.markierungId]?.data },
+                        ziel = (z as? Platzierung.Zweck.ZielOrt)?.let { stand.ziele[it.zielId]?.data },
+                    ))
+                },
+            )
+        }
 
         // Oben: Suchleiste
-        Surface(
+        if (platzierung == null) Surface(
             shape = RoundedCornerShape(28.dp),
             tonalElevation = 3.dp,
             shadowElevation = 4.dp,
@@ -156,7 +211,7 @@ private fun Lagebildschirm(modell: AppModell, stand: LageStand) {
                 aktiv = steuerung.anheftung != Anheftung.Frei,
             ) { steuerung.anheftenUmschalten(ort?.let { GeoPunkt(it.lat, it.lon) }) }
             Kartenknopf(Icons.Filled.Traffic, "Verkehr", aktiv = verkehr) { verkehr = !verkehr; steuerung.verkehr(verkehr) }
-            Kartenknopf(Icons.Filled.Add, "Hinzufügen", hervorgehoben = true) {}
+            Kartenknopf(Icons.Filled.Add, "Hinzufügen", hervorgehoben = true) { plusOrt = null; plus = true }
         }
 
         // Unten: A-Position und Fortbewegung, darüber die Lageleiste
@@ -198,7 +253,7 @@ private fun Lagebildschirm(modell: AppModell, stand: LageStand) {
                 if (t.untertitel.isNotBlank()) Text(t.untertitel, color = MaterialTheme.colorScheme.onSurfaceVariant)
                 Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
                     Button(onClick = {}, modifier = Modifier.weight(1f).height(52.dp)) { Text("Hinführen") }
-                    OutlinedButton(onClick = {}, modifier = Modifier.weight(1f).height(52.dp)) { Text("Hier anlegen") }
+                    OutlinedButton(onClick = { ortTreffer = null; plusOrt = t.punkt; plus = true }, modifier = Modifier.weight(1f).height(52.dp)) { Text("Hier anlegen") }
                 }
             }
         }
@@ -206,10 +261,39 @@ private fun Lagebildschirm(modell: AppModell, stand: LageStand) {
 
     auswahl?.let { a ->
         ModalBottomSheet(onDismissRequest = { auswahl = null }, sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = false)) {
-            Kurzuebersicht(stand, a)
+            Kurzuebersicht(stand, a) {
+                stand.markierungen[a.id]?.let { editor = Markierungsbearbeitung(a.id, it.data, neu = false) }
+                auswahl = null
+            }
+        }
+    }
+
+    if (plus) {
+        ModalBottomSheet(onDismissRequest = { plus = false; plusOrt = null; steuerung.markieren(null) }) { PlusMenue(::anlegen) }
+    }
+
+    editor?.let { b ->
+        ModalBottomSheet(onDismissRequest = { editor = null }, sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)) {
+            MarkierungsEditor(
+                stand, b.markierung, b.neu,
+                zuletzt = stand.markierungen[b.id]?.let { "Zuletzt geändert von ${stand.name(it.updatedBy)}" },
+                abbrechen = { editor = null },
+                sichern = { modell.lage.markierungSichern(it, b.id); editor = null },
+                verschieben = { editor = null; platzierung = Platzierung(Platzierung.Zweck.Verschieben(b.id)) },
+                loeschen = { modell.lage.loeschen(Art.Markierung, b.id); editor = null },
+            )
+        }
+    }
+
+    neuesZiel?.let { z ->
+        ModalBottomSheet(onDismissRequest = { neuesZiel = null }, sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)) {
+            ZielAnlegen(z, abbrechen = { neuesZiel = null }) { modell.lage.setzen(Art.Ziel, Lage.neueId(), it); neuesZiel = null }
         }
     }
 }
+
+/** Offener Markierungseditor: Kennung, Ausgangsstand, neu angelegt oder bestehend. */
+private data class Markierungsbearbeitung(val id: String, val markierung: Markierung, val neu: Boolean)
 
 @Composable
 private fun Kartenknopf(bild: ImageVector, beschreibung: String, aktiv: Boolean = false, hervorgehoben: Boolean = false, aktion: () -> Unit) {
@@ -279,7 +363,7 @@ private fun Lageleiste(stand: LageStand) {
 
 /** Kurzübersicht eines angetippten Objekts (Kopfzeile wie auf iOS: Symbol, Titel, Untertitel). */
 @Composable
-private fun Kurzuebersicht(stand: LageStand, a: KartenObjekt) {
+private fun Kurzuebersicht(stand: LageStand, a: KartenObjekt, bearbeiten: () -> Unit) {
     val (titel, untertitel, farbe) = when (a.art) {
         Objektart.Kraft -> stand.fahnder[a.id]?.data.let { Triple(it?.spitzname ?: "Fahnder", it?.let(stand::fortbewegungText) ?: "", SentinelFarben.kraefte) }
         Objektart.Fahrzeug -> stand.fahrzeuge[a.id]?.data.let { Triple(it?.funkrufname ?: "Fahrzeug", it?.zusatz ?: "", SentinelFarben.kraefte) }
@@ -294,7 +378,10 @@ private fun Kurzuebersicht(stand: LageStand, a: KartenObjekt) {
                 if (untertitel.isNotBlank()) Text(untertitel, color = MaterialTheme.colorScheme.onSurfaceVariant)
             }
         }
-        Button(onClick = {}, modifier = Modifier.fillMaxWidth().height(52.dp)) { Text("Hinführen") }
+        Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+            Button(onClick = {}, modifier = Modifier.weight(1f).height(52.dp)) { Text("Hinführen") }
+            if (a.art == Objektart.Markierung) OutlinedButton(onClick = bearbeiten, modifier = Modifier.weight(1f).height(52.dp)) { Text("Bearbeiten") }
+        }
     }
 }
 

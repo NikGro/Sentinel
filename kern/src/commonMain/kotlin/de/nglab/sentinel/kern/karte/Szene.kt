@@ -40,8 +40,9 @@ object Quellen {
     const val WEGZEIT = "s-wegzeit"
     const val BESTREIFUNG = "s-bestreifung"
     const val AUSWAHL = "s-auswahl"
+    const val ENTWURF = "s-entwurf"
 
-    val alle = listOf(SYMBOLE, LINIEN, FLAECHEN, FLAECHEN_TEXT, HALTE, OEPNV_FAHRZEUGE, ICH, ROUTE, SPUREN, WEGZEIT, BESTREIFUNG, AUSWAHL)
+    val alle = listOf(SYMBOLE, LINIEN, FLAECHEN, FLAECHEN_TEXT, HALTE, OEPNV_FAHRZEUGE, ICH, ROUTE, SPUREN, WEGZEIT, BESTREIFUNG, AUSWAHL, ENTWURF)
 }
 
 /** Was auf der Karte angetippt werden kann. */
@@ -73,32 +74,32 @@ data class Anzeige(
 )
 
 class Szene {
-    private fun punkt(p: GeoPunkt): JsonObject = buildJsonObject {
+    internal fun punkt(p: GeoPunkt): JsonObject = buildJsonObject {
         put("type", "Point")
         putJsonArray("coordinates") { add(JsonPrimitive(p.lon)); add(JsonPrimitive(p.lat)) }
     }
 
-    private fun linie(punkte: List<GeoPunkt>): JsonObject = buildJsonObject {
+    internal fun linie(punkte: List<GeoPunkt>): JsonObject = buildJsonObject {
         put("type", "LineString")
         put("coordinates", koordinaten(punkte))
     }
 
-    private fun flaeche(punkte: List<GeoPunkt>): JsonObject = buildJsonObject {
+    internal fun flaeche(punkte: List<GeoPunkt>): JsonObject = buildJsonObject {
         put("type", "Polygon")
         putJsonArray("coordinates") { add(koordinaten(if (punkte.first() == punkte.last()) punkte else punkte + punkte.first())) }
     }
 
-    private fun koordinaten(punkte: List<GeoPunkt>): JsonArray = buildJsonArray {
+    internal fun koordinaten(punkte: List<GeoPunkt>): JsonArray = buildJsonArray {
         punkte.forEach { p -> add(buildJsonArray { add(JsonPrimitive(p.lon)); add(JsonPrimitive(p.lat)) }) }
     }
 
-    private fun merkmal(geometrie: JsonObject, eigenschaften: JsonObject): JsonObject = buildJsonObject {
+    internal fun merkmal(geometrie: JsonObject, eigenschaften: JsonObject): JsonObject = buildJsonObject {
         put("type", "Feature")
         put("geometry", geometrie)
         put("properties", eigenschaften)
     }
 
-    private fun sammlung(merkmale: List<JsonObject>): String = buildJsonObject {
+    internal fun sammlung(merkmale: List<JsonObject>): String = buildJsonObject {
         put("type", "FeatureCollection")
         put("features", JsonArray(merkmale))
     }.toString()

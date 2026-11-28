@@ -37,6 +37,7 @@ export function lageQuellen(): Record<string, unknown> {
     's-oepnv-fahrzeuge': geojson(),
     's-ich': geojson(),
     's-auswahl': geojson(),
+    's-entwurf': geojson(),
   };
 }
 
@@ -291,6 +292,34 @@ export function lageEbenen(variante: Variante): Ebene[] {
       type: 'circle',
       source: 's-auswahl',
       paint: { 'circle-radius': 9, 'circle-color': weiss, 'circle-stroke-color': '#0A84FF', 'circle-stroke-width': 4 },
+    },
+    // Entwurf im Platzierungsmodus: gelbe Vorschau der neuen Form, Punkte mit dunklem Rand
+    {
+      id: 'lage-entwurf-flaeche',
+      type: 'fill',
+      source: 's-entwurf',
+      filter: ['==', ['get', 'art'], 'flaeche'],
+      paint: { 'fill-color': '#FFD60A', 'fill-opacity': 0.18 },
+    },
+    {
+      id: 'lage-entwurf-linie',
+      type: 'line',
+      source: 's-entwurf',
+      filter: ['in', ['get', 'art'], ['literal', ['linie', 'flaeche']]],
+      layout: { 'line-cap': 'round', 'line-join': 'round' },
+      paint: { 'line-color': '#FFD60A', 'line-width': 3, 'line-dasharray': [2, 1.5] },
+    },
+    {
+      id: 'lage-entwurf-punkt',
+      type: 'circle',
+      source: 's-entwurf',
+      filter: ['==', ['get', 'art'], 'punkt'],
+      paint: {
+        'circle-radius': ['case', ['get', 'letzter'], 8, 6],
+        'circle-color': '#FFD60A',
+        'circle-stroke-color': '#1C1C1E',
+        'circle-stroke-width': 2,
+      },
     },
     // Eigener Standort: blauer Punkt mit weißem Rand, im Fahrzeug bzw. in der Navigation als Pfeil (Bild der Plattform)
     {

@@ -8,6 +8,7 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
@@ -20,6 +21,7 @@ import de.nglab.sentinel.AppModell
 import de.nglab.sentinel.kern.karte.Anheftung
 import de.nglab.sentinel.kern.karte.Kamerafuehrung
 import de.nglab.sentinel.kern.karte.KartenObjekt
+import de.nglab.sentinel.kern.karte.Platzierung
 import de.nglab.sentinel.kern.karte.Quellen
 import de.nglab.sentinel.kern.karte.Szene
 import de.nglab.sentinel.kern.modell.GeoPunkt
@@ -32,6 +34,8 @@ import org.maplibre.android.maps.MapLibreMap
 import org.maplibre.android.maps.MapView
 import org.maplibre.android.maps.Style
 import org.maplibre.android.style.sources.GeoJsonSource
+
+private const val LEER = """{"type":"FeatureCollection","features":[]}"""
 
 /** Antippbare Ebenen des gemeinsamen Stils, die oberste zuerst. */
 private val ANTIPPBAR = arrayOf(
@@ -78,7 +82,7 @@ class KartenSteuerung {
     /** Hebt einen Ort hervor (Suchtreffer, gedrückter Ort); `null` entfernt die Markierung. */
     fun markieren(p: GeoPunkt?) {
         val quelle = karte?.style?.getSourceAs<GeoJsonSource>(Quellen.AUSWAHL) ?: return
-        quelle.setGeoJson(if (p == null) """{"type":"FeatureCollection","features":[]}""" else
+        quelle.setGeoJson(if (p == null) LEER else
             """{"type":"FeatureCollection","features":[{"type":"Feature","geometry":{"type":"Point","coordinates":[${p.lon},${p.lat}]},"properties":{}}]}""")
     }
 
@@ -96,8 +100,15 @@ fun LageKarte(
     modell: AppModell,
     steuerung: KartenSteuerung,
     modifier: Modifier = Modifier,
+    platzierung: Platzierung? = null,
+    entwurfRadius: Double? = null,
+    beiTipp: (GeoPunkt) -> Unit = {},
     beiAuswahl: (KartenObjekt) -> Unit,
 ) {
+    // Aktuelle Werte für die einmal angelegten Listener der Karte.
+    val platziert by rememberUpdatedState(platzierung != null)
+    val tipp by rememberUpdatedState(beiTipp)
+    val auswahl by rememberUpdatedState(beiAuswahl)
     val kontext = LocalContext.current
     val lebenszyklus = LocalLifecycleOwner.current.lifecycle
     val dunkel = isSystemInDarkTheme()
@@ -173,6 +184,11 @@ fun LageKarte(
                     }
                 })
                 karte.addOnMapClickListener { lage ->
+                    // Platzierungsmodus: jeder Tipp setzt einen Punkt, nichts wird ausgewählt.
+                    if (platziert) {
+                        tipp(GeoPunkt(lage.latitude, lage.longitude))
+                        return@addOnMapClickListener true
+                    }
                     val p = karte.projection.toScreenLocation(lage)
                     val r = 24f * resources.displayMetrics.density
                     val treffer = karte.queryRenderedFeatures(RectF(p.x - r, p.y - r, p.x + r, p.y + r), *ANTIPPBAR)
@@ -184,7 +200,7 @@ fun LageKarte(
                             true
                         }
                         else -> {
-                            KartenObjekt.von(erster.getStringProperty("id"))?.let(beiAuswahl)
+                            KartenObjekt.von(erster.getStringProperty("id"))?.let(auswahl)
                             true
                         }
                     }
@@ -217,6 +233,12 @@ fun LageKarte(
         val s = style ?: return@LaunchedEffect
         val jetzt = System.currentTimeMillis()
         for ((id, json) in szene.aufbauen(stand, jetzt, zoom = zoom)) s.getSourceAs<GeoJsonSource>(id)?.setGeoJson(json)
+    }
+
+    // Entwurf im Platzierungsmodus (gelbe Vorschau)
+    LaunchedEffect(style, platzierung, entwurfRadius) {
+        val s = style ?: return@LaunchedEffect
+        s.getSourceAs<GeoJsonSource>(Quellen.ENTWURF)?.setGeoJson(platzierung?.vorschau(entwurfRadius) ?: LEER)
     }
 
     // ÖPNV-Fahrzeuge flüssig (zehnmal je Sekunde), nur diese Quelle.
