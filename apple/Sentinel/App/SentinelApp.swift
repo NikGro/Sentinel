@@ -24,6 +24,7 @@ struct SentinelApp: App {
 /// Oberste Ansicht: Einrichtung, Verbindungsaufbau, Profil oder die eigentliche App.
 struct Wurzel: View {
     @Environment(AppModell.self) private var modell
+    @Environment(\.scenePhase) private var szenenphase
 
     var body: some View {
         Group {
@@ -31,7 +32,12 @@ struct Wurzel: View {
             case .einrichtung: Einrichtung()
             case .verbinde: Verbinde()
             case .profil: ProfilAnlegen()
-            case .bereit: Hauptansicht()
+            case .bereit:
+                if let hinweis = modell.stand.versionsHinweis(appVersion: Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "") {
+                    VersionPasstNicht(hinweis: hinweis)
+                } else {
+                    Hauptansicht()
+                }
             }
         }
         .overlay(alignment: .top) {
@@ -63,6 +69,10 @@ struct Wurzel: View {
         .overlay {
             if modell.gesperrt && modell.phase != .einrichtung { Sperrbildschirm() }
         }
+        .overlay {
+            // Sichtschutz im App-Umschalter: Schild statt Lage, sobald die App nicht im Vordergrund ist.
+            if szenenphase != .active && modell.phase != .einrichtung { Sichtschutz() }
+        }
     }
 }
 
@@ -93,5 +103,35 @@ struct Sperrbildschirm: View {
         kontext.evaluatePolicy(.deviceOwnerAuthentication, localizedReason: "SENTINEL entsperren") { ok, _ in
             if ok { Task { @MainActor in modell.gesperrt = false } }
         }
+    }
+}
+
+/// Sichtschutz: rotes SENTINEL-Schild auf neutralem Grund (App-Umschalter, Wechsel in den Hintergrund).
+struct Sichtschutz: View {
+    var body: some View {
+        VStack(spacing: 12) {
+            Image(systemName: "shield.lefthalf.filled").font(.system(size: 56, weight: .semibold)).foregroundStyle(.red)
+            Text("SENTINEL").font(.title.weight(.heavy)).tracking(4)
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .background(.background)
+    }
+}
+
+/// App und Server passen nicht zusammen (Haupt- oder Nebenversion verschieden): kein Einsatzbetrieb, nur Abmelden.
+struct VersionPasstNicht: View {
+    @Environment(AppModell.self) private var modell
+    let hinweis: String
+
+    var body: some View {
+        VStack(spacing: 16) {
+            Image(systemName: "exclamationmark.lock.fill").font(.system(size: 44)).foregroundStyle(.red)
+            Text("Version passt nicht").font(.title3.weight(.semibold))
+            Text(hinweis).multilineTextAlignment(.center).foregroundStyle(.secondary)
+            Button("Abmelden", role: .destructive) { modell.abmelden() }.buttonStyle(.glass)
+        }
+        .padding(32)
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .accessibilityIdentifier("Version")
     }
 }

@@ -6,6 +6,7 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.padding
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Lock
 import androidx.compose.material3.Button
@@ -31,5 +32,20 @@ fun Sperrbildschirm(entsperren: () -> Unit) {
         Icon(Icons.Filled.Lock, null, Modifier.size(48.dp), tint = MaterialTheme.colorScheme.primary)
         Text("SENTINEL ist gesperrt", style = MaterialTheme.typography.titleLarge)
         Button(onClick = entsperren, modifier = Modifier.height(48.dp)) { Text("Entsperren") }
+    }
+}
+
+/** App und Server passen nicht zusammen (Haupt- oder Nebenversion verschieden): kein Einsatzbetrieb, nur Abmelden. */
+@Composable
+fun VersionPasstNicht(hinweis: String, abmelden: () -> Unit) {
+    Column(
+        Modifier.fillMaxSize().background(MaterialTheme.colorScheme.surface).padding(32.dp).testTag("Version"),
+        horizontalAlignment = Alignment.CenterHorizontally,
+        verticalArrangement = Arrangement.spacedBy(16.dp, Alignment.CenterVertically),
+    ) {
+        Icon(Icons.Filled.Lock, null, Modifier.size(48.dp), tint = MaterialTheme.colorScheme.error)
+        Text("Version passt nicht", style = MaterialTheme.typography.titleLarge)
+        Text(hinweis, style = MaterialTheme.typography.bodyLarge, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        androidx.compose.material3.OutlinedButton(onClick = abmelden) { Text("Abmelden") }
     }
 }

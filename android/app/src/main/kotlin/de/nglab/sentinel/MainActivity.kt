@@ -19,6 +19,8 @@ class MainActivity : FragmentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
+        // Sichtschutz: In der Übersicht der zuletzt genutzten Apps erscheint kein Bild der Lage (Bildschirmfotos bleiben möglich).
+        if (Build.VERSION.SDK_INT >= 33) setRecentsScreenshotEnabled(false)
         val modell = (application as SentinelApp).modell
         // Standort (und auf neueren Android-Versionen Mitteilungen) erst nach der Anmeldung erfragen, wie auf iOS.
         val anfrage = registerForActivityResult(ActivityResultContracts.RequestMultiplePermissions()) { modell.vordergrund(true) }
@@ -39,7 +41,12 @@ class MainActivity : FragmentActivity() {
                         Phase.Einrichtung -> Einrichtung(modell)
                         Phase.Verbinde -> Verbinde(modell)
                         Phase.Profil -> ProfilAnlegen(modell)
-                        Phase.Bereit -> Hauptansicht(modell)
+                        Phase.Bereit -> {
+                            val stand by modell.lage.stand.collectAsStateWithLifecycle()
+                            val version = runCatching { packageManager.getPackageInfo(packageName, 0).versionName }.getOrNull() ?: ""
+                            val hinweis = stand.versionsHinweis(version)
+                            if (hinweis != null) de.nglab.sentinel.ui.VersionPasstNicht(hinweis) { modell.abmelden() } else Hauptansicht(modell)
+                        }
                     }
                     de.nglab.sentinel.ui.Banner(meldung) { modell.meldungGelesen() }
                     val gesperrt by modell.gesperrt.collectAsStateWithLifecycle()

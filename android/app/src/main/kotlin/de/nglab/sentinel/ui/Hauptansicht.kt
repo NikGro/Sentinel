@@ -156,6 +156,17 @@ private fun Lagebildschirm(modell: AppModell, stand: LageStand, fokus: KartenObj
     var platzierung by remember { mutableStateOf<Platzierung?>(null) }
     var editor by remember { mutableStateOf<Markierungsbearbeitung?>(null) }
     var neuesZiel by remember { mutableStateOf<Ziel?>(null) }
+    var lageUebersicht by remember { mutableStateOf(false) }
+    // Tempolimit an der eigenen Position, auch ohne Navigation (Straßenverzeichnis, gedrosselt im Kern)
+    val tempolimitAbfrage = remember { de.nglab.sentinel.kern.navi.Tempolimitabfrage() }
+    var tempolimitJetzt by remember { mutableStateOf<Int?>(null) }
+    val ortFuerTempo by modell.ort.collectAsStateWithLifecycle()
+    androidx.compose.runtime.LaunchedEffect(ortFuerTempo) {
+        val o = ortFuerTempo ?: return@LaunchedEffect
+        val api = modell.api ?: return@LaunchedEffect
+        if ((o.tempo ?: 0.0) * 3.6 < 5 && tempolimitJetzt == null) return@LaunchedEffect
+        if (tempolimitAbfrage.aktualisieren(api, GeoPunkt(o.lat, o.lon), System.currentTimeMillis())) tempolimitJetzt = tempolimitAbfrage.kmh
+    }
     var zielansicht by remember { mutableStateOf<String?>(null) }
     // ÖPNV live: Fahrzeuge und Haltestellen im Kartenausschnitt
     val liveAn = ebenen.oepnvLive
@@ -359,7 +370,27 @@ private fun Lagebildschirm(modell: AppModell, stand: LageStand, fokus: KartenObj
                 AKnopf(stand, Modifier.weight(1f)) { if (stand.haeltA) modell.lage.aFreigeben() else modell.lage.aUebernehmen() }
                 Fortbewegungswahl(stand.ich?.data?.fortbewegung ?: Fortbewegung.Fuss, Modifier.weight(1.2f)) { modell.lage.fortbewegungSetzen(it) }
             }
-            Lageleiste(stand)
+            Lageleiste(stand) { lageUebersicht = true }
+        }
+
+        // Tempo und Tempolimit unten links (in Bewegung, auch ohne Navigation)
+        if (navi == null && verlauf == null) {
+            val o = ortJetzt
+            val kmh = o?.tempo?.let { (it * 3.6).toInt() }?.takeIf { it >= 5 }
+            if (kmh != null || tempolimitJetzt != null) Row(
+                Modifier.align(Alignment.BottomStart).padding(start = 16.dp, bottom = 132.dp),
+                horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically,
+            ) {
+                kmh?.let {
+                    Surface(shape = RoundedCornerShape(12.dp), tonalElevation = 3.dp, shadowElevation = 3.dp) {
+                        Column(Modifier.padding(horizontal = 10.dp, vertical = 4.dp), horizontalAlignment = Alignment.CenterHorizontally) {
+                            Text("$it", fontWeight = FontWeight.Bold, style = MaterialTheme.typography.titleMedium)
+                            Text("km/h", style = MaterialTheme.typography.labelSmall)
+                        }
+                    }
+                }
+                tempolimitJetzt?.let { Tempolimit(it) }
+            }
         }
     }
 
@@ -459,6 +490,10 @@ private fun Lagebildschirm(modell: AppModell, stand: LageStand, fokus: KartenObj
                 standortSetzen = { zielansicht = null; platzierung = Platzierung(Platzierung.Zweck.ZielOrt(id)) },
             )
         }
+    }
+
+    if (lageUebersicht) {
+        ModalBottomSheet(onDismissRequest = { lageUebersicht = false }) { LageUebersicht(stand) }
     }
 
     if (ebenenWahl) {
@@ -597,8 +632,8 @@ private fun Fortbewegungswahl(aktuell: Fortbewegung, modifier: Modifier, waehlen
 }
 
 @Composable
-private fun Lageleiste(stand: LageStand) {
-    Surface(shape = RoundedCornerShape(24.dp), tonalElevation = 3.dp, shadowElevation = 3.dp, modifier = Modifier.fillMaxWidth().height(48.dp)) {
+private fun Lageleiste(stand: LageStand, oeffnen: () -> Unit) {
+    Surface(onClick = oeffnen, shape = RoundedCornerShape(24.dp), tonalElevation = 3.dp, shadowElevation = 3.dp, modifier = Modifier.fillMaxWidth().height(48.dp).testTag("Lageleiste")) {
         Row(Modifier.padding(horizontal = 16.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
             Text(stand.einsatz.funkkanal?.let { "Kanal $it" } ?: "Kein Kanal", fontWeight = FontWeight.SemiBold)
             Text(stand.aktuelleInstanz?.data?.name ?: "", color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1, modifier = Modifier.weight(1f))
@@ -654,3 +689,31 @@ private fun Kurzuebersicht(modell: AppModell, stand: LageStand, a: KartenObjekt,
 
 /** Aktionen, die es in dieser Ausbaustufe schon gibt (Details folgen mit der Zielansicht). */
 private val UMGESETZT = Kurzaktion.entries.toSet()
+
+/** Lageübersicht (aus der Lageleiste): Einsatz, Funkkanal, A-Position und Erreichbarkeit der Kräfte mit Anrufen. */
+@Composable
+private fun LageUebersicht(stand: LageStand) {
+    val kontext = androidx.compose.ui.platform.LocalContext.current
+    val jetzt = System.currentTimeMillis()
+    LazyColumn(Modifier.fillMaxWidth().padding(bottom = 24.dp)) {
+        item {
+            Column(Modifier.padding(horizontal = 20.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                Text(stand.einsatz.titel.ifBlank { stand.aktuelleInstanz?.data?.name ?: "Lage" }, style = MaterialTheme.typography.titleLarge)
+                Text(listOfNotNull(stand.einsatz.funkkanal?.let { "Kanal $it" }, stand.aHalter?.let { "A: ${it.data.spitzname} (${stand.fortbewegungText(it.data)})" }).joinToString(" · ").ifBlank { "Kein Kanal, keine A" }, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                if (stand.einsatz.hinweise.isNotBlank()) Text(stand.einsatz.hinweise)
+                Text("Kräfte", style = MaterialTheme.typography.titleSmall, color = MaterialTheme.colorScheme.primary, modifier = Modifier.padding(top = 12.dp))
+            }
+        }
+        items(de.nglab.sentinel.kern.lage.Kraefteansicht.sortiert(stand), key = { it.id }) { f ->
+            ListItem(
+                headlineContent = { Text(f.data.spitzname) },
+                supportingContent = { Text(de.nglab.sentinel.kern.lage.Kraefteansicht.status(stand, f, jetzt), maxLines = 1) },
+                trailingContent = {
+                    if (f.data.telefon.isNotBlank() && f.id != stand.ichId) androidx.compose.material3.FilledTonalButton(onClick = {
+                        kontext.startActivity(android.content.Intent(android.content.Intent.ACTION_DIAL, android.net.Uri.parse("tel:${f.data.telefon}")))
+                    }) { Text("Anrufen") }
+                },
+            )
+        }
+    }
+}

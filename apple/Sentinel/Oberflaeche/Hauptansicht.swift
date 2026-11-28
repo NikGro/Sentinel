@@ -77,6 +77,9 @@ struct Lagebildschirm: View {
     @State private var editor: Markierungsbearbeitung?
     @State private var neuesZiel: NeuesZielAuswahl?
     @State private var sonderrechte = false
+    @State private var lageUebersicht = false
+    @State private var tempolimitAbfrage = Tempolimitabfrage()
+    @State private var tempolimitJetzt: Int?
 
     private func hinfuehren(_ ziel: Naviziel) {
         let m = modell
@@ -195,6 +198,33 @@ struct Lagebildschirm: View {
                 }
               }
             }
+            .overlay(alignment: .bottomLeading) {
+                // Tempo und Tempolimit (in Bewegung, auch ohne Navigation)
+                if modell.navigator.stand == nil, verlauf == nil {
+                    let kmh = modell.standort.aktuell.map { Int(max(0, $0.speed) * 3.6) }.flatMap { $0 >= 5 ? $0 : nil }
+                    HStack(spacing: 8) {
+                        if let kmh {
+                            VStack(spacing: 0) {
+                                Text("\(kmh)").font(.headline.weight(.bold)).monospacedDigit()
+                                Text("km/h").font(.caption2)
+                            }
+                            .padding(.horizontal, 10).padding(.vertical, 4)
+                            .glassEffect(.regular, in: .rect(cornerRadius: 12))
+                        }
+                        if let t = tempolimitJetzt { Tempolimit(kmh: t) }
+                    }
+                    .padding(.leading, 22)
+                    .padding(.bottom, 8)
+                }
+            }
+            .task(id: modell.standort.aktuell?.timestamp) {
+                guard let o = modell.standort.aktuell, let api = modell.api else { return }
+                if o.speed * 3.6 < 5 && tempolimitJetzt == nil { return }
+                if (try? await tempolimitAbfrage.aktualisieren(api: api, ort: GeoPunkt(lat: o.coordinate.latitude, lon: o.coordinate.longitude), jetztMs: jetztMs))?.boolValue == true {
+                    tempolimitJetzt = tempolimitAbfrage.kmh.map { Int($0.int32Value) }
+                }
+            }
+            .sheet(isPresented: $lageUebersicht) { LageUebersicht().presentationDetents([.medium, .large]) }
             .overlay(alignment: .topTrailing) {
                 VStack(spacing: 8) {
                     SosKnopf()
@@ -242,7 +272,7 @@ struct Lagebildschirm: View {
                                 AKnopf()
                                 Fortbewegungswahl()
                             }
-                            Lageleiste()
+                            Lageleiste().onTapGesture { lageUebersicht = true }
                         }
                     }
                 }
@@ -614,5 +644,41 @@ private struct SosKnopf: View {
             .confirmationDialog("Notruf beenden?", isPresented: $rueckfrage, titleVisibility: .visible) {
                 Button("Beenden", role: .destructive) { _ = modell.lage.notrufBeenden() }
             }
+    }
+}
+
+/// Lageübersicht (aus der Lageleiste): Einsatz, Funkkanal, A-Position und Erreichbarkeit der Kräfte mit Anrufen.
+struct LageUebersicht: View {
+    @Environment(AppModell.self) private var modell
+
+    var body: some View {
+        let stand = modell.stand
+        let jetzt = Int64(Date.now.timeIntervalSince1970 * 1000)
+        NavigationStack {
+            List {
+                Section {
+                    let zeile = [stand.einsatz.funkkanal.map { "Kanal \($0)" }, stand.aHalter.map { "A: \($0.data.spitzname) (\(stand.fortbewegungText(f: $0.data)))" }].compactMap { $0 }.joined(separator: " · ")
+                    Text(zeile.isEmpty ? "Kein Kanal, keine A" : zeile).foregroundStyle(.secondary)
+                    if !stand.einsatz.hinweise.isEmpty { Text(stand.einsatz.hinweise) }
+                }
+                Section("Kräfte") {
+                    ForEach(Kraefteansicht.shared.sortiert(stand: stand), id: \.id) { f in
+                        HStack {
+                            VStack(alignment: .leading, spacing: 2) {
+                                Text(f.data.spitzname)
+                                Text(Kraefteansicht.shared.status(stand: stand, f: f, jetztMs: jetzt)).font(.caption).foregroundStyle(.secondary).lineLimit(1)
+                            }
+                            Spacer()
+                            if !f.data.telefon.isEmpty, f.id != stand.ichId, let url = URL(string: "tel:\(f.data.telefon.filter { !$0.isWhitespace })") {
+                                Link(destination: url) { Image(systemName: "phone.fill") }
+                                    .buttonStyle(.bordered).buttonBorderShape(.circle).tint(.green)
+                            }
+                        }
+                    }
+                }
+            }
+            .navigationTitle(stand.einsatz.titel.isEmpty ? (stand.aktuelleInstanz?.data.name ?? "Lage") : stand.einsatz.titel)
+            .navigationBarTitleDisplayMode(.inline)
+        }
     }
 }
