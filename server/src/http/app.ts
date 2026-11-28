@@ -11,7 +11,6 @@ import type { Config } from '../config.js';
 import type { Database } from '../db.js';
 import type { Hub } from '../hub.js';
 import type { Actor, Lage } from '../lage.js';
-import type { MapKitTokens } from '../mapkit.js';
 import type { OepnvStore, OverpassClient } from '../oepnv.js';
 import type { ReachService } from '../reach/reach.js';
 import type { RouteService } from '../reach/route.js';
@@ -48,7 +47,6 @@ export interface Services {
   releases: ReleaseStore;
   vault: Vault;
   paj: PajPoller;
-  mapkit: MapKitTokens;
   oepnv: OepnvStore;
   /** Deutschlandweiter ÖPNV mit Echtzeit (Transitous); `null`, wenn abgeschaltet. */
   transit: TransitousClient | null;
@@ -116,15 +114,14 @@ export async function buildApp(services: Services): Promise<FastifyInstance> {
 
   const publicOrigin = new URL(config.publicUrl).origin;
   const wsOrigin = publicOrigin.replace(/^http/, 'ws');
-  // Apple Maps wird nur freigegeben, wenn ein MapKit-Schlüssel hinterlegt ist.
-  const apple = services.mapkit.configured;
+  // Karte, Kacheln, Schriften und Verkehr kommen ausschließlich vom eigenen Server.
   const csp = [
     "default-src 'self'",
-    `script-src 'self'${apple ? ' https://cdn.apple-mapkit.com' : ''}`,
+    "script-src 'self'",
     "media-src 'self' blob:",
-    `img-src 'self' data: blob: https://tile.openstreetmap.org${apple ? ' https://*.apple-mapkit.com' : ''}`,
+    "img-src 'self' data: blob:",
     "style-src 'self' 'unsafe-inline'",
-    `connect-src 'self' ${wsOrigin} https://tile.openstreetmap.org${apple ? ' https://*.apple-mapkit.com' : ''}`,
+    `connect-src 'self' ${wsOrigin}`,
     "worker-src 'self' blob:",
     "object-src 'none'",
     "frame-ancestors 'none'",

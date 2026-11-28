@@ -1,7 +1,7 @@
 import type { GeoPoint } from '../types';
 
 /**
- * Gemeinsame Schnittstelle der Kartendarstellungen (Apple Maps, OpenStreetMap).
+ * Schnittstelle der Kartendarstellung (eigene Karte mit dem gemeinsamen Stil des Servers).
  * Die Lage wird unabhängig vom Kartenanbieter als Formen und Marker beschrieben; die Variante zeichnet sie nur.
  */
 
@@ -28,12 +28,14 @@ export const SHAPE_GROUPS: readonly ShapeGroup[] = ['reach', 'coverage', 'object
 export type ColorScheme = 'light' | 'dark';
 
 export interface MapBackend {
-  readonly provider: 'apple' | 'osm';
+  readonly provider: 'karte';
   setShapes(group: ShapeGroup, shapes: Shape[]): void;
   setPins(group: string, pins: Pin[]): void;
   flyTo(point: GeoPoint): void;
   setCrosshair(active: boolean): void;
   setColorScheme(scheme: ColorScheme): void;
+  /** Verkehrslage und Sperrungen (TomTom) ein- oder ausblenden. */
+  setTraffic(on: boolean): void;
   onClick(handler: (point: GeoPoint) => void): void;
   onDoubleClick(handler: () => void): void;
   destroy(): void;

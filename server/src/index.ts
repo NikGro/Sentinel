@@ -9,7 +9,6 @@ import { Lage } from './lage.js';
 import { spurDays } from './spur.js';
 import { StreetIndex } from './streetindex.js';
 import { TransitousClient } from './transit/transitous.js';
-import { MapKitTokens } from './mapkit.js';
 import { createOverpassClient, OepnvStore } from './oepnv.js';
 import { ReachService } from './reach/reach.js';
 import { RouteService } from './reach/route.js';
@@ -73,7 +72,6 @@ export async function createServices(config: Config, database?: Database): Promi
     oepnv,
     overpass,
     transit: process.env.SENTINEL_TRANSITOUS === 'aus' ? null : new TransitousClient(),
-    mapkit: new MapKitTokens(config.mapkit, new URL(config.publicUrl).origin),
     argus: new ArgusImporter(config.argusDir),
     releases: new ReleaseStore(config.dataDir, config.publicUrl),
     unknownTrackers: new Map(),

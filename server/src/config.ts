@@ -20,7 +20,6 @@ export interface Config {
   /** Schlüsselmaterial zum Verschlüsseln hinterlegter Zugangsdaten (z. B. PAJ). */
   readonly dataKey: string;
   /** Apple Maps in der Kommandozentrale: Team-ID, Key-ID und Pfad zur .p8-Datei. Leer = OpenStreetMap. */
-  readonly mapkit: { teamId: string; keyId: string; keyFile: string };
   /** Overpass-API für ÖPNV-Linien und Kreuzungssuche; leer schaltet beides ab. */
   readonly overpassUrl: string;
   /** Einsatzraum für ÖPNV-Linien: Süd, West, Nord, Ost. */
@@ -65,11 +64,6 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): Config {
     argusDir: env.SENTINEL_ARGUS_DIR ?? '',
     deployToken: env.SENTINEL_DEPLOY_TOKEN ?? '',
     dataKey: dataKey || 'nur-fuer-entwicklung-nicht-produktiv-verwenden',
-    mapkit: {
-      teamId: env.SENTINEL_MAPKIT_TEAM_ID ?? '',
-      keyId: env.SENTINEL_MAPKIT_KEY_ID ?? '',
-      keyFile: env.SENTINEL_MAPKIT_KEY_FILE ?? '',
-    },
     karteDir: env.SENTINEL_KARTE_DIR ?? '',
     photonUrl: (env.SENTINEL_PHOTON_URL ?? '').replace(/\/+$/, ''),
     overpassUrl: env.SENTINEL_OVERPASS_URL ?? 'https://overpass-api.de/api/interpreter',

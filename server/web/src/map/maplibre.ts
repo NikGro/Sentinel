@@ -8,36 +8,63 @@ setWorkerUrl('/maplibre/maplibre-gl-worker.mjs');
 
 const lngLat = (p: GeoPoint): [number, number] => [p.lon, p.lat];
 
-/** OpenStreetMap über MapLibre. Rückfall, wenn kein Apple-Maps-Schlüssel hinterlegt ist. */
+/** Stil des eigenen Servers, wie in den Apps (Vektorkacheln, 3D-Gebäude, Verkehr von TomTom). */
+const stilAdresse = (scheme: ColorScheme) => `/karte/stil/${scheme === 'dark' ? 'dunkel' : 'hell'}.json`;
+const VERKEHR_EBENEN = ['verkehr-fluss', 'verkehr-sperrung', 'verkehr-meldung-punkt'];
+
+/** Eigene Karte über MapLibre mit dem gemeinsamen Stil (gleiche Darstellung wie iOS und Android). */
 export function createMapLibreBackend(container: HTMLElement, scheme: ColorScheme): Promise<MapBackend> {
   const map = new MlMap({
     container,
-    style: {
-      version: 8,
-      sources: {
-        osm: { type: 'raster', tiles: ['https://tile.openstreetmap.org/{z}/{x}/{y}.png'], tileSize: 256, maxzoom: 19, attribution: '© OpenStreetMap-Mitwirkende' },
-      },
-      layers: [{ id: 'osm', type: 'raster', source: 'osm' }],
-    },
+    style: stilAdresse(scheme),
     center: lngLat(START_CENTER),
     zoom: 12.5,
     attributionControl: { compact: true },
     doubleClickZoom: false,
   });
-  map.addControl(new NavigationControl({ visualizePitch: false }), 'top-right');
+  map.addControl(new NavigationControl({ visualizePitch: true }), 'top-right');
   map.addControl(new ScaleControl({ unit: 'metric' }), 'bottom-left');
+  let verkehr = false;
+  let aktuellesSchema = scheme;
 
   const markers = new Map<string, Map<string, { marker: Marker; signature: string }>>();
 
   const applyScheme = (next: ColorScheme) => {
-    // Nachtdienst: Kacheln abdunkeln und entsättigen, damit Marker und Flächen hervortreten.
-    map.setPaintProperty('osm', 'raster-brightness-max', next === 'dark' ? 0.55 : 1);
-    map.setPaintProperty('osm', 'raster-saturation', next === 'dark' ? -0.6 : -0.15);
-    map.setPaintProperty('osm', 'raster-contrast', next === 'dark' ? 0.15 : 0);
+    if (next === aktuellesSchema) return;
+    aktuellesSchema = next;
+    // Neuer Stil: eigene Quellen und Ebenen kommen nach dem Laden wieder dazu (style.load).
+    map.setStyle(stilAdresse(next));
   };
 
+  const verkehrAnwenden = () => {
+    for (const id of VERKEHR_EBENEN) if (map.getLayer(id)) map.setLayoutProperty(id, 'visibility', verkehr ? 'visible' : 'none');
+  };
+
+  /** Eigene Formen (Weg-Zeit, Bestreifung, Markierungen, Entwurf) über dem Stil. */
+  const eigeneEbenen = () => {
+    for (const group of SHAPE_GROUPS) {
+      if (map.getSource(group)) continue;
+      map.addSource(group, { type: 'geojson', data: { type: 'FeatureCollection', features: [] } });
+      map.addLayer({ id: `${group}-fill`, type: 'fill', source: group, filter: ['==', ['get', 'flaeche'], true], paint: { 'fill-color': ['get', 'farbe'], 'fill-opacity': ['get', 'fuellung'] } });
+      map.addLayer({
+        id: `${group}-line`,
+        type: 'line',
+        source: group,
+        layout: { 'line-cap': 'round', 'line-join': 'round' },
+        paint: {
+          'line-color': ['get', 'farbe'],
+          'line-width': ['get', 'breite'],
+          'line-opacity': ['get', 'deckkraft'],
+          ...(group === 'draft' ? { 'line-dasharray': [2, 1.5] } : {}),
+        },
+      });
+    }
+    verkehrAnwenden();
+  };
+  const letzteFormen = new Map<ShapeGroup, unknown>();
+
   const backend: MapBackend = {
-    provider: 'osm',
+    provider: 'karte',
     setShapes(group: ShapeGroup, shapes: Shape[]) {
       const features = shapes.map((shape) => ({
         type: 'Feature' as const,
@@ -47,7 +74,9 @@ export function createMapLibreBackend(container: HTMLElement, scheme: ColorSchem
             ? { type: 'Polygon' as const, coordinates: [[...shape.points.map(lngLat), lngLat(shape.points[0]!)]] }
             : { type: 'LineString' as const, coordinates: shape.points.map(lngLat) },
       }));
-      (map.getSource(group) as GeoJSONSource | undefined)?.setData({ type: 'FeatureCollection', features });
+      const daten = { type: 'FeatureCollection' as const, features };
+      letzteFormen.set(group, daten);
+      (map.getSource(group) as GeoJSONSource | undefined)?.setData(daten);
     },
     setPins(group: string, pins: Pin[]) {
       let existing = markers.get(group);
@@ -78,6 +107,10 @@ export function createMapLibreBackend(container: HTMLElement, scheme: ColorSchem
       map.getCanvas().style.cursor = active ? 'crosshair' : '';
     },
     setColorScheme: applyScheme,
+    setTraffic(an: boolean) {
+      verkehr = an;
+      verkehrAnwenden();
+    },
     onClick(handler) {
       map.on('click', (event) => handler({ lat: event.lngLat.lat, lon: event.lngLat.lng }));
     },
@@ -89,25 +122,19 @@ export function createMapLibreBackend(container: HTMLElement, scheme: ColorSchem
     },
   };
 
+  // Nach jedem Stilwechsel eigene Ebenen und deren Daten wiederherstellen.
+  map.on('style.load', () => {
+    eigeneEbenen();
+    for (const [group, daten] of letzteFormen) (map.getSource(group) as GeoJSONSource | undefined)?.setData(daten as never);
+  });
+  // Bilder des gemeinsamen Stils (Symbole der Lage) erzeugen die Apps selbst; im Web bleiben diese Ebenen leer.
+  map.on('styleimagemissing', (e) => {
+    if (!map.hasImage(e.id)) map.addImage(e.id, { width: 1, height: 1, data: new Uint8Array(4) });
+  });
+
   return new Promise((resolve) => {
-    map.on('load', () => {
-      for (const group of SHAPE_GROUPS) {
-        map.addSource(group, { type: 'geojson', data: { type: 'FeatureCollection', features: [] } });
-        map.addLayer({ id: `${group}-fill`, type: 'fill', source: group, filter: ['==', ['get', 'flaeche'], true], paint: { 'fill-color': ['get', 'farbe'], 'fill-opacity': ['get', 'fuellung'] } });
-        map.addLayer({
-          id: `${group}-line`,
-          type: 'line',
-          source: group,
-          layout: { 'line-cap': 'round', 'line-join': 'round' },
-          paint: {
-            'line-color': ['get', 'farbe'],
-            'line-width': ['get', 'breite'],
-            'line-opacity': ['get', 'deckkraft'],
-            ...(group === 'draft' ? { 'line-dasharray': [2, 1.5] } : {}),
-          },
-        });
-      }
-      applyScheme(scheme);
+    map.once('load', () => {
+      eigeneEbenen();
       resolve(backend);
     });
   });

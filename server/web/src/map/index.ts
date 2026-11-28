@@ -1,11 +1,9 @@
 import { effect, signal } from '@preact/signals';
 import {
-  api,
   coverage,
   focusRequest,
   hiddenLayers,
   newId,
-  notice,
   online,
   isLocked,
   loadStopsNearby,
@@ -29,7 +27,6 @@ import {
   targetVisible,
 } from '../store';
 import { ZIEL_TITEL, type GeoPoint, type MapObject } from '../types';
-import { createAppleBackend } from './apple';
 import type { ColorScheme, MapBackend, Pin, Shape } from './backend';
 import { createMapLibreBackend } from './maplibre';
 
@@ -44,7 +41,10 @@ const DRAFT_COLOR = '#FFD60A';
 const COVERAGE_GAP_MS = 180_000;
 
 /** Aktiver Kartenanbieter, zur Anzeige. */
-export const mapProvider = signal<'apple' | 'osm' | null>(null);
+export const mapProvider = signal<'karte' | null>(null);
+
+/** Verkehrslage auf der Karte (TomTom). */
+export const trafficVisible = signal(false);
 
 function circlePoints(center: GeoPoint, radiusMeters: number, segments = 64): GeoPoint[] {
   const latRad = (center.lat * Math.PI) / 180;
@@ -82,28 +82,22 @@ function pinElement(className: string, html: string, onClick?: () => void): HTML
 /** Sentinel Web ist immer dunkel, auch die Karte. */
 const colorScheme = (): ColorScheme => 'dark';
 
-async function createBackend(container: HTMLElement, provider: 'apple' | 'osm'): Promise<MapBackend> {
-  if (provider === 'apple') {
-    try {
-      return await createAppleBackend(container, colorScheme(), async () => (await api<{ token: string }>('/admin/mapkit-token')).token);
-    } catch {
-      notice.value = 'Apple Maps ist nicht erreichbar. Es wird OpenStreetMap angezeigt.';
-    }
-  }
+async function createBackend(container: HTMLElement): Promise<MapBackend> {
   return createMapLibreBackend(container, colorScheme());
 }
 
 /** Baut die Karte auf. Liefert eine Funktion zum Abräumen. */
-export function createMap(container: HTMLElement, provider: 'apple' | 'osm'): () => void {
+export function createMap(container: HTMLElement): () => void {
   const disposers: (() => void)[] = [];
   let disposed = false;
   let backend: MapBackend | null = null;
 
-  void createBackend(container, provider).then((created) => {
+  void createBackend(container).then((created) => {
     if (disposed) return created.destroy();
     backend = created;
     mapProvider.value = created.provider;
     bind(created, disposers);
+    disposers.push(effect(() => created.setTraffic(trafficVisible.value)));
   });
 
   return () => {

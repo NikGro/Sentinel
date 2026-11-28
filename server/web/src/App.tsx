@@ -1,6 +1,6 @@
 import { useSignal } from '@preact/signals';
 import { useEffect, useRef } from 'preact/hooks';
-import { createMap, mapProvider } from './map';
+import { createMap, trafficVisible } from './map';
 import { ChatPanel } from './panels/ChatPanel';
 import { InstancesPanel } from './panels/InstancesPanel';
 import { LagePanel } from './panels/LagePanel';
@@ -10,7 +10,7 @@ import { SystemPanel } from './panels/SystemPanel';
 import { TargetsPanel } from './panels/TargetsPanel';
 import { TeamPanel } from './panels/TeamPanel';
 import { TrackersPanel } from './panels/TrackersPanel';
-import { adminStatus, api, attempt, authed, command, connect, connected, disconnect, focusRequest, hiddenLayers, loadCoverage, loadReach, memberLabel, messages, notice, online, operation, positions, reachModes, refreshStatus, membersHere, showCoverage, tables, instanz, currentInstance } from './store';
+import { api, attempt, authed, command, connect, connected, disconnect, focusRequest, hiddenLayers, loadCoverage, loadReach, memberLabel, messages, notice, online, operation, positions, reachModes, refreshStatus, membersHere, showCoverage, tables, instanz, currentInstance } from './store';
 import { FORTBEWEGUNG_TITEL } from './types';
 import { ago } from './ui';
 
@@ -80,7 +80,6 @@ function Console() {
   const section = useSignal<SectionId | null>('lage');
   const chatSeen = useSignal(Date.now());
   const mapRef = useRef<HTMLDivElement>(null);
-  const provider = adminStatus.value?.karte ?? 'osm';
 
   useEffect(() => {
     connect();
@@ -91,7 +90,7 @@ function Console() {
     };
   }, []);
 
-  useEffect(() => createMap(mapRef.current!, provider), [provider]);
+  useEffect(() => createMap(mapRef.current!), []);
 
   // Weg-Zeit-Flächen aktuell halten: sofort bei Änderungen, danach regelmäßig.
   const rooms = Object.values(tables.annotation.value).filter((a) => a.data.typ === 'fahndungsraum');
@@ -139,9 +138,15 @@ function Console() {
 
       <main class="map-area">
         <div ref={mapRef} class="map" />
+        <button
+          class={`map-traffic${trafficVisible.value ? ' active' : ''}`}
+          aria-pressed={trafficVisible.value}
+          onClick={() => (trafficVisible.value = !trafficVisible.value)}
+        >
+          Verkehr
+        </button>
         <ObjectEditor />
         <MapToolbar />
-        {mapProvider.value === 'osm' && provider === 'apple' && <div class="map-note">Apple Maps nicht erreichbar, Anzeige über OpenStreetMap</div>}
         {notice.value && (
           <div class="notice" role="status">
             <span>{notice.value}</span>

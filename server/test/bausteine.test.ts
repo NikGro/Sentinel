@@ -6,7 +6,6 @@ import { join } from 'node:path';
 import { test } from 'node:test';
 import { cellCorners, selectCells } from '../src/argus.js';
 import { distanceMeters, utmToWgs84 } from '../src/geo.js';
-import { MapKitTokens } from '../src/mapkit.js';
 import { modelRadiusMeters, ReachService } from '../src/reach/reach.js';
 import { costingFor, decodePolyline6, RouteService, sonderrechteLohnen } from '../src/reach/route.js';
 import { hashPassword, RateLimiter, Vault, verifyPassword } from '../src/security.js';
@@ -85,22 +84,6 @@ test('Sicherheit: Passwort-Hash, Tresor, Ratenbegrenzung', async () => {
   assert.equal(new Vault('anderer').open(vault.seal('geheim')), null);
   const limiter = new RateLimiter(2, 1000);
   assert.deepEqual([limiter.take('ip', 0), limiter.take('ip', 1), limiter.take('ip', 2), limiter.take('ip', 1001)], [true, true, false, true]);
-});
-
-test('Apple Maps: Token ist ES256-signiert und an die eigene Adresse gebunden', () => {
-  assert.equal(new MapKitTokens({ teamId: '', keyId: '', keyFile: '' }, 'https://x').configured, false);
-  const { privateKey, publicKey } = generateKeyPairSync('ec', { namedCurve: 'P-256' });
-  const keyFile = join(mkdtempSync(join(tmpdir(), 'sentinel-mapkit-')), 'AuthKey.p8');
-  writeFileSync(keyFile, privateKey.export({ type: 'pkcs8', format: 'pem' }));
-  const tokens = new MapKitTokens({ teamId: 'TEAM123456', keyId: 'KEY1234567', keyFile }, 'https://sentinel.example.org');
-  assert.ok(tokens.configured);
-  const [header, payload, signature] = tokens.issue(1_700_000_000_000)!.split('.') as [string, string, string];
-  assert.deepEqual(JSON.parse(Buffer.from(header, 'base64url').toString()), { alg: 'ES256', kid: 'KEY1234567', typ: 'JWT' });
-  const claims = JSON.parse(Buffer.from(payload, 'base64url').toString());
-  assert.equal(claims.iss, 'TEAM123456');
-  assert.equal(claims.origin, 'https://sentinel.example.org');
-  assert.equal(claims.exp - claims.iat, 1800);
-  assert.ok(verify('sha256', Buffer.from(`${header}.${payload}`), { key: publicKey, dsaEncoding: 'ieee-p1363' }, Buffer.from(signature, 'base64url')));
 });
 
 test('Route: Linienzug wird entpackt', () => {
