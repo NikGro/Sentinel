@@ -39,8 +39,8 @@ export interface MapBackend {
   /** Lage-Quellen des gemeinsamen Stils (GeoJSON je Quelle, aus dem Kern). */
   setLage(quellen: Record<string, string>): void;
   setQuelle(id: string, json: string): void;
-  /** Antippen eines Lage-Objekts (Schlüssel „art:kennung“). */
-  onObjectClick(handler: (schluessel: string) => void): void;
+  /** Antippen von Lage-Objekten (Schlüssel „art:kennung“, oberstes zuerst). */
+  onObjectClick(handler: (treffer: string[]) => void): void;
   zoom(): number;
   /** Verkehrslage und Sperrungen (TomTom) ein- oder ausblenden. */
   setTraffic(on: boolean): void;

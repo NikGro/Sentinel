@@ -164,7 +164,7 @@ export function createMapLibreBackend(container: HTMLElement, scheme: ColorSchem
 
   // Antippen von Lage-Objekten (gleiche Ebenen wie in den Apps): Schlüssel „art:kennung“ an die Kommandozentrale.
   const ANTIPPBAR = ['lage-cluster', 'lage-symbole', 'lage-symbole-zeichen', 'lage-oepnv-fahrzeuge', 'lage-halte', 'lage-linien', 'lage-oepnv-kante', 'lage-flaechen'];
-  let objektKlick: ((schluessel: string) => void) | null = null;
+  let objektKlick: ((treffer: string[]) => void) | null = null;
   map.on('click', (event) => {
     const vorhanden = ANTIPPBAR.filter((id) => map.getLayer(id));
     const r = 12;
@@ -175,7 +175,7 @@ export function createMapLibreBackend(container: HTMLElement, scheme: ColorSchem
       map.easeTo({ center: event.lngLat, zoom: map.getZoom() + 2 });
       return;
     }
-    objektKlick?.(String(erster.properties!.id));
+    objektKlick?.(treffer.filter((f) => f.properties?.id).map((f) => String(f.properties!.id)));
   });
 
   return new Promise((resolve) => {

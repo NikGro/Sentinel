@@ -51,6 +51,11 @@ class WebLage {
     fun stilAdresse(grundkarte: String, dunkel: Boolean, dreiD: Boolean): String =
         de.nglab.sentinel.kern.karte.Kartenebenen(grundkarte = grundkarte, dreiD = dreiD).stilAdresse("", dunkel)
 
+    private val tippfolge = de.nglab.sentinel.kern.karte.Tippfolge()
+
+    /** Getroffene Objekte (oberstes zuerst) → gewähltes; mehrfaches Tippen schaltet durch. */
+    fun tippen(treffer: Array<String>, jetztMs: Double): String? = tippfolge.waehlen(treffer.toList(), jetztMs.toLong())?.schluessel
+
     /** Name der Quelle für ÖPNV-Fahrzeuge (damit das Web keine festen Namen braucht). */
     val quelleOepnvFahrzeuge: String get() = Quellen.OEPNV_FAHRZEUGE
 

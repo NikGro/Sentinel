@@ -161,6 +161,7 @@ fun LageKarte(
     val anzeige = ebenen.anzeige
     var zoom by remember { mutableStateOf(14.0) }
     val szene = remember { Szene() }
+    val tippfolge = remember { de.nglab.sentinel.kern.karte.Tippfolge(4_000) }
 
     val ansicht = remember {
         MapView(kontext).apply {
@@ -248,7 +249,9 @@ fun LageKarte(
                             true
                         }
                         else -> {
-                            KartenObjekt.von(erster.getStringProperty("id"))?.let(auswahl)
+                            // Übereinanderliegende Objekte: jedes weitere Tippen nimmt das nächste.
+                            val ids = treffer.filter { it.hasProperty("id") }.map { it.getStringProperty("id") }
+                            tippfolge.waehlen(ids, System.currentTimeMillis())?.let(auswahl)
                             true
                         }
                     }

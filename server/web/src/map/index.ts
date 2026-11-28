@@ -112,8 +112,10 @@ function bind(map: MapBackend, disposers: (() => void)[]): void {
   const takt = window.setInterval(() => map.setQuelle(lagekern.quelleOepnvFahrzeuge, lagekern.oepnvFahrzeuge(Date.now(), [...hiddenLayers.value])), 250);
   disposers.push(() => window.clearInterval(takt));
   // Antippen: Markierung öffnet den Editor, alles andere wird gezeigt.
-  map.onObjectClick((schluessel) => {
+  map.onObjectClick((treffer) => {
     if (tool.value.kind !== 'auswahl') return;
+    const schluessel = lagekern.tippen(treffer, Date.now());
+    if (!schluessel) return;
     const [art, id] = [schluessel.slice(0, schluessel.indexOf(':')), schluessel.slice(schluessel.indexOf(':') + 1)];
     if (art === 'markierung' || art === 'spur') {
       selectedObject.value = id;

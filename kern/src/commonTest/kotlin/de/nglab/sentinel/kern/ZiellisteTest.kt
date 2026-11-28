@@ -92,3 +92,17 @@ class KartenstilTest {
         assertTrue(aus.mitGruppe("g", true).gruppeAn("g"))
     }
 }
+
+class TippfolgeTest {
+    @Test
+    fun schaltetDurchUndBeginntNeu() {
+        val t = de.nglab.sentinel.kern.karte.Tippfolge()
+        val l = listOf("markierung:a", "markierung:b", "markierung:a", "ziel:c")
+        assertEquals("a", t.waehlen(l, 0)?.id)
+        assertEquals("b", t.waehlen(l, 1000)?.id)
+        assertEquals("c", t.waehlen(l, 2000)?.id)
+        assertEquals("a", t.waehlen(l, 3000)?.id)
+        assertEquals("a", t.waehlen(l, 3000 + 10_000)?.id)
+        assertEquals("c", t.waehlen(listOf("ziel:c"), 13_500)?.id)
+    }
+}

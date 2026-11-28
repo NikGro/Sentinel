@@ -29,29 +29,21 @@ Bedienung geprüft ist noch nichts davon; dafür braucht es den Server mit den n
 - Daueranzeige im Dienst (Live-Aktivität, Android-Benachrichtigung) mit Statuszeile aus dem Kern.
 - Mehr: Profil, Funkkanal und Lage, Version, Abmelden.
 - Web: eigene Karte mit gemeinsamem Stil, Lage über den gemeinsamen Kern; Apple Maps entfernt.
+- Lange drücken auf die Karte (Umkehrsuche, Hinführen, Hier anlegen); Notruf-Leiste; Versionsabgleich mit
+  Sperrbildschirm; Sichtschutz im App-Umschalter; Lageübersicht; Tempo und Tempolimit ohne Navigation.
+- ÖPNV als Fortbewegung, selbst bzw. Zielperson einsteigen; Navigation zu Zielen im ÖPNV mit 1–2 Halten voraus.
+- Ziele: Suche, Gruppen anlegen/bearbeiten/löschen, Auswahlmodus, Insassen, Anschrift mit Vorschlägen,
+  Aufzeichnung je Ziel. Kräfte: Suche, Fahrzeugflotte bearbeiten. Profil übernehmen bei der Einrichtung.
+- Karte: Grundkarte Satellit (TomTom-Luftbild über den eigenen Server), 3D an/aus, Zielarten und Gruppen
+  ausblenden (Android, iOS, Web).
 
 ## Offen (nach Wichtigkeit)
 
 **Einsatzbetrieb**
-1. Lange drücken auf die Karte: Ort mit Umkehrsuche, Hinführen, Hier anlegen.
-2. Fortbewegung ÖPNV mit Linienwahl; Zielperson aus der ÖPNV-Ansicht einsteigen lassen; selbst einsteigen.
-3. Navigation zu einem Ziel im ÖPNV: Halte voraus; überschlagendes Anfahren.
-4. Notruf-Leiste (rot, solange ein Notruf läuft) und Knöpfe „Zu Objekten navigieren“, „A-Position zeigen“.
-5. Versionsabgleich App/Server mit Sperrbildschirm „Version passt nicht“ (Regel liegt im Kern, Anzeige fehlt).
-6. Sichtschutz im App-Umschalter.
-7. Lageübersicht (aus der Lageleiste): Einsatzinformationen, Erreichbarkeit der Kräfte mit Anrufen.
-8. Tempo und Tempolimit auch ohne Navigation; Straße und Querstraße unter dem eigenen Punkt.
-
-**Ziele und Kräfte**
-9. Ziele: Suche, Gruppen anlegen/bearbeiten, Auswahlmodus (mehrere zur Gruppe), Insassen anzeigen,
-   Anschrift mit Vorschlägen (setzt Standort), Aufzeichnung je Ziel schalten.
-10. Kräfte: Suche; Fahrzeugflotte bearbeiten (Funkrufname, Kennzeichen, Foto, Tracker).
-11. Profil eines nicht verbundenen Geräts übernehmen (Einrichtung).
+3. Navigation zu einem Ziel im ÖPNV: überschlagendes Anfahren (Halte voraus ist fertig).
 
 **Karte**
-12. Kartenstil Satellit/Hybrid (braucht eine Luftbild-Quelle), 2D/3D-Umschalter.
-13. Zielarten und Gruppen ausblenden (Ebenen-Auswahl).
-14. Mehrfach tippen schaltet übereinanderliegende Formen durch; Punkt auf Linie bzw. Spur.
+14. Punkt auf Linie bzw. Spur antippen (Wert an der Stelle; Durchschalten übereinanderliegender Formen ist fertig).
 15. Fahndungsraum verschieben mit Rückfrage zum Sichtungszeitpunkt.
 16. Sonderbereiche sichtbar machen: „Dauerhafte Orte bearbeiten“, „Paket vorbereiten“ (Leiste mit „Fertig“,
     eingeschränkte Funktionen).

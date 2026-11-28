@@ -10,6 +10,7 @@ export declare class WebLage {
     quellen(jetztMs: number, zoom: number, ausgeblendeteEbenen: Array<string>, ausgeblendeteZielarten: Array<string>, ausgeblendeteGruppen: Array<string>): string;
     oepnvFahrzeuge(jetztMs: number, ausgeblendeteEbenen: Array<string>): string;
     stilAdresse(grundkarte: string, dunkel: boolean, dreiD: boolean): string;
+    tippen(treffer: Array<string>, jetztMs: number): Nullable<string>;
     get quelleOepnvFahrzeuge(): string;
     kurzinfo(schluessel: string, jetztMs: number): Nullable<string>;
     symbolFuerBild(bildname: string): Nullable<string>;

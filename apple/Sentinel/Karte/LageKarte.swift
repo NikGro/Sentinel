@@ -190,6 +190,7 @@ struct LageKarte: UIViewRepresentable {
         private var letzterStand: LageStand?
         private var letzterOrt: Date?
         private let rest = Routenrest()
+        private let tippfolge = Tippfolge(fristMs: 4000)
         var stilAdresse = ""
         private var anzeige = Anzeige(ausgeblendeteEbenen: [], ausgeblendeteZielarten: [], ausgeblendeteGruppen: [])
         private var verkehr = false
@@ -360,8 +361,10 @@ struct LageKarte: UIViewRepresentable {
             guard let erstes = merkmale.first(where: { $0.attribute(forKey: "id") != nil || $0.attribute(forKey: "point_count") != nil }) else { return }
             if erstes.attribute(forKey: "point_count") != nil {
                 karte.setCenter(erstes.coordinate, zoomLevel: karte.zoomLevel + 2, animated: true)
-            } else if let id = erstes.attribute(forKey: "id") as? String, let objekt = KartenObjekt.companion.von(schluessel: id) {
-                beiAuswahl(objekt)
+            } else {
+                // Übereinanderliegende Objekte: jedes weitere Tippen nimmt das nächste.
+                let ids = merkmale.compactMap { $0.attribute(forKey: "id") as? String }
+                if let objekt = tippfolge.waehlen(treffer: ids, jetztMs: Int64(Date.now.timeIntervalSince1970 * 1000)) { beiAuswahl(objekt) }
             }
         }
     }
