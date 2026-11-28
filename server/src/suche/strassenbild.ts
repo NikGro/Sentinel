@@ -63,9 +63,11 @@ export class StrassenbildDienst {
     private readonly panoramaxUrl = 'https://api.panoramax.xyz/api',
   ) {}
 
-  /** Nächstes Bild im Umkreis von `radius` Metern; Panoramax zuerst, dann Mapillary. */
+  /** Nächstes Bild im Umkreis von `radius` Metern aus Panoramax und Mapillary (gleichzeitig abgefragt). */
   async naechstes(p: GeoPoint, radius = 60): Promise<Strassenbild | null> {
-    const kandidaten = [...(await this.panoramax(p, radius)), ...(await this.mapillary(p, radius))];
+    // Beide Quellen gleichzeitig: Die langsamere bremst die andere nicht aus.
+    const [panoramax, mapillary] = await Promise.all([this.panoramax(p, radius), this.mapillary(p, radius)]);
+    const kandidaten = [...panoramax, ...mapillary];
     kandidaten.sort((a, b) => distanceMeters(a.punkt, p) - distanceMeters(b.punkt, p));
     return kandidaten[0] ?? null;
   }

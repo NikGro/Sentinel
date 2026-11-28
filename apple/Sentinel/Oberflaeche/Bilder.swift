@@ -133,3 +133,53 @@ struct AnhaengeAbschnitt: View {
         }
     }
 }
+
+/// Straßenbild am Ort (Panoramax, Mapillary über den eigenen Server): Vorschau, Antippen zeigt es groß mit Quelle und
+/// Urheber. Ohne Bild in der Nähe erscheint nichts (gleich wie Android).
+struct StrassenbildVorschau: View {
+    @Environment(AppModell.self) private var modell
+    let ort: GeoPunkt
+    @State private var info: Strassenbild?
+    @State private var gross = false
+
+    private var schluessel: String { String(format: "%.4f,%.4f", ort.lat, ort.lon) }
+
+    var body: some View {
+        Group {
+            if let b = info, let url = URL(string: b.vorschau) {
+                VStack(alignment: .leading, spacing: 4) {
+                    AsyncImage(url: url) { bild in
+                        bild.resizable().aspectRatio(contentMode: .fill)
+                    } placeholder: {
+                        Rectangle().fill(.fill.tertiary)
+                    }
+                    .frame(height: 140)
+                    .frame(maxWidth: .infinity)
+                    .clipShape(.rect(cornerRadius: 12))
+                    .onTapGesture { gross = true }
+                    Text(Strassenbilder.shared.beschriftung(b: b)).font(.caption).foregroundStyle(.secondary)
+                }
+                .fullScreenCover(isPresented: $gross) {
+                    ZStack(alignment: .bottom) {
+                        Color.black.ignoresSafeArea()
+                        AsyncImage(url: URL(string: b.bild)) { bild in
+                            bild.resizable().aspectRatio(contentMode: .fit)
+                        } placeholder: { ProgressView().tint(.white) }
+                        .frame(maxWidth: .infinity, maxHeight: .infinity)
+                        HStack {
+                            Text(Strassenbilder.shared.beschriftung(b: b)).font(.caption).foregroundStyle(.white)
+                            Spacer()
+                            if let link = URL(string: b.link) { Link("Quelle öffnen", destination: link).font(.caption.weight(.semibold)) }
+                        }
+                        .padding()
+                    }
+                    .onTapGesture { gross = false }
+                }
+            }
+        }
+        .task(id: schluessel) {
+            guard let api = modell.api else { return }
+            info = try? await api.strassenbild(p: ort)
+        }
+    }
+}

@@ -363,6 +363,7 @@ private fun Lagebildschirm(modell: AppModell, stand: LageStand, fokus: KartenObj
             Column(Modifier.fillMaxWidth().padding(horizontal = 20.dp).padding(bottom = 32.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
                 Text(t.titel, style = MaterialTheme.typography.titleLarge)
                 if (t.untertitel.isNotBlank()) Text(t.untertitel, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                StrassenbildVorschau(modell, t.punkt)
                 Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
                     Button(onClick = { ortTreffer = null; steuerung.markieren(null); hinfuehren(Naviziel.Ort(t.punkt, t.titel)) }, modifier = Modifier.weight(1f).height(52.dp)) { Text("Hinführen") }
                     OutlinedButton(onClick = { ortTreffer = null; plusOrt = t.punkt; plus = true }, modifier = Modifier.weight(1f).height(52.dp)) { Text("Hier anlegen") }
@@ -375,7 +376,7 @@ private fun Lagebildschirm(modell: AppModell, stand: LageStand, fokus: KartenObj
         ModalBottomSheet(onDismissRequest = { auswahl = null }, sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = false)) {
             val ort by modell.ort.collectAsStateWithLifecycle()
             val kontext = androidx.compose.ui.platform.LocalContext.current
-            Kurzuebersicht(stand, a, ort?.let { GeoPunkt(it.lat, it.lon) }, live) { k, info ->
+            Kurzuebersicht(modell, stand, a, ort?.let { GeoPunkt(it.lat, it.lon) }, live) { k, info ->
                 auswahl = null
                 when (k) {
                     Kurzaktion.Hinfuehren -> when (a.art) {
@@ -546,7 +547,7 @@ private fun Lageleiste(stand: LageStand) {
 
 /** Kurzübersicht eines angetippten Objekts: Inhalt aus dem Kern (gleich wie auf iOS), Aktionen als Knöpfe. */
 @Composable
-private fun Kurzuebersicht(stand: LageStand, a: KartenObjekt, ich: GeoPunkt?, live: de.nglab.sentinel.kern.oepnv.OepnvLive, aktion: (Kurzaktion, Kurzinfo) -> Unit) {
+private fun Kurzuebersicht(modell: AppModell, stand: LageStand, a: KartenObjekt, ich: GeoPunkt?, live: de.nglab.sentinel.kern.oepnv.OepnvLive, aktion: (Kurzaktion, Kurzinfo) -> Unit) {
     val jetzt = System.currentTimeMillis()
     val info = (live.kurzinfo(a, jetzt) ?: Kurzinfo.fuer(stand, a, jetzt, ich)) ?: run {
         Text("Nicht mehr in der Lage", modifier = Modifier.padding(20.dp))
@@ -571,6 +572,8 @@ private fun Kurzuebersicht(stand: LageStand, a: KartenObjekt, ich: GeoPunkt?, li
                 }
             }
         }
+        // Straßenbild bei festen Orten (Ziele, Markierungen), nicht bei bewegten Kräften und Fahrzeugen
+        if (a.art == Objektart.Ziel || a.art == Objektart.Markierung) info.ort?.let { StrassenbildVorschau(modell, it) }
         if (info.zeilen.isNotEmpty()) {
             Surface(shape = RoundedCornerShape(16.dp), color = MaterialTheme.colorScheme.surfaceContainerHigh) {
                 Column(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 6.dp)) {

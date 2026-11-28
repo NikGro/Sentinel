@@ -249,6 +249,7 @@ struct Lagebildschirm: View {
                 VStack(alignment: .leading, spacing: 12) {
                     Text(o.treffer.titel).font(.title3.weight(.semibold))
                     if !o.treffer.untertitel.isEmpty { Text(o.treffer.untertitel).foregroundStyle(.secondary) }
+                    StrassenbildVorschau(ort: o.treffer.punkt)
                     HStack(spacing: 12) {
                         Button {
                             ortTreffer = nil
@@ -266,7 +267,7 @@ struct Lagebildschirm: View {
                     Spacer()
                 }
                 .padding(20)
-                .presentationDetents([.fraction(0.28)])
+                .presentationDetents([.fraction(0.28), .medium])
                 .presentationBackgroundInteraction(.enabled)
             }
             .sheet(item: $auswahl) { a in
@@ -536,6 +537,8 @@ struct Kurzuebersicht: View {
                         }
                         .controlSize(.large)
                     }
+                    // Straßenbild bei festen Orten (Ziele, Markierungen), nicht bei bewegten Kräften und Fahrzeugen
+                    if ["ziel", "markierung"].contains(objekt.art.schluessel), let p = info.ort { StrassenbildVorschau(ort: p) }
                     if !info.zeilen.isEmpty {
                         VStack(spacing: 0) {
                             ForEach(info.zeilen.indices, id: \.self) { i in

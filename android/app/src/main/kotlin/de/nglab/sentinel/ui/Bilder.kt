@@ -23,6 +23,7 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Description
@@ -75,6 +76,17 @@ object Bildspeicher {
             runCatching {
                 val bytes = api.datei(blobId)
                 BitmapFactory.decodeByteArray(bytes, 0, bytes.size)?.also { speicher.put(blobId, it) }?.asImageBitmap()
+            }.getOrNull()
+        }
+    }
+
+    /** Bild von einer offenen Quelle (Straßenbilder: Panoramax, Mapillary), ohne Anmeldung. */
+    suspend fun ladenUrl(url: String): ImageBitmap? {
+        speicher.get(url)?.let { return it.asImageBitmap() }
+        return withContext(Dispatchers.IO) {
+            runCatching {
+                val verbindung = java.net.URL(url).openConnection().apply { connectTimeout = 8000; readTimeout = 15000 }
+                verbindung.getInputStream().use { BitmapFactory.decodeStream(it) }?.also { speicher.put(url, it) }?.asImageBitmap()
             }.getOrNull()
         }
     }
@@ -173,6 +185,44 @@ fun AnhaengeAbschnitt(modell: AppModell, z: Ziel, aendern: ((Ziel) -> Ziel) -> U
         Dialog(onDismissRequest = { gross = null }, properties = DialogProperties(usePlatformDefaultWidth = false)) {
             Box(Modifier.fillMaxSize().background(Color.Black).clickable { gross = null }) {
                 ServerBild(modell, id, Modifier.fillMaxSize(), rund = 0.dp, inhalt = ContentScale.Fit)
+            }
+        }
+    }
+}
+
+/**
+ * Straßenbild am Ort (Panoramax, Mapillary über den eigenen Server): Vorschau, Antippen zeigt es groß mit Quelle und
+ * Urheber. Ohne Bild in der Nähe erscheint nichts.
+ */
+@Composable
+fun StrassenbildVorschau(modell: AppModell, ort: de.nglab.sentinel.kern.modell.GeoPunkt) {
+    val schluessel = "${"%.4f".format(java.util.Locale.ROOT, ort.lat)},${"%.4f".format(java.util.Locale.ROOT, ort.lon)}"
+    var info by remember(schluessel) { mutableStateOf<de.nglab.sentinel.kern.netz.Strassenbild?>(null) }
+    var vorschau by remember(schluessel) { mutableStateOf<ImageBitmap?>(null) }
+    var gross by remember { mutableStateOf(false) }
+    LaunchedEffect(schluessel) {
+        info = runCatching { modell.api?.strassenbild(ort) }.getOrNull()
+        vorschau = info?.let { Bildspeicher.ladenUrl(it.vorschau) }
+    }
+    val b = info ?: return
+    val v = vorschau ?: return
+    val kontext = LocalContext.current
+    Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+        Image(v, "Straßenbild", Modifier.fillMaxWidth().height(140.dp).clip(RoundedCornerShape(12.dp)).clickable { gross = true }, contentScale = ContentScale.Crop)
+        Text(de.nglab.sentinel.kern.netz.Strassenbilder.beschriftung(b), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+    }
+    if (gross) {
+        var bild by remember { mutableStateOf<ImageBitmap?>(null) }
+        LaunchedEffect(b.bild) { bild = Bildspeicher.ladenUrl(b.bild) }
+        Dialog(onDismissRequest = { gross = false }, properties = DialogProperties(usePlatformDefaultWidth = false)) {
+            Column(Modifier.fillMaxSize().background(Color.Black).clickable { gross = false }, verticalArrangement = Arrangement.Center) {
+                (bild ?: v).let { Image(it, null, Modifier.fillMaxWidth().weight(1f), contentScale = ContentScale.Fit) }
+                Row(Modifier.fillMaxWidth().padding(16.dp), verticalAlignment = Alignment.CenterVertically) {
+                    Text(de.nglab.sentinel.kern.netz.Strassenbilder.beschriftung(b), color = Color.White, style = MaterialTheme.typography.bodySmall, modifier = Modifier.weight(1f))
+                    androidx.compose.material3.TextButton(onClick = {
+                        kontext.startActivity(android.content.Intent(android.content.Intent.ACTION_VIEW, android.net.Uri.parse(b.link)))
+                    }) { Text("Quelle öffnen") }
+                }
             }
         }
     }

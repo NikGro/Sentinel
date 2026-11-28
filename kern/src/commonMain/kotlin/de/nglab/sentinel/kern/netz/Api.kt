@@ -204,3 +204,12 @@ class Api(private val client: HttpClient, val server: String, private val token:
     suspend fun trackerZustand(id: String): JsonElement = element(HttpMethod.Get, "api/v1/trackers/$id/status")
     suspend fun trackerBefehl(id: String, befehl: JsonElement): JsonElement = element(HttpMethod.Post, "api/v1/trackers/$id/befehl") { jsonInhalt(befehl) }
 }
+
+/** Beschriftung eines Straßenbilds: Quelle, Aufnahmedatum, Urheber (Pflichtangabe der offenen Quellen). */
+object Strassenbilder {
+    fun beschriftung(b: Strassenbild): String {
+        val quelle = if (b.quelle == "mapillary") "Mapillary" else "Panoramax"
+        val datum = b.aufgenommen?.take(10)?.split('-')?.takeIf { it.size == 3 }?.let { (j, m, t) -> "$t.$m.$j" }
+        return listOfNotNull(quelle, datum, b.urheber.takeIf { it.isNotBlank() }).joinToString(" · ")
+    }
+}
