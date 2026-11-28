@@ -62,6 +62,7 @@ import de.nglab.sentinel.kern.karte.Formen
 import de.nglab.sentinel.kern.karte.Markierungseditor
 import de.nglab.sentinel.kern.karte.Platzierung
 import de.nglab.sentinel.kern.karte.Symbol
+import de.nglab.sentinel.kern.karte.Zielerfassung
 import de.nglab.sentinel.kern.lage.LageStand
 import de.nglab.sentinel.kern.modell.Ausloeser
 import de.nglab.sentinel.kern.modell.Ebene
@@ -192,14 +193,13 @@ fun MarkierungsEditor(
         }
 
         if (Markierungseditor.zeigtRadius(m)) {
-            val b = Markierungseditor.radiusBereich(m)
-            val r = (m.radius ?: Formen.radius(m.typ) ?: 150.0).coerceIn(b.start, minOf(b.endInclusive, 3000.0))
+            val r = Markierungseditor.radius(m).coerceAtMost(Markierungseditor.reglerMax(m))
             Abschnitt(if (m.typ == Form.Haltestellen) "Umkreis" else "Radius")
             Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
                 Slider(
                     value = r.toFloat(),
                     onValueChange = { m = m.copy(radius = ((it / 10).roundToInt() * 10).toDouble()) },
-                    valueRange = b.start.toFloat()..minOf(b.endInclusive, 3000.0).toFloat(),
+                    valueRange = Markierungseditor.radiusMin(m).toFloat()..Markierungseditor.reglerMax(m).toFloat(),
                     modifier = Modifier.weight(1f),
                 )
                 Text(Format.entfernung(r), modifier = Modifier.width(72.dp))
@@ -259,7 +259,7 @@ fun ZielAnlegen(start: Ziel, abbrechen: () -> Unit, sichern: (Ziel) -> Unit) {
         Row(verticalAlignment = Alignment.CenterVertically) {
             TextButton(onClick = abbrechen) { Text("Abbrechen") }
             Text("Neu: ${Anlegbar.NeuesZiel(z.art).titel}", style = MaterialTheme.typography.titleMedium, modifier = Modifier.weight(1f))
-            Button(onClick = { sichern(z.copy(vorname = z.vorname.trim(), nachname = z.nachname.trim(), kennzeichen = z.kennzeichen.trim().uppercase(), bezeichnung = z.bezeichnung.trim())) }, modifier = Modifier.testTag("Sichern")) { Text("Sichern") }
+            Button(onClick = { sichern(Zielerfassung.fertig(z, z.vorname, z.nachname, z.bezeichnung, z.kennzeichen, z.anschrift, z.hinweise)) }, modifier = Modifier.testTag("Sichern")) { Text("Sichern") }
         }
         when (z.art) {
             Zielart.Person -> {

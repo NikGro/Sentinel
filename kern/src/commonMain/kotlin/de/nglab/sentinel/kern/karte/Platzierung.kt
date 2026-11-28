@@ -1,5 +1,6 @@
 package de.nglab.sentinel.kern.karte
 
+import de.nglab.sentinel.kern.modell.Ausloeser
 import de.nglab.sentinel.kern.modell.Ebene
 import de.nglab.sentinel.kern.modell.Form
 import de.nglab.sentinel.kern.modell.GeoPunkt
@@ -212,7 +213,21 @@ object Markierungseditor {
     fun zeigtLebensdauer(m: Markierung) = m.typ != Form.OepnvFahrzeug
     fun zeigtZiele(m: Markierung) = m.typ == Form.Geofence
 
-    fun radiusBereich(m: Markierung): ClosedFloatingPointRange<Double> = if (m.typ == Form.Haltestellen) 50.0..5000.0 else 5.0..100_000.0
+    fun radiusBereich(m: Markierung): ClosedFloatingPointRange<Double> = radiusMin(m)..radiusMax(m)
+    fun radiusMin(m: Markierung): Double = if (m.typ == Form.Haltestellen) 50.0 else 5.0
+    fun radiusMax(m: Markierung): Double = if (m.typ == Form.Haltestellen) 5000.0 else 100_000.0
+
+    /** Schieberegler-Bereich (bis 3 km; größere Werte nur über das Web). */
+    fun reglerMax(m: Markierung): Double = minOf(radiusMax(m), 3000.0)
+
+    /** Aktueller Radius für die Anzeige (Vorgabe der Form, falls leer). */
+    fun radius(m: Markierung): Double = (m.radius ?: Formen.radius(m.typ) ?: 150.0).coerceIn(radiusMin(m), radiusMax(m))
+
+    /** Geänderter Stand aus den Feldern des Editors (für Plattformen ohne benannte Kopien, etwa Swift). */
+    fun aendern(
+        m: Markierung, titel: String, notiz: String, farbe: String, symbol: String, radius: Double?, layerId: String,
+        ausloeser: Ausloeser?, ziele: List<String>,
+    ): Markierung = m.copy(titel = titel, notiz = notiz, farbe = farbe, symbol = symbol, radius = radius, layerId = layerId, ausloeser = ausloeser, ziele = ziele)
 
     /** Was zum Sichern fehlt; `null` = sicherbar. */
     fun fehlt(m: Markierung): String? = when {
@@ -238,4 +253,16 @@ object Markierungseditor {
         }
         return r
     }
+}
+
+/** Schnellerfassung eines neuen Ziels: Felder übernehmen und bereinigen (gleich auf allen Plattformen). */
+object Zielerfassung {
+    fun fertig(z: Ziel, vorname: String, nachname: String, bezeichnung: String, kennzeichen: String, anschrift: String, hinweise: String): Ziel = z.copy(
+        vorname = vorname.trim().take(80),
+        nachname = nachname.trim().take(80),
+        bezeichnung = bezeichnung.trim().take(120),
+        kennzeichen = kennzeichen.trim().uppercase().take(20),
+        anschrift = anschrift.trim().take(200),
+        hinweise = hinweise.take(4000),
+    )
 }

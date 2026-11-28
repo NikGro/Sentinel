@@ -79,6 +79,9 @@ final class KartenSteuerung {
 struct LageKarte: UIViewRepresentable {
     let modell: AppModell
     let steuerung: KartenSteuerung
+    /// Platzierungsmodus: Tipps setzen Punkte (`beiTipp`), die Vorschau erscheint in `s-entwurf`.
+    var platzierung: Platzierung? = nil
+    var beiTipp: (GeoPunkt) -> Void = { _ in }
     let beiAuswahl: (KartenObjekt) -> Void
     @Environment(\.colorScheme) private var farbschema
 
@@ -108,6 +111,8 @@ struct LageKarte: UIViewRepresentable {
 
     func updateUIView(_ karte: MLNMapView, context: Context) {
         context.coordinator.beiAuswahl = beiAuswahl
+        context.coordinator.beiTipp = beiTipp
+        context.coordinator.entwurf(platzierung)
         context.coordinator.aktualisieren(stand: modell.stand, ort: modell.standort.aktuell)
     }
 
@@ -116,6 +121,9 @@ struct LageKarte: UIViewRepresentable {
         let modell: AppModell
         weak var steuerung: KartenSteuerung?
         var beiAuswahl: (KartenObjekt) -> Void
+        var beiTipp: (GeoPunkt) -> Void = { _ in }
+        private var platzierung: Platzierung?
+        private var letzteVorschau = ""
         weak var karte: MLNMapView?
         private var stil: MLNStyle?
         private let szene = Szene()
@@ -133,6 +141,8 @@ struct LageKarte: UIViewRepresentable {
         func mapView(_ mapView: MLNMapView, didFinishLoading style: MLNStyle) {
             stil = style
             aktualisieren(stand: modell.stand, ort: modell.standort.aktuell, erzwingen: true)
+            letzteVorschau = ""
+            entwurf(platzierung)
             // ÖPNV-Fahrzeuge flüssig (zehnmal je Sekunde), nur diese Quelle.
             takt = Timer.scheduledTimer(withTimeInterval: 0.1, repeats: true) { [weak self] _ in
                 MainActor.assumeIsolated { self?.oepnvTakt() }
@@ -199,6 +209,16 @@ struct LageKarte: UIViewRepresentable {
             }
         }
 
+        /// Entwurf im Platzierungsmodus (gelbe Vorschau); nur bei Änderung neu setzen.
+        func entwurf(_ p: Platzierung?) {
+            platzierung = p
+            guard let stil else { return }
+            let json = p?.vorschau(radius: nil) ?? #"{"type":"FeatureCollection","features":[]}"#
+            guard json != letzteVorschau else { return }
+            letzteVorschau = json
+            setzen(stil, Quellen.shared.ENTWURF, json)
+        }
+
         private func oepnvTakt() {
             guard let stil else { return }
             let jetzt = Int64(Date.now.timeIntervalSince1970 * 1000)
@@ -213,6 +233,12 @@ struct LageKarte: UIViewRepresentable {
         @objc func getippt(_ g: UITapGestureRecognizer) {
             guard let karte else { return }
             let p = g.location(in: karte)
+            // Platzierungsmodus: jeder Tipp setzt einen Punkt, nichts wird ausgewählt.
+            if platzierung != nil {
+                let k = karte.convert(p, toCoordinateFrom: karte)
+                beiTipp(GeoPunkt(lat: k.latitude, lon: k.longitude))
+                return
+            }
             let r: CGFloat = 24
             let merkmale = karte.visibleFeatures(in: CGRect(x: p.x - r, y: p.y - r, width: 2 * r, height: 2 * r), styleLayerIdentifiers: antippbar)
             guard let erstes = merkmale.first(where: { $0.attribute(forKey: "id") != nil || $0.attribute(forKey: "point_count") != nil }) else { return }

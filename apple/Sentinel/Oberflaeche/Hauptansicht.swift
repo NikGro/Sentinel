@@ -29,11 +29,70 @@ struct Lagebildschirm: View {
     @State private var verkehr = false
     @State private var sucht = false
     @State private var ortTreffer: OrtAuswahl?
+    // Anlegen: Plus-Menü (optional an einem Ort), Platzierungsmodus, danach Editor
+    @State private var plus = false
+    @State private var plusOrt: GeoPunkt?
+    @State private var platzierung: Platzierung?
+    @State private var editor: Markierungsbearbeitung?
+    @State private var neuesZiel: NeuesZielAuswahl?
+
+    private var jetztMs: Int64 { Int64(Date.now.timeIntervalSince1970 * 1000) }
+
+    /// Nächstes Blatt erst zeigen, wenn das vorige ganz geschlossen ist (sonst verwirft SwiftUI die Darstellung).
+    private func nachSchliessen(_ aktion: @escaping @MainActor () -> Void) {
+        Task { @MainActor in
+            try? await Task.sleep(for: .milliseconds(450))
+            aktion()
+        }
+    }
+
+    private func ergebnis(_ e: PlatzierungErgebnis?) {
+        switch e {
+        case let e as PlatzierungErgebnisNeueMarkierung:
+            editor = Markierungsbearbeitung(id: Lage.companion.neueId(), markierung: e.markierung, neu: true)
+        case let e as PlatzierungErgebnisNeuesZiel:
+            neuesZiel = NeuesZielAuswahl(ziel: e.ziel)
+        case let e as PlatzierungErgebnisVerschoben:
+            _ = modell.lage.markierungSichern(m: e.markierung, id: e.id)
+        case let e as PlatzierungErgebnisZielVersetzt:
+            _ = modell.lage.setzen(art: .ziel, id: e.id, daten: e.ziel)
+        default:
+            break
+        }
+    }
+
+    private func anlegen(_ was: Anlegbar) {
+        plus = false
+        let ort = plusOrt
+        plusOrt = nil
+        steuerung.markieren(nil)
+        let p = Platzierung.companion.anlegen(was: was, start: ort)
+        // Einzelner Ort schon bekannt (Suchtreffer): direkt weiter, sonst Platzierungsmodus.
+        if ort != nil && !p.mehrpunkt {
+            let e = p.bestaetigen(jetztMs: jetztMs, ebene: Ebene.companion.LAGE, markierung: nil, ziel: nil)
+            nachSchliessen { ergebnis(e) }
+        } else {
+            platzierung = p
+        }
+    }
+
+    private func platzierungFertig(_ p: Platzierung) {
+        platzierung = nil
+        let stand = modell.stand
+        let m = (p.zweck as? PlatzierungZweckVerschieben).flatMap { stand.markierungen[$0.markierungId]?.data }
+        let z = (p.zweck as? PlatzierungZweckZielOrt).flatMap { stand.ziele[$0.zielId]?.data }
+        ergebnis(p.bestaetigen(jetztMs: jetztMs, ebene: Ebene.companion.LAGE, markierung: m, ziel: z))
+    }
 
     var body: some View {
-        LageKarte(modell: modell, steuerung: steuerung) { auswahl = KartenObjektAuswahl(objekt: $0) }
+        LageKarte(modell: modell, steuerung: steuerung, platzierung: platzierung, beiTipp: { punkt in platzierung = platzierung?.tippen(p: punkt) }) {
+            auswahl = KartenObjektAuswahl(objekt: $0)
+        }
             .ignoresSafeArea()
             .safeAreaInset(edge: .top) {
+                if let p = platzierung {
+                    Platzierungsleiste(p: p, zuruecknehmen: { platzierung = p.zuruecknehmen() }, abbrechen: { platzierung = nil }) { platzierungFertig(p) }
+                } else {
                 HStack(spacing: 10) {
                     Image(systemName: "magnifyingglass")
                     Text("Suchen oder navigieren").foregroundStyle(.secondary)
@@ -44,6 +103,7 @@ struct Lagebildschirm: View {
                 .glassEffect(.regular.interactive(), in: .capsule)
                 .padding(.horizontal, 22)
                 .onTapGesture { sucht = true }
+                }
             }
             .overlay(alignment: .topTrailing) {
                 VStack(spacing: 8) {
@@ -65,7 +125,10 @@ struct Lagebildschirm: View {
                                 verkehr.toggle()
                                 steuerung.verkehr(verkehr)
                             }
-                            Kartenknopf(symbol: "plus", titel: "Hinzufügen", hervorgehoben: true) {}
+                            Kartenknopf(symbol: "plus", titel: "Hinzufügen", hervorgehoben: true) {
+                                plusOrt = nil
+                                plus = true
+                            }
                         }
                     }
                 }
@@ -96,14 +159,18 @@ struct Lagebildschirm: View {
                     }
                 }
             }
-            .sheet(item: $ortTreffer, onDismiss: { steuerung.markieren(nil) }) { o in
+            .sheet(item: $ortTreffer, onDismiss: { if plusOrt == nil { steuerung.markieren(nil) } }) { o in
                 VStack(alignment: .leading, spacing: 12) {
                     Text(o.treffer.titel).font(.title3.weight(.semibold))
                     if !o.treffer.untertitel.isEmpty { Text(o.treffer.untertitel).foregroundStyle(.secondary) }
                     HStack(spacing: 12) {
                         Button {} label: { Label("Hinführen", systemImage: "arrow.triangle.turn.up.right.diamond.fill").frame(maxWidth: .infinity) }
                             .buttonStyle(.glassProminent)
-                        Button {} label: { Label("Hier anlegen", systemImage: "plus").frame(maxWidth: .infinity) }
+                        Button {
+                            plusOrt = o.treffer.punkt
+                            ortTreffer = nil
+                            nachSchliessen { plus = true }
+                        } label: { Label("Hier anlegen", systemImage: "plus").frame(maxWidth: .infinity) }
                             .buttonStyle(.glass)
                     }
                     .controlSize(.large)
@@ -114,9 +181,26 @@ struct Lagebildschirm: View {
                 .presentationBackgroundInteraction(.enabled)
             }
             .sheet(item: $auswahl) { a in
-                Kurzuebersicht(objekt: a.objekt)
-                    .presentationDetents([.fraction(0.3), .medium, .large])
-                    .presentationBackgroundInteraction(.enabled(upThrough: .medium))
+                Kurzuebersicht(objekt: a.objekt) {
+                    if let v = modell.stand.markierungen[a.objekt.id] {
+                        auswahl = nil
+                        nachSchliessen { editor = Markierungsbearbeitung(id: a.objekt.id, markierung: v.data, neu: false) }
+                    }
+                }
+                .presentationDetents([.fraction(0.3), .medium, .large])
+                .presentationBackgroundInteraction(.enabled(upThrough: .medium))
+            }
+            .sheet(isPresented: $plus, onDismiss: { if platzierung == nil && editor == nil && neuesZiel == nil { plusOrt = nil; steuerung.markieren(nil) } }) {
+                PlusMenue { anlegen($0) }
+                    .presentationDetents([.medium, .large])
+            }
+            .sheet(item: $editor) { b in
+                MarkierungsEditor(bearbeitung: b) { id in
+                    platzierung = Platzierung(zweck: PlatzierungZweckVerschieben(markierungId: id), punkte: [])
+                }
+            }
+            .sheet(item: $neuesZiel) { n in
+                ZielAnlegen(ziel: n.ziel)
             }
     }
 }
@@ -208,6 +292,7 @@ private struct Lageleiste: View {
 struct Kurzuebersicht: View {
     @Environment(AppModell.self) private var modell
     let objekt: KartenObjekt
+    var bearbeiten: () -> Void = {}
 
     var body: some View {
         let stand = modell.stand
@@ -236,10 +321,18 @@ struct Kurzuebersicht: View {
                 }
                 Spacer()
             }
-            Button {} label: {
-                Label("Hinführen", systemImage: "arrow.triangle.turn.up.right.diamond.fill").font(.headline).frame(maxWidth: .infinity)
+            HStack(spacing: 12) {
+                Button {} label: {
+                    Label("Hinführen", systemImage: "arrow.triangle.turn.up.right.diamond.fill").font(.headline).frame(maxWidth: .infinity)
+                }
+                .buttonStyle(.glassProminent)
+                if objekt.art == .markierung {
+                    Button(action: bearbeiten) {
+                        Label("Bearbeiten", systemImage: "pencil").font(.headline).frame(maxWidth: .infinity)
+                    }
+                    .buttonStyle(.glass)
+                }
             }
-            .buttonStyle(.glassProminent)
             .controlSize(.large)
             Spacer()
         }
