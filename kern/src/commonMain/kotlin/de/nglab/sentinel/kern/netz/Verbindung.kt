@@ -12,7 +12,6 @@ import io.ktor.websocket.close
 import io.ktor.websocket.readText
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Job
-import kotlinx.coroutines.channels.trySendBlocking
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -95,7 +94,7 @@ class Verbindung(
     /** Sendet, wenn verbunden; `false`, wenn die Nachricht nicht abgeschickt werden konnte. */
     fun senden(text: String): Boolean {
         val s = sitzung ?: return false
-        return s.outgoing.trySendBlocking(Frame.Text(text)).isSuccess
+        return s.outgoing.trySend(Frame.Text(text)).isSuccess
     }
 
     companion object {

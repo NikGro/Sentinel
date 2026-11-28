@@ -26,7 +26,7 @@ enum class Symbol(val schluessel: String, val sf: String, val material: String) 
     Mensch("mensch", "person.fill", "person"),
     Warnung("warnung", "exclamationmark.triangle.fill", "warning"),
     Kamera("kamera", "camera.fill", "photo_camera"),
-    Tuer("tuer", "door.left.hand.open", "door_open"),
+    Tuer("tuer", "door.left.hand.open", "door_front"),
     Parken("parken", "p.circle.fill", "local_parking"),
     Bahn("bahn", "tram.fill", "tram"),
     Kreuz("kreuz", "cross.fill", "add"),

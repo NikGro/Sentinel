@@ -1,3 +1,4 @@
+import { kernEmpfangen } from './map/kern';
 import { computed, signal } from '@preact/signals';
 import type { AdminStatus, Entity, Kind, KindMap, MapObject, Member, Operation, Position, ReachArea, ReachMode, Shape, Vehicle } from './types';
 
@@ -157,7 +158,11 @@ export function connect(): void {
   if (socket) return;
   const ws = new WebSocket(`${location.origin.replace(/^http/, 'ws')}/api/v1/ws`);
   socket = ws;
-  ws.onmessage = (event) => receive(JSON.parse(event.data as string));
+  ws.onmessage = (event) => {
+    // Gleiche Nachricht an den gemeinsamen Kern (Kartenlage wie in den Apps) und an die Tabellen der Kommandozentrale.
+    kernEmpfangen(event.data as string);
+    receive(JSON.parse(event.data as string));
+  };
   ws.onclose = (event) => {
     socket = null;
     connected.value = false;

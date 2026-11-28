@@ -1,6 +1,7 @@
 import { Map as MlMap, Marker, NavigationControl, ScaleControl, setWorkerUrl, type GeoJSONSource } from 'maplibre-gl';
 import 'maplibre-gl/dist/maplibre-gl.css';
 import type { GeoPoint } from '../types';
+import { kartenbild } from './kartenbilder';
 import { SHAPE_GROUPS, START_CENTER, type ColorScheme, type MapBackend, type Pin, type Shape, type ShapeGroup } from './backend';
 
 // Der Worker der Kartenbibliothek wird als eigene Datei von der eigenen Adresse geladen (siehe Skript "worker" in package.json).
@@ -62,6 +63,7 @@ export function createMapLibreBackend(container: HTMLElement, scheme: ColorSchem
     verkehrAnwenden();
   };
   const letzteFormen = new Map<ShapeGroup, unknown>();
+  let letzteLage: Record<string, string> = {};
 
   const backend: MapBackend = {
     provider: 'karte',
@@ -107,6 +109,20 @@ export function createMapLibreBackend(container: HTMLElement, scheme: ColorSchem
       map.getCanvas().style.cursor = active ? 'crosshair' : '';
     },
     setColorScheme: applyScheme,
+    setLage(quellen: Record<string, string>) {
+      letzteLage = quellen;
+      for (const [id, json] of Object.entries(quellen)) (map.getSource(id) as GeoJSONSource | undefined)?.setData(JSON.parse(json));
+    },
+    setQuelle(id: string, json: string) {
+      letzteLage = { ...letzteLage, [id]: json };
+      (map.getSource(id) as GeoJSONSource | undefined)?.setData(JSON.parse(json));
+    },
+    onObjectClick(handler) {
+      objektKlick = handler;
+    },
+    zoom() {
+      return map.getZoom();
+    },
     setTraffic(an: boolean) {
       verkehr = an;
       verkehrAnwenden();
@@ -126,10 +142,33 @@ export function createMapLibreBackend(container: HTMLElement, scheme: ColorSchem
   map.on('style.load', () => {
     eigeneEbenen();
     for (const [group, daten] of letzteFormen) (map.getSource(group) as GeoJSONSource | undefined)?.setData(daten as never);
+    for (const [id, json] of Object.entries(letzteLage)) (map.getSource(id) as GeoJSONSource | undefined)?.setData(JSON.parse(json));
   });
-  // Bilder des gemeinsamen Stils (Symbole der Lage) erzeugen die Apps selbst; im Web bleiben diese Ebenen leer.
+  // Bilder des gemeinsamen Stils (Symbole der Lage) wie in den Apps im Browser zeichnen.
   map.on('styleimagemissing', (e) => {
-    if (!map.hasImage(e.id)) map.addImage(e.id, { width: 1, height: 1, data: new Uint8Array(4) });
+    if (map.hasImage(e.id)) return;
+    const b = kartenbild(e.id);
+    if (!b) return map.addImage(e.id, { width: 1, height: 1, data: new Uint8Array(4) });
+    map.addImage(e.id, { width: b.width, height: b.height, data: b.data }, {
+      pixelRatio: b.pixelRatio,
+      ...(b.stretchX ? { stretchX: b.stretchX, stretchY: b.stretchY, content: b.content } : {}),
+    });
+  });
+
+  // Antippen von Lage-Objekten (gleiche Ebenen wie in den Apps): Schlüssel „art:kennung“ an die Kommandozentrale.
+  const ANTIPPBAR = ['lage-cluster', 'lage-symbole', 'lage-symbole-zeichen', 'lage-oepnv-fahrzeuge', 'lage-halte', 'lage-linien', 'lage-oepnv-kante', 'lage-flaechen'];
+  let objektKlick: ((schluessel: string) => void) | null = null;
+  map.on('click', (event) => {
+    const vorhanden = ANTIPPBAR.filter((id) => map.getLayer(id));
+    const r = 12;
+    const treffer = map.queryRenderedFeatures([[event.point.x - r, event.point.y - r], [event.point.x + r, event.point.y + r]], { layers: vorhanden });
+    const erster = treffer.find((f) => f.properties?.id || f.properties?.point_count);
+    if (!erster) return;
+    if (erster.properties?.point_count) {
+      map.easeTo({ center: event.lngLat, zoom: map.getZoom() + 2 });
+      return;
+    }
+    objektKlick?.(String(erster.properties!.id));
   });
 
   return new Promise((resolve) => {

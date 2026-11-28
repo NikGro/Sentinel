@@ -15,6 +15,16 @@ kotlin {
         compilerOptions { jvmTarget.set(JvmTarget.JVM_17) }
     }
 
+    // Web: als JavaScript-Bibliothek für Sentinel Web (gleiche Karten-Szene und Kurzübersichten wie die Apps).
+    js(IR) {
+        outputModuleName.set("sentinel-kern")
+        // Tests laufen auf der JVM; ohne Karma-Testläufer (wird sonst von GitHub nachgeladen).
+        browser { testTask { enabled = false } }
+        binaries.library()
+        generateTypeScriptDefinitions()
+        compilerOptions { target.set("es2015") }
+    }
+
     // iOS: als XCFramework „SentinelKern“ (nur auf macOS gebaut).
     val xcf = XCFramework("SentinelKern")
     listOf(iosArm64(), iosSimulatorArm64()).forEach { target ->
@@ -42,6 +52,9 @@ kotlin {
         }
         iosMain.dependencies {
             implementation("io.ktor:ktor-client-darwin:3.3.2")
+        }
+        jsMain.dependencies {
+            implementation("io.ktor:ktor-client-js:3.3.2")
         }
     }
 }

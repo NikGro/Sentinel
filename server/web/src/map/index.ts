@@ -4,12 +4,8 @@ import {
   focusRequest,
   hiddenLayers,
   newId,
-  online,
   isLocked,
   loadStopsNearby,
-  memberLabel,
-  operation,
-  positions,
   put,
   reach,
   reachModes,
@@ -21,14 +17,11 @@ import {
   tables,
   targetLayer,
   tool,
-  trackerPoint,
-  vehicleOf,
-  membersHere,
-  targetVisible,
 } from '../store';
-import { ZIEL_TITEL, type GeoPoint, type MapObject } from '../types';
+import type { GeoPoint, MapObject } from '../types';
 import type { ColorScheme, MapBackend, Pin, Shape } from './backend';
 import { createMapLibreBackend } from './maplibre';
+import { kernStand, lagekern } from './kern';
 
 /**
  * Lagekarte der Kommandozentrale: übersetzt den Zustand aus dem Store in Formen und Marker
@@ -45,17 +38,6 @@ export const mapProvider = signal<'karte' | null>(null);
 
 /** Verkehrslage auf der Karte (TomTom). */
 export const trafficVisible = signal(false);
-
-function circlePoints(center: GeoPoint, radiusMeters: number, segments = 64): GeoPoint[] {
-  const latRad = (center.lat * Math.PI) / 180;
-  return Array.from({ length: segments }, (_, i) => {
-    const angle = (i / segments) * 2 * Math.PI;
-    return {
-      lat: center.lat + (radiusMeters * Math.cos(angle)) / 111_320,
-      lon: center.lon + (radiusMeters * Math.sin(angle)) / (111_320 * Math.cos(latRad)),
-    };
-  });
-}
 
 export function anchorOf(object: MapObject): GeoPoint {
   if ((object.typ !== 'linie' && object.typ !== 'flaeche') || object.punkte.length === 0) return object.punkte[0] ?? { lat: 0, lon: 0 };
@@ -113,46 +95,28 @@ function bind(map: MapBackend, disposers: (() => void)[]): void {
   const visibleObjects = () =>
     Object.values(tables.annotation.value).filter((o) => !hiddenLayers.value.has(o.data.layerId) && tables.layer.value[o.data.layerId]?.data.status === 'live');
 
-  // Markierungen: Flächen, Kreise, Linien und ihre antippbaren Griffe
+  // Lage aus dem gemeinsamen Kern: Markierungen, Kräfte, Fahrzeuge, Ziele, Halte – gleiche Darstellung wie die Apps.
   disposers.push(
     effect(() => {
-      const objects = visibleObjects();
-      const shapes: Shape[] = [];
-      for (const { data } of objects) {
-        if (data.typ === 'flaeche' && data.punkte.length >= 3) {
-          shapes.push({ kind: 'polygon', points: data.punkte, color: data.farbe, fillOpacity: data.wert === null ? 0.18 : 0.32, lineWidth: data.wert === null ? 2 : 1 });
-        } else if (data.typ === 'kreis' && data.punkte[0]) {
-          shapes.push({ kind: 'polygon', points: circlePoints(data.punkte[0], data.radius ?? 100), color: data.farbe, fillOpacity: 0.15, lineWidth: 2 });
-        } else if (data.typ === 'haltestellen' && data.punkte[0]) {
-          shapes.push({ kind: 'polygon', points: circlePoints(data.punkte[0], data.radius ?? 500), color: '#0A84FF', fillOpacity: 0.06, lineWidth: 1.5 });
-        } else if ((data.typ === 'linie' || data.typ === 'oepnvlinie' || data.typ === 'pfeil') && data.punkte.length >= 2) {
-          shapes.push({ kind: 'line', points: data.punkte, color: data.farbe, lineWidth: 4 });
-        }
-      }
-      map.setShapes('objects', shapes);
-
-      map.setPins(
-        'handles',
-        objects
-          .filter((o) => o.data.wert === null && o.data.punkte.length > 0)
-          .map((o): Pin => {
-            const draft = tables.layer.value[o.data.layerId]?.data.status === 'entwurf';
-            const selected = selectedObject.value === o.id;
-            const isRoom = o.data.typ === 'fahndungsraum';
-            const dot = o.data.typ === 'marker' || isRoom ? `<span class="dot${isRoom ? ' raum' : ''}" style="background:${o.data.farbe}"></span>` : o.data.titel ? '' : `<span class="dot klein" style="background:${o.data.farbe}"></span>`;
-            const since = isRoom && o.data.zeit ? `seit ${new Date(o.data.zeit).toLocaleTimeString('de-DE', { hour: '2-digit', minute: '2-digit' })}` : '';
-            const title = [o.data.titel || (isRoom ? 'Fahndungsraum' : ''), since].filter(Boolean).join(', ');
-            const label = title ? `<span class="label" style="border-color:${o.data.farbe}">${escapeHtml(title)}</span>` : '';
-            return {
-              id: o.id,
-              point: trackerPoint(o.data.trackerId) ?? anchorOf(o.data),
-              signature: `${o.rev}:${draft}:${selected}:${trackerPoint(o.data.trackerId)?.ts ?? 0}`,
-              build: () => pinElement(`pin pin-object ${o.data.typ} ${draft ? 'entwurf' : ''} ${selected ? 'gewaehlt' : ''}`, dot + label, () => (selectedObject.value = o.id)),
-            };
-          }),
-      );
+      void kernStand.value;
+      map.setLage(JSON.parse(lagekern.quellen(Date.now(), map.zoom(), [...hiddenLayers.value])) as Record<string, string>);
     }),
   );
+  // ÖPNV-Fahrzeuge flüssig (viermal je Sekunde), nur diese Quelle.
+  const takt = window.setInterval(() => map.setQuelle(lagekern.quelleOepnvFahrzeuge, lagekern.oepnvFahrzeuge(Date.now(), [...hiddenLayers.value])), 250);
+  disposers.push(() => window.clearInterval(takt));
+  // Antippen: Markierung öffnet den Editor, alles andere wird gezeigt.
+  map.onObjectClick((schluessel) => {
+    if (tool.value.kind !== 'auswahl') return;
+    const [art, id] = [schluessel.slice(0, schluessel.indexOf(':')), schluessel.slice(schluessel.indexOf(':') + 1)];
+    if (art === 'markierung' || art === 'spur') {
+      selectedObject.value = id;
+      return;
+    }
+    const info = lagekern.kurzinfo(schluessel, Date.now());
+    const ort = info ? (JSON.parse(info) as { ort: [number, number] | null }).ort : null;
+    if (ort) focusRequest.value = { lat: ort[0], lon: ort[1], at: Date.now() };
+  });
 
   // Haltestellen in Umkreis-Markierungen
   disposers.push(
@@ -182,89 +146,6 @@ function bind(map: MapBackend, disposers: (() => void)[]): void {
         }
       }
       map.setPins('stops', pins);
-    }),
-  );
-
-  // Kräfte: zu Fuß einzeln mit Spitznamen, im Fahrzeug gemeinsam unter dem Funkrufnamen des Fahrzeugs.
-  disposers.push(
-    effect(() => {
-      const a = operation.value.a?.memberId;
-      const pins: Pin[] = [];
-      const crews = new Map<string, { names: string[]; point: GeoPoint; online: boolean; isA: boolean; ts: number }>();
-      for (const m of membersHere.value) {
-        const position = positions.value[m.id];
-        if (!position || !m.data.aktiv) continue;
-        const isOnline = online.value.has(m.id);
-        const isA = a === m.id;
-        const vehicle = vehicleOf(m.data);
-        if (vehicle) {
-          const crew = crews.get(vehicle.id);
-          if (!crew || position.ts > crew.ts) crews.set(vehicle.id, { names: [...(crew?.names ?? []), m.data.spitzname], point: position, online: isOnline || !!crew?.online, isA: isA || !!crew?.isA, ts: position.ts });
-          else crew.names.push(m.data.spitzname), (crew.isA ||= isA), (crew.online ||= isOnline);
-          continue;
-        }
-        pins.push({
-          id: m.id,
-          point: position,
-          signature: `${m.rev}:${isOnline}:${isA}`,
-          build: () =>
-            pinElement(`pin pin-member ${isOnline ? 'online' : 'offline'} ${isA ? 'a' : ''} ${m.data.fortbewegung}`, `<span class="dot">${isA ? 'A' : ''}</span><span class="label">${escapeHtml(memberLabel(m.data))}</span>`, () => {
-              focusRequest.value = { ...positions.value[m.id]!, at: Date.now() };
-            }),
-        });
-      }
-      for (const [vehicleId, crew] of crews) {
-        const vehicle = tables.vehicle.value[vehicleId]!;
-        // Sitzt jemand im Fahrzeug, ist sein Telefon die Quelle; der Tracker nur, wenn er deutlich frischer ist.
-        const tracked = trackerPoint(vehicle.data.trackerId);
-        const point = tracked && tracked.ts > crew.ts + 120_000 ? tracked : crew.point;
-        const label = vehicle.data.funkrufname;
-        pins.push({
-          id: `fz-${vehicleId}`,
-          point,
-          signature: `${vehicle.rev}:${label}:${crew.online}:${crew.isA}`,
-          build: () => pinElement(`pin pin-vehicle besetzt ${crew.isA ? 'a' : ''}`, `<span class="dot">${crew.isA ? 'A' : ''}</span><span class="label">${escapeHtml(label)}</span>`),
-        });
-      }
-      map.setPins('members', pins);
-    }),
-  );
-
-  // Unbesetzte Fahrzeuge (abgestellt oder mit Tracker) und Ziele mit Standort oder Tracker
-  disposers.push(
-    effect(() => {
-      const occupied = new Set(Object.values(tables.member.value).filter((m) => m.data.aktiv && vehicleOf(m.data)).map((m) => m.data.fahrzeugId));
-      map.setPins(
-        'vehicles',
-        Object.values(tables.vehicle.value).flatMap((v): Pin[] => {
-          if (!v.data.aktiv || occupied.has(v.id)) return [];
-          const point = trackerPoint(v.data.trackerId) ?? v.data.abgestellt ?? undefined;
-          if (!point) return [];
-          return [{ id: v.id, point, signature: `${v.rev}`, build: () => pinElement('pin pin-vehicle', `<span class="dot"></span><span class="label">${escapeHtml(v.data.funkrufname)}</span>`) }];
-        }),
-      );
-      map.setPins(
-        'targets',
-        Object.values(tables.target.value).flatMap((t): Pin[] => {
-          if (!targetVisible(t.id)) return [];
-          const point = trackerPoint(t.data.trackerId) ?? t.data.standort ?? undefined;
-          if (!point) return [];
-          const name =
-            t.data.art === 'person'
-              ? [t.data.vorname, t.data.nachname].filter(Boolean).join(' ')
-              : t.data.art === 'fahrzeug'
-                ? t.data.kennzeichen || t.data.bezeichnung
-                : t.data.bezeichnung || t.data.anschrift;
-          return [
-            {
-              id: t.id,
-              point,
-              signature: `${t.rev}`,
-              build: () => pinElement(`pin pin-target ziel-${t.data.art}`, `<span class="dot"></span><span class="label">${escapeHtml(name || ZIEL_TITEL[t.data.art])}</span>`),
-            },
-          ];
-        }),
-      );
     }),
   );
 

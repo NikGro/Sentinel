@@ -34,6 +34,12 @@ export interface MapBackend {
   flyTo(point: GeoPoint): void;
   setCrosshair(active: boolean): void;
   setColorScheme(scheme: ColorScheme): void;
+  /** Lage-Quellen des gemeinsamen Stils (GeoJSON je Quelle, aus dem Kern). */
+  setLage(quellen: Record<string, string>): void;
+  setQuelle(id: string, json: string): void;
+  /** Antippen eines Lage-Objekts (Schlüssel „art:kennung“). */
+  onObjectClick(handler: (schluessel: string) => void): void;
+  zoom(): number;
   /** Verkehrslage und Sperrungen (TomTom) ein- oder ausblenden. */
   setTraffic(on: boolean): void;
   onClick(handler: (point: GeoPoint) => void): void;
