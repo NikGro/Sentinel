@@ -96,6 +96,8 @@ final class AppModell {
         zugang = z
         phase = .verbinde
         starten(z)
+        // Standort erst nach der Anmeldung erfragen und nutzen.
+        standort.starten()
     }
 
     /// Entfernt Anmeldung und alle Einsatzdaten von diesem Gerät; beim Server wird das Gerät gesperrt.

@@ -20,17 +20,19 @@ class MainActivity : ComponentActivity() {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
         val modell = (application as SentinelApp).modell
-        // Standort (und auf neueren Android-Versionen Mitteilungen) beim ersten Start erfragen.
+        // Standort (und auf neueren Android-Versionen Mitteilungen) erst nach der Anmeldung erfragen, wie auf iOS.
         val anfrage = registerForActivityResult(ActivityResultContracts.RequestMultiplePermissions()) { modell.vordergrund(true) }
         val rechte = buildList {
             add(Manifest.permission.ACCESS_FINE_LOCATION)
             add(Manifest.permission.ACCESS_COARSE_LOCATION)
             if (Build.VERSION.SDK_INT >= 33) add(Manifest.permission.POST_NOTIFICATIONS)
         }
-        if (!modell.standort.erlaubt) anfrage.launch(rechte.toTypedArray())
         setContent {
             SentinelThema {
                 val phase by modell.phase.collectAsStateWithLifecycle()
+                androidx.compose.runtime.LaunchedEffect(phase == Phase.Einrichtung) {
+                    if (phase != Phase.Einrichtung && !modell.standort.erlaubt) anfrage.launch(rechte.toTypedArray())
+                }
                 when (phase) {
                     Phase.Einrichtung -> Einrichtung(modell)
                     Phase.Verbinde -> Verbinde(modell)
