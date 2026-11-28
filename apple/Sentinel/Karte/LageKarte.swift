@@ -261,7 +261,7 @@ struct LageKarte: UIViewRepresentable {
         private var gewuenschteSpuren = #"{"type":"FeatureCollection","features":[]}"#
         private var letzteSpuren: String?
         func spurenSetzen(_ json: String?) {
-            gewuenschteSpuren = json ?: #"{"type":"FeatureCollection","features":[]}"#
+            gewuenschteSpuren = json ?? #"{"type":"FeatureCollection","features":[]}"#
             guard let stil, gewuenschteSpuren != letzteSpuren else { return }
             letzteSpuren = gewuenschteSpuren
             setzen(stil, Quellen.shared.SPUREN, gewuenschteSpuren)
