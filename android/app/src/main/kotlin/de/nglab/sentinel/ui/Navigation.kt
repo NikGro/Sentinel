@@ -1,6 +1,7 @@
 package de.nglab.sentinel.ui
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -40,6 +41,8 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import de.nglab.sentinel.kern.format.Format
 import de.nglab.sentinel.kern.navi.Manoever
+import de.nglab.sentinel.kern.navi.Naviziel
+import de.nglab.sentinel.kern.karte.Objektart
 import de.nglab.sentinel.navi.Navistand
 
 /** Bild eines Manövers (Material Symbols). */
@@ -107,7 +110,7 @@ fun NaviLeisteOben(n: Navistand) {
 
 /** Navi-Leiste unten: Ankunft, Restzeit, Entfernung, Sonderrechte, Beenden. */
 @Composable
-fun NaviLeisteUnten(n: Navistand, sonderrechte: Boolean, sonderrechteUmschalten: () -> Unit, beenden: () -> Unit) {
+fun NaviLeisteUnten(n: Navistand, sonderrechte: Boolean, sonderrechteUmschalten: () -> Unit, modusWaehlen: (Naviziel) -> Unit, beenden: () -> Unit) {
     val f = n.fortschritt
     val jetzt = System.currentTimeMillis()
     Surface(shape = RoundedCornerShape(24.dp), tonalElevation = 3.dp, shadowElevation = 4.dp, modifier = Modifier.fillMaxWidth()) {
@@ -129,7 +132,26 @@ fun NaviLeisteUnten(n: Navistand, sonderrechte: Boolean, sonderrechteUmschalten:
                     modifier = Modifier.height(48.dp).testTag("Navigation beenden"),
                 ) { Text("Beenden") }
             }
-            FilterChip(selected = sonderrechte, onClick = sonderrechteUmschalten, label = { Text("Sonderrechte") })
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
+                FilterChip(selected = sonderrechte, onClick = sonderrechteUmschalten, label = { Text("Sonderrechte") })
+                // Bei bewegten Zielen: direkt, Vorlauf (Kreuzung davor) oder parallel (Nebenstrecke)
+                val basis = n.ziel.basis
+                if (basis is Naviziel.APosition || (basis is Naviziel.Objekt && basis.objekt.art in listOf(Objektart.Kraft, Objektart.Fahrzeug, Objektart.Ziel))) {
+                    FilterChip(selected = n.ziel is Naviziel.Vorlauf, onClick = { modusWaehlen(if (n.ziel is Naviziel.Vorlauf) basis else Naviziel.Vorlauf(basis)) }, label = { Text("Vorlauf") })
+                    FilterChip(selected = n.ziel is Naviziel.Parallel, onClick = { modusWaehlen(if (n.ziel is Naviziel.Parallel) basis else Naviziel.Parallel(basis)) }, label = { Text("Parallel") })
+                }
+                n.tempolimit?.let { Tempolimit(it) }
+            }
         }
     }
+}
+
+/** Tempolimit-Schild (rot umrandet, wie im Straßenverkehr). */
+@Composable
+fun Tempolimit(kmh: Int) {
+    Box(
+        Modifier.size(40.dp).background(Color.White, androidx.compose.foundation.shape.CircleShape)
+            .border(4.dp, Color(0xFFE2001A), androidx.compose.foundation.shape.CircleShape),
+        contentAlignment = Alignment.Center,
+    ) { Text("$kmh", color = Color.Black, fontWeight = FontWeight.Bold, fontSize = 14.sp) }
 }

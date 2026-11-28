@@ -69,6 +69,7 @@ final class AppModell {
 
     private func starten(_ z: Zugang) {
         navigator.verbinden(server: z.server, token: z.token)
+        navigator.api = { [weak self] in self?.api }
         lage.verbinden(ichId: z.geraetId, sender: sender)
         verbindung.starten(zugang: z)
     }

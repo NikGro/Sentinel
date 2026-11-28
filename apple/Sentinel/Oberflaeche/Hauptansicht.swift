@@ -218,7 +218,7 @@ struct Lagebildschirm: View {
                         NaviLeisteUnten(n: n, sonderrechte: Binding(get: { sonderrechte }, set: { neu in
                             sonderrechte = neu
                             hinfuehren(n.ziel)
-                        }), beenden: naviBeenden)
+                        }), modusWaehlen: { hinfuehren($0) }, beenden: naviBeenden)
                     } else {
                         VStack(spacing: 8) {
                             HStack(spacing: 8) {

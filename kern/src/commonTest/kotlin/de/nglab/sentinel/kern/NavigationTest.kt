@@ -70,3 +70,25 @@ class RoutenrestTest {
         assertEquals(GeoPunkt(53.0, 10.004), r.rest(route, GeoPunkt(53.0, 10.0))[1])
     }
 }
+
+class VorlaufTest {
+    @Test
+    fun naechsteKreuzungVorausInFahrtrichtung() {
+        val von = GeoPunkt(53.0, 10.0)
+        val kreuzungen = listOf(
+            "Hinten" to listOf(GeoPunkt(52.998, 10.0)),
+            "Vorn" to listOf(GeoPunkt(53.003, 10.0)),
+            "Weit" to listOf(GeoPunkt(53.02, 10.0)),
+        )
+        val k = de.nglab.sentinel.kern.navi.Vorlaufplaner.naechste(kreuzungen, "Hauptstraße", von, 0.0)
+        assertEquals("Vorn", k?.second)
+        assertEquals(0.0, de.nglab.sentinel.kern.navi.Vorlaufplaner.kurs(listOf(GeoPunkt(53.0, 10.0), GeoPunkt(53.001, 10.0)))!!, 0.5)
+    }
+
+    @Test
+    fun parallelGehtInDieAnfrage() {
+        val body = """{"costing":"auto","locations":[{"lat":1,"lon":2},{"lat":3,"lon":4}]}"""
+        val neu = Routenanfrage.anpassen(body, Anfrageoptionen(false, false, parallel = de.nglab.sentinel.kern.navi.Parallelhinweis(GeoPunkt(1.0, 2.0), 90.0, 400.0)))
+        assertTrue(neu.contains(""""parallel":{"lat":1.0,"lon":2.0,"kurs":90.0,"meter":400.0}"""))
+    }
+}

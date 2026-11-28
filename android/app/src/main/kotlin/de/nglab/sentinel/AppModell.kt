@@ -64,7 +64,7 @@ class AppModell(private val kontext: Context) {
     /** Spuren der Spur-Markierungen (Verlauf, Standortspur), laufend nachgeladen. */
     val spuren = de.nglab.sentinel.kern.spur.Spurenlader()
 
-    val navigator = de.nglab.sentinel.navi.Navigator({ _zugang.value?.server }, { _zugang.value?.token }, standort.roh)
+    val navigator = de.nglab.sentinel.navi.Navigator({ _zugang.value?.server }, { _zugang.value?.token }, standort.roh).also { it.api = { api } }
 
     init {
         standort.beiPosition = { p -> if (lage.stand.value.imDienst) lage.positionSenden(p) }

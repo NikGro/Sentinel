@@ -57,6 +57,7 @@ struct NaviLeisteOben: View {
 struct NaviLeisteUnten: View {
     let n: Navistand
     @Binding var sonderrechte: Bool
+    var modusWaehlen: (Naviziel) -> Void = { _ in }
     let beenden: () -> Void
 
     var body: some View {
@@ -79,12 +80,38 @@ struct NaviLeisteUnten: View {
                     .controlSize(.large)
                     .accessibilityIdentifier("Navigation beenden")
             }
-            Toggle("Sonderrechte", isOn: $sonderrechte)
-                .toggleStyle(.button)
-                .buttonStyle(.glass)
-                .tint(sonderrechte ? .red : .primary)
+            HStack(spacing: 8) {
+                Toggle("Sonderrechte", isOn: $sonderrechte)
+                    .toggleStyle(.button)
+                    .buttonStyle(.glass)
+                    .tint(sonderrechte ? .red : .primary)
+                // Bei bewegten Zielen: direkt, Vorlauf (Kreuzung davor) oder parallel (Nebenstrecke)
+                let basis = n.ziel.basis
+                if basis is NavizielAPosition || ((basis as? NavizielObjekt).map { ["kraft", "fahrzeug", "ziel"].contains($0.objekt.art.schluessel) } ?? false) {
+                    Button("Vorlauf") { modusWaehlen(n.ziel is NavizielVorlauf ? basis : NavizielVorlauf(ziel: basis)) }
+                        .buttonStyle(.glass).tint(n.ziel is NavizielVorlauf ? .accentColor : .primary)
+                    Button("Parallel") { modusWaehlen(n.ziel is NavizielParallel ? basis : NavizielParallel(ziel: basis)) }
+                        .buttonStyle(.glass).tint(n.ziel is NavizielParallel ? .accentColor : .primary)
+                }
+                Spacer(minLength: 0)
+                if let kmh = n.tempolimit { Tempolimit(kmh: kmh) }
+            }
         }
         .padding(16)
         .glassEffect(.regular, in: .rect(cornerRadius: 24))
+    }
+}
+
+/// Tempolimit-Schild (rot umrandet, wie im Straßenverkehr).
+struct Tempolimit: View {
+    let kmh: Int
+
+    var body: some View {
+        Text("\(kmh)")
+            .font(.system(size: 14, weight: .bold))
+            .foregroundStyle(.black)
+            .frame(width: 40, height: 40)
+            .background(.white, in: .circle)
+            .overlay(Circle().stroke(Color(hex: "#E2001A"), lineWidth: 4))
     }
 }

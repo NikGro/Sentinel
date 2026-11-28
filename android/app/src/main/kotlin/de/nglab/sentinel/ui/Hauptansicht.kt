@@ -313,7 +313,7 @@ private fun Lagebildschirm(modell: AppModell, stand: LageStand, fokus: KartenObj
                 NaviLeisteUnten(n, sonderrechte, sonderrechteUmschalten = {
                     sonderrechte = !sonderrechte
                     hinfuehren(n.ziel)
-                }, beenden = ::naviBeenden)
+                }, modusWaehlen = { hinfuehren(it) }, beenden = ::naviBeenden)
             }
         }
         verlauf?.let { v ->

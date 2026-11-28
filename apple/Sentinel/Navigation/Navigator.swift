@@ -17,6 +17,8 @@ struct Navistand {
     var info = Routeninfo(sonderrechte: false, gemieden: false, verkehr: false, verkehrsfaktor: 1)
     var rechnet = false
     var fehler: String?
+    /// Tempolimit an der eigenen Position (km/h), falls bekannt.
+    var tempolimit: Int?
 }
 
 /// Netzwerkschicht des Navigationskerns: leitet die Anfrage an den eigenen Server, ergänzt sie im gemeinsamen Kern
@@ -84,6 +86,10 @@ final class Navigator {
     /// Zählt Starts; eine Route aus einem älteren Lauf wird verworfen.
     @ObservationIgnored private var lauf = 0
     @ObservationIgnored private let nachfuehrung = Nachfuehrung()
+    @ObservationIgnored private let vorlauf = Vorlaufplaner()
+    @ObservationIgnored private let tempolimit = Tempolimitabfrage()
+    /// Serverzugriff für das Straßenverzeichnis (Vorlauf, Tempolimit).
+    @ObservationIgnored var api: () -> Api? = { nil }
     @ObservationIgnored private let ortsquelle = CoreLocationProvider(activityType: .automotiveNavigation, allowBackgroundLocationUpdates: true)
 
     /// Gleiche Einstellungen wie auf Android.
@@ -134,6 +140,8 @@ final class Navigator {
         stoppen()
         stand = Navistand(ziel: ziel)
         nachfuehrung.zuruecksetzen()
+        vorlauf.zuruecksetzen()
+        tempolimit.zuruecksetzen()
         ortsquelle.startUpdating()
         lauf += 1
         let nummer = lauf
@@ -155,10 +163,17 @@ final class Navigator {
 
     private func nachfuehren(_ ziel: Naviziel, nummer: Int, sonderrechte: Bool, zuFuss: Bool, lage: LageStand) async {
         let jetzt = Int64(Date.now.timeIntervalSince1970 * 1000)
-        guard let ort = Navizielaufloesung.shared.aufloesen(ziel: ziel, stand: lage, jetztMs: jetzt) else {
+        // Tempolimit an der eigenen Position (nicht zu Fuß)
+        if !zuFuss, let l = ortsquelle.lastLocation, let a = api(),
+           (try? await tempolimit.aktualisieren(api: a, ort: GeoPunkt(lat: l.coordinates.lat, lon: l.coordinates.lng), jetztMs: jetzt))?.boolValue == true {
+            stand?.tempolimit = tempolimit.kmh.map { Int($0.int32Value) }
+        }
+        guard let aufgeloest = try? await Navizielaufloesung.shared.aufloesenMitVorlauf(ziel: ziel, stand: lage, jetztMs: jetzt, planer: vorlauf, api: api()) else {
             stand?.fehler = Navizielaufloesung.shared.fehlertext(ziel: ziel)
             return
         }
+        let ort = aufgeloest.first!
+        let parallel = aufgeloest.second
         stand?.titel = ort.titel
         guard stand?.rechnet == false, nachfuehrung.faellig(ziel: ort.punkt, jetztMs: jetzt) else { return }
         guard let kern, let lader else {
@@ -169,7 +184,7 @@ final class Navigator {
             stand?.fehler = "Eigener Standort unbekannt."
             return
         }
-        lader.setzen(Anfrageoptionen(sonderrechte: sonderrechte, zuFuss: zuFuss, zielstrasse: ort.strasse))
+        lader.setzen(Anfrageoptionen(sonderrechte: sonderrechte, zuFuss: zuFuss, zielstrasse: ort.strasse, parallel: parallel))
         nachfuehrung.gerechnet(ziel: ort.punkt, jetztMs: jetzt)
         stand?.rechnet = true
         defer { stand?.rechnet = false }

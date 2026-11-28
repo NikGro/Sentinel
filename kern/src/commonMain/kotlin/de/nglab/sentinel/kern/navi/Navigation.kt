@@ -24,6 +24,17 @@ sealed interface Naviziel {
     data object APosition : Naviziel
     data class Objekt(val objekt: KartenObjekt) : Naviziel
     data class Ort(val punkt: GeoPunkt, val titel: String) : Naviziel
+    /** Vorlauf: zur nächsten Kreuzung vor dem Ziel in seiner Fahrtrichtung (rückt mit). */
+    data class Vorlauf(val ziel: Naviziel) : Naviziel
+    /** Parallel: ebenfalls zur Kreuzung vor dem Ziel, aber über eine Nebenstrecke; seine Straße wird gemieden. */
+    data class Parallel(val ziel: Naviziel) : Naviziel
+
+    /** Das eigentliche Ziel, ohne Vorlauf bzw. Parallel. */
+    val basis: Naviziel get() = when (this) {
+        is Vorlauf -> ziel.basis
+        is Parallel -> ziel.basis
+        else -> this
+    }
 }
 
 /** Aufgelöstes Ziel: Punkt, Titel und (bei Anschriften) die Straße, auf der angekommen werden soll. */
@@ -31,7 +42,24 @@ data class Zielort(val punkt: GeoPunkt, val titel: String, val strasse: String? 
 
 object Navizielaufloesung {
     /** Aktueller Ort des Ziels; `null`, wenn es derzeit keine Position hat. */
+    /**
+     * Wie `aufloesen`, aber mit Vorlauf bzw. Parallel: dann die nächste Kreuzung vor dem Ziel (solange Richtung oder
+     * Straße unbekannt sind, das Ziel selbst). Zweiter Wert: Hinweis für den Parallel-Modus.
+     */
+    suspend fun aufloesenMitVorlauf(ziel: Naviziel, stand: LageStand, jetztMs: Long, planer: Vorlaufplaner, api: de.nglab.sentinel.kern.netz.Api?): Pair<Zielort, Parallelhinweis?>? {
+        if (ziel !is Naviziel.Vorlauf && ziel !is Naviziel.Parallel) return aufloesen(ziel, stand, jetztMs)?.let { it to null }
+        val basis = ziel.basis
+        val hier = aufloesen(basis, stand, jetztMs) ?: return null
+        val schluessel = basis.toString()
+        val k = planer.kreuzung(schluessel, hier.punkt, jetztMs, api)
+        val hinweis = if (ziel is Naviziel.Parallel) planer.parallelhinweis(schluessel, k?.first) else null
+        val ort = k?.let { Zielort(it.first, "Kreuzung ${it.second} vor ${hier.titel}") } ?: hier
+        return ort to hinweis
+    }
+
     fun aufloesen(ziel: Naviziel, stand: LageStand, jetztMs: Long): Zielort? = when (ziel) {
+        is Naviziel.Vorlauf -> aufloesen(ziel.basis, stand, jetztMs)
+        is Naviziel.Parallel -> aufloesen(ziel.basis, stand, jetztMs)
         Naviziel.APosition -> stand.aHalter?.let { a -> stand.positionen[a.id]?.let { Zielort(it.punkt, "A-Position (${a.data.spitzname})") } }
         is Naviziel.Ort -> Zielort(ziel.punkt, ziel.titel, Strassenname.aus(ziel.titel))
         is Naviziel.Objekt -> {
@@ -66,7 +94,7 @@ object Strassenname {
 }
 
 /** Was der Server zur Routenanfrage zusätzlich erfährt. */
-data class Anfrageoptionen(val sonderrechte: Boolean, val zuFuss: Boolean, val zielstrasse: String? = null)
+data class Anfrageoptionen(val sonderrechte: Boolean, val zuFuss: Boolean, val zielstrasse: String? = null, val parallel: Parallelhinweis? = null)
 
 object Routenanfrage {
     /**
@@ -77,7 +105,12 @@ object Routenanfrage {
     fun anpassen(body: String, o: Anfrageoptionen): String {
         val alt = runCatching { json.parseToJsonElement(body).jsonObject }.getOrNull() ?: return body
         val neu = alt.toMutableMap()
-        neu["sentinel"] = buildJsonObject { put("sonderrechte", o.sonderrechte && !o.zuFuss) }
+        neu["sentinel"] = buildJsonObject {
+            put("sonderrechte", o.sonderrechte && !o.zuFuss)
+            if (o.parallel != null && !o.zuFuss) put("parallel", buildJsonObject {
+                put("lat", o.parallel.punkt.lat); put("lon", o.parallel.punkt.lon); put("kurs", o.parallel.kurs); put("meter", o.parallel.meter)
+            })
+        }
         if (o.zuFuss) neu["costing"] = JsonPrimitive("pedestrian")
         val orte = (alt["locations"] as? JsonArray)?.toMutableList()
         if (o.zielstrasse != null && !orte.isNullOrEmpty()) {

@@ -64,6 +64,8 @@ data class Navistand(
     val info: Routeninfo = Routeninfo(),
     val rechnet: Boolean = false,
     val fehler: String? = null,
+    /** Tempolimit an der eigenen Position (km/h), falls bekannt. */
+    val tempolimit: Int? = null,
 )
 
 /**
@@ -82,6 +84,10 @@ class Navigator(
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main)
     private val http = OkHttpClient.Builder().callTimeout(20, TimeUnit.SECONDS).build()
     private val nachfuehrung = Nachfuehrung()
+    private val vorlauf = de.nglab.sentinel.kern.navi.Vorlaufplaner()
+    private val tempolimit = de.nglab.sentinel.kern.navi.Tempolimitabfrage()
+    /** Serverzugriff für Straßenverzeichnis (Vorlauf, Tempolimit). */
+    var api: () -> de.nglab.sentinel.kern.netz.Api? = { null }
     private var schleife: Job? = null
     private var beobachter: Job? = null
     private var kern: FerrostarCore? = null
@@ -147,6 +153,8 @@ class Navigator(
         stoppen()
         _stand.value = Navistand(ziel)
         nachfuehrung.zuruecksetzen()
+        vorlauf.zuruecksetzen()
+        tempolimit.zuruecksetzen()
         schleife = scope.launch {
             while (isActive) {
                 nachfuehren(ziel, sonderrechte, zuFuss, stand())
@@ -164,7 +172,12 @@ class Navigator(
 
     private suspend fun nachfuehren(ziel: Naviziel, sonderrechte: Boolean, zuFuss: Boolean, lage: LageStand) {
         val jetzt = System.currentTimeMillis()
-        val ort = Navizielaufloesung.aufloesen(ziel, lage, jetzt)
+        // Tempolimit an der eigenen Position (nicht zu Fuß)
+        if (!zuFuss) standorte.replayCache.lastOrNull()?.let { l ->
+            api()?.let { a -> if (tempolimit.aktualisieren(a, GeoPunkt(l.latitude, l.longitude), jetzt)) _stand.value = _stand.value?.copy(tempolimit = tempolimit.kmh) }
+        }
+        val aufgeloest = Navizielaufloesung.aufloesenMitVorlauf(ziel, lage, jetzt, vorlauf, api())
+        val ort = aufgeloest?.first
         if (ort == null) {
             _stand.value = _stand.value?.copy(fehler = Navizielaufloesung.fehlertext(ziel))
             return
@@ -179,7 +192,7 @@ class Navigator(
             _stand.value = _stand.value?.copy(fehler = "Eigener Standort unbekannt.")
             return
         }
-        optionen = Anfrageoptionen(sonderrechte = sonderrechte, zuFuss = zuFuss, zielstrasse = ort.strasse)
+        optionen = Anfrageoptionen(sonderrechte = sonderrechte, zuFuss = zuFuss, zielstrasse = ort.strasse, parallel = aufgeloest.second)
         nachfuehrung.gerechnet(ort.punkt, jetzt)
         _stand.value = _stand.value?.copy(rechnet = true)
         try {

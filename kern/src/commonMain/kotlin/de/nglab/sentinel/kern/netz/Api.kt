@@ -159,6 +159,19 @@ class Api(private val client: HttpClient, val server: String, private val token:
         return e.jsonObject["name"]?.jsonPrimitive?.content?.takeIf { it != "null" }
     }
 
+    /** Querstraßen einer Straße (Name und Kreuzungspunkte) aus dem Straßenverzeichnis des Servers. */
+    suspend fun kreuzungStrassen(strasse: String, nahe: GeoPunkt): List<Pair<String, List<GeoPunkt>>> {
+        val e = element(HttpMethod.Get, "api/v1/kreuzung/strassen") { parameter("a", strasse); parameter("lat", nahe.lat); parameter("lon", nahe.lon) }
+        return (e.jsonObject["strassen"] as? kotlinx.serialization.json.JsonArray ?: return emptyList()).mapNotNull { s ->
+            val o = s.jsonObject
+            val name = o["name"]?.jsonPrimitive?.content ?: return@mapNotNull null
+            val punkte = (o["punkte"] as? kotlinx.serialization.json.JsonArray ?: return@mapNotNull null).map { p ->
+                GeoPunkt(p.jsonObject["lat"]!!.jsonPrimitive.content.toDouble(), p.jsonObject["lon"]!!.jsonPrimitive.content.toDouble())
+            }
+            name to punkte
+        }
+    }
+
     suspend fun tempolimit(p: GeoPunkt): Int? {
         val e = element(HttpMethod.Get, "api/v1/tempolimit") { parameter("lat", p.lat); parameter("lon", p.lon) }
         return e.jsonObject["kmh"]?.jsonPrimitive?.content?.toIntOrNull()
