@@ -12,10 +12,10 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.filled.TurnLeft
-import androidx.compose.material.icons.automirrored.filled.TurnRight
-import androidx.compose.material.icons.automirrored.filled.TurnSlightLeft
-import androidx.compose.material.icons.automirrored.filled.TurnSlightRight
+import androidx.compose.material.icons.filled.TurnLeft
+import androidx.compose.material.icons.filled.TurnRight
+import androidx.compose.material.icons.filled.TurnSlightLeft
+import androidx.compose.material.icons.filled.TurnSlightRight
 import androidx.compose.material.icons.filled.Flag
 import androidx.compose.material.icons.filled.Navigation
 import androidx.compose.material.icons.filled.RoundaboutRight
@@ -45,10 +45,10 @@ import de.nglab.sentinel.navi.Navistand
 /** Bild eines Manövers (Material Symbols). */
 fun Manoever.bild(): ImageVector = when (this) {
     Manoever.Geradeaus -> Icons.Filled.Straight
-    Manoever.Rechts -> Icons.AutoMirrored.Filled.TurnRight
-    Manoever.LeichtRechts -> Icons.AutoMirrored.Filled.TurnSlightRight
-    Manoever.Links -> Icons.AutoMirrored.Filled.TurnLeft
-    Manoever.LeichtLinks -> Icons.AutoMirrored.Filled.TurnSlightLeft
+    Manoever.Rechts -> Icons.Filled.TurnRight
+    Manoever.LeichtRechts -> Icons.Filled.TurnSlightRight
+    Manoever.Links -> Icons.Filled.TurnLeft
+    Manoever.LeichtLinks -> Icons.Filled.TurnSlightLeft
     Manoever.Wenden -> Icons.Filled.UTurnLeft
     Manoever.Kreisverkehr -> Icons.Filled.RoundaboutRight
     Manoever.Start -> Icons.Filled.Navigation
