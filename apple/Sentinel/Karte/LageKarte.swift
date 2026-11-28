@@ -110,6 +110,7 @@ struct LageKarte: UIViewRepresentable {
     /// Platzierungsmodus: Tipps setzen Punkte (`beiTipp`), die Vorschau erscheint in `s-entwurf`.
     var platzierung: Platzierung? = nil
     var beiTipp: (GeoPunkt) -> Void = { _ in }
+    var beiLangemDruck: (GeoPunkt) -> Void = { _ in }
     /// ÖPNV live (Fahrzeuge, Haltestellen); `liveStand` ändert sich nach jedem Laden.
     var live: OepnvLive? = nil
     var liveStand = 0
@@ -140,6 +141,9 @@ struct LageKarte: UIViewRepresentable {
             tipp.require(toFail: g)
         }
         karte.addGestureRecognizer(tipp)
+        let druck = UILongPressGestureRecognizer(target: context.coordinator, action: #selector(Koordinator.gedrueckt(_:)))
+        druck.minimumPressDuration = 0.5
+        karte.addGestureRecognizer(druck)
         steuerung.karte = karte
         context.coordinator.karte = karte
         return karte
@@ -148,6 +152,7 @@ struct LageKarte: UIViewRepresentable {
     func updateUIView(_ karte: MLNMapView, context: Context) {
         context.coordinator.beiAuswahl = beiAuswahl
         context.coordinator.beiTipp = beiTipp
+        context.coordinator.beiLangemDruck = beiLangemDruck
         context.coordinator.beiKameraRuhe = beiKameraRuhe
         context.coordinator.liveSetzen(live, stand: liveStand)
         context.coordinator.spurenSetzen(spurenJson)
@@ -162,6 +167,7 @@ struct LageKarte: UIViewRepresentable {
         weak var steuerung: KartenSteuerung?
         var beiAuswahl: (KartenObjekt) -> Void
         var beiTipp: (GeoPunkt) -> Void = { _ in }
+        var beiLangemDruck: (GeoPunkt) -> Void = { _ in }
         var beiKameraRuhe: () -> Void = {}
         private var live: OepnvLive?
         private var liveStand = -1
@@ -309,6 +315,13 @@ struct LageKarte: UIViewRepresentable {
         private func setzen(_ stil: MLNStyle, _ id: String, _ json: String) {
             guard let quelle = stil.source(withIdentifier: id) as? MLNShapeSource, let daten = json.data(using: .utf8) else { return }
             quelle.shape = try? MLNShape(data: daten, encoding: String.Encoding.utf8.rawValue)
+        }
+
+        @objc func gedrueckt(_ g: UILongPressGestureRecognizer) {
+            guard g.state == .began, let karte else { return }
+            let k = karte.convert(g.location(in: karte), toCoordinateFrom: karte)
+            UIImpactFeedbackGenerator(style: .medium).impactOccurred()
+            beiLangemDruck(GeoPunkt(lat: k.latitude, lon: k.longitude))
         }
 
         @objc func getippt(_ g: UITapGestureRecognizer) {

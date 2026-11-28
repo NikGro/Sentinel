@@ -226,3 +226,12 @@ object Strassenbilder {
         return listOfNotNull(quelle, datum, b.urheber.takeIf { it.isNotBlank() }).joinToString(" · ")
     }
 }
+
+/** Ort nach langem Drücken: Treffer der Umkehrsuche, sonst ein schlichter Ort mit Koordinaten. */
+object Ortsauswahl {
+    suspend fun aufloesen(api: Api?, p: GeoPunkt): Suchtreffer =
+        runCatching { api?.umkehr(p) }.getOrNull()?.copy(punkt = p) ?: Suchtreffer(
+            id = "ort:${p.lat},${p.lon}", titel = "Markierter Ort",
+            untertitel = "${(p.lat * 100000).toLong() / 100000.0}, ${(p.lon * 100000).toLong() / 100000.0}", punkt = p, art = "ort",
+        )
+}

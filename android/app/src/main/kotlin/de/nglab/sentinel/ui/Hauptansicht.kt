@@ -247,6 +247,12 @@ private fun Lagebildschirm(modell: AppModell, stand: LageStand, fokus: KartenObj
             modell, steuerung, Modifier.fillMaxSize().testTag("Lagekarte"),
             platzierung = platzierung,
             beiTipp = { punkt -> platzierung = platzierung?.tippen(punkt) },
+            beiLangemDruck = { punkt ->
+                if (platzierung == null && navi == null) {
+                    steuerung.markieren(punkt)
+                    bereich.launch { ortTreffer = de.nglab.sentinel.kern.netz.Ortsauswahl.aufloesen(modell.api, punkt) }
+                }
+            },
             live = if (liveAn) live else null,
             liveStand = liveStand,
             beiKameraRuhe = { if (liveAn) liveAnstoss++ },
@@ -273,6 +279,22 @@ private fun Lagebildschirm(modell: AppModell, stand: LageStand, fokus: KartenObj
         }
 
         navi?.let { n -> if (platzierung == null) NaviLeisteOben(n) }
+
+        // Notruf-Leiste (rot), solange ein Notruf läuft: wer, und direkt hinführen
+        val notruf = stand.fremderNotruf
+        if (notruf != null && platzierung == null) {
+            Surface(
+                color = SentinelFarben.aPosition, contentColor = Color.White, shape = RoundedCornerShape(20.dp), shadowElevation = 6.dp,
+                modifier = Modifier.align(Alignment.TopCenter).statusBarsPadding().padding(top = if (navi != null) 150.dp else 68.dp).padding(horizontal = 16.dp).fillMaxWidth().testTag("Notrufleiste"),
+            ) {
+                Row(Modifier.padding(start = 16.dp, end = 8.dp).height(48.dp), verticalAlignment = Alignment.CenterVertically) {
+                    Text("NOTRUF: ${notruf.data.spitzname}", fontWeight = FontWeight.Bold, modifier = Modifier.weight(1f))
+                    androidx.compose.material3.TextButton(onClick = { hinfuehren(Naviziel.Objekt(KartenObjekt(Objektart.Kraft, notruf.id))) }) {
+                        Text("Hinführen", color = Color.White, fontWeight = FontWeight.Bold)
+                    }
+                }
+            }
+        }
 
         // Oben: Suchleiste
         if (platzierung == null && navi == null) Surface(

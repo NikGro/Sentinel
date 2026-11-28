@@ -147,6 +147,11 @@ struct Lagebildschirm: View {
 
     var body: some View {
         LageKarte(modell: modell, steuerung: steuerung, platzierung: platzierung, beiTipp: { punkt in platzierung = platzierung?.tippen(p: punkt) },
+                  beiLangemDruck: { punkt in
+                      guard platzierung == nil, modell.navigator.stand == nil else { return }
+                      steuerung.markieren(punkt)
+                      Task { ortTreffer = OrtAuswahl(treffer: try await Ortsauswahl.shared.aufloesen(api: modell.api, p: punkt)) }
+                  },
                   live: liveAn ? live : nil, liveStand: liveStand, beiKameraRuhe: { if liveAn { liveAnstoss += 1 } },
                   spurenJson: { let _ = (spurenStand, verlaufStand); return modell.spuren.geoJson(stand: modell.stand, verlauf: verlauf) }(),
                   wegZeitJson: { let _ = flaechenStand; return flaechen.wegZeitGeoJson() }(),
@@ -155,6 +160,7 @@ struct Lagebildschirm: View {
         }
             .ignoresSafeArea()
             .safeAreaInset(edge: .top) {
+              VStack(spacing: 8) {
                 if let n = modell.navigator.stand, platzierung == nil {
                     NaviLeisteOben(n: n)
                 } else if let p = platzierung {
@@ -171,6 +177,23 @@ struct Lagebildschirm: View {
                 .padding(.horizontal, 22)
                 .onTapGesture { sucht = true }
                 }
+                // Notruf-Leiste (rot), solange ein Notruf läuft: wer, und direkt hinführen
+                if let notruf = modell.stand.fremderNotruf, platzierung == nil {
+                    HStack {
+                        Text("NOTRUF: \(notruf.data.spitzname)").font(.headline.weight(.bold))
+                        Spacer()
+                        Button("Hinführen") { hinfuehren(NavizielObjekt(objekt: KartenObjekt(art: .kraft, id: notruf.id))) }
+                            .font(.headline.weight(.bold))
+                            .buttonStyle(.plain)
+                    }
+                    .foregroundStyle(.white)
+                    .padding(.horizontal, 16)
+                    .frame(height: 44)
+                    .glassEffect(.regular.tint(.red), in: .capsule)
+                    .padding(.horizontal, 22)
+                    .accessibilityIdentifier("Notrufleiste")
+                }
+              }
             }
             .overlay(alignment: .topTrailing) {
                 VStack(spacing: 8) {

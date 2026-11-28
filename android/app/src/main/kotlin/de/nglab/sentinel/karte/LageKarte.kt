@@ -131,6 +131,7 @@ fun LageKarte(
     platzierung: Platzierung? = null,
     entwurfRadius: Double? = null,
     beiTipp: (GeoPunkt) -> Unit = {},
+    beiLangemDruck: (GeoPunkt) -> Unit = {},
     live: de.nglab.sentinel.kern.oepnv.OepnvLive? = null,
     liveStand: Int = 0,
     beiKameraRuhe: () -> Unit = {},
@@ -143,6 +144,7 @@ fun LageKarte(
     // Aktuelle Werte für die einmal angelegten Listener der Karte.
     val platziert by rememberUpdatedState(platzierung != null)
     val tipp by rememberUpdatedState(beiTipp)
+    val langerDruck by rememberUpdatedState(beiLangemDruck)
     val auswahl by rememberUpdatedState(beiAuswahl)
     val kontext = LocalContext.current
     val lebenszyklus = LocalLifecycleOwner.current.lifecycle
@@ -218,6 +220,10 @@ fun LageKarte(
                         steuerung.fuehrung.nutzerZoom(karte.cameraPosition.zoom, karte.cameraPosition.tilt)
                     }
                 })
+                karte.addOnMapLongClickListener { lage ->
+                    langerDruck(GeoPunkt(lage.latitude, lage.longitude))
+                    true
+                }
                 karte.addOnMapClickListener { lage ->
                     // Platzierungsmodus: jeder Tipp setzt einen Punkt, nichts wird ausgewählt.
                     if (platziert) {
