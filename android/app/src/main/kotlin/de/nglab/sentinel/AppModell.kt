@@ -71,7 +71,13 @@ class AppModell(private val kontext: Context) {
         // Dienststatus steuert Übertragung und Benachrichtigung zentral, unabhängig von Ansichten: außer Dienst endet
         // alles sofort, auch wenn die App gerade nicht sichtbar ist.
         bereich.launch {
-            lage.stand.collect { s -> dienstAnpassen(s.hatStand && s.imDienst) }
+            var letzteZeile = ""
+            lage.stand.collect { s ->
+                dienstAnpassen(s.hatStand && s.imDienst)
+                val zeile = de.nglab.sentinel.kern.lage.Statusanzeige.detail(s)
+                if (dienstLaeuft && zeile != letzteZeile) StandortDienst.aktualisieren(kontext, zeile)
+                letzteZeile = zeile
+            }
         }
         verbindung.beiNachricht = { text -> bereich.launch { lage.empfangen(text); phaseNachStand() } }
         verbindung.beiZugangEntzogen = { bereich.launch { abmelden(lokal = true) } }

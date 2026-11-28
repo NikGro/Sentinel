@@ -108,7 +108,7 @@ class StandortDienst : Service() {
         (application as SentinelApp).modell.standortHintergrundBeendet()
     }
 
-    private fun benachrichtigung(): Notification {
+    private fun benachrichtigung(detail: String = de.nglab.sentinel.kern.lage.Statusanzeige.detail((application as SentinelApp).modell.lage.stand.value)): Notification {
         val nm = getSystemService(NotificationManager::class.java)
         nm.createNotificationChannel(NotificationChannel(KANAL, "Standort im Dienst", NotificationManager.IMPORTANCE_LOW).apply {
             description = "Zeigt an, solange SENTINEL deinen Standort an das Einsatzteam teilt."
@@ -118,8 +118,9 @@ class StandortDienst : Service() {
         return NotificationCompat.Builder(this, KANAL)
             .setSmallIcon(R.drawable.ic_schild_klein)
             .setColor(0xFFFF3B30.toInt())
-            .setContentTitle("SENTINEL teilt deinen Standort")
-            .setContentText("Live an das Einsatzteam")
+            .setContentTitle(de.nglab.sentinel.kern.lage.Statusanzeige.TITEL)
+            .setContentText(detail)
+            .setOnlyAlertOnce(true)
             .setOngoing(true)
             .setContentIntent(oeffnen)
             .setForegroundServiceBehavior(NotificationCompat.FOREGROUND_SERVICE_IMMEDIATE)
@@ -135,6 +136,24 @@ class StandortDienst : Service() {
 
         fun beenden(kontext: Context) {
             kontext.stopService(Intent(kontext, StandortDienst::class.java))
+        }
+
+        /** Laufende Benachrichtigung mit neuer Statuszeile (gleicher Text wie die Live-Aktivität auf iOS). */
+        @android.annotation.SuppressLint("MissingPermission")
+        fun aktualisieren(kontext: Context, detail: String) {
+            val nm = kontext.getSystemService(NotificationManager::class.java)
+            if (nm.activeNotifications.none { it.id == 1 }) return
+            val oeffnen = PendingIntent.getActivity(kontext, 0, Intent(kontext, MainActivity::class.java), PendingIntent.FLAG_IMMUTABLE)
+            val n = NotificationCompat.Builder(kontext, KANAL)
+                .setSmallIcon(R.drawable.ic_schild_klein)
+                .setColor(0xFFFF3B30.toInt())
+                .setContentTitle(de.nglab.sentinel.kern.lage.Statusanzeige.TITEL)
+                .setContentText(detail)
+                .setOngoing(true)
+                .setOnlyAlertOnce(true)
+                .setContentIntent(oeffnen)
+                .build()
+            nm.notify(1, n)
         }
     }
 }

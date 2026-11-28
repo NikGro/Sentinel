@@ -53,6 +53,7 @@ final class AppModell {
             guard let self else { return }
             self.stand = neu
             self.phaseNachStand()
+            self.standort.statuszeile = Statusanzeige.shared.detail(stand: neu)
             self.standort.dienst(neu.hatStand && neu.imDienst)
         })
         beobachter.append(Bruecke.shared.verbindungBeobachten(verbindung: verbindung) { [weak self] z in self?.verbindungszustand = z })

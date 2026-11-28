@@ -15,7 +15,7 @@ struct SentinelApp: App {
                 .onChange(of: szenenphase, initial: true) { _, phase in
                     // Standort für die Karte nur, solange die App sichtbar ist; im Dienst läuft er im Hintergrund weiter.
                     if phase == .active, modell.zugang != nil { modell.standort.starten() } else if phase == .background, !modell.stand.imDienst { modell.standort.stoppen() }
-                    if phase == .active { modell.szenenwechsel(aktiv: true) } else if phase == .background { modell.szenenwechsel(aktiv: false) }
+                    if phase == .active { modell.szenenwechsel(aktiv: true); modell.standort.vordergrund() } else if phase == .background { modell.szenenwechsel(aktiv: false) }
                 }
         }
     }
