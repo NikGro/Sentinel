@@ -26,7 +26,7 @@ struct Navistand {
 final class NaviLader: URLRequestLoading, @unchecked Sendable {
     private let token: String
     private let lock = NSLock()
-    private var optionen = Anfrageoptionen(sonderrechte: false, zuFuss: false, zielstrasse: nil)
+    private var optionen = Anfrageoptionen(sonderrechte: false, zuFuss: false, zielstrasse: nil, parallel: nil)
     private var info = Routeninfo(sonderrechte: false, gemieden: false, verkehr: false, verkehrsfaktor: 1)
 
     init(token: String) { self.token = token }
