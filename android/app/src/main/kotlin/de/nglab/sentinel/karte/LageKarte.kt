@@ -41,7 +41,7 @@ private const val LEER = """{"type":"FeatureCollection","features":[]}"""
 /** Antippbare Ebenen des gemeinsamen Stils, die oberste zuerst. */
 private val ANTIPPBAR = arrayOf(
     "lage-cluster", "lage-symbole", "lage-symbole-zeichen", "lage-oepnv-fahrzeuge", "lage-halte",
-    "lage-linien", "lage-oepnv-kante", "lage-spuren", "lage-standortspur", "lage-flaechen",
+    "lage-linien", "lage-oepnv-kante", "lage-spuren", "lage-standortspur", "lage-flaechen", "lage-oepnv-live-halte",
 )
 
 /** Steuerung der Karte von außen (Kamera, Verkehrslage); gefüllt, sobald die Karte bereit ist. */
@@ -99,6 +99,13 @@ class KartenSteuerung {
             """{"type":"FeatureCollection","features":[{"type":"Feature","geometry":{"type":"Point","coordinates":[${p.lon},${p.lat}]},"properties":{}}]}""")
     }
 
+    /** Sichtbarer Ausschnitt: Süd, West, Nord, Ost und Zoom; `null`, solange die Karte nicht bereit ist. */
+    fun ausschnitt(): DoubleArray? {
+        val k = karte ?: return null
+        val b = k.projection.visibleRegion.latLngBounds
+        return doubleArrayOf(b.latitudeSouth, b.longitudeWest, b.latitudeNorth, b.longitudeEast, k.cameraPosition.zoom)
+    }
+
     fun norden() {
         karte?.animateCamera(CameraUpdateFactory.bearingTo(0.0), 400)
     }
@@ -116,8 +123,12 @@ fun LageKarte(
     platzierung: Platzierung? = null,
     entwurfRadius: Double? = null,
     beiTipp: (GeoPunkt) -> Unit = {},
+    live: de.nglab.sentinel.kern.oepnv.OepnvLive? = null,
+    liveStand: Int = 0,
+    beiKameraRuhe: () -> Unit = {},
     beiAuswahl: (KartenObjekt) -> Unit,
 ) {
+    val ruhe by rememberUpdatedState(beiKameraRuhe)
     // Aktuelle Werte für die einmal angelegten Listener der Karte.
     val platziert by rememberUpdatedState(platzierung != null)
     val tipp by rememberUpdatedState(beiTipp)
@@ -147,7 +158,7 @@ fun LageKarte(
                 karte.cameraPosition = CameraPosition.Builder().target(start).zoom(14.5).tilt(0.0).build()
                 karte.setStyle(Style.Builder().fromUri("$server/karte/stil/${if (dunkel) "dunkel" else "hell"}.json")) { s -> style = s }
                 addOnStyleImageMissingListener { name -> karte.style?.let { Kartenbilder.anlegen(it, name) } }
-                karte.addOnCameraIdleListener { zoom = karte.cameraPosition.zoom }
+                karte.addOnCameraIdleListener { zoom = karte.cameraPosition.zoom; ruhe() }
                 // Gesten: Verschieben bzw. Herausdrehen löst die Kopplung, Zoomen und Kippen setzen nur Sollwerte.
                 // Während einer Geste setzt die Führung die Kamera nie (sonst würde die Geste abgebrochen).
                 var startMitte: LatLng? = null
@@ -255,10 +266,11 @@ fun LageKarte(
     }
 
     // ÖPNV-Fahrzeuge flüssig (zehnmal je Sekunde), nur diese Quelle.
-    LaunchedEffect(style, stand) {
+    LaunchedEffect(style, stand, live, liveStand) {
         val s = style ?: return@LaunchedEffect
+        s.getSourceAs<GeoJsonSource>(Quellen.OEPNV_LIVE_HALTE)?.setGeoJson(live?.halteGeoJson() ?: LEER)
         while (isActive) {
-            s.getSourceAs<GeoJsonSource>(Quellen.OEPNV_FAHRZEUGE)?.setGeoJson(szene.oepnvFahrzeuge(stand, System.currentTimeMillis()))
+            s.getSourceAs<GeoJsonSource>(Quellen.OEPNV_FAHRZEUGE)?.setGeoJson(szene.oepnvFahrzeuge(stand, System.currentTimeMillis(), live = live))
             delay(100)
         }
     }

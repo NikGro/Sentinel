@@ -38,6 +38,7 @@ export function lageQuellen(): Record<string, unknown> {
     's-ich': geojson(),
     's-auswahl': geojson(),
     's-entwurf': geojson(),
+    's-oepnv-live-halte': geojson(),
   };
 }
 
@@ -171,6 +172,22 @@ export function lageEbenen(variante: Variante): Ebene[] {
       type: 'symbol',
       source: 's-halte',
       minzoom: 15,
+      layout: { 'text-field': ['get', 'titel'], 'text-font': SCHRIFT, 'text-size': 11, 'text-offset': [0, 1.1], 'text-anchor': 'top', 'text-optional': true },
+      paint: { 'text-color': text, 'text-halo-color': halo, 'text-halo-width': 1.4 },
+    },
+    // ÖPNV live: Haltestellen im Kartenausschnitt (antippbar für Abfahrten)
+    {
+      id: 'lage-oepnv-live-halte',
+      type: 'circle',
+      source: 's-oepnv-live-halte',
+      minzoom: 14,
+      paint: { 'circle-radius': ['interpolate', ['linear'], ['zoom'], 14, 4, 17, 7], 'circle-color': '#FFD60A', 'circle-stroke-color': '#1E7A3C', 'circle-stroke-width': 2 },
+    },
+    {
+      id: 'lage-oepnv-live-halte-name',
+      type: 'symbol',
+      source: 's-oepnv-live-halte',
+      minzoom: 15.5,
       layout: { 'text-field': ['get', 'titel'], 'text-font': SCHRIFT, 'text-size': 11, 'text-offset': [0, 1.1], 'text-anchor': 'top', 'text-optional': true },
       paint: { 'text-color': text, 'text-halo-color': halo, 'text-halo-width': 1.4 },
     },

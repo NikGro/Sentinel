@@ -41,13 +41,17 @@ object Quellen {
     const val BESTREIFUNG = "s-bestreifung"
     const val AUSWAHL = "s-auswahl"
     const val ENTWURF = "s-entwurf"
+    const val OEPNV_LIVE_HALTE = "s-oepnv-live-halte"
 
-    val alle = listOf(SYMBOLE, LINIEN, FLAECHEN, FLAECHEN_TEXT, HALTE, OEPNV_FAHRZEUGE, ICH, ROUTE, SPUREN, WEGZEIT, BESTREIFUNG, AUSWAHL, ENTWURF)
+    val alle = listOf(SYMBOLE, LINIEN, FLAECHEN, FLAECHEN_TEXT, HALTE, OEPNV_FAHRZEUGE, ICH, ROUTE, SPUREN, WEGZEIT, BESTREIFUNG, AUSWAHL, ENTWURF, OEPNV_LIVE_HALTE)
 }
 
 /** Was auf der Karte angetippt werden kann. */
 enum class Objektart(val schluessel: String) {
-    Kraft("kraft"), Fahrzeug("fahrzeug"), Ziel("ziel"), Markierung("markierung"), OepnvFahrzeug("oepnv"), Halt("halt"), Spur("spur");
+    Kraft("kraft"), Fahrzeug("fahrzeug"), Ziel("ziel"), Markierung("markierung"), OepnvFahrzeug("oepnv"), Halt("halt"), Spur("spur"),
+
+    /** ÖPNV live (nicht in der Lage): Fahrzeug bzw. Haltestelle aus Transitous. */
+    OepnvLive("live"), HaltLive("livehalt");
 
     companion object {
         fun von(s: String): Objektart? = entries.firstOrNull { it.schluessel == s }
@@ -257,8 +261,9 @@ class Szene {
     }
 
     /** ÖPNV-Fahrzeuge zur Zeit `jetztMs` (für den schnellen Takt, eigene Quelle). */
-    fun oepnvFahrzeuge(lage: LageStand, jetztMs: Long, anzeige: Anzeige = Anzeige()): String {
+    fun oepnvFahrzeuge(lage: LageStand, jetztMs: Long, anzeige: Anzeige = Anzeige(), live: de.nglab.sentinel.kern.oepnv.OepnvLive? = null): String {
         val merkmale = ArrayList<JsonObject>()
+        live?.let { merkmale += it.fahrzeugMerkmale(jetztMs) }
         for (m in lage.sichtbareMarkierungen(jetztMs, anzeige.ausgeblendeteEbenen)) {
             val d = m.data
             if (!d.typ.istOepnv || !d.zeigtFahrzeug) continue

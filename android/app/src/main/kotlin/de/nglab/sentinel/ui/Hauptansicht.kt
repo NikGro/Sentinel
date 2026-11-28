@@ -141,6 +141,25 @@ private fun Lagebildschirm(modell: AppModell, stand: LageStand, fokus: KartenObj
     var editor by remember { mutableStateOf<Markierungsbearbeitung?>(null) }
     var neuesZiel by remember { mutableStateOf<Ziel?>(null) }
     var zielansicht by remember { mutableStateOf<String?>(null) }
+    // ÖPNV live: Fahrzeuge und Haltestellen im Kartenausschnitt
+    var liveAn by rememberSaveable { mutableStateOf(false) }
+    val live = remember { de.nglab.sentinel.kern.oepnv.OepnvLive() }
+    var liveStand by remember { mutableStateOf(0) }
+    var liveAnstoss by remember { mutableStateOf(0) }
+    var fahrtAnsicht by remember { mutableStateOf<String?>(null) }
+    var abfahrten by remember { mutableStateOf<de.nglab.sentinel.kern.oepnv.LiveHalt?>(null) }
+    androidx.compose.runtime.LaunchedEffect(liveAn, liveAnstoss) {
+        if (!liveAn) { live.leeren(); liveStand++; return@LaunchedEffect }
+        while (true) {
+            val b = steuerung.ausschnitt()
+            val api = modell.api
+            if (b != null && api != null) {
+                live.laden(api, b[0], b[1], b[2], b[3], b[4])
+                liveStand++
+            }
+            kotlinx.coroutines.delay(de.nglab.sentinel.kern.oepnv.OepnvLive.AKTUALISIEREN_MS)
+        }
+    }
     // Navigation
     val navi by modell.navigator.stand.collectAsStateWithLifecycle()
     var sonderrechte by rememberSaveable { mutableStateOf(false) }
@@ -181,6 +200,9 @@ private fun Lagebildschirm(modell: AppModell, stand: LageStand, fokus: KartenObj
             modell, steuerung, Modifier.fillMaxSize().testTag("Lagekarte"),
             platzierung = platzierung,
             beiTipp = { punkt -> platzierung = platzierung?.tippen(punkt) },
+            live = if (liveAn) live else null,
+            liveStand = liveStand,
+            beiKameraRuhe = { if (liveAn) liveAnstoss++ },
         ) { auswahl = it }
 
         platzierung?.let { p ->
@@ -234,6 +256,7 @@ private fun Lagebildschirm(modell: AppModell, stand: LageStand, fokus: KartenObj
                 aktiv = steuerung.anheftung != Anheftung.Frei,
             ) { steuerung.anheftenUmschalten(ort?.let { GeoPunkt(it.lat, it.lon) }) }
             Kartenknopf(Icons.Filled.Traffic, "Verkehr", aktiv = verkehr) { verkehr = !verkehr; steuerung.verkehr(verkehr) }
+            Kartenknopf(Icons.Filled.Tram, "ÖPNV live", aktiv = liveAn) { liveAn = !liveAn }
             Kartenknopf(Icons.Filled.Add, "Hinzufügen", hervorgehoben = true) { plusOrt = null; plus = true }
         }
 
@@ -294,17 +317,24 @@ private fun Lagebildschirm(modell: AppModell, stand: LageStand, fokus: KartenObj
         ModalBottomSheet(onDismissRequest = { auswahl = null }, sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = false)) {
             val ort by modell.ort.collectAsStateWithLifecycle()
             val kontext = androidx.compose.ui.platform.LocalContext.current
-            Kurzuebersicht(stand, a, ort?.let { GeoPunkt(it.lat, it.lon) }) { k, info ->
+            Kurzuebersicht(stand, a, ort?.let { GeoPunkt(it.lat, it.lon) }, live) { k, info ->
                 auswahl = null
                 when (k) {
-                    Kurzaktion.Hinfuehren -> hinfuehren(if (stand.einsatz.a?.memberId == a.id && a.art == Objektart.Kraft) Naviziel.APosition else Naviziel.Objekt(a))
+                    Kurzaktion.Hinfuehren -> when (a.art) {
+                        Objektart.OepnvLive, Objektart.HaltLive -> info.ort?.let { hinfuehren(Naviziel.Ort(it, info.titel)) }
+                        else -> hinfuehren(if (stand.einsatz.a?.memberId == a.id && a.art == Objektart.Kraft) Naviziel.APosition else Naviziel.Objekt(a))
+                    }
                     Kurzaktion.Bearbeiten -> stand.markierungen[a.id]?.let { editor = Markierungsbearbeitung(a.id, it.data, neu = false) }
                     Kurzaktion.Verschieben -> platzierung = Platzierung(Platzierung.Zweck.Verschieben(a.id))
                     Kurzaktion.StandortSetzen -> platzierung = Platzierung(Platzierung.Zweck.ZielOrt(a.id))
                     Kurzaktion.Anrufen -> info.telefon?.let {
                         kontext.startActivity(android.content.Intent(android.content.Intent.ACTION_DIAL, android.net.Uri.parse("tel:$it")))
                     }
-                    Kurzaktion.Details -> zielansicht = a.id
+                    Kurzaktion.Details -> when (a.art) {
+                        Objektart.OepnvLive -> fahrtAnsicht = a.id
+                        Objektart.HaltLive -> abfahrten = live.halt(a.id)
+                        else -> zielansicht = a.id
+                    }
                 }
             }
         }
@@ -316,6 +346,15 @@ private fun Lagebildschirm(modell: AppModell, stand: LageStand, fokus: KartenObj
         Kurzinfo.fuer(stand, f, System.currentTimeMillis(), null)?.ort?.let { steuerung.zeigen(it, 17.0) }
         auswahl = f
         fokusErledigt()
+    }
+
+    fahrtAnsicht?.let { id ->
+        ModalBottomSheet(onDismissRequest = { fahrtAnsicht = null }) { FahrtAnsicht(modell, id) { fahrtAnsicht = null } }
+    }
+    abfahrten?.let { h ->
+        ModalBottomSheet(onDismissRequest = { abfahrten = null }) {
+            AbfahrtenAnsicht(modell, h, fahrtWaehlen = { abfahrten = null; fahrtAnsicht = it }) { abfahrten = null }
+        }
     }
 
     zielansicht?.let { id ->
@@ -427,8 +466,9 @@ private fun Lageleiste(stand: LageStand) {
 
 /** Kurzübersicht eines angetippten Objekts: Inhalt aus dem Kern (gleich wie auf iOS), Aktionen als Knöpfe. */
 @Composable
-private fun Kurzuebersicht(stand: LageStand, a: KartenObjekt, ich: GeoPunkt?, aktion: (Kurzaktion, Kurzinfo) -> Unit) {
-    val info = Kurzinfo.fuer(stand, a, System.currentTimeMillis(), ich) ?: run {
+private fun Kurzuebersicht(stand: LageStand, a: KartenObjekt, ich: GeoPunkt?, live: de.nglab.sentinel.kern.oepnv.OepnvLive, aktion: (Kurzaktion, Kurzinfo) -> Unit) {
+    val jetzt = System.currentTimeMillis()
+    val info = (live.kurzinfo(a, jetzt) ?: Kurzinfo.fuer(stand, a, jetzt, ich)) ?: run {
         Text("Nicht mehr in der Lage", modifier = Modifier.padding(20.dp))
         return
     }

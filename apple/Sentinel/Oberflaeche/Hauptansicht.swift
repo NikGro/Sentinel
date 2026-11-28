@@ -39,6 +39,13 @@ struct Lagebildschirm: View {
     @Environment(AppModell.self) private var modell
     @Binding var fokus: KartenObjektAuswahl?
     @State private var zielansicht: ZielansichtAuswahl?
+    // ÖPNV live
+    @State private var liveAn = false
+    @State private var live = OepnvLive()
+    @State private var liveStand = 0
+    @State private var liveAnstoss = 0
+    @State private var fahrtAnsicht: ZielansichtAuswahl?
+    @State private var abfahrtenHalt: LiveHaltAuswahl?
     @State private var steuerung = KartenSteuerung()
     @State private var auswahl: KartenObjektAuswahl?
     @State private var verkehr = false
@@ -112,7 +119,8 @@ struct Lagebildschirm: View {
     }
 
     var body: some View {
-        LageKarte(modell: modell, steuerung: steuerung, platzierung: platzierung, beiTipp: { punkt in platzierung = platzierung?.tippen(p: punkt) }) {
+        LageKarte(modell: modell, steuerung: steuerung, platzierung: platzierung, beiTipp: { punkt in platzierung = platzierung?.tippen(p: punkt) },
+                  live: liveAn ? live : nil, liveStand: liveStand, beiKameraRuhe: { if liveAn { liveAnstoss += 1 } }) {
             auswahl = KartenObjektAuswahl(objekt: $0)
         }
             .ignoresSafeArea()
@@ -154,6 +162,7 @@ struct Lagebildschirm: View {
                                 verkehr.toggle()
                                 steuerung.verkehr(verkehr)
                             }
+                            Kartenknopf(symbol: "tram.fill", titel: "ÖPNV live", aktiv: liveAn) { liveAn.toggle() }
                             Kartenknopf(symbol: "plus", titel: "Hinzufügen", hervorgehoben: true) {
                                 plusOrt = nil
                                 plus = true
@@ -222,13 +231,17 @@ struct Lagebildschirm: View {
                 .presentationBackgroundInteraction(.enabled)
             }
             .sheet(item: $auswahl) { a in
-                Kurzuebersicht(objekt: a.objekt) { k, info in
+                Kurzuebersicht(objekt: a.objekt, live: live) { k, info in
                     auswahl = nil
                     // Vergleich über den Kotlin-Namen (Swift-Schreibweise mehrteiliger Namen ist nicht festgelegt).
                     switch k.name {
                     case "Hinfuehren":
-                        let istA = a.objekt.art == .kraft && modell.stand.einsatz.a?.memberId == a.objekt.id
-                        hinfuehren(istA ? NavizielAPosition.shared : NavizielObjekt(objekt: a.objekt))
+                        if ["live", "livehalt"].contains(a.objekt.art.schluessel) {
+                            if let p = info.ort { hinfuehren(NavizielOrt(punkt: p, titel: info.titel)) }
+                        } else {
+                            let istA = a.objekt.art == .kraft && modell.stand.einsatz.a?.memberId == a.objekt.id
+                            hinfuehren(istA ? NavizielAPosition.shared : NavizielObjekt(objekt: a.objekt))
+                        }
                     case "Bearbeiten":
                         if let v = modell.stand.markierungen[a.objekt.id] {
                             nachSchliessen { editor = Markierungsbearbeitung(id: a.objekt.id, markierung: v.data, neu: false) }
@@ -238,7 +251,12 @@ struct Lagebildschirm: View {
                     case "StandortSetzen":
                         platzierung = Platzierung(zweck: PlatzierungZweckZielOrt(zielId: a.objekt.id), punkte: [])
                     case "Details":
-                        nachSchliessen { zielansicht = ZielansichtAuswahl(id: a.objekt.id) }
+                        let id = a.objekt.id
+                        switch a.objekt.art.schluessel {
+                        case "live": nachSchliessen { fahrtAnsicht = ZielansichtAuswahl(id: id) }
+                        case "livehalt": if let h = live.halt(stopId: id) { nachSchliessen { abfahrtenHalt = LiveHaltAuswahl(halt: h) } }
+                        default: nachSchliessen { zielansicht = ZielansichtAuswahl(id: id) }
+                        }
                     case "Anrufen":
                         if let t = info.telefon, let url = URL(string: "tel:\(t.filter { !$0.isWhitespace })") { UIApplication.shared.open(url) }
                     default:
@@ -259,6 +277,27 @@ struct Lagebildschirm: View {
             }
             .sheet(item: $neuesZiel) { n in
                 ZielAnlegen(ziel: n.ziel)
+            }
+            .sheet(item: $fahrtAnsicht) { f in FahrtAnsicht(tripId: f.id) }
+            .sheet(item: $abfahrtenHalt) { h in
+                AbfahrtenAnsicht(halt: h.halt) { trip in
+                    abfahrtenHalt = nil
+                    nachSchliessen { fahrtAnsicht = ZielansichtAuswahl(id: trip) }
+                }
+            }
+            .task(id: liveAn ? liveAnstoss : -1) {
+                guard liveAn else {
+                    live.leeren()
+                    liveStand += 1
+                    return
+                }
+                while !Task.isCancelled {
+                    if let b = steuerung.ausschnitt(), let api = modell.api {
+                        try? await live.laden(api: api, sued: b.sued, west: b.west, nord: b.nord, ost: b.ost, zoom: b.zoom)
+                        liveStand += 1
+                    }
+                    try? await Task.sleep(for: .milliseconds(Int(OepnvLive.companion.AKTUALISIEREN_MS)))
+                }
             }
             .sheet(item: $zielansicht) { auswahl in
                 NavigationStack {
@@ -284,6 +323,11 @@ struct Lagebildschirm: View {
 
 struct ZielansichtAuswahl: Identifiable {
     let id: String
+}
+
+struct LiveHaltAuswahl: Identifiable {
+    let halt: LiveHalt
+    var id: String { halt.stopId }
 }
 
 struct OrtAuswahl: Identifiable {
@@ -373,6 +417,7 @@ private struct Lageleiste: View {
 struct Kurzuebersicht: View {
     @Environment(AppModell.self) private var modell
     let objekt: KartenObjekt
+    var live: OepnvLive?
     var aktion: (Kurzaktion, Kurzinfo) -> Void = { _, _ in }
 
     /// Aktionen, die es in dieser Ausbaustufe schon gibt (Details folgen mit der Zielansicht).
@@ -380,7 +425,8 @@ struct Kurzuebersicht: View {
 
     var body: some View {
         let ich = modell.standort.aktuell.map { GeoPunkt(lat: $0.coordinate.latitude, lon: $0.coordinate.longitude) }
-        if let info = Kurzinfo.companion.fuer(stand: modell.stand, objekt: objekt, jetztMs: Int64(Date.now.timeIntervalSince1970 * 1000), ich: ich) {
+        let jetzt = Int64(Date.now.timeIntervalSince1970 * 1000)
+        if let info = live?.kurzinfo(objekt: objekt, jetztMs: jetzt) ?? Kurzinfo.companion.fuer(stand: modell.stand, objekt: objekt, jetztMs: jetzt, ich: ich) {
             ScrollView {
                 VStack(alignment: .leading, spacing: 16) {
                     HStack(spacing: 12) {

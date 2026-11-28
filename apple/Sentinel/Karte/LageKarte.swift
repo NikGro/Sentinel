@@ -6,7 +6,7 @@ import UIKit
 /// Antippbare Ebenen des gemeinsamen Stils.
 private let antippbar: Set<String> = [
     "lage-cluster", "lage-symbole", "lage-symbole-zeichen", "lage-oepnv-fahrzeuge", "lage-halte",
-    "lage-linien", "lage-oepnv-kante", "lage-spuren", "lage-standortspur", "lage-flaechen",
+    "lage-linien", "lage-oepnv-kante", "lage-spuren", "lage-standortspur", "lage-flaechen", "lage-oepnv-live-halte",
 ]
 
 /// Steuerung der Karte von außen (Kamera, Verkehrslage).
@@ -74,6 +74,13 @@ final class KartenSteuerung {
         }
     }
 
+    /// Sichtbarer Ausschnitt (Süd, West, Nord, Ost) und Zoom; `nil`, solange die Karte nicht bereit ist.
+    func ausschnitt() -> (sued: Double, west: Double, nord: Double, ost: Double, zoom: Double)? {
+        guard let karte else { return nil }
+        let b = karte.visibleCoordinateBounds
+        return (b.sw.latitude, b.sw.longitude, b.ne.latitude, b.ne.longitude, karte.zoomLevel)
+    }
+
     func norden() {
         karte?.setDirection(0, animated: true)
     }
@@ -94,6 +101,10 @@ struct LageKarte: UIViewRepresentable {
     /// Platzierungsmodus: Tipps setzen Punkte (`beiTipp`), die Vorschau erscheint in `s-entwurf`.
     var platzierung: Platzierung? = nil
     var beiTipp: (GeoPunkt) -> Void = { _ in }
+    /// ÖPNV live (Fahrzeuge, Haltestellen); `liveStand` ändert sich nach jedem Laden.
+    var live: OepnvLive? = nil
+    var liveStand = 0
+    var beiKameraRuhe: () -> Void = {}
     let beiAuswahl: (KartenObjekt) -> Void
     @Environment(\.colorScheme) private var farbschema
 
@@ -124,6 +135,8 @@ struct LageKarte: UIViewRepresentable {
     func updateUIView(_ karte: MLNMapView, context: Context) {
         context.coordinator.beiAuswahl = beiAuswahl
         context.coordinator.beiTipp = beiTipp
+        context.coordinator.beiKameraRuhe = beiKameraRuhe
+        context.coordinator.liveSetzen(live, stand: liveStand)
         context.coordinator.entwurf(platzierung)
         context.coordinator.aktualisieren(stand: modell.stand, ort: modell.standort.aktuell)
     }
@@ -134,6 +147,9 @@ struct LageKarte: UIViewRepresentable {
         weak var steuerung: KartenSteuerung?
         var beiAuswahl: (KartenObjekt) -> Void
         var beiTipp: (GeoPunkt) -> Void = { _ in }
+        var beiKameraRuhe: () -> Void = {}
+        private var live: OepnvLive?
+        private var liveStand = -1
         private var platzierung: Platzierung?
         private var letzteVorschau = ""
         weak var karte: MLNMapView?
@@ -190,6 +206,7 @@ struct LageKarte: UIViewRepresentable {
         }
 
         func mapView(_ mapView: MLNMapView, regionDidChangeAnimated animated: Bool) {
+            beiKameraRuhe()
             let neu = mapView.zoomLevel
             // Auffächern nur bei merklicher Änderung neu berechnen.
             if abs(neu - zoom) > 0.25 {
@@ -227,6 +244,15 @@ struct LageKarte: UIViewRepresentable {
             }
         }
 
+        /// ÖPNV live: Haltestellen neu setzen, wenn neu geladen wurde; Fahrzeuge zeichnet der Takt.
+        func liveSetzen(_ l: OepnvLive?, stand: Int) {
+            let wechsel = (l == nil) != (live == nil)
+            live = l
+            guard let stil, wechsel || stand != liveStand else { return }
+            liveStand = stand
+            setzen(stil, Quellen.shared.OEPNV_LIVE_HALTE, l?.halteGeoJson() ?? #"{"type":"FeatureCollection","features":[]}"#)
+        }
+
         /// Entwurf im Platzierungsmodus (gelbe Vorschau); nur bei Änderung neu setzen.
         func entwurf(_ p: Platzierung?) {
             platzierung = p
@@ -240,7 +266,7 @@ struct LageKarte: UIViewRepresentable {
         private func oepnvTakt() {
             guard let stil else { return }
             let jetzt = Int64(Date.now.timeIntervalSince1970 * 1000)
-            setzen(stil, Quellen.shared.OEPNV_FAHRZEUGE, Bruecke.shared.oepnvFahrzeuge(szene: szene, stand: modell.stand, jetztMs: jetzt))
+            setzen(stil, Quellen.shared.OEPNV_FAHRZEUGE, Bruecke.shared.oepnvFahrzeuge(szene: szene, stand: modell.stand, jetztMs: jetzt, live: live))
         }
 
         private func setzen(_ stil: MLNStyle, _ id: String, _ json: String) {
