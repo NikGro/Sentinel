@@ -1,7 +1,15 @@
 package de.nglab.sentinel.ui
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.combinedClickable
+import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.filled.Edit
+import androidx.compose.material.icons.filled.Place
+import androidx.compose.material.icons.filled.Search
+import de.nglab.sentinel.kern.lage.Zielgruppen
+import de.nglab.sentinel.kern.lage.Zielverzeichnis
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -59,46 +67,142 @@ import de.nglab.sentinel.kern.modell.Art
 import de.nglab.sentinel.kern.modell.Standortquelle
 import de.nglab.sentinel.kern.modell.Ziel
 
-/** Ziele-Tab: nach Gruppen geordnet, Antippen öffnet die Zielansicht. */
-@OptIn(ExperimentalMaterial3Api::class)
+/**
+ * Ziele-Tab: Suche, nach Gruppen geordnet, Antippen öffnet die Zielansicht. Lange drücken startet den Auswahlmodus
+ * (mehrere Ziele einer Gruppe zuordnen). Gruppen lassen sich anlegen, umbenennen, umfärben und löschen.
+ */
+@OptIn(ExperimentalMaterial3Api::class, androidx.compose.foundation.ExperimentalFoundationApi::class)
 @Composable
 fun Zielliste(modell: AppModell, stand: LageStand, aufKarte: (KartenObjekt) -> Unit) {
     var offen by rememberSaveable { mutableStateOf<String?>(null) }
+    var suche by rememberSaveable { mutableStateOf("") }
+    var auswahl by remember { mutableStateOf(setOf<String>()) }
+    var gruppeBearbeiten by remember { mutableStateOf<Pair<String?, de.nglab.sentinel.kern.modell.Zielgruppe>?>(null) }
+    var zuordnenMenue by remember { mutableStateOf(false) }
     offen?.let { id ->
         if (stand.ziele[id] != null) {
-            Zielansicht(modell, stand, id, zurueck = { offen = null }, aufKarte = { aufKarte(KartenObjekt(Objektart.Ziel, id)) })
+            Zielansicht(modell, stand, id, zurueck = { offen = null }, aufKarte = { aufKarte(KartenObjekt(Objektart.Ziel, id)) }, oeffnen = { offen = it })
             return
         }
     }
+    val auswahlModus = auswahl.isNotEmpty()
     Column(Modifier.fillMaxSize()) {
-        TopAppBar(title = { Text("Ziele") })
+        if (auswahlModus) {
+            TopAppBar(
+                title = { Text("${auswahl.size} ausgewählt") },
+                navigationIcon = { IconButton(onClick = { auswahl = emptySet() }) { Icon(Icons.Filled.Close, "Auswahl beenden") } },
+                actions = {
+                    Box {
+                        TextButton(onClick = { zuordnenMenue = true }) { Text("Zur Gruppe") }
+                        androidx.compose.material3.DropdownMenu(expanded = zuordnenMenue, onDismissRequest = { zuordnenMenue = false }) {
+                            for (g in stand.zielgruppenSortiert) androidx.compose.material3.DropdownMenuItem(text = { Text(g.data.name) }, onClick = {
+                                zuordnenMenue = false
+                                for ((id, z) in Zielverzeichnis.zuordnen(stand, auswahl.toList(), g.id)) modell.lage.setzen(Art.Ziel, id, z)
+                                auswahl = emptySet()
+                            })
+                            androidx.compose.material3.DropdownMenuItem(text = { Text("Neue Gruppe …") }, onClick = {
+                                zuordnenMenue = false
+                                gruppeBearbeiten = null to Zielgruppen.neu("", Zielgruppen.vorschlag(stand))
+                            })
+                            androidx.compose.material3.DropdownMenuItem(text = { Text("Aus der Gruppe nehmen") }, onClick = {
+                                zuordnenMenue = false
+                                for ((id, z) in Zielverzeichnis.zuordnen(stand, auswahl.toList(), null)) modell.lage.setzen(Art.Ziel, id, z)
+                                auswahl = emptySet()
+                            })
+                        }
+                    }
+                },
+            )
+        } else {
+            TopAppBar(
+                title = { Text("Ziele") },
+                actions = { TextButton(onClick = { gruppeBearbeiten = null to Zielgruppen.neu("", Zielgruppen.vorschlag(stand)) }) { Text("Neue Gruppe") } },
+            )
+        }
+        OutlinedTextField(
+            value = suche, onValueChange = { suche = it },
+            placeholder = { Text("Ziele durchsuchen") },
+            leadingIcon = { Icon(Icons.Filled.Search, null) },
+            trailingIcon = { if (suche.isNotEmpty()) IconButton(onClick = { suche = "" }) { Icon(Icons.Filled.Close, "Leeren") } },
+            singleLine = true,
+            modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 4.dp),
+        )
         LazyColumn {
-            val gruppen = stand.zielgruppenSortiert
-            val ohne = stand.zieleSortiert.filter { z -> z.data.gruppeId == null || stand.zielgruppen[z.data.gruppeId] == null }
-            for (g in gruppen) {
-                val drin = stand.zieleSortiert.filter { it.data.gruppeId == g.id }
-                item(key = "g-${g.id}") { Abschnittskopf(g.data.name, hexFarbe(g.data.farbe)) }
-                items(drin, key = { it.id }) { z -> Zielzeile(modell, stand, z.id) { offen = z.id } }
-            }
-            if (ohne.isNotEmpty()) {
-                if (gruppen.isNotEmpty()) item(key = "ohne") { Abschnittskopf("Ohne Gruppe", null) }
-                items(ohne, key = { it.id }) { z -> Zielzeile(modell, stand, z.id) { offen = z.id } }
+            for (a in Zielverzeichnis.abschnitte(stand, suche)) {
+                item(key = "g-${a.gruppeId}") {
+                    Abschnittskopf(a.titel, a.farbe?.let { hexFarbe(it) }, bearbeiten = a.gruppeId?.let { gid -> { stand.zielgruppen[gid]?.let { gruppeBearbeiten = gid to it.data } } })
+                }
+                if (a.ziele.isEmpty()) item(key = "leer-${a.gruppeId}") { Text("Keine Ziele in dieser Gruppe.", color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(horizontal = 16.dp, vertical = 4.dp)) }
+                items(a.ziele, key = { it.id }) { z ->
+                    Zielzeile(
+                        modell, stand, z.id,
+                        gewaehlt = if (auswahlModus) z.id in auswahl else null,
+                        oeffnen = { if (auswahlModus) auswahl = if (z.id in auswahl) auswahl - z.id else auswahl + z.id else offen = z.id },
+                        langDruecken = { auswahl = auswahl + z.id },
+                    )
+                }
             }
             if (stand.ziele.isEmpty()) item { Text("Noch keine Ziele. Über „+“ auf der Karte anlegen.", color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(20.dp)) }
+            else if (suche.isNotBlank() && Zielverzeichnis.abschnitte(stand, suche).isEmpty()) item { Text("Kein Ziel passt zu „$suche“.", color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(20.dp)) }
+        }
+    }
+    gruppeBearbeiten?.let { (gid, g) ->
+        GruppeBearbeiten(gid != null, g, abbrechen = { gruppeBearbeiten = null }, loeschen = gid?.let { id -> {
+            for ((zid, z) in Zielverzeichnis.gruppeLoesen(stand, id)) modell.lage.setzen(Art.Ziel, zid, z)
+            modell.lage.loeschen(Art.Zielgruppe, id)
+            gruppeBearbeiten = null
+        } }) { neu ->
+            val id = gid ?: Lage.neueId()
+            modell.lage.setzen(Art.Zielgruppe, id, neu)
+            if (gid == null && auswahl.isNotEmpty()) {
+                for ((zid, z) in Zielverzeichnis.zuordnen(stand, auswahl.toList(), id)) modell.lage.setzen(Art.Ziel, zid, z)
+                auswahl = emptySet()
+            }
+            gruppeBearbeiten = null
         }
     }
 }
 
+/** Gruppe anlegen bzw. bearbeiten: Name, Farbe, Löschen (die Ziele bleiben, ohne Gruppe). */
 @Composable
-private fun Abschnittskopf(titel: String, farbe: Color?) {
-    Row(Modifier.padding(horizontal = 16.dp, vertical = 10.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-        farbe?.let { Box(Modifier.size(10.dp).background(it, CircleShape)) }
-        Text(titel, style = MaterialTheme.typography.titleSmall, color = MaterialTheme.colorScheme.primary)
-    }
+private fun GruppeBearbeiten(vorhanden: Boolean, g: de.nglab.sentinel.kern.modell.Zielgruppe, abbrechen: () -> Unit, loeschen: (() -> Unit)?, sichern: (de.nglab.sentinel.kern.modell.Zielgruppe) -> Unit) {
+    var name by remember { mutableStateOf(g.name) }
+    var farbe by remember { mutableStateOf(g.farbe) }
+    AlertDialog(
+        onDismissRequest = abbrechen,
+        title = { Text(if (vorhanden) "Gruppe bearbeiten" else "Neue Gruppe") },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                OutlinedTextField(name, { name = it }, label = { Text("Name") }, singleLine = true, modifier = Modifier.fillMaxWidth())
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    for (f in Zielgruppen.farben) {
+                        Box(
+                            Modifier.size(28.dp).background(hexFarbe(f), CircleShape)
+                                .then(if (f == farbe) Modifier.border(3.dp, MaterialTheme.colorScheme.onSurface, CircleShape) else Modifier)
+                                .clickable { farbe = f },
+                        )
+                    }
+                }
+                loeschen?.let { TextButton(onClick = it) { Text("Gruppe löschen", color = MaterialTheme.colorScheme.error) } }
+            }
+        },
+        confirmButton = { TextButton(onClick = { sichern(Zielgruppen.aendern(g, name, farbe)) }, enabled = Zielgruppen.gueltig(name)) { Text(if (vorhanden) "Sichern" else "Anlegen") } },
+        dismissButton = { TextButton(onClick = abbrechen) { Text("Abbrechen") } },
+    )
 }
 
 @Composable
-private fun Zielzeile(modell: AppModell, stand: LageStand, id: String, oeffnen: () -> Unit) {
+private fun Abschnittskopf(titel: String, farbe: Color?, bearbeiten: (() -> Unit)? = null) {
+    Row(Modifier.fillMaxWidth().padding(start = 16.dp, end = 4.dp, top = 6.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+        farbe?.let { Box(Modifier.size(10.dp).background(it, CircleShape)) }
+        Text(titel, style = MaterialTheme.typography.titleSmall, color = MaterialTheme.colorScheme.primary, modifier = Modifier.weight(1f).padding(vertical = 10.dp))
+        bearbeiten?.let { IconButton(onClick = it) { Icon(Icons.Filled.Edit, "Gruppe bearbeiten", tint = MaterialTheme.colorScheme.onSurfaceVariant) } }
+    }
+}
+
+@OptIn(androidx.compose.foundation.ExperimentalFoundationApi::class)
+@Composable
+private fun Zielzeile(modell: AppModell, stand: LageStand, id: String, gewaehlt: Boolean? = null, oeffnen: () -> Unit, langDruecken: () -> Unit = {}) {
     val info = Kurzinfo.fuer(stand, KartenObjekt(Objektart.Ziel, id), System.currentTimeMillis(), null) ?: return
     val sichtbar = stand.zielEingeblendet(id)
     ListItem(
@@ -111,7 +215,8 @@ private fun Zielzeile(modell: AppModell, stand: LageStand, id: String, oeffnen: 
                 Icon(info.symbol.bild(), null, tint = Color.White, modifier = Modifier.size(20.dp))
             }
         },
-        modifier = Modifier.clickable(onClick = oeffnen).testTag("Ziel ${info.titel}"),
+        trailingContent = gewaehlt?.let { g -> { androidx.compose.material3.Checkbox(checked = g, onCheckedChange = { oeffnen() }) } },
+        modifier = Modifier.combinedClickable(onClick = oeffnen, onLongClick = langDruecken).testTag("Ziel ${info.titel}"),
     )
 }
 
@@ -121,7 +226,7 @@ private fun Zielzeile(modell: AppModell, stand: LageStand, id: String, oeffnen: 
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun Zielansicht(modell: AppModell, stand: LageStand, id: String, zurueck: () -> Unit, aufKarte: () -> Unit, standortSetzen: (() -> Unit)? = null) {
+fun Zielansicht(modell: AppModell, stand: LageStand, id: String, zurueck: () -> Unit, aufKarte: () -> Unit, standortSetzen: (() -> Unit)? = null, oeffnen: ((String) -> Unit)? = null) {
     val v = stand.ziele[id] ?: return
     var z by remember(id) { mutableStateOf(v.data) }
     val geaendert = z != v.data
@@ -184,6 +289,10 @@ fun Zielansicht(modell: AppModell, stand: LageStand, id: String, zurueck: () -> 
             // Angaben
             Abschnittstitel("Angaben")
             for (f in Zieleditor.felder(z.art)) {
+                if (Zieleditor.mitVorschlaegen(f.schluessel)) {
+                    AnschriftFeld(modell, f.titel, z.anschrift, aendern = { z = Zieleditor.setzen(z, f.schluessel, it) }) { t -> z = Zieleditor.anschriftUebernehmen(z, t, System.currentTimeMillis()) }
+                    continue
+                }
                 OutlinedTextField(
                     value = Zieleditor.wert(z, f.schluessel),
                     onValueChange = { z = Zieleditor.setzen(z, f.schluessel, it) },
@@ -216,6 +325,29 @@ fun Zielansicht(modell: AppModell, stand: LageStand, id: String, zurueck: () -> 
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Text("Auf der Karte zeigen", modifier = Modifier.weight(1f))
                 Switch(checked = stand.zielEingeblendet(id), onCheckedChange = { modell.lage.zielEinblenden(id, it) })
+            }
+
+            // Aufzeichnung: sofort wirksam
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Column(Modifier.weight(1f)) {
+                    Text("Standort aufzeichnen")
+                    Text("Für den Verlauf", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                }
+                Switch(checked = v.data.aufzeichnung, onCheckedChange = { an ->
+                    modell.lage.setzen(Art.Ziel, id, Zieleditor.mitAufzeichnung(v.data, an))
+                    z = Zieleditor.mitAufzeichnung(z, an)
+                })
+            }
+
+            // Insassen (Zielfahrzeug, Zielobjekt)
+            val insassen = Zielverzeichnis.insassen(stand, id)
+            if (z.art != de.nglab.sentinel.kern.modell.Zielart.Person) {
+                Abschnittstitel(if (z.art == de.nglab.sentinel.kern.modell.Zielart.Fahrzeug) "Insassen" else "Im Gebäude")
+                if (insassen.isEmpty()) Text("Niemand bekannt.", color = MaterialTheme.colorScheme.onSurfaceVariant)
+                for (p in insassen) ListItem(
+                    headlineContent = { Text(p.data.anzeigename) },
+                    modifier = if (oeffnen != null) Modifier.clickable { oeffnen(p.id) } else Modifier,
+                )
             }
 
             // Beziehungen: sofort wirksam
@@ -272,6 +404,27 @@ private fun BeziehungAnlegen(stand: LageStand, id: String, abbrechen: () -> Unit
         confirmButton = { TextButton(onClick = { anderes?.let { sichern(Beziehungen.neu(id, it, bezeichnung, stand.ichId)) } }, enabled = anderes != null) { Text("Verbinden") } },
         dismissButton = { TextButton(onClick = abbrechen) { Text("Abbrechen") } },
     )
+}
+
+/** Anschrift mit Vorschlägen aus der Ortssuche; ein Vorschlag übernimmt die Anschrift und setzt den Standort. */
+@Composable
+private fun AnschriftFeld(modell: AppModell, titel: String, wert: String, aendern: (String) -> Unit, waehlen: (de.nglab.sentinel.kern.netz.Suchtreffer) -> Unit) {
+    var tippt by remember { mutableStateOf(false) }
+    var vorschlaege by remember { mutableStateOf(emptyList<de.nglab.sentinel.kern.netz.Suchtreffer>()) }
+    androidx.compose.runtime.LaunchedEffect(wert, tippt) {
+        if (!tippt || wert.trim().length < 3) { vorschlaege = emptyList(); return@LaunchedEffect }
+        kotlinx.coroutines.delay(300)
+        vorschlaege = runCatching { modell.api?.suche(wert, null) ?: emptyList() }.getOrDefault(emptyList()).filter { it.art != "objekt" }.take(5)
+    }
+    Column {
+        OutlinedTextField(value = wert, onValueChange = { tippt = true; aendern(it) }, label = { Text(titel) }, singleLine = true, modifier = Modifier.fillMaxWidth())
+        for (t in vorschlaege) ListItem(
+            headlineContent = { Text(t.titel) },
+            supportingContent = { if (t.untertitel.isNotBlank()) Text(t.untertitel) },
+            leadingContent = { Icon(Icons.Filled.Place, null) },
+            modifier = Modifier.clickable { tippt = false; vorschlaege = emptyList(); waehlen(t) },
+        )
+    }
 }
 
 @Composable

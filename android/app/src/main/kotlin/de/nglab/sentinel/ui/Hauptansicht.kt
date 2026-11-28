@@ -500,6 +500,7 @@ private fun Lagebildschirm(modell: AppModell, stand: LageStand, fokus: KartenObj
                     Kurzinfo.fuer(stand, KartenObjekt(Objektart.Ziel, id), System.currentTimeMillis(), null)?.ort?.let { steuerung.zeigen(it, 17.0) }
                 },
                 standortSetzen = { zielansicht = null; platzierung = Platzierung(Platzierung.Zweck.ZielOrt(id)) },
+                oeffnen = { zielansicht = it },
             )
         }
     }

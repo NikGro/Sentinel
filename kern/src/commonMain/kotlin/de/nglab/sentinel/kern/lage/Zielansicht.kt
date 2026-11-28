@@ -188,6 +188,16 @@ object Zieleditor {
         return bindungsziele(stand, zielId).firstOrNull { if (b == null || b.art == BindungsArt.Fuss) it.art == BindungsArt.Fuss else it.art == b.art && it.zielId == b.zielId }
     }
 
+    /** Standortaufzeichnung (Verlauf) für dieses Ziel an oder aus. */
+    fun mitAufzeichnung(z: Ziel, an: Boolean): Ziel = z.copy(aufzeichnung = an)
+
+    /** Anschrift aus einem Suchtreffer übernehmen und den Standort dorthin setzen. */
+    fun anschriftUebernehmen(z: Ziel, t: de.nglab.sentinel.kern.netz.Suchtreffer, jetztMs: Long): Ziel =
+        standortSetzen(z.copy(anschrift = listOf(t.titel, t.untertitel).filter { it.isNotBlank() }.joinToString(", ")), t.punkt, jetztMs)
+
+    /** Felder, unter denen Anschriftsvorschläge erscheinen. */
+    fun mitVorschlaegen(schluessel: String): Boolean = schluessel == "anschrift"
+
     /** Gruppe setzen (für Plattformen ohne benannte Kopien, etwa Swift). */
     fun mitGruppe(z: Ziel, gruppeId: String?): Ziel = z.copy(gruppeId = gruppeId)
 
