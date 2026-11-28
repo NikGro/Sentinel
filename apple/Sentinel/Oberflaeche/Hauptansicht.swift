@@ -174,13 +174,7 @@ struct Lagebildschirm: View {
             }
             .overlay(alignment: .topTrailing) {
                 VStack(spacing: 8) {
-                    Button(modell.stand.eigenerNotruf ? "Ende" : "SOS") {
-                        if modell.stand.eigenerNotruf { _ = modell.lage.notrufBeenden() } else { _ = modell.lage.notrufAusloesen() }
-                    }
-                    .font(.headline.weight(.heavy))
-                    .foregroundStyle(.white)
-                    .frame(width: 44, height: 44)
-                    .glassEffect(.regular.tint(.red).interactive(), in: .circle)
+                    SosKnopf()
                     GlassEffectContainer(spacing: 8) {
                         VStack(spacing: 8) {
                             // Standort und Kompass in einem Knopf: heftet an (Fahrtrichtung), erneut Norden oben.
@@ -560,5 +554,42 @@ struct Kurzuebersicht: View {
         } else {
             Text("Nicht mehr in der Lage").foregroundStyle(.secondary).padding(20)
         }
+    }
+}
+
+/// Notrufknopf: auslösen erst nach 1,5 s Halten (Ring füllt sich), damit ein versehentlicher Tipp nichts auslöst.
+/// Den eigenen Notruf beendet ein Tipp mit Rückfrage (gleich wie Android).
+private struct SosKnopf: View {
+    @Environment(AppModell.self) private var modell
+    @State private var gedrueckt = false
+    @State private var rueckfrage = false
+
+    var body: some View {
+        let eigen = modell.stand.eigenerNotruf
+        Text(eigen ? "Ende" : "SOS")
+            .font(.headline.weight(.heavy))
+            .foregroundStyle(.white)
+            .frame(width: 44, height: 44)
+            .glassEffect(.regular.tint(.red).interactive(), in: .circle)
+            .overlay {
+                Circle()
+                    .trim(from: 0, to: gedrueckt ? 1 : 0)
+                    .stroke(.white, style: StrokeStyle(lineWidth: 4, lineCap: .round))
+                    .rotationEffect(.degrees(-90))
+                    .frame(width: 50, height: 50)
+                    .animation(gedrueckt ? .linear(duration: 1.5) : .easeOut(duration: 0.15), value: gedrueckt)
+            }
+            .contentShape(.circle)
+            .onTapGesture { if eigen { rueckfrage = true } }
+            .onLongPressGesture(minimumDuration: 1.5, perform: {
+                guard !eigen else { return }
+                UINotificationFeedbackGenerator().notificationOccurred(.warning)
+                _ = modell.lage.notrufAusloesen()
+            }, onPressingChanged: { gedrueckt = $0 && !eigen })
+            .accessibilityLabel(eigen ? "Notruf beenden" : "Notruf, zum Auslösen 1,5 Sekunden halten")
+            .accessibilityIdentifier("SOS")
+            .confirmationDialog("Notruf beenden?", isPresented: $rueckfrage, titleVisibility: .visible) {
+                Button("Beenden", role: .destructive) { _ = modell.lage.notrufBeenden() }
+            }
     }
 }

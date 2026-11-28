@@ -66,6 +66,8 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
@@ -291,7 +293,7 @@ private fun Lagebildschirm(modell: AppModell, stand: LageStand, fokus: KartenObj
             verticalArrangement = Arrangement.spacedBy(10.dp),
             horizontalAlignment = Alignment.End,
         ) {
-            SosKnopf(stand.eigenerNotruf) { if (stand.eigenerNotruf) modell.lage.notrufBeenden() else modell.lage.notrufAusloesen() }
+            SosKnopf(stand.eigenerNotruf, ausloesen = { modell.lage.notrufAusloesen() }, beenden = { modell.lage.notrufBeenden() })
             // Standort und Kompass in einem Knopf: heftet an (Fahrtrichtung), erneut Norden oben.
             val ort by modell.ort.collectAsStateWithLifecycle()
             Kartenknopf(
@@ -489,17 +491,55 @@ private fun Kartenknopf(bild: ImageVector, beschreibung: String, aktiv: Boolean 
     ) { Icon(bild, beschreibung) }
 }
 
-/** Notrufknopf: kurz antippen löst noch nicht aus, erst ein langer Druck (wie auf iOS 1,5 s). */
+/**
+ * Notrufknopf wie auf iOS: auslösen erst nach 1,5 s Halten (Ring füllt sich), damit ein versehentlicher Tipp nichts
+ * auslöst. Den eigenen Notruf beendet ein Tipp mit Rückfrage.
+ */
 @Composable
-private fun SosKnopf(eigenerNotruf: Boolean, aktion: () -> Unit) {
-    Surface(
-        color = SentinelFarben.aPosition,
-        contentColor = Color.White,
-        shape = CircleShape,
-        shadowElevation = 4.dp,
-        modifier = Modifier.size(48.dp).clickable(onClickLabel = if (eigenerNotruf) "Notruf beenden" else "Notruf auslösen", onClick = aktion),
-    ) {
-        Box(contentAlignment = Alignment.Center) { Text(if (eigenerNotruf) "Ende" else "SOS", fontWeight = FontWeight.Bold) }
+private fun SosKnopf(eigenerNotruf: Boolean, ausloesen: () -> Unit, beenden: () -> Unit) {
+    var fortschritt by remember { mutableStateOf(0f) }
+    var rueckfrage by remember { mutableStateOf(false) }
+    val bereich = androidx.compose.runtime.rememberCoroutineScope()
+    var halten by remember { mutableStateOf<kotlinx.coroutines.Job?>(null) }
+    val haptik = androidx.compose.ui.platform.LocalHapticFeedback.current
+    Box(contentAlignment = Alignment.Center, modifier = Modifier.size(48.dp)) {
+        Surface(
+            color = SentinelFarben.aPosition,
+            contentColor = Color.White,
+            shape = CircleShape,
+            shadowElevation = 4.dp,
+            modifier = Modifier.size(48.dp).testTag("SOS").pointerInput(eigenerNotruf) {
+                detectTapGestures(
+                    onPress = {
+                        if (eigenerNotruf) return@detectTapGestures
+                        halten = bereich.launch {
+                            val start = System.currentTimeMillis()
+                            while (fortschritt < 1f) {
+                                fortschritt = ((System.currentTimeMillis() - start) / 1500f).coerceAtMost(1f)
+                                kotlinx.coroutines.delay(16)
+                            }
+                            haptik.performHapticFeedback(androidx.compose.ui.hapticfeedback.HapticFeedbackType.LongPress)
+                            ausloesen()
+                        }
+                        tryAwaitRelease()
+                        halten?.cancel()
+                        fortschritt = 0f
+                    },
+                    onTap = { if (eigenerNotruf) rueckfrage = true },
+                )
+            },
+        ) {
+            Box(contentAlignment = Alignment.Center) { Text(if (eigenerNotruf) "Ende" else "SOS", fontWeight = FontWeight.Bold) }
+        }
+        if (fortschritt > 0f) androidx.compose.material3.CircularProgressIndicator(progress = { fortschritt }, modifier = Modifier.size(54.dp), color = Color.White, strokeWidth = 4.dp)
+    }
+    if (rueckfrage) {
+        androidx.compose.material3.AlertDialog(
+            onDismissRequest = { rueckfrage = false },
+            title = { Text("Notruf beenden?") },
+            confirmButton = { androidx.compose.material3.TextButton(onClick = { rueckfrage = false; beenden() }) { Text("Beenden") } },
+            dismissButton = { androidx.compose.material3.TextButton(onClick = { rueckfrage = false }) { Text("Abbrechen") } },
+        )
     }
 }
 
