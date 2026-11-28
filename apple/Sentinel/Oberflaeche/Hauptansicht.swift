@@ -209,19 +209,20 @@ struct Lagebildschirm: View {
             .sheet(item: $auswahl) { a in
                 Kurzuebersicht(objekt: a.objekt) { k, info in
                     auswahl = nil
-                    switch k {
-                    case .hinfuehren:
+                    // Vergleich über den Kotlin-Namen (Swift-Schreibweise mehrteiliger Namen ist nicht festgelegt).
+                    switch k.name {
+                    case "Hinfuehren":
                         let istA = a.objekt.art == .kraft && modell.stand.einsatz.a?.memberId == a.objekt.id
                         hinfuehren(istA ? NavizielAPosition.shared : NavizielObjekt(objekt: a.objekt))
-                    case .bearbeiten:
+                    case "Bearbeiten":
                         if let v = modell.stand.markierungen[a.objekt.id] {
                             nachSchliessen { editor = Markierungsbearbeitung(id: a.objekt.id, markierung: v.data, neu: false) }
                         }
-                    case .verschieben:
+                    case "Verschieben":
                         platzierung = Platzierung(zweck: PlatzierungZweckVerschieben(markierungId: a.objekt.id), punkte: [])
-                    case .standortSetzen:
+                    case "StandortSetzen":
                         platzierung = Platzierung(zweck: PlatzierungZweckZielOrt(zielId: a.objekt.id), punkte: [])
-                    case .anrufen:
+                    case "Anrufen":
                         if let t = info.telefon, let url = URL(string: "tel:\(t.filter { !$0.isWhitespace })") { UIApplication.shared.open(url) }
                     default:
                         break
@@ -335,7 +336,7 @@ struct Kurzuebersicht: View {
     var aktion: (Kurzaktion, Kurzinfo) -> Void = { _, _ in }
 
     /// Aktionen, die es in dieser Ausbaustufe schon gibt (Details folgen mit der Zielansicht).
-    private static let umgesetzt: [Kurzaktion] = [.hinfuehren, .bearbeiten, .verschieben, .standortSetzen, .anrufen]
+    private static let umgesetzt: Set<String> = ["Hinfuehren", "Bearbeiten", "Verschieben", "StandortSetzen", "Anrufen"]
 
     var body: some View {
         let ich = modell.standort.aktuell.map { GeoPunkt(lat: $0.coordinate.latitude, lon: $0.coordinate.longitude) }
@@ -354,7 +355,7 @@ struct Kurzuebersicht: View {
                         }
                         Spacer()
                     }
-                    let knoepfe = info.aktionen.filter { Self.umgesetzt.contains($0) }
+                    let knoepfe = info.aktionen.filter { Self.umgesetzt.contains($0.name) }
                     if !knoepfe.isEmpty {
                         HStack(spacing: 10) {
                             ForEach(knoepfe.indices, id: \.self) { i in
