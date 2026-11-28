@@ -46,6 +46,21 @@ struct Lagebildschirm: View {
     @State private var liveAnstoss = 0
     @State private var fahrtAnsicht: ZielansichtAuswahl?
     @State private var abfahrtenHalt: LiveHaltAuswahl?
+    // Verlauf und Spur-Markierungen
+    @State private var verlauf: Verlauf?
+    @State private var verlaufStand = 0
+    @State private var verlaufAnteil = 1.0
+    @State private var spurenStand = 0
+
+    private func verlaufLaden(_ v: Verlauf, _ z: Zeitraum) {
+        guard let api = modell.api else { return }
+        Task {
+            try? await v.laden(api: api, z: z)
+            verlaufAnteil = 1
+            verlaufStand += 1
+            if let r = v.rahmen() { steuerung.einpassen(r) }
+        }
+    }
     @State private var steuerung = KartenSteuerung()
     @State private var auswahl: KartenObjektAuswahl?
     @State private var verkehr = false
@@ -97,6 +112,14 @@ struct Lagebildschirm: View {
 
     private func anlegen(_ was: Anlegbar) {
         plus = false
+        if was is AnlegbarStandortspur {
+            if let o = modell.standort.aktuell,
+               let m = Verlauf.companion.standortspur(stand: modell.stand, ort: GeoPunkt(lat: o.coordinate.latitude, lon: o.coordinate.longitude), jetztMs: jetztMs) {
+                _ = modell.lage.markierungSichern(m: m, id: Lage.companion.neueId())
+            }
+            plusOrt = nil
+            return
+        }
         let ort = plusOrt
         plusOrt = nil
         steuerung.markieren(nil)
@@ -120,7 +143,8 @@ struct Lagebildschirm: View {
 
     var body: some View {
         LageKarte(modell: modell, steuerung: steuerung, platzierung: platzierung, beiTipp: { punkt in platzierung = platzierung?.tippen(p: punkt) },
-                  live: liveAn ? live : nil, liveStand: liveStand, beiKameraRuhe: { if liveAn { liveAnstoss += 1 } }) {
+                  live: liveAn ? live : nil, liveStand: liveStand, beiKameraRuhe: { if liveAn { liveAnstoss += 1 } },
+                  spurenJson: { let _ = (spurenStand, verlaufStand); return modell.spuren.geoJson(stand: modell.stand, verlauf: verlauf) }()) {
             auswahl = KartenObjektAuswahl(objekt: $0)
         }
             .ignoresSafeArea()
@@ -175,7 +199,20 @@ struct Lagebildschirm: View {
             }
             .safeAreaInset(edge: .bottom) {
                 Group {
-                    if let n = modell.navigator.stand {
+                    if let v = verlauf {
+                        VerlaufLeiste(v: v, stand: verlaufStand, anteil: Binding(get: { verlaufAnteil }, set: { a in
+                            verlaufAnteil = a
+                            if let t = v.zeitBei(anteil: a) { steuerung.markieren(v.ort(zeitMs: t.int64Value)) }
+                        }), zeitraumWaehlen: { verlaufLaden(v, $0) }, behalten: {
+                            if let m = v.alsMarkierung() { _ = modell.lage.markierungSichern(m: m, id: Lage.companion.neueId()) }
+                            verlauf = nil
+                            steuerung.markieren(nil)
+                        }, schliessen: {
+                            verlauf = nil
+                            verlaufStand += 1
+                            steuerung.markieren(nil)
+                        })
+                    } else if let n = modell.navigator.stand {
                         NaviLeisteUnten(n: n, sonderrechte: Binding(get: { sonderrechte }, set: { neu in
                             sonderrechte = neu
                             hinfuehren(n.ziel)
@@ -257,6 +294,10 @@ struct Lagebildschirm: View {
                         case "livehalt": if let h = live.halt(stopId: id) { nachSchliessen { abfahrtenHalt = LiveHaltAuswahl(halt: h) } }
                         default: nachSchliessen { zielansicht = ZielansichtAuswahl(id: id) }
                         }
+                    case "Verlauf":
+                        let v = Verlauf(objekt: a.objekt, titel: info.titel)
+                        verlauf = v
+                        verlaufLaden(v, Verlauf.companion.zeitraeume(jetztMs: jetztMs, mitternachtMs: mitternachtMs())[1])
                     case "Anrufen":
                         if let t = info.telefon, let url = URL(string: "tel:\(t.filter { !$0.isWhitespace })") { UIApplication.shared.open(url) }
                     default:
@@ -283,6 +324,15 @@ struct Lagebildschirm: View {
                 AbfahrtenAnsicht(halt: h.halt) { trip in
                     abfahrtenHalt = nil
                     nachSchliessen { fahrtAnsicht = ZielansichtAuswahl(id: trip) }
+                }
+            }
+            .task {
+                // Spur-Markierungen laufend nachladen
+                while !Task.isCancelled {
+                    if let api = modell.api, (try? await modell.spuren.aktualisieren(api: api, stand: modell.stand, jetztMs: Int64(Date.now.timeIntervalSince1970 * 1000)))?.boolValue == true {
+                        spurenStand += 1
+                    }
+                    try? await Task.sleep(for: .seconds(10))
                 }
             }
             .task(id: liveAn ? liveAnstoss : -1) {
@@ -421,7 +471,7 @@ struct Kurzuebersicht: View {
     var aktion: (Kurzaktion, Kurzinfo) -> Void = { _, _ in }
 
     /// Aktionen, die es in dieser Ausbaustufe schon gibt (Details folgen mit der Zielansicht).
-    private static let umgesetzt: Set<String> = ["Hinfuehren", "Bearbeiten", "Verschieben", "StandortSetzen", "Anrufen", "Details"]
+    private static let umgesetzt: Set<String> = ["Hinfuehren", "Bearbeiten", "Verschieben", "StandortSetzen", "Anrufen", "Details", "Verlauf"]
 
     var body: some View {
         let ich = modell.standort.aktuell.map { GeoPunkt(lat: $0.coordinate.latitude, lon: $0.coordinate.longitude) }

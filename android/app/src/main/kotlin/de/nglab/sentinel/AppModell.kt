@@ -61,6 +61,9 @@ class AppModell(private val kontext: Context) {
     private var dienstLaeuft = false
 
     /** Navigation (Ferrostar-Kern, Routen vom eigenen Server). */
+    /** Spuren der Spur-Markierungen (Verlauf, Standortspur), laufend nachgeladen. */
+    val spuren = de.nglab.sentinel.kern.spur.Spurenlader()
+
     val navigator = de.nglab.sentinel.navi.Navigator({ _zugang.value?.server }, { _zugang.value?.token }, standort.roh)
 
     init {

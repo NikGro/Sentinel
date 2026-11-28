@@ -36,12 +36,18 @@ sealed interface Anlegbar {
         }
     }
 
+    /** Eigener Weg ab jetzt als Spur auf der Karte (ohne Platzieren; siehe `Verlauf.standortspur`). */
+    data object Standortspur : Anlegbar {
+        override val titel: String get() = "Standortspur"
+        override val symbol: Symbol get() = Symbol.Verlauf
+    }
+
     companion object {
         /** Reihenfolge im Plus-Menü (gleich auf allen Plattformen): Ziele, dann Markierungen. */
         val ziele: List<Anlegbar> = Zielart.entries.map { NeuesZiel(it) }
         val markierungen: List<Anlegbar> = listOf(
             Form.Marker, Form.Text, Form.Fahndungsraum, Form.Kreis, Form.Linie, Form.Pfeil, Form.Flaeche, Form.Haltestellen, Form.Geofence,
-        ).map { NeueForm(it) }
+        ).map { NeueForm(it) } + Standortspur
         val alle: List<Anlegbar> = ziele + markierungen
     }
 }
@@ -170,6 +176,7 @@ data class Platzierung(val zweck: Zweck, val punkte: List<GeoPunkt> = emptyList(
                 is Anlegbar.NeuesZiel -> Ergebnis.NeuesZiel(
                     Ziel(art = was.art, quelle = Standortquelle.Hand, standort = ZeitPunkt(punkte[0].lat, punkte[0].lon, jetztMs)),
                 )
+                Anlegbar.Standortspur -> null
             }
             is Zweck.Verschieben -> markierung?.let { Ergebnis.Verschoben(z.markierungId, verschieben(it, punkte[0])) }
             is Zweck.ZielOrt -> ziel?.let {

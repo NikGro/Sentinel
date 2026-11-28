@@ -41,7 +41,7 @@ private const val LEER = """{"type":"FeatureCollection","features":[]}"""
 /** Antippbare Ebenen des gemeinsamen Stils, die oberste zuerst. */
 private val ANTIPPBAR = arrayOf(
     "lage-cluster", "lage-symbole", "lage-symbole-zeichen", "lage-oepnv-fahrzeuge", "lage-halte",
-    "lage-linien", "lage-oepnv-kante", "lage-spuren", "lage-standortspur", "lage-flaechen", "lage-oepnv-live-halte",
+    "lage-linien", "lage-oepnv-kante", "lage-spuren", "lage-standortspur", "lage-flaechen", "lage-oepnv-live-halte", "lage-standortspur-haeufigkeit", "lage-spuren-luecke",
 )
 
 /** Steuerung der Karte von außen (Kamera, Verkehrslage); gefüllt, sobald die Karte bereit ist. */
@@ -106,6 +106,14 @@ class KartenSteuerung {
         return doubleArrayOf(b.latitudeSouth, b.longitudeWest, b.latitudeNorth, b.longitudeEast, k.cameraPosition.zoom)
     }
 
+    /** Karte auf einen Rahmen (Süd, West, Nord, Ost) einpassen, mit Rand für die Leisten. */
+    fun einpassen(r: DoubleArray) {
+        val k = karte ?: return
+        val grenzen = org.maplibre.android.geometry.LatLngBounds.Builder()
+            .include(LatLng(r[0], r[1])).include(LatLng(r[2], r[3])).build()
+        k.animateCamera(CameraUpdateFactory.newLatLngBounds(grenzen, 80, 200, 80, 420), 700)
+    }
+
     fun norden() {
         karte?.animateCamera(CameraUpdateFactory.bearingTo(0.0), 400)
     }
@@ -126,6 +134,7 @@ fun LageKarte(
     live: de.nglab.sentinel.kern.oepnv.OepnvLive? = null,
     liveStand: Int = 0,
     beiKameraRuhe: () -> Unit = {},
+    spurenJson: String? = null,
     beiAuswahl: (KartenObjekt) -> Unit,
 ) {
     val ruhe by rememberUpdatedState(beiKameraRuhe)
@@ -257,6 +266,11 @@ fun LageKarte(
         val s = style ?: return@LaunchedEffect
         val jetzt = System.currentTimeMillis()
         for ((id, json) in szene.aufbauen(stand, jetzt, zoom = zoom)) s.getSourceAs<GeoJsonSource>(id)?.setGeoJson(json)
+    }
+
+    // Spuren (Spur-Markierungen und ein offener Verlauf)
+    LaunchedEffect(style, spurenJson) {
+        style?.getSourceAs<GeoJsonSource>(Quellen.SPUREN)?.setGeoJson(spurenJson ?: LEER)
     }
 
     // Entwurf im Platzierungsmodus (gelbe Vorschau)

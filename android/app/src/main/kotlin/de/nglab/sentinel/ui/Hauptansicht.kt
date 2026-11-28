@@ -69,6 +69,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import de.nglab.sentinel.AppModell
+import kotlinx.coroutines.launch
 import de.nglab.sentinel.karte.KartenSteuerung
 import de.nglab.sentinel.karte.LageKarte
 import de.nglab.sentinel.kern.karte.Anheftung
@@ -147,6 +148,30 @@ private fun Lagebildschirm(modell: AppModell, stand: LageStand, fokus: KartenObj
     var liveStand by remember { mutableStateOf(0) }
     var liveAnstoss by remember { mutableStateOf(0) }
     var fahrtAnsicht by remember { mutableStateOf<String?>(null) }
+    // Verlauf eines Objekts und Spur-Markierungen
+    var verlauf by remember { mutableStateOf<de.nglab.sentinel.kern.spur.Verlauf?>(null) }
+    var verlaufStand by remember { mutableStateOf(0) }
+    var verlaufAnteil by remember { mutableStateOf(1f) }
+    var spurenStand by remember { mutableStateOf(0) }
+    val bereich = androidx.compose.runtime.rememberCoroutineScope()
+    androidx.compose.runtime.LaunchedEffect(Unit) {
+        while (true) {
+            val api = modell.api
+            if (api != null && modell.spuren.aktualisieren(api, modell.lage.stand.value, System.currentTimeMillis())) spurenStand++
+            kotlinx.coroutines.delay(10_000)
+        }
+    }
+    val spurenJson = remember(spurenStand, verlaufStand, stand) { modell.spuren.geoJson(stand, verlauf) }
+
+    fun verlaufLaden(v: de.nglab.sentinel.kern.spur.Verlauf, z: de.nglab.sentinel.kern.spur.Zeitraum) {
+        val api = modell.api ?: return
+        bereich.launch {
+            v.laden(api, z)
+            verlaufAnteil = 1f
+            verlaufStand++
+            v.rahmen()?.let { steuerung.einpassen(it) }
+        }
+    }
     var abfahrten by remember { mutableStateOf<de.nglab.sentinel.kern.oepnv.LiveHalt?>(null) }
     androidx.compose.runtime.LaunchedEffect(liveAn, liveAnstoss) {
         if (!liveAn) { live.leeren(); liveStand++; return@LaunchedEffect }
@@ -187,6 +212,13 @@ private fun Lagebildschirm(modell: AppModell, stand: LageStand, fokus: KartenObj
 
     fun anlegen(was: Anlegbar) {
         plus = false
+        if (was == Anlegbar.Standortspur) {
+            val o = modell.ort.value
+            val m = o?.let { de.nglab.sentinel.kern.spur.Verlauf.standortspur(stand, GeoPunkt(it.lat, it.lon), System.currentTimeMillis()) }
+            if (m != null) modell.lage.markierungSichern(m, Lage.neueId())
+            plusOrt = null
+            return
+        }
         val ort = plusOrt
         plusOrt = null
         steuerung.markieren(null)
@@ -203,6 +235,7 @@ private fun Lagebildschirm(modell: AppModell, stand: LageStand, fokus: KartenObj
             live = if (liveAn) live else null,
             liveStand = liveStand,
             beiKameraRuhe = { if (liveAn) liveAnstoss++ },
+            spurenJson = spurenJson,
         ) { auswahl = it }
 
         platzierung?.let { p ->
@@ -269,7 +302,18 @@ private fun Lagebildschirm(modell: AppModell, stand: LageStand, fokus: KartenObj
                 }, beenden = ::naviBeenden)
             }
         }
-        if (navi == null) Column(
+        verlauf?.let { v ->
+            Box(Modifier.align(Alignment.BottomCenter).padding(horizontal = 16.dp, vertical = 12.dp)) {
+                VerlaufLeiste(
+                    v, verlaufStand, verlaufAnteil,
+                    anteilSetzen = { a -> verlaufAnteil = a; v.zeitBei(a.toDouble())?.let { t -> steuerung.markieren(v.ort(t)) } },
+                    zeitraumWaehlen = { verlaufLaden(v, it) },
+                    behalten = { v.alsMarkierung()?.let { modell.lage.markierungSichern(it, Lage.neueId()) }; verlauf = null; steuerung.markieren(null) },
+                    schliessen = { verlauf = null; verlaufStand++; steuerung.markieren(null) },
+                )
+            }
+        }
+        if (navi == null && verlauf == null) Column(
             Modifier.align(Alignment.BottomCenter).padding(horizontal = 16.dp, vertical = 12.dp).fillMaxWidth(),
             verticalArrangement = Arrangement.spacedBy(8.dp),
         ) {
@@ -327,6 +371,13 @@ private fun Lagebildschirm(modell: AppModell, stand: LageStand, fokus: KartenObj
                     Kurzaktion.Bearbeiten -> stand.markierungen[a.id]?.let { editor = Markierungsbearbeitung(a.id, it.data, neu = false) }
                     Kurzaktion.Verschieben -> platzierung = Platzierung(Platzierung.Zweck.Verschieben(a.id))
                     Kurzaktion.StandortSetzen -> platzierung = Platzierung(Platzierung.Zweck.ZielOrt(a.id))
+                    Kurzaktion.Verlauf -> {
+                        val v = de.nglab.sentinel.kern.spur.Verlauf(a, info.titel)
+                        verlauf = v
+                        val jetzt = System.currentTimeMillis()
+                        val mitternacht = java.time.LocalDate.now().atStartOfDay(java.time.ZoneId.systemDefault()).toInstant().toEpochMilli()
+                        verlaufLaden(v, de.nglab.sentinel.kern.spur.Verlauf.zeitraeume(jetzt, mitternacht)[1])
+                    }
                     Kurzaktion.Anrufen -> info.telefon?.let {
                         kontext.startActivity(android.content.Intent(android.content.Intent.ACTION_DIAL, android.net.Uri.parse("tel:$it")))
                     }

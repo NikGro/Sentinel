@@ -98,6 +98,7 @@ private fun Anlegekachel(e: Anlegbar, modifier: Modifier, aktion: () -> Unit) {
     val farbe = when (e) {
         is Anlegbar.NeuesZiel -> SentinelFarben.ziele
         is Anlegbar.NeueForm -> hexFarbe(Formen.farbe(e.form))
+        Anlegbar.Standortspur -> hexFarbe("#FF375F")
     }
     Column(
         modifier.clickable(onClick = aktion).padding(vertical = 4.dp).testTag("Anlegen ${e.titel}"),

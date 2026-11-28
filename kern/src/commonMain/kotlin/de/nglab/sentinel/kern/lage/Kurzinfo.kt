@@ -18,6 +18,7 @@ enum class Kurzaktion(val titel: String) {
     Verschieben("Verschieben"),
     StandortSetzen("Standort setzen"),
     Anrufen("Anrufen"),
+    Verlauf("Verlauf"),
     Details("Details"),
 }
 
@@ -70,6 +71,7 @@ data class Kurzinfo(
                         aktionen = listOfNotNull(
                             Kurzaktion.Hinfuehren.takeIf { pos != null && f.id != stand.ichId },
                             Kurzaktion.Anrufen.takeIf { f.data.telefon.isNotBlank() && f.id != stand.ichId },
+                            Kurzaktion.Verlauf,
                         ),
                         telefon = f.data.telefon.takeIf { it.isNotBlank() },
                     )
@@ -95,7 +97,7 @@ data class Kurzinfo(
                             entfernung(o?.punkt),
                         ),
                         ort = o?.punkt,
-                        aktionen = listOfNotNull(Kurzaktion.Hinfuehren.takeIf { o != null }),
+                        aktionen = listOfNotNull(Kurzaktion.Hinfuehren.takeIf { o != null }, Kurzaktion.Verlauf),
                     )
                 }
 
@@ -124,7 +126,7 @@ data class Kurzinfo(
                             z.data.freitext.takeIf { it.isNotBlank() }?.let { Kurzzeile("Hinweise", it.take(200)) },
                         ),
                         ort = o?.punkt,
-                        aktionen = listOfNotNull(Kurzaktion.Hinfuehren.takeIf { o != null }, Kurzaktion.StandortSetzen, Kurzaktion.Details),
+                        aktionen = listOfNotNull(Kurzaktion.Hinfuehren.takeIf { o != null }, Kurzaktion.Details, Kurzaktion.Verlauf, Kurzaktion.StandortSetzen),
                     )
                 }
 
@@ -154,6 +156,8 @@ data class Kurzinfo(
                     )
                 }
 
+                // Angetippte Spur einer Spur-Markierung: wie die Markierung selbst
+                Objektart.Spur -> if (stand.markierungen[objekt.id] != null) fuer(stand, KartenObjekt(Objektart.Markierung, objekt.id), jetztMs, ich) else null
                 else -> null
             }
         }

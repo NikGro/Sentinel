@@ -37,6 +37,8 @@ final class AppModell {
     let standort = Standort()
     /// Navigation (Ferrostar-Kern, Routen vom eigenen Server).
     let navigator = Navigator()
+    /// Spuren der Spur-Markierungen (Verlauf, Standortspur), laufend nachgeladen.
+    @ObservationIgnored let spuren = Spurenlader()
 
     var api: Api? { zugang.map { Bruecke.shared.api(server: $0.server, token: $0.token) } }
 

@@ -6,7 +6,7 @@ import UIKit
 /// Antippbare Ebenen des gemeinsamen Stils.
 private let antippbar: Set<String> = [
     "lage-cluster", "lage-symbole", "lage-symbole-zeichen", "lage-oepnv-fahrzeuge", "lage-halte",
-    "lage-linien", "lage-oepnv-kante", "lage-spuren", "lage-standortspur", "lage-flaechen", "lage-oepnv-live-halte",
+    "lage-linien", "lage-oepnv-kante", "lage-spuren", "lage-standortspur", "lage-flaechen", "lage-oepnv-live-halte", "lage-standortspur-haeufigkeit", "lage-spuren-luecke",
 ]
 
 /// Steuerung der Karte von außen (Kamera, Verkehrslage).
@@ -81,6 +81,15 @@ final class KartenSteuerung {
         return (b.sw.latitude, b.sw.longitude, b.ne.latitude, b.ne.longitude, karte.zoomLevel)
     }
 
+    /// Karte auf einen Rahmen (Süd, West, Nord, Ost) einpassen, mit Rand für die Leisten.
+    func einpassen(_ r: KotlinDoubleArray) {
+        guard let karte, r.size == 4 else { return }
+        let grenzen = MLNCoordinateBounds(sw: CLLocationCoordinate2D(latitude: r.get(index: 0), longitude: r.get(index: 1)),
+                                          ne: CLLocationCoordinate2D(latitude: r.get(index: 2), longitude: r.get(index: 3)))
+        let kamera = karte.cameraThatFitsCoordinateBounds(grenzen, edgePadding: UIEdgeInsets(top: 120, left: 60, bottom: 320, right: 60))
+        karte.setCamera(kamera, withDuration: 0.7, animationTimingFunction: nil)
+    }
+
     func norden() {
         karte?.setDirection(0, animated: true)
     }
@@ -105,6 +114,8 @@ struct LageKarte: UIViewRepresentable {
     var live: OepnvLive? = nil
     var liveStand = 0
     var beiKameraRuhe: () -> Void = {}
+    /// Spuren (Spur-Markierungen und ein offener Verlauf) als GeoJSON.
+    var spurenJson: String? = nil
     let beiAuswahl: (KartenObjekt) -> Void
     @Environment(\.colorScheme) private var farbschema
 
@@ -137,6 +148,7 @@ struct LageKarte: UIViewRepresentable {
         context.coordinator.beiTipp = beiTipp
         context.coordinator.beiKameraRuhe = beiKameraRuhe
         context.coordinator.liveSetzen(live, stand: liveStand)
+        context.coordinator.spurenSetzen(spurenJson)
         context.coordinator.entwurf(platzierung)
         context.coordinator.aktualisieren(stand: modell.stand, ort: modell.standort.aktuell)
     }
@@ -171,6 +183,8 @@ struct LageKarte: UIViewRepresentable {
             stil = style
             aktualisieren(stand: modell.stand, ort: modell.standort.aktuell, erzwingen: true)
             letzteVorschau = ""
+            letzteSpuren = nil
+            spurenSetzen(gewuenschteSpuren)
             entwurf(platzierung)
             // ÖPNV-Fahrzeuge flüssig (zehnmal je Sekunde), nur diese Quelle.
             takt = Timer.scheduledTimer(withTimeInterval: 0.1, repeats: true) { [weak self] _ in
@@ -242,6 +256,15 @@ struct LageKarte: UIViewRepresentable {
                 letzterOrt = anzeige.timestamp
                 steuerung?.folgen(anzeige)
             }
+        }
+
+        private var gewuenschteSpuren = #"{"type":"FeatureCollection","features":[]}"#
+        private var letzteSpuren: String?
+        func spurenSetzen(_ json: String?) {
+            gewuenschteSpuren = json ?: #"{"type":"FeatureCollection","features":[]}"#
+            guard let stil, gewuenschteSpuren != letzteSpuren else { return }
+            letzteSpuren = gewuenschteSpuren
+            setzen(stil, Quellen.shared.SPUREN, gewuenschteSpuren)
         }
 
         /// ÖPNV live: Haltestellen neu setzen, wenn neu geladen wurde; Fahrzeuge zeichnet der Takt.
