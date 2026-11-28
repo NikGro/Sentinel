@@ -119,7 +119,7 @@ fun Hauptansicht(modell: AppModell) {
             when (tab) {
                 Tab.Lage -> Lagebildschirm(modell, stand, fokus) { fokus = null }
                 Tab.Ziele -> Zielliste(modell, stand) { fokus = it; tab = Tab.Lage }
-                Tab.Kraefte -> Kraefteliste(stand)
+                Tab.Kraefte -> Kraefteliste(modell, stand) { fokus = it; tab = Tab.Lage }
                 Tab.Mehr -> Mehr(modell) { hauptmenue = true }
             }
         }
@@ -469,23 +469,6 @@ private fun Kurzuebersicht(stand: LageStand, a: KartenObjekt, ich: GeoPunkt?, ak
 
 /** Aktionen, die es in dieser Ausbaustufe schon gibt (Details folgen mit der Zielansicht). */
 private val UMGESETZT = Kurzaktion.entries.toSet()
-
-@OptIn(ExperimentalMaterial3Api::class)
-@Composable
-private fun Kraefteliste(stand: LageStand) {
-    Column(Modifier.fillMaxSize()) {
-        TopAppBar(title = { Text("Kräfte") })
-        LazyColumn {
-            items(stand.kraefte, key = { it.id }) { f ->
-                ListItem(
-                    headlineContent = { Text(f.data.spitzname) },
-                    supportingContent = { Text(if (f.data.aktiv) stand.fortbewegungText(f.data) else "Ruhemodus") },
-                    trailingContent = { if (stand.istOnline(f.id)) Box(Modifier.size(10.dp).background(Color(0xFF34C759), CircleShape)) },
-                )
-            }
-        }
-    }
-}
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable

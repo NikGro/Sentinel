@@ -21,7 +21,12 @@ struct Hauptansicht: View {
                         tab = "lage"
                     }
                 }
-                Tab("Kräfte", systemImage: "person.3", value: "kraefte") { Kraefteliste() }
+                Tab("Kräfte", systemImage: "person.3", value: "kraefte") {
+                    Kraefteliste { objekt in
+                        fokus = KartenObjektAuswahl(objekt: objekt)
+                        tab = "lage"
+                    }
+                }
                 Tab("Mehr", systemImage: "ellipsis", value: "mehr") { Mehr { hauptmenue = true } }
             }
         }
@@ -426,26 +431,6 @@ struct Kurzuebersicht: View {
             }
         } else {
             Text("Nicht mehr in der Lage").foregroundStyle(.secondary).padding(20)
-        }
-    }
-}
-
-struct Kraefteliste: View {
-    @Environment(AppModell.self) private var modell
-
-    var body: some View {
-        NavigationStack {
-            List(modell.stand.kraefte, id: \.id) { f in
-                HStack {
-                    VStack(alignment: .leading) {
-                        Text(f.data.spitzname)
-                        Text(f.data.aktiv ? modell.stand.fortbewegungText(f: f.data) : "Ruhemodus").font(.caption).foregroundStyle(.secondary)
-                    }
-                    Spacer()
-                    if modell.stand.istOnline(fahnderId: f.id) { Circle().fill(.green).frame(width: 10, height: 10) }
-                }
-            }
-            .navigationTitle("Kräfte")
         }
     }
 }
