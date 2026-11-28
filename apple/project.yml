@@ -21,6 +21,10 @@ packages:
   MapLibre:
     url: https://github.com/maplibre/maplibre-gl-native-distribution
     from: 6.10.0
+  # Quelloffener Navigationskern (BSD-Lizenz), gleiche Version wie auf Android, ohne dessen Kartenoberfläche.
+  Ferrostar:
+    url: https://github.com/stadiamaps/ferrostar
+    exactVersion: 0.59.0
 
 targets:
   Sentinel:
@@ -31,6 +35,8 @@ targets:
     dependencies:
       - package: MapLibre
         product: MapLibre
+      - package: Ferrostar
+        product: FerrostarCore
       - framework: ../kern/build/XCFrameworks/release/SentinelKern.xcframework
         embed: false
       - target: SentinelStatus

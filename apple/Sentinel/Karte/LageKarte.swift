@@ -27,6 +27,18 @@ final class KartenSteuerung {
         if let ort { folgen(ort, sofort: true) }
     }
 
+    /// Navigation: nah, gekippt, in Fahrtrichtung; `nil` löst die Kopplung wieder (Ende der Navigation).
+    func navigation(ort: CLLocation?) {
+        guard let ort else {
+            fuehrung.loesen()
+            anheftung = fuehrung.anheftung
+            return
+        }
+        fuehrung.anheften(art: .navigation, lat: ort.coordinate.latitude)
+        anheftung = fuehrung.anheftung
+        folgen(ort, sofort: true)
+    }
+
     fileprivate func folgen(_ ort: CLLocation, sofort: Bool = false) {
         guard let karte, !gesteAktiv else { return }
         let punkt = GeoPunkt(lat: ort.coordinate.latitude, lon: ort.coordinate.longitude)
@@ -131,6 +143,7 @@ struct LageKarte: UIViewRepresentable {
         private var takt: Timer?
         private var letzterStand: LageStand?
         private var letzterOrt: Date?
+        private let rest = Routenrest()
 
         init(modell: AppModell, steuerung: KartenSteuerung, beiAuswahl: @escaping (KartenObjekt) -> Void) {
             self.modell = modell
@@ -199,13 +212,18 @@ struct LageKarte: UIViewRepresentable {
                     setzen(stil, id, json)
                 }
             }
-            let punkt = ort.map { GeoPunkt(lat: $0.coordinate.latitude, lon: $0.coordinate.longitude) }
-            let richtung: KotlinDouble? = (ort?.course ?? -1) >= 0 ? KotlinDouble(value: ort!.course) : nil
-            setzen(stil, Quellen.shared.ICH, szene.ich(p: punkt, richtung: richtung, darstellung: "punkt", mitA: stand.haeltA))
+            // In der Navigation: Standort auf die Route gelegt und als Navi-Pfeil, die Route beginnt dort.
+            let navi = modell.navigator.stand
+            let anzeige = navi?.aufRoute ?? ort
+            let punkt = anzeige.map { GeoPunkt(lat: $0.coordinate.latitude, lon: $0.coordinate.longitude) }
+            let richtung: KotlinDouble? = (anzeige?.course ?? -1) >= 0 ? KotlinDouble(value: anzeige!.course) : nil
+            setzen(stil, Quellen.shared.ICH, szene.ich(p: punkt, richtung: richtung, darstellung: navi != nil ? "pfeil" : "punkt", mitA: stand.haeltA))
+            let linie = navi.map { rest.rest(neueRoute: $0.route, ort: punkt) } ?? []
+            setzen(stil, Quellen.shared.ROUTE, szene.route(punkte: linie, sonderrechte: navi?.info.sonderrechte ?? false))
             // Angeheftet: Kamera folgt dem Standort.
-            if let ort, ort.timestamp != letzterOrt {
-                letzterOrt = ort.timestamp
-                steuerung?.folgen(ort)
+            if let anzeige, anzeige.timestamp != letzterOrt {
+                letzterOrt = anzeige.timestamp
+                steuerung?.folgen(anzeige)
             }
         }
 

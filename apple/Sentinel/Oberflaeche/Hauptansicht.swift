@@ -35,6 +35,18 @@ struct Lagebildschirm: View {
     @State private var platzierung: Platzierung?
     @State private var editor: Markierungsbearbeitung?
     @State private var neuesZiel: NeuesZielAuswahl?
+    @State private var sonderrechte = false
+
+    private func hinfuehren(_ ziel: Naviziel) {
+        let m = modell
+        m.navigator.starten(ziel, sonderrechte: sonderrechte, zuFuss: m.stand.ich?.data.fortbewegung == .fuss) { [weak m] in m?.stand ?? LageStand.companion.leer }
+        steuerung.navigation(ort: modell.standort.aktuell)
+    }
+
+    private func naviBeenden() {
+        modell.navigator.stoppen()
+        steuerung.navigation(ort: nil)
+    }
 
     private var jetztMs: Int64 { Int64(Date.now.timeIntervalSince1970 * 1000) }
 
@@ -90,7 +102,9 @@ struct Lagebildschirm: View {
         }
             .ignoresSafeArea()
             .safeAreaInset(edge: .top) {
-                if let p = platzierung {
+                if let n = modell.navigator.stand, platzierung == nil {
+                    NaviLeisteOben(n: n)
+                } else if let p = platzierung {
                     Platzierungsleiste(p: p, zuruecknehmen: { platzierung = p.zuruecknehmen() }, abbrechen: { platzierung = nil }) { platzierungFertig(p) }
                 } else {
                 HStack(spacing: 10) {
@@ -136,12 +150,21 @@ struct Lagebildschirm: View {
                 .padding(.top, 60)
             }
             .safeAreaInset(edge: .bottom) {
-                VStack(spacing: 8) {
-                    HStack(spacing: 8) {
-                        AKnopf()
-                        Fortbewegungswahl()
+                Group {
+                    if let n = modell.navigator.stand {
+                        NaviLeisteUnten(n: n, sonderrechte: Binding(get: { sonderrechte }, set: { neu in
+                            sonderrechte = neu
+                            hinfuehren(n.ziel)
+                        }), beenden: naviBeenden)
+                    } else {
+                        VStack(spacing: 8) {
+                            HStack(spacing: 8) {
+                                AKnopf()
+                                Fortbewegungswahl()
+                            }
+                            Lageleiste()
+                        }
                     }
-                    Lageleiste()
                 }
                 .padding(.horizontal, 22)
                 .padding(.bottom, 4)
@@ -164,7 +187,10 @@ struct Lagebildschirm: View {
                     Text(o.treffer.titel).font(.title3.weight(.semibold))
                     if !o.treffer.untertitel.isEmpty { Text(o.treffer.untertitel).foregroundStyle(.secondary) }
                     HStack(spacing: 12) {
-                        Button {} label: { Label("Hinführen", systemImage: "arrow.triangle.turn.up.right.diamond.fill").frame(maxWidth: .infinity) }
+                        Button {
+                            ortTreffer = nil
+                            hinfuehren(NavizielOrt(punkt: o.treffer.punkt, titel: o.treffer.titel))
+                        } label: { Label("Hinführen", systemImage: "arrow.triangle.turn.up.right.diamond.fill").frame(maxWidth: .infinity) }
                             .buttonStyle(.glassProminent)
                         Button {
                             plusOrt = o.treffer.punkt
@@ -185,7 +211,8 @@ struct Lagebildschirm: View {
                     auswahl = nil
                     switch k {
                     case .hinfuehren:
-                        if let p = info.ort { steuerung.zeigen(p, zoom: 17) }
+                        let istA = a.objekt.art == .kraft && modell.stand.einsatz.a?.memberId == a.objekt.id
+                        hinfuehren(istA ? NavizielAPosition.shared : NavizielObjekt(objekt: a.objekt))
                     case .bearbeiten:
                         if let v = modell.stand.markierungen[a.objekt.id] {
                             nachSchliessen { editor = Markierungsbearbeitung(id: a.objekt.id, markierung: v.data, neu: false) }

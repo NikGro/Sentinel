@@ -35,6 +35,8 @@ final class AppModell {
     @ObservationIgnored private let sender = VerbindungsSender()
     @ObservationIgnored private var beobachter: [Abmelder] = []
     let standort = Standort()
+    /// Navigation (Ferrostar-Kern, Routen vom eigenen Server).
+    let navigator = Navigator()
 
     var api: Api? { zugang.map { Bruecke.shared.api(server: $0.server, token: $0.token) } }
 
@@ -64,6 +66,7 @@ final class AppModell {
     }
 
     private func starten(_ z: Zugang) {
+        navigator.verbinden(server: z.server, token: z.token)
         lage.verbinden(ichId: z.geraetId, sender: sender)
         verbindung.starten(zugang: z)
     }
@@ -100,6 +103,7 @@ final class AppModell {
         if !lokal, let api {
             Task { try? await api.abmelden() }
         }
+        navigator.verbinden(server: nil, token: nil)
         verbindung.stoppen()
         lage.trennen()
         standort.dienst(false)
