@@ -9,6 +9,7 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
@@ -77,11 +78,11 @@ fun Zielliste(modell: AppModell, stand: LageStand, aufKarte: (KartenObjekt) -> U
             for (g in gruppen) {
                 val drin = stand.zieleSortiert.filter { it.data.gruppeId == g.id }
                 item(key = "g-${g.id}") { Abschnittskopf(g.data.name, hexFarbe(g.data.farbe)) }
-                items(drin, key = { it.id }) { z -> Zielzeile(stand, z.id) { offen = z.id } }
+                items(drin, key = { it.id }) { z -> Zielzeile(modell, stand, z.id) { offen = z.id } }
             }
             if (ohne.isNotEmpty()) {
                 if (gruppen.isNotEmpty()) item(key = "ohne") { Abschnittskopf("Ohne Gruppe", null) }
-                items(ohne, key = { it.id }) { z -> Zielzeile(stand, z.id) { offen = z.id } }
+                items(ohne, key = { it.id }) { z -> Zielzeile(modell, stand, z.id) { offen = z.id } }
             }
             if (stand.ziele.isEmpty()) item { Text("Noch keine Ziele. Über „+“ auf der Karte anlegen.", color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(20.dp)) }
         }
@@ -97,14 +98,16 @@ private fun Abschnittskopf(titel: String, farbe: Color?) {
 }
 
 @Composable
-private fun Zielzeile(stand: LageStand, id: String, oeffnen: () -> Unit) {
+private fun Zielzeile(modell: AppModell, stand: LageStand, id: String, oeffnen: () -> Unit) {
     val info = Kurzinfo.fuer(stand, KartenObjekt(Objektart.Ziel, id), System.currentTimeMillis(), null) ?: return
     val sichtbar = stand.zielEingeblendet(id)
     ListItem(
         headlineContent = { Text(info.titel) },
         supportingContent = { Text(info.zeilen.firstOrNull { it.titel == "Stand" }?.wert ?: info.untertitel, maxLines = 1) },
         leadingContent = {
-            Box(Modifier.size(36.dp).background(hexFarbe(info.farbe).copy(alpha = if (sichtbar) 1f else 0.35f), CircleShape), contentAlignment = Alignment.Center) {
+            val foto = stand.ziele[id]?.data?.let { de.nglab.sentinel.kern.lage.Anhaenge.titelfoto(it) }
+            if (foto != null) ServerBild(modell, foto, Modifier.size(36.dp), rund = 18.dp)
+            else Box(Modifier.size(36.dp).background(hexFarbe(info.farbe).copy(alpha = if (sichtbar) 1f else 0.35f), CircleShape), contentAlignment = Alignment.Center) {
                 Icon(info.symbol.bild(), null, tint = Color.White, modifier = Modifier.size(20.dp))
             }
         },
@@ -142,6 +145,7 @@ fun Zielansicht(modell: AppModell, stand: LageStand, id: String, zurueck: () -> 
         )
         Column(Modifier.verticalScroll(rememberScrollState()).padding(horizontal = 16.dp).padding(bottom = 32.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
             fehlt?.let { Text(it, color = MaterialTheme.colorScheme.error) }
+            de.nglab.sentinel.kern.lage.Anhaenge.titelfoto(z)?.let { ServerBild(modell, it, Modifier.fillMaxWidth().height(220.dp)) }
 
             // Ort und Quelle
             Abschnittstitel("Standort")
@@ -194,6 +198,13 @@ fun Zielansicht(modell: AppModell, stand: LageStand, id: String, zurueck: () -> 
             if (z.art == de.nglab.sentinel.kern.modell.Zielart.Person) {
                 val heute = java.time.LocalDate.now()
                 Zieleditor.alter(z.geburtsdatum, heute.year, heute.monthValue, heute.dayOfMonth)?.let { Text("$it Jahre", color = MaterialTheme.colorScheme.onSurfaceVariant) }
+            }
+
+            // Fotos und Dateien: sofort wirksam
+            Abschnittstitel("Fotos und Dateien")
+            AnhaengeAbschnitt(modell, z) { aenderung ->
+                stand.ziele[id]?.data?.let { modell.lage.setzen(Art.Ziel, id, aenderung(it)) }
+                z = aenderung(z)
             }
 
             // Gruppe

@@ -44,3 +44,17 @@ class ZielansichtTest {
         assertEquals(54.0, raus.standort?.lat)
     }
 }
+
+class AnhaengeTest {
+    @Test
+    fun erstesBildWirdTitelfotoUndRueckt() {
+        val a = de.nglab.sentinel.kern.lage.Anhaenge.aus(de.nglab.sentinel.kern.netz.HochgeladeneDatei("a", "image/jpeg", 10), "a.jpg")
+        val b = de.nglab.sentinel.kern.lage.Anhaenge.aus(de.nglab.sentinel.kern.netz.HochgeladeneDatei("b", "image/jpeg", 10), "b.jpg")
+        var z = de.nglab.sentinel.kern.lage.Anhaenge.hinzufuegen(Ziel(), a)
+        z = de.nglab.sentinel.kern.lage.Anhaenge.hinzufuegen(z, b)
+        assertEquals("a", z.fotoBlob)
+        z = de.nglab.sentinel.kern.lage.Anhaenge.entfernen(z, "a")
+        assertEquals("b", z.fotoBlob)
+        assertEquals(1, z.anhaenge.size)
+    }
+}

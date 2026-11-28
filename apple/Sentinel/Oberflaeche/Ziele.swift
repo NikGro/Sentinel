@@ -44,11 +44,15 @@ struct Zielliste: View {
             let sichtbar = stand.zielEingeblendet(id: id)
             NavigationLink(value: id) {
                 HStack(spacing: 12) {
-                    Image(systemName: info.symbol.sf)
-                        .font(.system(size: 15, weight: .semibold))
-                        .foregroundStyle(.white)
-                        .frame(width: 36, height: 36)
-                        .background(Color(hex: info.farbe).opacity(sichtbar ? 1 : 0.35), in: .circle)
+                    if let foto = stand.ziele[id].flatMap({ Anhaenge.shared.titelfoto(z: $0.data) }) {
+                        ServerBild(blobId: foto).frame(width: 36, height: 36).clipShape(.circle)
+                    } else {
+                        Image(systemName: info.symbol.sf)
+                            .font(.system(size: 15, weight: .semibold))
+                            .foregroundStyle(.white)
+                            .frame(width: 36, height: 36)
+                            .background(Color(hex: info.farbe).opacity(sichtbar ? 1 : 0.35), in: .circle)
+                    }
                     VStack(alignment: .leading, spacing: 2) {
                         Text(info.titel)
                         Text(info.zeilen.first { $0.titel == "Stand" }?.wert ?? info.untertitel).font(.caption).foregroundStyle(.secondary).lineLimit(1)
@@ -82,6 +86,9 @@ struct Zielansicht: View {
             let fehlt = Zieleditor.shared.fehlt(z: aktuell)
             let jetzt = Int64(Date.now.timeIntervalSince1970 * 1000)
             Form {
+                if let foto = Anhaenge.shared.titelfoto(z: aktuell) {
+                    Section { ServerBild(blobId: foto).frame(height: 220).listRowInsets(EdgeInsets()) }
+                }
                 if let fehlt { Section { Text(fehlt).foregroundStyle(.red) } }
 
                 Section("Standort") {
@@ -147,6 +154,13 @@ struct Zielansicht: View {
                         if let a = Zieleditor.shared.alter(geburtsdatum: aktuell.geburtsdatum, jahr: Int32(k.year!), monat: Int32(k.month!), tag: Int32(k.day!)) {
                             Text("\(a.intValue) Jahre").foregroundStyle(.secondary)
                         }
+                    }
+                }
+
+                Section("Fotos und Dateien") {
+                    AnhaengeAbschnitt(ziel: aktuell) { aenderung in
+                        if let jetzt = modell.stand.ziele[id]?.data { _ = modell.lage.setzen(art: .ziel, id: id, daten: aenderung(jetzt)) }
+                        if let z0 = z { z = aenderung(z0) }
                     }
                 }
 
