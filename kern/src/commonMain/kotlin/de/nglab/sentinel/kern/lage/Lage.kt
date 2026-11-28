@@ -73,7 +73,7 @@ class Lage(private var sender: Sender = Sender { false }) {
             is ServerNachricht.Stand -> {
                 val s = n.schnappschuss
                 @Suppress("UNCHECKED_CAST")
-                fun <T> liste(art: Art) = (s.objekte[art] ?: emptyList()).associateBy { it.id } as Map<String, Versioniert<T>>
+                fun <T : Any> liste(art: Art) = (s.objekte[art] ?: emptyList()).associateBy { it.id } as Map<String, Versioniert<T>>
                 _stand.value = LageStand(
                     ichId = s.ich.id,
                     hatStand = true,

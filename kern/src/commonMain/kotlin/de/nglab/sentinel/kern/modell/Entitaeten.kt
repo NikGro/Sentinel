@@ -9,7 +9,7 @@ import kotlinx.serialization.Serializable
 
 /** Ein gemeinsam bearbeitetes Objekt samt Versionsstand. */
 @Serializable
-data class Versioniert<T>(
+data class Versioniert<T : Any>(
     val id: String,
     val rev: Long = 0,
     val updatedAt: Long = 0,
