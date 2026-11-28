@@ -43,3 +43,17 @@ class KartenebenenTest {
         assertTrue(f.mit("verkehr", true).an("verkehr"))
     }
 }
+
+class VerwaltungTest {
+    @Test
+    fun nurErstellerBearbeitetHauptinstanzBleibt() {
+        val stand = LageStand(ichId = "ich", instanz = "x")
+        val eigene = Versioniert("x", data = de.nglab.sentinel.kern.modell.Instanz("Einsatz", mitglieder = listOf("ich", "b"), erstelltVon = "ich"))
+        val fremde = Versioniert("y", data = de.nglab.sentinel.kern.modell.Instanz("Andere", erstelltVon = "b"))
+        val haupt = Versioniert("haupt", data = de.nglab.sentinel.kern.modell.Instanz("KSOD"))
+        assertTrue(de.nglab.sentinel.kern.lage.Verwaltung.darfBearbeiten(stand, eigene))
+        assertTrue(!de.nglab.sentinel.kern.lage.Verwaltung.darfBearbeiten(stand, fremde))
+        assertTrue(!de.nglab.sentinel.kern.lage.Verwaltung.darfBearbeiten(stand, haupt))
+        assertEquals("2 Mitglieder", de.nglab.sentinel.kern.lage.Verwaltung.beschreibung(stand, eigene))
+    }
+}

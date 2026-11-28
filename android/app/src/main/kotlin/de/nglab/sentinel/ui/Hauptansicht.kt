@@ -122,7 +122,7 @@ fun Hauptansicht(modell: AppModell) {
                 Tab.Lage -> Lagebildschirm(modell, stand, fokus) { fokus = null }
                 Tab.Ziele -> Zielliste(modell, stand) { fokus = it; tab = Tab.Lage }
                 Tab.Kraefte -> Kraefteliste(modell, stand) { fokus = it; tab = Tab.Lage }
-                Tab.Mehr -> Mehr(modell) { hauptmenue = true }
+                Tab.Mehr -> Mehr(modell, stand) { hauptmenue = true }
             }
         }
     }
@@ -589,47 +589,3 @@ private fun Kurzuebersicht(stand: LageStand, a: KartenObjekt, ich: GeoPunkt?, li
 
 /** Aktionen, die es in dieser Ausbaustufe schon gibt (Details folgen mit der Zielansicht). */
 private val UMGESETZT = Kurzaktion.entries.toSet()
-
-@OptIn(ExperimentalMaterial3Api::class)
-@Composable
-private fun Mehr(modell: AppModell, hauptmenue: () -> Unit) {
-    Column(Modifier.fillMaxSize()) {
-        TopAppBar(title = { Text("Mehr") })
-        ListItem(headlineContent = { Text("Hauptmenü") }, supportingContent = { Text("Instanzen wechseln oder verlassen") }, modifier = Modifier.clickable(onClick = hauptmenue))
-        ListItem(headlineContent = { Text("Abmelden", color = MaterialTheme.colorScheme.error) }, modifier = Modifier.clickable { modell.abmelden() })
-    }
-}
-
-/** Hauptmenü außerhalb jeder Instanz: eigene Instanzen öffnen, anderen beitreten. */
-@OptIn(ExperimentalMaterial3Api::class)
-@Composable
-private fun Hauptmenue(modell: AppModell, stand: LageStand, schliessen: () -> Unit) {
-    Scaffold(topBar = { TopAppBar(title = { Text("SENTINEL") }) }) { innen ->
-        LazyColumn(Modifier.fillMaxSize().padding(innen)) {
-            item { Text("Instanzen", style = MaterialTheme.typography.titleSmall, color = MaterialTheme.colorScheme.primary, modifier = Modifier.padding(16.dp)) }
-            items(stand.eigeneInstanzen, key = { it.id }) { i ->
-                ListItem(
-                    headlineContent = { Text(i.data.name) },
-                    supportingContent = { if (i.id == stand.instanz && stand.imDienst) Text("Geöffnet") },
-                    modifier = Modifier.clickable {
-                        if (i.id != stand.instanz || !stand.imDienst) modell.lage.instanzWechseln(i.id)
-                        schliessen()
-                    },
-                )
-            }
-            if (stand.andereInstanzen.isNotEmpty()) {
-                item { Text("Beitreten", style = MaterialTheme.typography.titleSmall, color = MaterialTheme.colorScheme.primary, modifier = Modifier.padding(16.dp)) }
-                items(stand.andereInstanzen, key = { it.id }) { i ->
-                    ListItem(headlineContent = { Text(i.data.name) }, trailingContent = { OutlinedButton(onClick = { modell.lage.instanzBeitreten(i.id) }) { Text("Beitreten") } })
-                }
-            }
-            item {
-                Spacer(Modifier.height(24.dp))
-                Row(Modifier.fillMaxWidth().padding(16.dp), horizontalArrangement = Arrangement.Center) {
-                    OutlinedButton(onClick = { modell.abmelden() }) { Text("Abmelden") }
-                    Spacer(Modifier.width(12.dp))
-                }
-            }
-        }
-    }
-}
