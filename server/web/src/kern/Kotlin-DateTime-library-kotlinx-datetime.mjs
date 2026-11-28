@@ -6605,7 +6605,7 @@ initMetadataForClass(DayDirective, 'DayDirective');
 initMetadataForObject(DateFields, 'DateFields');
 initMetadataForCompanion(Companion_9);
 initMetadataForInterface(AbstractWithTimeBuilder, 'AbstractWithTimeBuilder', VOID, VOID, [WithTime]);
-initMetadataForInterface(AbstractWithDateTimeBuilder, 'AbstractWithDateTimeBuilder', VOID, VOID, [AbstractWithDateBuilder, AbstractWithTimeBuilder, WithDate, WithTime]);
+initMetadataForInterface(AbstractWithDateTimeBuilder, 'AbstractWithDateTimeBuilder', VOID, VOID, [AbstractWithDateBuilder, AbstractWithTimeBuilder, WithTime, WithDate]);
 protoOf(Builder_0).k1f = appendAlternativeParsingImpl;
 protoOf(Builder_0).j1f = appendOptionalImpl;
 protoOf(Builder_0).r1e = chars;

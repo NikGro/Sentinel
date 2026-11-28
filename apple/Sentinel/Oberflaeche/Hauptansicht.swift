@@ -41,7 +41,7 @@ struct Lagebildschirm: View {
     @State private var zielansicht: ZielansichtAuswahl?
     // ÖPNV live
     // Zuschaltbare Ebenen (Verkehr, ÖPNV live, Bestreifung, Weg-Zeit)
-    @State private var ebenen = Kartenebenen(verkehr: false, oepnvLive: false, wegZeitFuss: true, wegZeitKfz: true, wegZeitOepnv: false, bestreifung: false)
+    @State private var ebenen = Kartenebenen.companion.standard
     @State private var ebenenWahl = false
     @State private var flaechen = Lageflaechen()
     @State private var flaechenStand = 0
@@ -158,7 +158,8 @@ struct Lagebildschirm: View {
                   live: liveAn ? live : nil, liveStand: liveStand, beiKameraRuhe: { if liveAn { liveAnstoss += 1 } },
                   spurenJson: { let _ = (spurenStand, verlaufStand); return modell.spuren.geoJson(stand: modell.stand, verlauf: verlauf) }(),
                   wegZeitJson: { let _ = flaechenStand; return flaechen.wegZeitGeoJson() }(),
-                  bestreifungJson: { let _ = flaechenStand; return flaechen.bestreifungGeoJson(jetztMs: jetztMs) }()) {
+                  bestreifungJson: { let _ = flaechenStand; return flaechen.bestreifungGeoJson(jetztMs: jetztMs) }(),
+                  ebenen: ebenen) {
             auswahl = KartenObjektAuswahl(objekt: $0)
         }
             .ignoresSafeArea()
@@ -235,7 +236,7 @@ struct Lagebildschirm: View {
                                         titel: "Standort und Kompass", aktiv: steuerung.anheftung != .frei) {
                                 steuerung.anheftenUmschalten(ort: modell.standort.aktuell)
                             }
-                            Kartenknopf(symbol: "square.3.layers.3d", titel: "Ebenen", aktiv: ebenen.verkehr || ebenen.oepnvLive || ebenen.bestreifung) { ebenenWahl = true }
+                            Kartenknopf(symbol: "square.3.layers.3d", titel: "Ebenen", aktiv: ebenen.veraendert) { ebenenWahl = true }
                             Kartenknopf(symbol: "plus", titel: "Hinzufügen", hervorgehoben: true) {
                                 plusOrt = nil
                                 plus = true
@@ -401,6 +402,17 @@ struct Lagebildschirm: View {
             .sheet(isPresented: $ebenenWahl) {
                 NavigationStack {
                     Form {
+                        // Grundkarte und 3D
+                        Section {
+                            Picker("Grundkarte", selection: Binding(get: { ebenen.grundkarte }, set: { ebenen = ebenen.mitGrundkarte(g: $0) })) {
+                                ForEach(Kartenebenen.companion.grundkarten.indices, id: \.self) { i in
+                                    let g = Kartenebenen.companion.grundkarten[i]
+                                    Text((g.second as String?) ?? "").tag((g.first as String?) ?? "")
+                                }
+                            }
+                            .pickerStyle(.segmented)
+                            Toggle("Gebäude in 3D", isOn: Binding(get: { ebenen.dreiD }, set: { ebenen = ebenen.mitDreiD(an: $0) }))
+                        }
                         Section {
                             ForEach(Kartenebenen.companion.schalter.indices, id: \.self) { i in
                                 let eintrag = Kartenebenen.companion.schalter[i]
@@ -410,11 +422,25 @@ struct Lagebildschirm: View {
                         } footer: {
                             Text("Weg-Zeit-Flächen zeigen, wie weit jemand seit einer Sichtung gekommen sein kann.")
                         }
+                        // Ziele nach Art und Gruppe ausblenden (nur auf diesem Gerät)
+                        Section("Ziele auf der Karte") {
+                            ForEach(Kartenebenen.companion.zielarten.indices, id: \.self) { i in
+                                let eintrag = Kartenebenen.companion.zielarten[i]
+                                if let art = eintrag.first {
+                                    Toggle((eintrag.second as String?) ?? "", isOn: Binding(get: { ebenen.zielartAn(art: art) }, set: { ebenen = ebenen.mitZielart(art: art, an: $0) }))
+                                }
+                            }
+                            ForEach(modell.stand.zielgruppenSortiert, id: \.id) { g in
+                                Toggle(isOn: Binding(get: { ebenen.gruppeAn(id: g.id) }, set: { ebenen = ebenen.mitGruppe(id: g.id, an: $0) })) {
+                                    Label { Text(g.data.name) } icon: { Circle().fill(Color(hex: g.data.farbe)).frame(width: 10, height: 10) }
+                                }
+                            }
+                        }
                     }
                     .navigationTitle("Ebenen")
                     .navigationBarTitleDisplayMode(.inline)
                 }
-                .presentationDetents([.medium])
+                .presentationDetents([.medium, .large])
             }
             .task(id: liveAn ? liveAnstoss : -1) {
                 guard liveAn else {

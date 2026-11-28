@@ -1,6 +1,6 @@
 import { useSignal } from '@preact/signals';
 import { useEffect, useRef } from 'preact/hooks';
-import { createMap, trafficVisible } from './map';
+import { createMap, dreiD, grundkarte, hiddenTargetGroups, hiddenTargetKinds, trafficVisible } from './map';
 import { ChatPanel } from './panels/ChatPanel';
 import { InstancesPanel } from './panels/InstancesPanel';
 import { LagePanel } from './panels/LagePanel';
@@ -138,13 +138,7 @@ function Console() {
 
       <main class="map-area">
         <div ref={mapRef} class="map" />
-        <button
-          class={`map-traffic${trafficVisible.value ? ' active' : ''}`}
-          aria-pressed={trafficVisible.value}
-          onClick={() => (trafficVisible.value = !trafficVisible.value)}
-        >
-          Verkehr
-        </button>
+        <MapLayers />
         <ObjectEditor />
         <MapToolbar />
         {notice.value && (
@@ -282,5 +276,45 @@ function Roster() {
         })}
       </ul>
     </aside>
+  );
+}
+
+const ZIELARTEN: [string, string][] = [['person', 'Personen'], ['fahrzeug', 'Fahrzeuge'], ['objekt', 'Objekte']];
+
+const umschalten = (menge: Set<string>, wert: string): Set<string> => {
+  const neu = new Set(menge);
+  if (neu.has(wert)) neu.delete(wert);
+  else neu.add(wert);
+  return neu;
+};
+
+/** Kartenebenen wie in den Apps: Grundkarte, 3D, Verkehr, Zielarten und Zielgruppen ausblenden. */
+function MapLayers() {
+  const offen = useSignal(false);
+  const veraendert = trafficVisible.value || grundkarte.value !== 'standard' || !dreiD.value || hiddenTargetKinds.value.size > 0 || hiddenTargetGroups.value.size > 0;
+  const gruppen = Object.values(tables.targetGroup.value).sort((a, b) => a.data.name.localeCompare(b.data.name, 'de'));
+  return (
+    <div class="map-layers">
+      <button class={`map-traffic${veraendert ? ' active' : ''}`} aria-expanded={offen.value} onClick={() => (offen.value = !offen.value)}>
+        Karte
+      </button>
+      {offen.value && (
+        <div class="map-layers-menu" role="group" aria-label="Kartenebenen">
+          <div class="segmented" role="radiogroup" aria-label="Grundkarte">
+            <button role="radio" aria-checked={grundkarte.value === 'standard'} class={grundkarte.value === 'standard' ? 'active' : ''} onClick={() => (grundkarte.value = 'standard')}>Karte</button>
+            <button role="radio" aria-checked={grundkarte.value === 'satellit'} class={grundkarte.value === 'satellit' ? 'active' : ''} onClick={() => (grundkarte.value = 'satellit')}>Satellit</button>
+          </div>
+          <label><input type="checkbox" checked={dreiD.value} onChange={() => (dreiD.value = !dreiD.value)} /> Gebäude in 3D</label>
+          <label><input type="checkbox" checked={trafficVisible.value} onChange={() => (trafficVisible.value = !trafficVisible.value)} /> Verkehr und Sperrungen</label>
+          <p class="map-layers-title">Ziele auf der Karte</p>
+          {ZIELARTEN.map(([art, titel]) => (
+            <label key={art}><input type="checkbox" checked={!hiddenTargetKinds.value.has(art)} onChange={() => (hiddenTargetKinds.value = umschalten(hiddenTargetKinds.value, art))} /> {titel}</label>
+          ))}
+          {gruppen.map((g) => (
+            <label key={g.id}><input type="checkbox" checked={!hiddenTargetGroups.value.has(g.id)} onChange={() => (hiddenTargetGroups.value = umschalten(hiddenTargetGroups.value, g.id))} /> {g.data.name}</label>
+          ))}
+        </div>
+      )}
+    </div>
   );
 }

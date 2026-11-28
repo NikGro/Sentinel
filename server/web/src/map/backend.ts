@@ -34,6 +34,8 @@ export interface MapBackend {
   flyTo(point: GeoPoint): void;
   setCrosshair(active: boolean): void;
   setColorScheme(scheme: ColorScheme): void;
+  /** Stil wechseln (Grundkarte Karte/Satellit, 3D an/aus). */
+  setStyleUrl(adresse: string): void;
   /** Lage-Quellen des gemeinsamen Stils (GeoJSON je Quelle, aus dem Kern). */
   setLage(quellen: Record<string, string>): void;
   setQuelle(id: string, json: string): void;

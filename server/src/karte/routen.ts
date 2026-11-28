@@ -50,10 +50,11 @@ export function registerKartenRoutes(app: FastifyInstance, config: KartenConfig)
 
   app.get('/karte/stil/:name', async (request, reply) => {
     const { name } = request.params as { name: string };
-    const match = /^(hell|dunkel)(-flach)?\.json$/.exec(name);
+    const match = /^(hell|dunkel|satellit)(-flach)?\.json$/.exec(name);
     if (!match) return reply.code(404).send({ fehler: 'Unbekannter Stil.' });
     reply.header('Cache-Control', 'public, max-age=300').header('Access-Control-Allow-Origin', '*');
-    return kartenstil(match[1] as Variante, config.publicUrl, { gebaeude3d: !match[2] });
+    const luftbild = match[1] === 'satellit';
+    return kartenstil(luftbild ? 'dunkel' : (match[1] as Variante), config.publicUrl, { gebaeude3d: !match[2], luftbild });
   });
 
   app.get('/karte/kacheln/:z/:x/:y', async (request, reply) => {
@@ -104,6 +105,33 @@ export function registerKartenRoutes(app: FastifyInstance, config: KartenConfig)
     reply.header('Access-Control-Allow-Origin', '*').header('Cache-Control', 'public, max-age=60');
     if (!eintrag.daten) return reply.code(204).send();
     return reply.header('Content-Type', 'application/x-protobuf').header('Content-Encoding', 'gzip').send(eintrag.daten);
+  });
+
+  // Luftbild (Satellit) von TomTom über den eigenen Server; lange zwischengespeichert, Schlüssel bleibt hier.
+  const luftbildSpeicher = new Map<string, Buffer | null>();
+  app.get('/karte/luftbild/:z/:x/:y', async (request, reply) => {
+    const { z, x, y } = request.params as { z: string; x: string; y: string };
+    const zi = Number(z), xi = Number(x), yi = Number(y.replace(/\.jpg$/, ''));
+    if (![zi, xi, yi].every(Number.isInteger) || zi < 0 || zi > 19 || xi < 0 || yi < 0 || xi >= 2 ** zi || yi >= 2 ** zi) return reply.code(400).send();
+    const schluessel = config.verkehrSchluessel?.();
+    if (!schluessel) return reply.code(204).send();
+    const id = `${zi}/${xi}/${yi}`;
+    let bild = luftbildSpeicher.get(id);
+    if (bild === undefined) {
+      try {
+        const url = `https://api.tomtom.com/map/1/tile/sat/main/${zi}/${xi}/${yi}.jpg?key=${encodeURIComponent(schluessel)}`;
+        const antwort = await (config.fetchFn ?? fetch)(url, { signal: AbortSignal.timeout(8000) });
+        bild = antwort.ok ? Buffer.from(await antwort.arrayBuffer()) : null;
+      } catch {
+        bild = null;
+      }
+      if (bild) {
+        luftbildSpeicher.set(id, bild);
+        if (luftbildSpeicher.size > 3000) luftbildSpeicher.delete(luftbildSpeicher.keys().next().value!);
+      }
+    }
+    if (!bild) return reply.code(204).send();
+    return reply.header('Access-Control-Allow-Origin', '*').header('Cache-Control', 'public, max-age=604800').header('Content-Type', 'image/jpeg').send(bild);
   });
 
   app.get('/karte/schrift/:stapel/:bereich', async (request, reply) => {

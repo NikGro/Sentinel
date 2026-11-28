@@ -75,7 +75,10 @@ data class KartenObjekt(val art: Objektart, val id: String) {
 data class Anzeige(
     val ausgeblendeteEbenen: Set<String> = emptySet(),
     val ausgeblendeteZielarten: Set<Zielart> = emptySet(),
-)
+    val ausgeblendeteGruppen: Set<String> = emptySet(),
+) {
+    fun zielAusgeblendet(z: de.nglab.sentinel.kern.modell.Ziel): Boolean = z.art in ausgeblendeteZielarten || (z.gruppeId != null && z.gruppeId in ausgeblendeteGruppen)
+}
 
 class Szene {
     internal fun punkt(p: GeoPunkt): JsonObject = buildJsonObject {
@@ -170,7 +173,7 @@ class Szene {
 
         // Ziele: Zielperson in Zielfahrzeug oder Gebäude steckt darin (Name in dessen Beschriftung); im ÖPNV am Fahrzeug.
         for (z in lage.zieleSortiert) {
-            if (!lage.zielSichtbar(z.id) || z.data.art in anzeige.ausgeblendeteZielarten) continue
+            if (!lage.zielSichtbar(z.id) || anzeige.zielAusgeblendet(z.data)) continue
             val bindung = z.data.bindung
             if (bindung != null && (bindung.art == BindungsArt.Fahrzeug || bindung.art == BindungsArt.Objekt) && bindung.zielId != null && lage.ziele[bindung.zielId] != null) continue
             val ortung = lage.ortung(z, jetztMs) ?: continue

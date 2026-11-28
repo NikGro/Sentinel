@@ -76,3 +76,19 @@ class FahrzeugeditorTest {
         assertFalse(de.nglab.sentinel.kern.lage.Kraeftesuche.fahrzeug(v, "bär"))
     }
 }
+
+class KartenstilTest {
+    @Test
+    fun stilUndAusblenden() {
+        val e = de.nglab.sentinel.kern.karte.Kartenebenen.standard
+        assertEquals("https://s/karte/stil/dunkel.json", e.stilAdresse("https://s", true))
+        val sat = e.mitGrundkarte(de.nglab.sentinel.kern.karte.Kartenebenen.SATELLIT).mitDreiD(false)
+        assertEquals("https://s/karte/stil/satellit-flach.json", sat.stilAdresse("https://s", false))
+        assertTrue(sat.veraendert)
+        val aus = e.mitZielart(Zielart.Fahrzeug, false).mitGruppe("g", false)
+        assertTrue(aus.anzeige.zielAusgeblendet(Ziel(art = Zielart.Fahrzeug)))
+        assertTrue(aus.anzeige.zielAusgeblendet(Ziel(gruppeId = "g")))
+        assertFalse(aus.anzeige.zielAusgeblendet(Ziel()))
+        assertTrue(aus.mitGruppe("g", true).gruppeAn("g"))
+    }
+}

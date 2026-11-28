@@ -63,6 +63,7 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.testTag
@@ -130,7 +131,7 @@ fun Hauptansicht(modell: AppModell) {
     }
 }
 
-@OptIn(ExperimentalMaterial3Api::class)
+@OptIn(ExperimentalMaterial3Api::class, androidx.compose.foundation.layout.ExperimentalLayoutApi::class)
 @Composable
 private fun Lagebildschirm(modell: AppModell, stand: LageStand, fokus: KartenObjekt?, fokusErledigt: () -> Unit) {
     val steuerung = remember { KartenSteuerung() }
@@ -266,6 +267,7 @@ private fun Lagebildschirm(modell: AppModell, stand: LageStand, fokus: KartenObj
             },
             live = if (liveAn) live else null,
             liveStand = liveStand,
+            ebenen = ebenen,
             beiKameraRuhe = { if (liveAn) liveAnstoss++ },
             spurenJson = spurenJson,
             wegZeitJson = remember(flaechenStand) { flaechen.wegZeitGeoJson() },
@@ -338,7 +340,7 @@ private fun Lagebildschirm(modell: AppModell, stand: LageStand, fokus: KartenObj
                 "Standort und Kompass",
                 aktiv = steuerung.anheftung != Anheftung.Frei,
             ) { steuerung.anheftenUmschalten(ort?.let { GeoPunkt(it.lat, it.lon) }) }
-            Kartenknopf(Icons.Filled.Layers, "Ebenen", aktiv = ebenen.verkehr || ebenen.oepnvLive || ebenen.bestreifung) { ebenenWahl = true }
+            Kartenknopf(Icons.Filled.Layers, "Ebenen", aktiv = ebenen.veraendert) { ebenenWahl = true }
             Kartenknopf(Icons.Filled.Add, "Hinzufügen", hervorgehoben = true) { plusOrt = null; plus = true }
         }
 
@@ -511,8 +513,24 @@ private fun Lagebildschirm(modell: AppModell, stand: LageStand, fokus: KartenObj
 
     if (ebenenWahl) {
         ModalBottomSheet(onDismissRequest = { ebenenWahl = false }) {
-            Column(Modifier.fillMaxWidth().padding(horizontal = 20.dp).padding(bottom = 32.dp)) {
+            Column(Modifier.fillMaxWidth().then(Modifier.verticalScroll(androidx.compose.foundation.rememberScrollState())).padding(horizontal = 20.dp).padding(bottom = 32.dp)) {
                 Text("Ebenen", style = MaterialTheme.typography.titleLarge, modifier = Modifier.padding(bottom = 8.dp))
+                // Grundkarte und 3D
+                androidx.compose.material3.SingleChoiceSegmentedButtonRow(Modifier.fillMaxWidth()) {
+                    val karten = de.nglab.sentinel.kern.karte.Kartenebenen.grundkarten
+                    karten.forEachIndexed { i, (schluessel, titel) ->
+                        androidx.compose.material3.SegmentedButton(
+                            selected = ebenen.grundkarte == schluessel,
+                            onClick = { ebenen = ebenen.mitGrundkarte(schluessel) },
+                            shape = androidx.compose.material3.SegmentedButtonDefaults.itemShape(i, karten.size),
+                        ) { Text(titel) }
+                    }
+                }
+                Row(Modifier.fillMaxWidth().height(52.dp), verticalAlignment = Alignment.CenterVertically) {
+                    Text("Gebäude in 3D", modifier = Modifier.weight(1f))
+                    androidx.compose.material3.Switch(checked = ebenen.dreiD, onCheckedChange = { ebenen = ebenen.mitDreiD(it) })
+                }
+                androidx.compose.material3.HorizontalDivider()
                 for ((schluessel, titel) in de.nglab.sentinel.kern.karte.Kartenebenen.schalter) {
                     Row(Modifier.fillMaxWidth().height(52.dp), verticalAlignment = Alignment.CenterVertically) {
                         Text(titel, modifier = Modifier.weight(1f))
@@ -520,6 +538,16 @@ private fun Lagebildschirm(modell: AppModell, stand: LageStand, fokus: KartenObj
                     }
                 }
                 Text("Weg-Zeit-Flächen zeigen, wie weit jemand seit einer Sichtung gekommen sein kann.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                // Ziele nach Art und Gruppe ausblenden (nur auf diesem Gerät)
+                Text("Ziele auf der Karte", style = MaterialTheme.typography.titleSmall, color = MaterialTheme.colorScheme.primary, modifier = Modifier.padding(top = 16.dp, bottom = 4.dp))
+                androidx.compose.foundation.layout.FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    for ((art, titel) in de.nglab.sentinel.kern.karte.Kartenebenen.zielarten) {
+                        androidx.compose.material3.FilterChip(selected = ebenen.zielartAn(art), onClick = { ebenen = ebenen.mitZielart(art, !ebenen.zielartAn(art)) }, label = { Text(titel) })
+                    }
+                    for (g in stand.zielgruppenSortiert) {
+                        androidx.compose.material3.FilterChip(selected = ebenen.gruppeAn(g.id), onClick = { ebenen = ebenen.mitGruppe(g.id, !ebenen.gruppeAn(g.id)) }, label = { Text(g.data.name) })
+                    }
+                }
             }
         }
     }

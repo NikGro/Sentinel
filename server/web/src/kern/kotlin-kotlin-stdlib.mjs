@@ -4459,6 +4459,9 @@ function toSet(_this__u8e3s4) {
       return toCollection(_this__u8e3s4, LinkedHashSet.j(mapCapacity(_this__u8e3s4.length)));
   }
 }
+function contains_0(_this__u8e3s4, element) {
+  return indexOf(_this__u8e3s4, element) >= 0;
+}
 function filterNotNull(_this__u8e3s4) {
   return filterNotNullTo(_this__u8e3s4, ArrayList.n());
 }
@@ -4987,7 +4990,7 @@ function coerceIn_1(_this__u8e3s4, minimumValue, maximumValue) {
 function coerceAtMost(_this__u8e3s4, maximumValue) {
   return _this__u8e3s4 > maximumValue ? maximumValue : _this__u8e3s4;
 }
-function contains_0(_this__u8e3s4, value) {
+function contains_1(_this__u8e3s4, value) {
   // Inline function 'kotlin.let' call
   var it = toIntExactOrNull(value);
   return !(it == null) ? _this__u8e3s4.q1(it) : false;
@@ -9233,7 +9236,7 @@ function removePrefix(_this__u8e3s4, prefix) {
   }
   return _this__u8e3s4;
 }
-function contains_1(_this__u8e3s4, other, ignoreCase) {
+function contains_2(_this__u8e3s4, other, ignoreCase) {
   ignoreCase = ignoreCase === VOID ? false : ignoreCase;
   var tmp;
   if (typeof other === 'string') {
@@ -11865,13 +11868,13 @@ initMetadataForClass(AbstractCollection, 'AbstractCollection', VOID, VOID, [Coll
 initMetadataForClass(AbstractMutableCollection, 'AbstractMutableCollection', VOID, VOID, [Collection]);
 initMetadataForClass(IteratorImpl, 'IteratorImpl');
 initMetadataForClass(ListIteratorImpl, 'ListIteratorImpl');
-initMetadataForClass(AbstractMutableList, 'AbstractMutableList', VOID, VOID, [Collection, KtList]);
+initMetadataForClass(AbstractMutableList, 'AbstractMutableList', VOID, VOID, [KtList, Collection]);
 initMetadataForClass(AbstractMap, 'AbstractMap', VOID, VOID, [KtMap]);
 initMetadataForClass(AbstractMutableMap, 'AbstractMutableMap', VOID, VOID, [KtMutableMap]);
 initMetadataForClass(AbstractMutableSet, 'AbstractMutableSet', VOID, VOID, [KtSet, Collection]);
 initMetadataForCompanion(Companion_2);
 initMetadataForInterface(RandomAccess, 'RandomAccess');
-initMetadataForClass(ArrayList, 'ArrayList', ArrayList.n, VOID, [Collection, KtList, RandomAccess]);
+initMetadataForClass(ArrayList, 'ArrayList', ArrayList.n, VOID, [KtList, Collection, RandomAccess]);
 initMetadataForClass(HashMap, 'HashMap', HashMap.n6, VOID, [KtMutableMap]);
 initMetadataForClass(HashMapKeys, 'HashMapKeys', VOID, VOID, [KtSet, Collection]);
 initMetadataForClass(HashMapValues, 'HashMapValues', VOID, VOID, [Collection]);
@@ -12115,6 +12118,7 @@ export {
   checkCountOverflow as checkCountOverflow1ro2fe1r4xvgf,
   checkIndexOverflow as checkIndexOverflow3frtmheghr0th,
   collectionSizeOrDefault as collectionSizeOrDefault36dulx8yinfqm,
+  contains_0 as contains1tccixv8iwdcq,
   contentEquals as contentEqualsaf55p28mnw74,
   contentHashCode as contentHashCode2i020q5tbeh2s,
   copyOf_4 as copyOf39s58md6y6rn6,
@@ -12253,7 +12257,7 @@ export {
   coerceAtLeast as coerceAtLeast2bkz8m9ik7hep,
   coerceAtMost as coerceAtMost322komnqp70ag,
   coerceIn_0 as coerceIn1xblvmyr0tby6,
-  contains_0 as contains2c50nlxg7en7o,
+  contains_1 as contains2c50nlxg7en7o,
   step as step18s9qzr5xwxat,
   until as until1jbpn0z3f8lbg,
   getKClassFromExpression as getKClassFromExpression348iqjl4fnx2f,
@@ -12264,7 +12268,7 @@ export {
   KProperty1 as KProperty1ca4yb4wlo496,
   Regex as Regexxgw0gjiagf4z,
   StringBuilder as StringBuildermazzzhj6kkai,
-  contains_1 as contains3ue2qo8xhmpf1,
+  contains_2 as contains3ue2qo8xhmpf1,
   equals_0 as equals2v6cggk171b6e,
   indexOf_1 as indexOfwa4w6635jewi,
   indexOf_0 as indexOf1xbs558u7wr52,

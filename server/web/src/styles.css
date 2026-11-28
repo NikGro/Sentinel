@@ -798,11 +798,67 @@ pre {
 }
 
 /* Verkehrslage ein/aus: rechts unter der Kartensteuerung (Zoom, Kompass). */
-.map-traffic {
+.map-layers {
   position: absolute;
   z-index: 5;
   top: 120px;
   right: 10px;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 6px;
+}
+
+.map-layers-menu {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  min-width: 210px;
+  padding: 12px;
+  font-size: 13px;
+  color: var(--ink);
+  background: var(--panel);
+  border: 1px solid var(--line-strong);
+  border-radius: 10px;
+  box-shadow: var(--shadow-float);
+}
+
+.map-layers-menu label {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  cursor: pointer;
+}
+
+.map-layers-title {
+  margin: 4px 0 0;
+  color: var(--ink-soft, var(--ink));
+  font-weight: 600;
+}
+
+.map-layers-menu .segmented {
+  display: flex;
+  border: 1px solid var(--line-strong);
+  border-radius: 8px;
+  overflow: hidden;
+}
+
+.map-layers-menu .segmented button {
+  flex: 1;
+  padding: 5px 8px;
+  font: inherit;
+  color: var(--ink);
+  background: transparent;
+  border: 0;
+  cursor: pointer;
+}
+
+.map-layers-menu .segmented button.active {
+  color: var(--on-accent);
+  background: var(--accent-fill);
+}
+
+.map-traffic {
   padding: 6px 10px;
   font: inherit;
   font-size: 13px;

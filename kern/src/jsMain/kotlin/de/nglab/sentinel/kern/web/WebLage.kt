@@ -29,14 +29,27 @@ class WebLage {
         lage.empfangen(text)
     }
 
-    /** Alle Kartenquellen als JSON-Objekt { "s-symbole": "<GeoJSON>", … }. */
-    fun quellen(jetztMs: Double, zoom: Double, ausgeblendeteEbenen: Array<String>): String = buildJsonObject {
-        for ((id, json) in szene.aufbauen(lage.stand.value, jetztMs.toLong(), Anzeige(ausgeblendeteEbenen.toSet()), zoom)) put(id, json)
+    private fun anzeige(ebenen: Array<String>, zielarten: Array<String>, gruppen: Array<String>) = Anzeige(
+        ausgeblendeteEbenen = ebenen.toSet(),
+        ausgeblendeteZielarten = de.nglab.sentinel.kern.modell.Zielart.entries.filter { it.name.lowercase() in zielarten }.toSet(),
+        ausgeblendeteGruppen = gruppen.toSet(),
+    )
+
+    /**
+     * Alle Kartenquellen als JSON-Objekt { "s-symbole": "<GeoJSON>", … }. Ausgeblendet: Ebenen, Zielarten
+     * („person“, „fahrzeug“, „objekt“) und Zielgruppen.
+     */
+    fun quellen(jetztMs: Double, zoom: Double, ausgeblendeteEbenen: Array<String>, ausgeblendeteZielarten: Array<String>, ausgeblendeteGruppen: Array<String>): String = buildJsonObject {
+        for ((id, json) in szene.aufbauen(lage.stand.value, jetztMs.toLong(), anzeige(ausgeblendeteEbenen, ausgeblendeteZielarten, ausgeblendeteGruppen), zoom)) put(id, json)
     }.toString()
 
     /** ÖPNV-Fahrzeuge zur Zeit `jetztMs` (für den schnellen Takt, Quelle `s-oepnv-fahrzeuge`). */
     fun oepnvFahrzeuge(jetztMs: Double, ausgeblendeteEbenen: Array<String>): String =
         szene.oepnvFahrzeuge(lage.stand.value, jetztMs.toLong(), Anzeige(ausgeblendeteEbenen.toSet()))
+
+    /** Stiladresse (relativ zum Server) für Grundkarte („standard“, „satellit“), hell/dunkel und 3D. */
+    fun stilAdresse(grundkarte: String, dunkel: Boolean, dreiD: Boolean): String =
+        de.nglab.sentinel.kern.karte.Kartenebenen(grundkarte = grundkarte, dreiD = dreiD).stilAdresse("", dunkel)
 
     /** Name der Quelle für ÖPNV-Fahrzeuge (damit das Web keine festen Namen braucht). */
     val quelleOepnvFahrzeuge: String get() = Quellen.OEPNV_FAHRZEUGE

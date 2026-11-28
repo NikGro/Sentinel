@@ -20,7 +20,33 @@ data class Kartenebenen(
     val wegZeitKfz: Boolean = true,
     val wegZeitOepnv: Boolean = false,
     val bestreifung: Boolean = false,
+    /** Grundkarte: „standard“ (eigene Karte) oder „satellit“ (Luftbild mit Straßen und Beschriftung). */
+    val grundkarte: String = STANDARD,
+    /** Gebäude in 3D; aus = flache Karte. */
+    val dreiD: Boolean = true,
+    val ausgeblendeteZielarten: Set<de.nglab.sentinel.kern.modell.Zielart> = emptySet(),
+    val ausgeblendeteGruppen: Set<String> = emptySet(),
 ) {
+    /** Stiladresse auf dem eigenen Server. */
+    fun stilAdresse(server: String, dunkel: Boolean): String {
+        val name = if (grundkarte == SATELLIT) "satellit" else if (dunkel) "dunkel" else "hell"
+        return "$server/karte/stil/$name${if (dreiD) "" else "-flach"}.json"
+    }
+
+    /** Was die Szene ausblendet. */
+    val anzeige: Anzeige get() = Anzeige(ausgeblendeteZielarten = ausgeblendeteZielarten, ausgeblendeteGruppen = ausgeblendeteGruppen)
+
+    fun mitGrundkarte(g: String): Kartenebenen = copy(grundkarte = g)
+    fun mitDreiD(an: Boolean): Kartenebenen = copy(dreiD = an)
+    fun zielartAn(art: de.nglab.sentinel.kern.modell.Zielart): Boolean = art !in ausgeblendeteZielarten
+    fun mitZielart(art: de.nglab.sentinel.kern.modell.Zielart, an: Boolean): Kartenebenen =
+        copy(ausgeblendeteZielarten = if (an) ausgeblendeteZielarten - art else ausgeblendeteZielarten + art)
+    fun gruppeAn(id: String): Boolean = id !in ausgeblendeteGruppen
+    fun mitGruppe(id: String, an: Boolean): Kartenebenen = copy(ausgeblendeteGruppen = if (an) ausgeblendeteGruppen - id else ausgeblendeteGruppen + id)
+
+    /** Etwas weicht von der Grundeinstellung ab (Knopf hervorheben). */
+    val veraendert: Boolean get() = verkehr || oepnvLive || bestreifung || grundkarte != STANDARD || !dreiD || ausgeblendeteZielarten.isNotEmpty() || ausgeblendeteGruppen.isNotEmpty()
+
     val wegZeitModi: List<String> get() = listOfNotNull("fuss".takeIf { wegZeitFuss }, "kfz".takeIf { wegZeitKfz }, "oepnv".takeIf { wegZeitOepnv })
 
     /** Für Plattformen ohne benannte Kopien (Swift): eine Ebene umschalten. */
@@ -45,6 +71,16 @@ data class Kartenebenen(
     }
 
     companion object {
+        const val STANDARD = "standard"
+        const val SATELLIT = "satellit"
+        val standard: Kartenebenen = Kartenebenen()
+        val grundkarten: List<Pair<String, String>> = listOf(STANDARD to "Karte", SATELLIT to "Satellit")
+        val zielarten: List<Pair<de.nglab.sentinel.kern.modell.Zielart, String>> = listOf(
+            de.nglab.sentinel.kern.modell.Zielart.Person to "Personen",
+            de.nglab.sentinel.kern.modell.Zielart.Fahrzeug to "Fahrzeuge",
+            de.nglab.sentinel.kern.modell.Zielart.Objekt to "Objekte",
+        )
+
         /** Schalter in der Reihenfolge der Oberfläche: Schlüssel und Titel. */
         val schalter: List<Pair<String, String>> = listOf(
             "verkehr" to "Verkehr und Sperrungen",

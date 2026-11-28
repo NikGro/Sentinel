@@ -35,4 +35,8 @@ object Kraefteansicht {
             .thenBy { stand.einsatz.a?.memberId != it.id }
             .thenBy { Sortierung.text(it.data.spitzname) },
     )
+
+    /** Profile, die ein neues Gerät übernehmen kann: nicht das eigene, gerade nicht verbunden. */
+    fun uebernehmbar(stand: LageStand): List<Versioniert<Fahnder>> =
+        stand.kraefte.filter { it.id != stand.ichId && !stand.istOnline(it.id) }.sortedBy { Sortierung.text(it.data.spitzname) }
 }

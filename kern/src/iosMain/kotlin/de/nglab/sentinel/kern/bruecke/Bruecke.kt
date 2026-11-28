@@ -60,7 +60,7 @@ object Bruecke {
     }
 
     /** Datenquellen der Karte (GeoJSON je Quelle) mit Auffächern bei der Zoomstufe `zoom`. */
-    fun quellen(szene: Szene, stand: LageStand, jetztMs: Long, zoom: Double): Map<String, String> = szene.aufbauen(stand, jetztMs, Anzeige(), zoom)
+    fun quellen(szene: Szene, stand: LageStand, jetztMs: Long, zoom: Double, anzeige: Anzeige): Map<String, String> = szene.aufbauen(stand, jetztMs, anzeige, zoom)
 
-    fun oepnvFahrzeuge(szene: Szene, stand: LageStand, jetztMs: Long, live: de.nglab.sentinel.kern.oepnv.OepnvLive?): String = szene.oepnvFahrzeuge(stand, jetztMs, Anzeige(), live)
+    fun oepnvFahrzeuge(szene: Szene, stand: LageStand, jetztMs: Long, live: de.nglab.sentinel.kern.oepnv.OepnvLive?, anzeige: Anzeige): String = szene.oepnvFahrzeuge(stand, jetztMs, anzeige, live)
 }

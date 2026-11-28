@@ -119,6 +119,7 @@ struct LageKarte: UIViewRepresentable {
     var spurenJson: String? = nil
     var wegZeitJson: String? = nil
     var bestreifungJson: String? = nil
+    var ebenen: Kartenebenen = Kartenebenen.companion.standard
     let beiAuswahl: (KartenObjekt) -> Void
     @Environment(\.colorScheme) private var farbschema
 
@@ -126,8 +127,9 @@ struct LageKarte: UIViewRepresentable {
 
     func makeUIView(context: Context) -> MLNMapView {
         let server = modell.zugang?.server ?? ""
-        let stil = URL(string: "\(server)/karte/stil/\(farbschema == .dark ? "dunkel" : "hell").json")
-        let karte = MLNMapView(frame: .zero, styleURL: stil)
+        let adresse = ebenen.stilAdresse(server: server, dunkel: farbschema == .dark)
+        let karte = MLNMapView(frame: .zero, styleURL: URL(string: adresse))
+        context.coordinator.stilAdresse = adresse
         karte.delegate = context.coordinator
         karte.compassView.isHidden = true
         karte.logoView.isHidden = true
@@ -150,6 +152,13 @@ struct LageKarte: UIViewRepresentable {
     }
 
     func updateUIView(_ karte: MLNMapView, context: Context) {
+        // Stil nach Grundkarte (Karte, Satellit), 3D und hell/dunkel; ein Wechsel lädt den Stil neu.
+        let adresse = ebenen.stilAdresse(server: modell.zugang?.server ?? "", dunkel: farbschema == .dark)
+        if adresse != context.coordinator.stilAdresse {
+            context.coordinator.stilAdresse = adresse
+            karte.styleURL = URL(string: adresse)
+        }
+        context.coordinator.anzeigeSetzen(ebenen.anzeige, verkehr: ebenen.verkehr)
         context.coordinator.beiAuswahl = beiAuswahl
         context.coordinator.beiTipp = beiTipp
         context.coordinator.beiLangemDruck = beiLangemDruck
@@ -181,6 +190,18 @@ struct LageKarte: UIViewRepresentable {
         private var letzterStand: LageStand?
         private var letzterOrt: Date?
         private let rest = Routenrest()
+        var stilAdresse = ""
+        private var anzeige = Anzeige(ausgeblendeteEbenen: [], ausgeblendeteZielarten: [], ausgeblendeteGruppen: [])
+        private var verkehr = false
+
+        /// Ausgeblendete Zielarten und Gruppen; Verkehr nach jedem Stilwechsel wieder setzen.
+        func anzeigeSetzen(_ a: Anzeige, verkehr v: Bool) {
+            verkehr = v
+            if !a.isEqual(anzeige) {
+                anzeige = a
+                aktualisieren(stand: modell.stand, ort: modell.standort.aktuell, erzwingen: true)
+            }
+        }
 
         init(modell: AppModell, steuerung: KartenSteuerung, beiAuswahl: @escaping (KartenObjekt) -> Void) {
             self.modell = modell
@@ -190,6 +211,7 @@ struct LageKarte: UIViewRepresentable {
 
         func mapView(_ mapView: MLNMapView, didFinishLoading style: MLNStyle) {
             stil = style
+            steuerung?.verkehr(verkehr)
             aktualisieren(stand: modell.stand, ort: modell.standort.aktuell, erzwingen: true)
             letzteVorschau = ""
             letzteSpuren = nil
@@ -250,7 +272,7 @@ struct LageKarte: UIViewRepresentable {
             if erzwingen || letzterStand !== stand {
                 letzterStand = stand
                 let jetzt = Int64(Date.now.timeIntervalSince1970 * 1000)
-                for (id, json) in Bruecke.shared.quellen(szene: szene, stand: stand, jetztMs: jetzt, zoom: zoom) {
+                for (id, json) in Bruecke.shared.quellen(szene: szene, stand: stand, jetztMs: jetzt, zoom: zoom, anzeige: anzeige) {
                     setzen(stil, id, json)
                 }
             }
@@ -309,7 +331,7 @@ struct LageKarte: UIViewRepresentable {
         private func oepnvTakt() {
             guard let stil else { return }
             let jetzt = Int64(Date.now.timeIntervalSince1970 * 1000)
-            setzen(stil, Quellen.shared.OEPNV_FAHRZEUGE, Bruecke.shared.oepnvFahrzeuge(szene: szene, stand: modell.stand, jetztMs: jetzt, live: live))
+            setzen(stil, Quellen.shared.OEPNV_FAHRZEUGE, Bruecke.shared.oepnvFahrzeuge(szene: szene, stand: modell.stand, jetztMs: jetzt, live: live, anzeige: anzeige))
         }
 
         private func setzen(_ stil: MLNStyle, _ id: String, _ json: String) {

@@ -175,7 +175,7 @@ function strassenEbenen(f: Farben, tunnel: boolean): Ebene[] {
 }
 
 /** Vollständiger Stil. `basis` ist die öffentliche Adresse des Servers (für Kacheln und Schriften). */
-export function kartenstil(variante: Variante, basis: string, optionen: { gebaeude3d?: boolean; lage?: boolean } = {}): Record<string, unknown> {
+export function kartenstil(variante: Variante, basis: string, optionen: { gebaeude3d?: boolean; lage?: boolean; luftbild?: boolean } = {}): Record<string, unknown> {
   const f = FARBEN[variante];
   const halo = { 'text-halo-color': f.textHalo, 'text-halo-width': 1.4, 'text-halo-blur': 0.4 };
   const ebenen: Ebene[] = [
@@ -375,9 +375,23 @@ export function kartenstil(variante: Variante, basis: string, optionen: { gebaeu
     },
   ];
 
+  // Luftbild (Hybrid): Satellitenbild statt der Flächen, Straßen halb durchsichtig, Beschriftung bleibt.
+  const ohneFlaechen = new Set(['hintergrund', 'wohngebiet', 'gewerbe', 'acker', 'wiese', 'wald', 'sand', 'park', 'friedhof', 'krankenhaus', 'flughafen', 'wasser', 'gebaeude', 'rollbahn']);
+  const sichtbar = optionen.luftbild
+    ? [
+        { id: 'hintergrund', type: 'background', paint: { 'background-color': '#1B1F24' } } as Ebene,
+        { id: 'luftbild', type: 'raster', source: 'luftbild', paint: { 'raster-fade-duration': 150 } } as Ebene,
+        ...ebenen.filter((e) => !ohneFlaechen.has(e.id as string)).map((e) => {
+          if (e.type === 'line' && e.source === 'karte') return { ...e, paint: { ...(e.paint as object), 'line-opacity': 0.45 } };
+          if (e.type === 'fill-extrusion') return { ...e, paint: { ...(e.paint as object), 'fill-extrusion-opacity': 0.55 } };
+          return e;
+        }),
+      ]
+    : ebenen;
+
   return {
     version: 8,
-    name: `SENTINEL ${variante}`,
+    name: `SENTINEL ${optionen.luftbild ? 'Luftbild' : variante}`,
     glyphs: `${basis}/karte/schrift/{fontstack}/{range}.pbf`,
     sources: {
       karte: {
@@ -387,11 +401,12 @@ export function kartenstil(variante: Variante, basis: string, optionen: { gebaeu
         maxzoom: 14,
         attribution: '© OpenStreetMap-Mitwirkende',
       },
+      ...(optionen.luftbild ? { luftbild: { type: 'raster', tiles: [`${basis}/karte/luftbild/{z}/{x}/{y}.jpg`], tileSize: 256, minzoom: 0, maxzoom: 19, attribution: 'Luftbild © TomTom' } } : {}),
       'verkehr-fluss': { type: 'vector', tiles: [`${basis}/karte/verkehr/fluss/{z}/{x}/{y}.pbf`], minzoom: 6, maxzoom: 18, attribution: 'Verkehr © TomTom' },
       'verkehr-meldungen': { type: 'vector', tiles: [`${basis}/karte/verkehr/meldungen/{z}/{x}/{y}.pbf`], minzoom: 6, maxzoom: 18 },
       // Lage-Ebenen (Kräfte, Ziele, Markierungen, Route …): leere Quellen, die App bzw. Web füllt.
       ...(optionen.lage === false ? {} : lageQuellen()),
     },
-    layers: optionen.lage === false ? ebenen : [...ebenen, ...lageEbenen(variante)],
+    layers: optionen.lage === false ? sichtbar : [...sichtbar, ...lageEbenen(variante)],
   };
 }

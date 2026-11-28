@@ -30,11 +30,13 @@ export function createMapLibreBackend(container: HTMLElement, scheme: ColorSchem
 
   const markers = new Map<string, Map<string, { marker: Marker; signature: string }>>();
 
+  let aktuellerStil = stilAdresse(scheme);
   const applyScheme = (next: ColorScheme) => {
     if (next === aktuellesSchema) return;
     aktuellesSchema = next;
     // Neuer Stil: eigene Quellen und Ebenen kommen nach dem Laden wieder dazu (style.load).
-    map.setStyle(stilAdresse(next));
+    aktuellerStil = stilAdresse(next);
+    map.setStyle(aktuellerStil);
   };
 
   const verkehrAnwenden = () => {
@@ -109,6 +111,11 @@ export function createMapLibreBackend(container: HTMLElement, scheme: ColorSchem
       map.getCanvas().style.cursor = active ? 'crosshair' : '';
     },
     setColorScheme: applyScheme,
+    setStyleUrl(adresse: string) {
+      if (adresse === aktuellerStil) return;
+      aktuellerStil = adresse;
+      map.setStyle(adresse);
+    },
     setLage(quellen: Record<string, string>) {
       letzteLage = quellen;
       for (const [id, json] of Object.entries(quellen)) (map.getSource(id) as GeoJSONSource | undefined)?.setData(JSON.parse(json));

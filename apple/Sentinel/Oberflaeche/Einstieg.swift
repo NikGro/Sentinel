@@ -87,6 +87,8 @@ struct ProfilAnlegen: View {
     @State private var spitzname = ""
     @State private var dienststelle = ""
     @State private var telefon = ""
+    @State private var uebernahme: Versioniert<Fahnder>?
+    @State private var fehler: String?
 
     var body: some View {
         NavigationStack {
@@ -99,6 +101,31 @@ struct ProfilAnlegen: View {
                 } footer: {
                     Text("So sehen dich die anderen auf der Karte und in der Kräfteliste.")
                 }
+                // Bestehendes Profil übernehmen (etwa nach einem Gerätewechsel)
+                let uebernehmbar = Kraefteansicht.shared.uebernehmbar(stand: modell.stand)
+                if !uebernehmbar.isEmpty {
+                    Section {
+                        ForEach(uebernehmbar, id: \.id) { f in
+                            Button { uebernahme = f } label: {
+                                VStack(alignment: .leading, spacing: 2) {
+                                    Text(f.data.spitzname).foregroundStyle(.primary)
+                                    Text([f.data.name, f.data.dienststelle].filter { !$0.isEmpty }.joined(separator: ", ")).font(.caption).foregroundStyle(.secondary)
+                                }
+                            }
+                        }
+                        if let fehler { Text(fehler).foregroundStyle(.red) }
+                    } header: { Text("Oder ein bestehendes Profil übernehmen") }
+                }
+            }
+            .confirmationDialog("Profil übernehmen?", isPresented: Binding(get: { uebernahme != nil }, set: { if !$0 { uebernahme = nil } }), titleVisibility: .visible, presenting: uebernahme) { f in
+                Button("Übernehmen") {
+                    fehler = nil
+                    Task {
+                        do { try await modell.api?.profilUebernehmen(id: f.id) } catch { fehler = "Übernehmen fehlgeschlagen." }
+                    }
+                }
+            } message: { f in
+                Text("Dieses Gerät wird „\(f.data.spitzname)“. Das alte Gerät wird abgemeldet.")
             }
             .navigationTitle("Profil anlegen")
             .toolbar {

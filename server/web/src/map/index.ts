@@ -38,6 +38,11 @@ export const mapProvider = signal<'karte' | null>(null);
 
 /** Verkehrslage auf der Karte (TomTom). */
 export const trafficVisible = signal(false);
+/** Grundkarte („standard“, „satellit“), 3D und ausgeblendete Zielarten/-gruppen; wie in den Apps nur auf diesem Gerät. */
+export const grundkarte = signal<'standard' | 'satellit'>('standard');
+export const dreiD = signal(true);
+export const hiddenTargetKinds = signal<Set<string>>(new Set());
+export const hiddenTargetGroups = signal<Set<string>>(new Set());
 
 export function anchorOf(object: MapObject): GeoPoint {
   if ((object.typ !== 'linie' && object.typ !== 'flaeche') || object.punkte.length === 0) return object.punkte[0] ?? { lat: 0, lon: 0 };
@@ -80,6 +85,7 @@ export function createMap(container: HTMLElement): () => void {
     mapProvider.value = created.provider;
     bind(created, disposers);
     disposers.push(effect(() => created.setTraffic(trafficVisible.value)));
+    disposers.push(effect(() => created.setStyleUrl(lagekern.stilAdresse(grundkarte.value, colorScheme() === 'dark', dreiD.value))));
   });
 
   return () => {
@@ -99,7 +105,7 @@ function bind(map: MapBackend, disposers: (() => void)[]): void {
   disposers.push(
     effect(() => {
       void kernStand.value;
-      map.setLage(JSON.parse(lagekern.quellen(Date.now(), map.zoom(), [...hiddenLayers.value])) as Record<string, string>);
+      map.setLage(JSON.parse(lagekern.quellen(Date.now(), map.zoom(), [...hiddenLayers.value], [...hiddenTargetKinds.value], [...hiddenTargetGroups.value])) as Record<string, string>);
     }),
   );
   // ÖPNV-Fahrzeuge flüssig (viermal je Sekunde), nur diese Quelle.

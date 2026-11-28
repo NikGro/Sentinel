@@ -1,5 +1,7 @@
 package de.nglab.sentinel.ui
 
+import androidx.compose.runtime.collectAsState
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -122,7 +124,37 @@ fun ProfilAnlegen(modell: AppModell) {
                 enabled = name.isNotBlank() && spitzname.isNotBlank() && dienststelle.isNotBlank(),
                 modifier = Modifier.fillMaxWidth().height(52.dp),
             ) { Text("Sichern") }
+            // Bestehendes Profil übernehmen (etwa nach einem Gerätewechsel)
+            val stand by modell.lage.stand.collectAsState()
+            val uebernehmbar = de.nglab.sentinel.kern.lage.Kraefteansicht.uebernehmbar(stand)
+            var uebernahme by remember { mutableStateOf<de.nglab.sentinel.kern.modell.Versioniert<Fahnder>?>(null) }
+            var fehler by remember { mutableStateOf<String?>(null) }
+            val bereich = rememberCoroutineScope()
+            if (uebernehmbar.isNotEmpty()) {
+                Text("Oder ein bestehendes Profil übernehmen", style = MaterialTheme.typography.titleSmall, color = MaterialTheme.colorScheme.primary, modifier = Modifier.padding(top = 12.dp))
+                for (f in uebernehmbar) {
+                    androidx.compose.material3.ListItem(
+                        headlineContent = { Text(f.data.spitzname) },
+                        supportingContent = { Text(listOf(f.data.name, f.data.dienststelle).filter { it.isNotBlank() }.joinToString(", ")) },
+                        modifier = Modifier.clickable { uebernahme = f },
+                    )
+                }
+                fehler?.let { Text(it, color = MaterialTheme.colorScheme.error) }
+            }
             TextButton(onClick = { modell.abmelden() }, modifier = Modifier.align(Alignment.CenterHorizontally)) { Text("Abmelden") }
+            uebernahme?.let { f ->
+                androidx.compose.material3.AlertDialog(
+                    onDismissRequest = { uebernahme = null },
+                    title = { Text("Profil übernehmen?") },
+                    text = { Text("Dieses Gerät wird „${f.data.spitzname}“. Das alte Gerät wird abgemeldet.") },
+                    confirmButton = { TextButton(onClick = {
+                        uebernahme = null
+                        fehler = null
+                        bereich.launch { runCatching { modell.api?.profilUebernehmen(f.id) }.onFailure { fehler = it.message ?: "Übernehmen fehlgeschlagen." } }
+                    }) { Text("Übernehmen") } },
+                    dismissButton = { TextButton(onClick = { uebernahme = null }) { Text("Abbrechen") } },
+                )
+            }
         }
     }
 }

@@ -138,6 +138,7 @@ fun LageKarte(
     spurenJson: String? = null,
     wegZeitJson: String? = null,
     bestreifungJson: String? = null,
+    ebenen: de.nglab.sentinel.kern.karte.Kartenebenen = de.nglab.sentinel.kern.karte.Kartenebenen.standard,
     beiAuswahl: (KartenObjekt) -> Unit,
 ) {
     val ruhe by rememberUpdatedState(beiKameraRuhe)
@@ -153,6 +154,11 @@ fun LageKarte(
     val ort by modell.ort.collectAsStateWithLifecycle()
     val server = modell.zugang.value?.server ?: return
     var style by remember { mutableStateOf<Style?>(null) }
+    // Stil nach Grundkarte (Karte, Satellit), 3D und hell/dunkel; ein Wechsel lädt den Stil neu.
+    val stilAdresse = ebenen.stilAdresse(server, dunkel)
+    val aktuelleAdresse by rememberUpdatedState(stilAdresse)
+    var geladeneAdresse by remember { mutableStateOf<String?>(null) }
+    val anzeige = ebenen.anzeige
     var zoom by remember { mutableStateOf(14.0) }
     val szene = remember { Szene() }
 
@@ -169,7 +175,8 @@ fun LageKarte(
                 }
                 val start = modell.ort.value?.let { LatLng(it.lat, it.lon) } ?: LatLng(53.5511, 9.9937)
                 karte.cameraPosition = CameraPosition.Builder().target(start).zoom(14.5).tilt(0.0).build()
-                karte.setStyle(Style.Builder().fromUri("$server/karte/stil/${if (dunkel) "dunkel" else "hell"}.json")) { s -> style = s }
+                geladeneAdresse = aktuelleAdresse
+                karte.setStyle(Style.Builder().fromUri(aktuelleAdresse)) { s -> style = s }
                 addOnStyleImageMissingListener { name -> karte.style?.let { Kartenbilder.anlegen(it, name) } }
                 karte.addOnCameraIdleListener { zoom = karte.cameraPosition.zoom; ruhe() }
                 // Gesten: Verschieben bzw. Herausdrehen löst die Kopplung, Zoomen und Kippen setzen nur Sollwerte.
@@ -269,11 +276,22 @@ fun LageKarte(
         }
     }
 
+    LaunchedEffect(stilAdresse) {
+        val karte = steuerung.karte ?: return@LaunchedEffect
+        if (geladeneAdresse == null || geladeneAdresse == stilAdresse) return@LaunchedEffect
+        geladeneAdresse = stilAdresse
+        style = null
+        karte.setStyle(Style.Builder().fromUri(stilAdresse)) { s -> style = s }
+    }
+
+    // Verkehr nach jedem Stilwechsel wieder setzen
+    LaunchedEffect(style, ebenen.verkehr) { if (style != null) steuerung.verkehr(ebenen.verkehr) }
+
     // Lage → Datenquellen (bei jeder Änderung des Stands und beim Zoomen für das Auffächern).
-    LaunchedEffect(style, stand, zoom) {
+    LaunchedEffect(style, stand, zoom, anzeige) {
         val s = style ?: return@LaunchedEffect
         val jetzt = System.currentTimeMillis()
-        for ((id, json) in szene.aufbauen(stand, jetzt, zoom = zoom)) s.getSourceAs<GeoJsonSource>(id)?.setGeoJson(json)
+        for ((id, json) in szene.aufbauen(stand, jetzt, anzeige, zoom)) s.getSourceAs<GeoJsonSource>(id)?.setGeoJson(json)
     }
 
     // Spuren (Spur-Markierungen und ein offener Verlauf)
@@ -295,11 +313,11 @@ fun LageKarte(
     }
 
     // ÖPNV-Fahrzeuge flüssig (zehnmal je Sekunde), nur diese Quelle.
-    LaunchedEffect(style, stand, live, liveStand) {
+    LaunchedEffect(style, stand, live, liveStand, anzeige) {
         val s = style ?: return@LaunchedEffect
         s.getSourceAs<GeoJsonSource>(Quellen.OEPNV_LIVE_HALTE)?.setGeoJson(live?.halteGeoJson() ?: LEER)
         while (isActive) {
-            s.getSourceAs<GeoJsonSource>(Quellen.OEPNV_FAHRZEUGE)?.setGeoJson(szene.oepnvFahrzeuge(stand, System.currentTimeMillis(), live = live))
+            s.getSourceAs<GeoJsonSource>(Quellen.OEPNV_FAHRZEUGE)?.setGeoJson(szene.oepnvFahrzeuge(stand, System.currentTimeMillis(), anzeige, live))
             delay(100)
         }
     }
